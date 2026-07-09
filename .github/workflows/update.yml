@@ -3,7 +3,7 @@ name: Update dashboard
 # Runs on GitHub's servers, so updates happen even when your PC is off.
 on:
   schedule:
-    - cron: "0 21 * * *"      # daily at 21:00 UTC (after evening matches finish)
+    - cron: "0 22 * * *"      # daily at 22:00 UTC (10pm GMT)
   workflow_dispatch: {}         # lets you run it on demand from the Actions tab
 
 permissions:
@@ -23,16 +23,34 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Persist the SQLite DB across runs so updates are incremental (only new
+      # matches are fetched). A cache miss self-heals: the seed list below
+      # rebuilds every division from scratch via transitive discovery.
+      - name: Restore database cache
+        uses: actions/cache/restore@v4
+        with:
+          path: faceit.sqlite3
+          key: faceit-db-${{ github.run_id }}
+          restore-keys: faceit-db-
+
       - name: Install the tool
         run: pip install -e .
 
-      - name: Rebuild the whole league (stateless, keyless)
+      - name: Update all divisions + rebuild dashboard
         run: |
-          # Seed the known teams from the committed match list, then let the
-          # keyless enumerator discover and ingest every finished league match.
+          # Seed known teams from the committed match list (idempotent), then let
+          # the keyless enumerator discover and ingest every finished league match
+          # across all divisions. Already-stored finished matches are skipped.
           faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt
           faceit-sync --db faceit.sqlite3 fetch
           faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
+
+      - name: Save database cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: faceit.sqlite3
+          key: faceit-db-${{ github.run_id }}
 
       - name: Publish if the dashboard changed
         run: |

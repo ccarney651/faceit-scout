@@ -155,13 +155,45 @@ def _democracy_slots(dem_payload: Optional[dict[str, Any]]) -> list[dict[str, An
 
 @dataclass(slots=True)
 class _SlotInfo:
-    """A democracy game-slot, indexed for ban-set joining."""
+    """A democracy game-slot, indexed for joining to a played game."""
 
     ordered_bans: list[tuple[str, Optional[str]]]
     drop_set: frozenset[str]
+    map_guid: Optional[str]
     map_ticket: Optional[dict[str, Any]]
     atk_ticket: Optional[dict[str, Any]]
     used: bool = field(default=False)
+
+
+def _previous_loser(winners: list[Optional[str]], g: int) -> Optional[str]:
+    """Faction that lost game g-1 (bans first in game g). None if unknown."""
+    idx = g - 2
+    if idx < 0 or idx >= len(winners):
+        return None
+    w = winners[idx]
+    return FACTION2 if w == FACTION1 else FACTION1 if w == FACTION2 else None
+
+
+def _order_bans(
+    pairs: list[tuple[str, Optional[str]]], first_banner: Optional[str],
+) -> list[tuple[str, Optional[str]]]:
+    """Put the first-banning faction's ban first. Order is cosmetic otherwise."""
+    if not first_banner or len(pairs) != 2:
+        return pairs
+    a, b = pairs
+    if a[1] != first_banner and b[1] == first_banner:
+        return [b, a]
+    return [a, b]
+
+
+def _pick_guid(ticket: Optional[dict[str, Any]]) -> Optional[str]:
+    """Guid of the entity a map/side ticket resolved to ('pick')."""
+    if not ticket:
+        return None
+    for e in ticket.get("entities", []) or []:
+        if e.get("status") == "pick":
+            return _entity_guid(e)
+    return None
 
 
 def _democracy_slot_infos(dem_payload: Optional[dict[str, Any]]) -> list[_SlotInfo]:
@@ -171,20 +203,32 @@ def _democracy_slot_infos(dem_payload: Optional[dict[str, Any]]) -> list[_SlotIn
         infos.append(_SlotInfo(
             ordered_bans=ordered,
             drop_set=frozenset(g for g, _ in ordered),
+            map_guid=_pick_guid(slot.get("map")),
             map_ticket=slot.get("map"),
             atk_ticket=slot.get("attacking_first"),
         ))
     return infos
 
 
-def _match_slot(infos: list[_SlotInfo], ban_set: frozenset[str]) -> Optional[_SlotInfo]:
-    """Find an unused veto slot whose drop-set equals this game's ban-set."""
-    if not ban_set:
-        return None
+def _match_slot(
+    infos: list[_SlotInfo], ban_set: frozenset[str], game_map: Optional[str],
+) -> Optional[_SlotInfo]:
+    """Join a played game to its veto slot.
+
+    Prefer exact ban-set equality; fall back to the map the game was played on.
+    The map fallback rescues the rare game where FACEIT's two feeds disagree on
+    one banned hero (so the ban-sets differ) — there we still attribute the heroes
+    both feeds agree on, and leave the single disputed hero NULL.
+    """
     for info in infos:
         if not info.used and info.drop_set and info.drop_set == ban_set:
             info.used = True
             return info
+    if game_map:
+        for info in infos:
+            if not info.used and info.drop_set and info.map_guid == game_map:
+                info.used = True
+                return info
     return None
 
 
@@ -314,10 +358,11 @@ def extract_bundle(
     # game to its veto slot by BAN-SET equality, not by position.
     slot_infos = _democracy_slot_infos(dem_payload)
 
-    # winner of the whole match: tally per-game winners
+    # per-game winners (chronological) — used both for the match winner and to
+    # derive ban order (the previous map's loser bans first).
+    winners = [r.get("winner") for r in results]
     wins = {FACTION1: 0, FACTION2: 0}
-    for r in results:
-        w = r.get("winner")
+    for w in winners:
         if w in wins:
             wins[w] += 1
     winner_faction: Optional[str] = None
@@ -367,25 +412,30 @@ def extract_bundle(
             banned_guids = []
             warnings.append(f"game {g}: no hero veto recorded")
 
-        # --- attribution: join this game to its veto slot by ban-set ----------
+        # --- attribution: join this game to its veto slot (ban-set, then map) --
         ban_set = frozenset(banned_guids)
-        slot = _match_slot(slot_infos, ban_set) if (dem_present and banned_guids) else None
+        slot = _match_slot(slot_infos, ban_set, map_guid) if (dem_present and banned_guids) else None
 
         if slot is not None:
-            for order, (guid, faction) in enumerate(slot.ordered_bans, start=1):
-                hero_bans.append(HeroBan(match_id, g, guid, order, faction))
+            attr = {gd: fac for gd, fac in slot.ordered_bans}
+            pairs: list[tuple[str, Optional[str]]] = [(gd, attr.get(gd)) for gd in banned_guids]
             map_pick_by = _pick_selected_by(slot.map_ticket)
             side_pick_by = _pick_selected_by(slot.atk_ticket)
             was_restarted = False
         else:
-            # Bans known but no matching veto slot: the veto record for this played
-            # game is absent (admin restart, or other veto disruption). Attribution
-            # is unrecoverable; the bans themselves are still real.
-            for order, guid in enumerate(banned_guids, start=1):
-                hero_bans.append(HeroBan(match_id, g, guid, order, None))
+            # Veto record for this played game is absent (restart / disruption).
+            # Bans are still real; attribution is unrecoverable.
+            pairs = [(gd, None) for gd in banned_guids]
             map_pick_by = None
             side_pick_by = None
             was_restarted = dem_present and bool(banned_guids)
+
+        # Ban ORDER by the verified rule (not FACEIT's unreliable `round` field):
+        # game 1 -> faction1 bans first; later games -> the previous map's loser
+        # bans first. With one ban per team, that fixes the whole order.
+        first_banner = FACTION1 if g == 1 else _previous_loser(winners, g)
+        for order, (guid, faction) in enumerate(_order_bans(pairs, first_banner), start=1):
+            hero_bans.append(HeroBan(match_id, g, guid, order, faction))
 
         # --- map category from stats (per-round) ------------------------------
         sgame = stats_by_round.get(g)
@@ -628,47 +678,25 @@ class SyncEngine:
         ).fetchall()
         return [str(r[0]) for r in rows]
 
-    def _enumerate(self, championship_id: str, result: "SyncResult") -> list[str]:
-        """Match ids for a championship: keyless via known teams, else Data API.
-
-        Unioning each known team's championship matches enumerates the whole
-        league without an API key, and self-expands (a new opponent gets stored,
-        so it's included next run).
-        """
-        team_ids = self.known_team_ids(championship_id)
-        if team_ids:
-            log.info("enumerating championship %s keyless via %d known teams",
-                     championship_id, len(team_ids))
-            seen: set[str] = set()
-            ids: list[str] = []
-            for tid in team_ids:
-                try:
-                    for m in self.client.iter_team_championship_matches(championship_id, tid):
-                        mid = m["match_id"]
-                        # Only finished matches; skip scheduled/ongoing entirely so
-                        # we never fetch unplayed matches.
-                        if m.get("status") != "finished":
-                            continue
-                        if mid not in seen:
-                            seen.add(mid)
-                            ids.append(mid)
-                except Exception:  # noqa: BLE001 - a bad team must not abort enumeration
-                    log.exception("error enumerating team %s", tid)
-                    result.errors += 1
-            log.info("found %d unique matches across teams", len(ids))
-            return ids
-        if self.client.api_key:
-            log.info("no teams known yet; enumerating via Data API")
-            out: list[str] = []
-            for s in self.client.iter_championship_matches(championship_id):
-                mid = s.get("match_id") or s.get("id")
-                if mid:
-                    out.append(mid)
-            return out
-        raise EnumerationError(
-            "No teams are known for this championship yet, and no FACEIT_API_KEY is set. "
-            "Seed a few matches first, e.g.:  faceit-sync fetch --matches <room-url> ..."
-        )
+    def _ingest_and_tally(
+        self, mid: str, cid: str, result: "SyncResult", *,
+        force_refresh: bool, dry_run: bool,
+    ) -> None:
+        if not force_refresh and self.db.match_status(mid) == "FINISHED":
+            result.skipped += 1
+            return
+        try:
+            outcome = self.ingest_match(mid, cid, force_refresh=force_refresh, dry_run=dry_run)
+        except Exception:  # noqa: BLE001 - one bad match must not abort the run
+            log.exception("error ingesting %s", mid)
+            result.errors += 1
+            return
+        if outcome == "inserted":
+            result.inserted += 1
+        elif outcome == "updated":
+            result.updated += 1
+        else:
+            result.skipped += 1
 
     def run(
         self,
@@ -677,38 +705,86 @@ class SyncEngine:
         force_refresh: bool = False,
         dry_run: bool = False,
     ) -> SyncResult:
-        result = SyncResult()
-        for match_id in self._enumerate(championship_id, result):
-            if not match_id:
-                continue
-            result.matches_seen += 1
-            # Cheap skip: don't even fetch a match we've already finalized.
-            if not force_refresh and self.db.match_status(match_id) == "FINISHED":
-                result.skipped += 1
-                continue
-            try:
-                outcome = self.ingest_match(
-                    match_id, championship_id,
-                    force_refresh=force_refresh, dry_run=dry_run,
-                )
-            except Exception:  # noqa: BLE001 - one bad match must not abort the run
-                log.exception("error ingesting %s", match_id)
-                result.errors += 1
-                continue
-            if outcome == "inserted":
-                result.inserted += 1
-            elif outcome == "updated":
-                result.updated += 1
-            else:
-                result.skipped += 1
+        """Enumerate + ingest a whole championship, keyless.
 
+        Transitive discovery: starting from the teams already known for this
+        championship (even one seed match is enough), we enumerate each team's
+        matches; ingesting them reveals new opponents, which we then enumerate
+        too, until the team graph is exhausted. In a connected schedule this
+        reaches every team and match from any single seed.
+        """
+        result = SyncResult()
+        seed_teams = self.known_team_ids(championship_id)
+        if not seed_teams:
+            if self.client.api_key:
+                for s in self.client.iter_championship_matches(championship_id):
+                    mid = s.get("match_id") or s.get("id")
+                    if mid:
+                        result.matches_seen += 1
+                        self._ingest_and_tally(mid, championship_id, result,
+                                               force_refresh=force_refresh, dry_run=dry_run)
+                self._write_sync_log(result, championship_id)
+                return result
+            raise EnumerationError(
+                "No teams are known for this championship yet, and no FACEIT_API_KEY is set. "
+                "Seed a few matches first, e.g.:  faceit-sync fetch --matches <room-url> ..."
+            )
+
+        processed: set[str] = set()
+        seen: set[str] = set()
+        while True:
+            teams = [t for t in self.known_team_ids(championship_id) if t not in processed]
+            if not teams:
+                break
+            for tid in teams:
+                processed.add(tid)
+                try:
+                    matches = list(
+                        self.client.iter_team_championship_matches(championship_id, tid)
+                    )
+                except Exception:  # noqa: BLE001 - a bad team must not abort enumeration
+                    log.exception("error enumerating team %s", tid)
+                    result.errors += 1
+                    continue
+                for m in matches:
+                    if m.get("status") != "finished":
+                        continue
+                    mid = m["match_id"]
+                    if mid in seen:
+                        continue
+                    seen.add(mid)
+                    result.matches_seen += 1
+                    self._ingest_and_tally(mid, championship_id, result,
+                                           force_refresh=force_refresh, dry_run=dry_run)
+        log.info("championship %s: %d matches across %d teams",
+                 championship_id, len(seen), len(processed))
+        self._write_sync_log(result, championship_id)
+        return result
+
+    def _write_sync_log(self, result: "SyncResult", cid: Optional[str]) -> None:
         self.db.insert_sync_log(
-            ran_at=_now_iso(), championship_id=championship_id,
+            ran_at=_now_iso(), championship_id=cid,
             matches_seen=result.matches_seen, inserted=result.inserted,
             updated=result.updated, skipped=result.skipped,
             warnings=result.warnings, errors=result.errors,
         )
-        return result
+
+    def run_all(self, *, force_refresh: bool = False, dry_run: bool = False) -> SyncResult:
+        """Update every championship currently stored (all divisions)."""
+        total = SyncResult()
+        cids = [
+            str(r[0]) for r in
+            self.db.conn.execute("SELECT id FROM championships ORDER BY name").fetchall()
+        ]
+        for cid in cids:
+            r = self.run(cid, force_refresh=force_refresh, dry_run=dry_run)
+            total.matches_seen += r.matches_seen
+            total.inserted += r.inserted
+            total.updated += r.updated
+            total.skipped += r.skipped
+            total.warnings += r.warnings
+            total.errors += r.errors
+        return total
 
     def run_matches(
         self,

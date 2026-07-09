@@ -6,7 +6,7 @@ import argparse
 import logging
 import os
 import sys
-from typing import Optional, Sequence
+from typing import Optional, Sequence, TextIO
 
 from dotenv import load_dotenv
 
@@ -61,20 +61,26 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 refs, force_refresh=args.force_refresh, dry_run=args.dry_run,
             )
             label = f"{len(refs)} match refs"
-        else:
-            cid = _resolve_championship(db, args.championship)
-            if cid is None:
-                print("  …or seed matches first with:  faceit-sync fetch --matches <room-url> ...",
-                      file=sys.stderr)
-                return 2
+        elif args.championship:
             try:
                 result = engine.run(
-                    cid, force_refresh=args.force_refresh, dry_run=args.dry_run,
+                    args.championship, force_refresh=args.force_refresh, dry_run=args.dry_run,
                 )
             except EnumerationError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
-            label = f"championship {cid}"
+            label = f"championship {args.championship}"
+        else:
+            # Update every division already stored (transitive keyless discovery).
+            n = db.conn.execute("SELECT COUNT(*) FROM championships").fetchone()[0]
+            if not n:
+                print("no divisions stored yet — seed first with:  "
+                      "faceit-sync fetch --matches <room-url> ...", file=sys.stderr)
+                return 2
+            result = engine.run_all(
+                force_refresh=args.force_refresh, dry_run=args.dry_run,
+            )
+            label = f"{n} division(s)"
     counts = result.as_dict()
     log.info(
         "done: seen=%(matches_seen)d inserted=%(inserted)d updated=%(updated)d "
@@ -107,28 +113,35 @@ def _resolve_championship(db: Database, requested: Optional[str]) -> Optional[st
 
 def cmd_export(args: argparse.Namespace) -> int:
     with Database(_db_path(args)) as db:
+        # HTML is the multi-division dashboard (all divisions unless one is named).
+        if args.format == "html":
+            out_path = args.out or "dashboard.html"
+            with open(out_path, "w", newline="", encoding="utf-8") as out:
+                n = export_html(db, out, championship_id=args.championship)
+            if n == 0:
+                print("no data to export yet", file=sys.stderr)
+                return 1
+            log.info("exported %d division(s) to %s", n, out_path)
+            print(f"wrote {out_path} ({n} division(s))")
+            return 0
+
+        # csv/json: a single championship (auto-detected when only one is stored).
         cid = _resolve_championship(db, args.championship)
         if cid is None:
             return 2
-        # HTML defaults to a file (a dashboard is useless on stdout); csv/json to stdout.
-        out_path = args.out or (f"dashboard-{cid}.html" if args.format == "html" else None)
-        out = open(out_path, "w", newline="", encoding="utf-8") if out_path else sys.stdout
+        stream: TextIO = (
+            open(args.out, "w", newline="", encoding="utf-8") if args.out else sys.stdout
+        )
         try:
-            if args.format == "csv":
-                n = export_csv(db, cid, out)
-            elif args.format == "json":
-                n = export_json(db, cid, out)
-            else:
-                n = export_html(db, cid, out)
+            n = export_csv(db, cid, stream) if args.format == "csv" else export_json(db, cid, stream)
         finally:
-            if out is not sys.stdout:
-                out.close()
+            if stream is not sys.stdout:
+                stream.close()
     if n == 0:
         print(f"no data for championship {cid}", file=sys.stderr)
         return 1
-    log.info("exported %d records for championship %s", n, cid)
-    if out_path:
-        print(f"wrote {out_path}")
+    if args.out:
+        print(f"wrote {args.out}")
     return 0
 
 

@@ -90,19 +90,22 @@ select:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;bord
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:13.5px}
 thead th{color:var(--faint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
-  cursor:pointer;user-select:none;position:sticky;top:0}
-th.num,td.num{text-align:right}
+  cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface);white-space:nowrap}
+thead th:hover{color:var(--fg)}
+thead th.sorted{color:var(--fg)}
+thead th .sar{margin-left:4px;font-size:8px;color:var(--accent);vertical-align:middle}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
 tbody tr:hover{background:var(--surface2)}
-.scroll{overflow-x:auto;border-radius:10px}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.scroll table{font-size:13.5px}
 
 /* bars */
-.barrow{display:grid;grid-template-columns:1fr 46%;align-items:center;gap:12px;padding:4px 2px}
-.barrow .lab{font-size:13px;display:flex;align-items:center;gap:7px;min-width:0}
-.barrow .lab .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.track{position:relative;height:10px;background:var(--surface2);border-radius:6px;overflow:hidden}
-.fill{position:absolute;inset:0 auto 0 0;border-radius:6px;background:var(--accent)}
-.barval{position:absolute;right:8px;top:-5px;font-size:12px;color:var(--muted)}
-.barwrap{position:relative}
+.barrow{display:grid;grid-template-columns:minmax(110px,1.1fr) minmax(70px,2fr) 40px;align-items:center;gap:11px;padding:5px 2px}
+.barrow+.barrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.barrow .lab{font-size:13px;display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
+.fill{height:100%;border-radius:6px;background:var(--accent);min-width:3px;transition:width .2s ease}
+.barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* chips / badges */
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
@@ -118,7 +121,7 @@ tbody tr:hover{background:var(--surface2)}
 .wl{display:inline-flex;gap:3px}
 .wl b{width:16px;height:16px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;
   display:inline-flex;align-items:center;justify-content:center}
-.w{background:var(--good)} .l{background:var(--bad)}
+.wl .w{background:var(--good)} .wl .l{background:var(--bad)}
 
 /* matches */
 .match{margin-bottom:12px;padding:0;overflow:hidden}
@@ -131,7 +134,10 @@ tbody tr:hover{background:var(--surface2)}
 .game:last-child{border-bottom:0}
 .game-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
 .game-hd .gno{font-weight:700;color:var(--faint);width:22px}
-.bans{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.bans{display:flex;gap:6px 4px;flex-wrap:wrap;align-items:center;margin-top:7px}
+.banstep{display:inline-flex;align-items:center;gap:5px;margin-right:16px}
+.ord{width:17px;height:17px;border-radius:50%;background:var(--accent-weak);color:var(--accent);
+  font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .rosters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
 @media (max-width:640px){.rosters{grid-template-columns:1fr}}
 .roster h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:650}
@@ -144,12 +150,45 @@ tbody tr:hover{background:var(--surface2)}
 </head>
 <body>
 <div class="topbar"><div class="topbar-in">
-  <div class="brand"><h1 id="title"></h1><span class="meta" id="subtitle"></span></div>
+  <div class="brand"><h1 id="title"></h1>
+    <select id="division" class="hidden" aria-label="Division"></select>
+    <span class="meta" id="subtitle"></span></div>
   <nav id="nav"></nav>
 </div></div>
 <main id="content"></main>
 <script>
 const DATA = __DATA__;
+const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined views
+let CURRENT_VIEW = VIEWS[0].id;
+const viewOf = (id)=> VIEWS.find(v=>v.id===id);
+const _vcache = {};
+function D(){                                       // active view's data (single or merged)
+  const v=viewOf(CURRENT_VIEW);
+  if(v.divisions.length===1) return DIVS[v.divisions[0]];
+  return _vcache[v.id] || (_vcache[v.id]=mergeDivisions(v));
+}
+// Merge several divisions into one combined view (matches/teams/meta), no data
+// duplication in the file — computed on demand, cached.
+function mergeDivisions(v){
+  const ds=v.divisions.map(cid=>DIVS[cid]);
+  const matches=[].concat(...ds.map(d=>d.matches));
+  const teams=[].concat(...ds.map(d=>d.teams));
+  const team_names=[...new Set([].concat(...ds.map(d=>d.team_names)))].sort();
+  const sum={championship:v.label, region:v.region};
+  ['matches','played_games','teams','players','walkovers','matches_with_attribution','restarted_games','dc_games']
+    .forEach(k=> sum[k]=ds.reduce((a,d)=>a+(d.summary[k]||0),0));
+  const fr=ds.map(d=>d.summary.date_from).filter(Boolean).sort();
+  const to=ds.map(d=>d.summary.date_to).filter(Boolean).sort();
+  sum.date_from=fr[0]||''; sum.date_to=to[to.length-1]||'';
+  const bm={};
+  ds.forEach(d=>d.attacking_first.by_map.forEach(m=>{
+    const e=bm[m.name]||(bm[m.name]={name:m.name,category:m.category,games:0,atk_first_wins:0});
+    e.games+=m.games; e.atk_first_wins+=m.atk_first_wins; }));
+  const af={by_map:Object.values(bm).sort((a,b)=>b.games-a.games),
+    total_games:ds.reduce((a,d)=>a+d.attacking_first.total_games,0),
+    atk_first_wins:ds.reduce((a,d)=>a+d.attacking_first.atk_first_wins,0)};
+  return {summary:sum, teams, team_names, matches, attacking_first:af};
+}
 
 /* ---------- tiny DOM + format helpers ---------- */
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
@@ -165,8 +204,13 @@ const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 const roleVar = (r)=> ({Tank:'var(--tank)',Damage:'var(--damage)',Support:'var(--support)'}[r]||'var(--accent)');
 const winVar = (p)=> p>=58?'var(--good)': p>=42?'var(--mid)':'var(--bad)';
 
-/* recency: matches newest-first (recency is measured in matches ≈ how a season is counted) */
-const MATCHES_RECENT=[...DATA.matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
+/* recency: matches newest-first (recency is measured in matches ≈ how a season is counted).
+   Recomputed whenever the active division changes. */
+let MATCHES_RECENT=[];
+function recomputeDivision(){
+  MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
+  SCOUT_TEAM=D().team_names[0]||null;
+}
 const recent=(arr,lim)=> (lim && lim<arr.length)? arr.slice(0,lim) : arr;
 const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();return {from:w[0]||'',to:w[w.length-1]||''};};
 
@@ -182,20 +226,22 @@ function barList(items){
   return `<div>`+items.map(i=>{
     const w=Math.max(2,Math.round(100*i.value/max));
     return `<div class="barrow"><div class="lab">${i.label}</div>`+
-      `<div class="barwrap"><div class="track"><div class="fill" style="width:${w}%;background:${i.color||'var(--accent)'}"></div></div>`+
-      `<span class="barval">${i.value}</span></div></div>`;
+      `<div class="track"><div class="fill" style="width:${w}%;background:${i.color||'var(--accent)'}"></div></div>`+
+      `<div class="barval">${i.value}</div></div>`;
   }).join('')+`</div>`;
 }
 
 // sortable table. cols:[{k,label,num?,html?}]
 function table(cols,rows){
-  const head=`<tr>`+cols.map((c,i)=>`<th class="${c.num?'num':''}" data-i="${i}">${esc(c.label)}</th>`).join('')+`</tr>`;
+  const head=`<tr>`+cols.map((c,i)=>`<th class="${c.num?'num':''}" data-i="${i}">${esc(c.label)}<span class="sar"></span></th>`).join('')+`</tr>`;
   const body=(rs)=>rs.map(r=>`<tr>`+cols.map(c=>`<td class="${c.num?'num':''}">${c.html?c.html(r):esc(r[c.k])}</td>`).join('')+`</tr>`).join('');
   const box=el(`<div class="scroll"><table><thead>${head}</thead><tbody>${body(rows)}</tbody></table></div>`);
   const asc={};
   box.querySelectorAll('th').forEach(th=>th.onclick=()=>{
     const i=+th.dataset.i,c=cols[i];asc[i]=!asc[i];
     const s=[...rows].sort((a,b)=>{let x=a[c.k],y=b[c.k];if(c.num){x=+x||0;y=+y||0;return asc[i]?x-y:y-x;}return asc[i]?String(x).localeCompare(String(y)):String(y).localeCompare(String(x));});
+    box.querySelectorAll('th').forEach(t=>{t.classList.remove('sorted');t.querySelector('.sar').textContent='';});
+    th.classList.add('sorted'); th.querySelector('.sar').textContent = asc[i]?'▲':'▼';
     box.querySelector('tbody').innerHTML=body(s);
   });
   return box;
@@ -213,7 +259,8 @@ function windowSelect(current,onchange,opts){
 /* ---------- aggregation over a set of matches ---------- */
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
-  const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},counter:{},mapStats:{},games:0,gwins:0,results:[]};
+  const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},counter:{},mapStats:{},
+           firstBans:{},firstBanGames:0,games:0,gwins:0,results:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
     if(team && !side) return;
@@ -227,6 +274,7 @@ function aggregate(matches,team){
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
         if(mine){ inc(a.bans,mine.hero); if(mine.role)inc(a.banRoles,mine.role);
           (a.perMap[g.map]=a.perMap[g.map]||{}); inc(a.perMap[g.map],mine.hero);
+          if(mine.order===1){ a.firstBanGames++; inc(a.firstBans,mine.hero); }
           if(oc){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero); } }
       } else { inc(a.mapsPicked,g.map); g.bans.forEach(b=>{ inc(a.bans,b.hero); if(b.role)inc(a.banRoles,b.role); }); }
     });
@@ -242,13 +290,13 @@ const TABS=[
  {id:'matches',label:'Matches',render:renderMatches},
 ];
 
-let SCOUT_TEAM = DATA.team_names[0]||null;
+let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_WIN='all', META_WIN='20';
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
 
 function renderOverview(){
-  const s=DATA.summary, wrap=el(`<div></div>`);
+  const s=D().summary, wrap=el(`<div></div>`);
 
   const tiles=[['played_games','Games played',`${s.matches} matches`],
     ['teams','Teams',`${s.walkovers} walkovers`],
@@ -263,7 +311,7 @@ function renderOverview(){
   launch.appendChild(el(`<p class="eyebrow">Prep for a match</p>`));
   const row=el(`<div class="controls"></div>`);
   const sel=el(`<select style="min-width:200px"></select>`);
-  DATA.team_names.forEach(n=>sel.appendChild(el(`<option>${esc(n)}</option>`)));
+  D().team_names.forEach(n=>sel.appendChild(el(`<option>${esc(n)}</option>`)));
   const go=el(`<button class="btn">Scout this team →</button>`);
   go.onclick=()=>gotoScout(sel.value);
   row.append(sel,go); launch.appendChild(row);
@@ -285,7 +333,7 @@ function renderOverview(){
   wrap.appendChild(table(
     [{k:'name',label:'Team'},{k:'matches',label:'Matches',num:true},{k:'wins',label:'Wins',num:true},
      {k:'win_pct',label:'Win %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))}],
-    DATA.teams));
+    D().teams));
   wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
   return wrap;
 }
@@ -301,7 +349,7 @@ function renderScout(){
   const bar=el(`<div class="card controls"></div>`);
   bar.appendChild(el(`<label>Opponent</label>`));
   const sel=el(`<select style="min-width:190px"></select>`);
-  DATA.team_names.forEach(n=>sel.appendChild(el(`<option ${n===SCOUT_TEAM?'selected':''}>${esc(n)}</option>`)));
+  D().team_names.forEach(n=>sel.appendChild(el(`<option ${n===SCOUT_TEAM?'selected':''}>${esc(n)}</option>`)));
   sel.onchange=()=>{SCOUT_TEAM=sel.value;draw();};
   bar.appendChild(sel);
   bar.appendChild(el(`<label>Form</label>`));
@@ -331,6 +379,10 @@ function renderScoutBody(t){
   const banC=el(`<div class="card"></div>`);
   banC.appendChild(el(`<p class="eyebrow">Preferred bans</p>`));
   banC.appendChild(el(barList(rank(t.bans).slice(0,12).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
+  if(t.firstBanGames){
+    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note">(when they draft first — ${t.firstBanGames} games)</span></p>`));
+    banC.appendChild(el(barList(rank(t.firstBans).slice(0,6).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
+  }
   two.appendChild(banC);
   const mapC=el(`<div class="card"></div>`);
   mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
@@ -387,7 +439,7 @@ function renderMeta(){
   }
   draw();
   // attacking-first (all season)
-  const af=DATA.attacking_first;
+  const af=D().attacking_first;
   wrap.appendChild(el(sectionH('Attacking-first advantage',`<span class="note">Escort &amp; Hybrid only · all season</span>`)));
   wrap.appendChild(el(`<p class="note" style="margin-top:0">Mirrored modes (Control/Flashpoint/Push) excluded. Overall the first-attacking team won <b>${af.atk_first_wins}/${af.total_games}</b> = <b>${pctOf(af.atk_first_wins,af.total_games)}%</b>.</p>`));
   wrap.appendChild(table(
@@ -414,13 +466,15 @@ function renderMatches(){
       return `<div class="roster"><h4>${esc(rt.team)}</h4>${pls||'<span class="faint">—</span>'}</div>`;
     }).join('')+`</div>`;
   }
-  function banSide(g,fac,name){
-    const bs=g.bans.filter(b=>b.faction===fac);
-    return `<span class="faint">${esc(name||fac)}:</span> ${bs.map(b=>heroChip(b.hero)).join(' ')||'—'}`;
+  // Bans in draft order: 1st ban, 2nd ban — with the team that banned it.
+  function bansOrdered(g){
+    const ord=[...g.bans].sort((a,b)=>(a.order||9)-(b.order||9));
+    return ord.map(b=>`<span class="banstep"><span class="ord">${b.order||'?'}</span> `+
+      `<b>${b.team?esc(b.team):'<span class=\'faint\'>?</span>'}</b> banned ${heroChip(b.hero)}</span>`).join('');
   }
   function draw(q){
     q=(q||'').trim().toLowerCase(); list.innerHTML='';
-    const shown=DATA.matches.filter(m=>!q||hay(m).includes(q));
+    const shown=D().matches.filter(m=>!q||hay(m).includes(q));
     if(!shown.length){ list.appendChild(el(`<p class="note">No matches.</p>`)); return; }
     shown.forEach(m=>{
       const c=el(`<div class="card match"></div>`);
@@ -436,8 +490,7 @@ function renderMatches(){
           `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
           (g.was_restarted?tag('veto disrupted','warn'):'')+
           `<span class="faint" style="margin-left:auto">▸ rosters</span></div>`));
-        gEl.appendChild(el(`<div class="bans">${banSide(g,'faction1',m.f1)} &nbsp; ${banSide(g,'faction2',m.f2)}`+
-          (un.length?` <span class="faint">(unattributed: ${un.map(b=>esc(b.hero)).join(', ')})</span>`:'')+`</div>`));
+        gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
         const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
         gEl.appendChild(ros);
         const toggle=gEl.querySelector('.game-hd');
@@ -457,9 +510,24 @@ function show(id){
   const c=document.getElementById('content'); c.innerHTML=''; c.appendChild(TABS.find(t=>t.id===id).render());
   try{window.scrollTo(0,0)}catch(e){} if(location.hash!=='#'+id) location.hash=id;
 }
+function updateHeader(){
+  const s=D().summary;
+  document.getElementById('title').textContent=s.championship;
+  document.getElementById('subtitle').textContent=`${s.matches} matches · ${s.played_games} games · ${dshort(s.date_from)} → ${dshort(s.date_to)}`;
+}
+function setDivision(id){
+  CURRENT_VIEW=id; recomputeDivision(); updateHeader();
+  const cur=document.querySelector('nav button.active');
+  show(cur?cur.dataset.id:'overview');
+}
 function init(){
-  document.getElementById('title').textContent=DATA.summary.championship;
-  document.getElementById('subtitle').textContent=`${DATA.summary.matches} matches · ${DATA.summary.played_games} games · ${dshort(DATA.summary.date_from)} → ${dshort(DATA.summary.date_to)}`;
+  recomputeDivision();
+  const dsel=document.getElementById('division');
+  VIEWS.forEach(v=>dsel.appendChild(el(`<option value="${v.id}">${esc(v.label)}</option>`)));
+  dsel.value=CURRENT_VIEW;
+  if(VIEWS.length>1) dsel.classList.remove('hidden');
+  dsel.onchange=()=>setDivision(dsel.value);
+  updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
   const start=(location.hash||'#overview').slice(1);

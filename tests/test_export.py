@@ -32,9 +32,8 @@ def test_players_table_gets_nicknames(db: Database) -> None:
 @responses.activate
 def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     _ingest(db)
-    champ = db.conn.execute("SELECT id FROM championships LIMIT 1").fetchone()["id"]
     buf = io.StringIO()
-    count = export_html(db, champ, buf)
+    count = export_html(db, buf)          # all divisions (just the one ingested)
     doc = buf.getvalue()
 
     assert count == 1
@@ -48,6 +47,9 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     m = re.search(r"const DATA = (\{.*\});", doc)
     assert m is not None
     data = json.loads(m.group(1).replace("<\\/", "</"))
-    assert data["summary"]["matches"] == 1
-    assert data["summary"]["dc_games"] == 1          # hazard A game present
-    assert data["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy
+    assert len(data["divisions"]) == 1
+    assert data["views"] and data["views"][0]["divisions"]
+    div = next(iter(data["divisions"].values()))
+    assert div["summary"]["matches"] == 1
+    assert div["summary"]["dc_games"] == 1          # hazard A game present
+    assert div["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy

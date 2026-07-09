@@ -334,11 +334,80 @@ def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
     }
 
 
-def export_html(db: Database, championship_id: str, out: TextIO) -> int:
-    data = _dashboard_data(db, championship_id)
-    if not data["summary"]["matches"]:
+def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None) -> int:
+    """Render the multi-division dashboard.
+
+    With ``championship_id`` set, only that division is included; otherwise every
+    championship in the database becomes a switchable division. Returns the number
+    of divisions with data.
+    """
+    if championship_id:
+        cids = [championship_id]
+    else:
+        cids = [str(r["id"]) for r in
+                db.conn.execute("SELECT id FROM championships ORDER BY name").fetchall()]
+
+    divisions: dict[str, Any] = {}
+    heroes: dict[str, Any] = {}
+    maps: dict[str, Any] = {}
+    ordered: list[tuple[str, str]] = []
+    for cid in cids:
+        d = _dashboard_data(db, cid)
+        if not d["summary"]["matches"]:
+            continue
+        for h in d.pop("heroes"):
+            heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"]})
+        for m in d.pop("maps"):
+            maps.setdefault(m["name"], {"name": m["name"], "category": m["category"]})
+        d.pop("bans_by_role", None)
+        divisions[cid] = d
+        ordered.append((str(d["summary"]["championship"]), cid))
+
+    if not divisions:
         return 0
+
+    # Build the switcher "views": each real division, plus a merged "Combined"
+    # per region (Master + Expert), in the order EMEA Master/Expert/Combined then
+    # NA Master/Expert/Combined. Region/tier are read from the championship name.
+    def region_of(name: str) -> Optional[str]:
+        u = name.upper()
+        return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
+
+    def tier_of(name: str) -> Optional[str]:
+        return "Master" if "Master" in name else "Expert" if "Expert" in name else None
+
+    by_region_tier: dict[tuple[str, str], str] = {}
+    for cid, d in divisions.items():
+        nm = str(d["summary"]["championship"])
+        r, t = region_of(nm), tier_of(nm)
+        if r and t:
+            by_region_tier[(r, t)] = cid
+
+    views: list[dict[str, Any]] = []
+    used: set[str] = set()
+    for region in ("EMEA", "NA"):
+        m, e = by_region_tier.get((region, "Master")), by_region_tier.get((region, "Expert"))
+        if m:
+            views.append({"id": m, "label": f"{region} Master", "divisions": [m], "region": region})
+            used.add(m)
+        if e:
+            views.append({"id": e, "label": f"{region} Expert", "divisions": [e], "region": region})
+            used.add(e)
+        if m and e:
+            views.append({"id": f"{region.lower()}-combined", "label": f"{region} Combined",
+                          "divisions": [m, e], "region": region})
+    # Any division whose name didn't classify still gets a plain view (fallback).
+    for name, cid in sorted(ordered):
+        if cid not in used:
+            views.append({"id": cid, "label": name, "divisions": [cid], "region": None})
+
+    data = {
+        "divisions": divisions,
+        "views": views,
+        "heroes": list(heroes.values()),
+        "maps": list(maps.values()),
+    }
+    title = "FACEIT OW2 — League Scouting"
     payload = json.dumps(data).replace("</", "<\\/")
-    title = html.escape(str(data["summary"]["championship"]))
-    out.write(HTML_TEMPLATE.replace("__TITLE__", title).replace("__DATA__", payload))
-    return int(data["summary"]["matches"])
+    out.write(HTML_TEMPLATE.replace("__TITLE__", html.escape(title)).replace("__DATA__", payload))
+    return len(divisions)
