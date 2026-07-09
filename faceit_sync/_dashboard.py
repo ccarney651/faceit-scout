@@ -353,7 +353,7 @@ function makeRecency(total, currentN, onChange, sliderMax){
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
   const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},perMapPick:{},counter:{},mapStats:{},
-           firstBans:{},firstBanGames:0,pickFirstBan:{},games:0,gwins:0,results:[],replays:[]};
+           firstBans:{},firstBanGames:0,pickFirstBan:{},banHeroWin:{},games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
     if(team && !side) return;
@@ -364,6 +364,11 @@ function aggregate(matches,team){
         const won=g.winner_faction===side; if(won)a.gwins++;
         const ms=a.mapStats[g.map]||(a.mapStats[g.map]={games:0,wins:0,picks:0}); ms.games++; if(won)ms.wins++;
         if(g.map_picked_by===team){ inc(a.mapsPicked,g.map); ms.picks++; }
+        // map win rate conditioned on a hero being banned out this map (by either team).
+        const seenB=new Set();
+        g.bans.forEach(b=>{ if(!b.hero||seenB.has(b.hero))return; seenB.add(b.hero);
+          const s=a.banHeroWin[b.hero]||(a.banHeroWin[b.hero]={games:0,wins:0,byThem:0,byOpp:0});
+          s.games++; if(won)s.wins++; if(b.team===team)s.byThem++; else if(b.team)s.byOpp++; });
         if(g.demo_code) a.replays.push({when:m.finished_at,opp:(m.f1===team?m.f2:m.f1),
           map:g.map,cat:g.map_category,gno:g.game_no,code:g.demo_code,won});
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
@@ -531,6 +536,23 @@ function renderScoutBody(t){
     t.matches.forEach(m=>w.appendChild(matchCard(m)));
   } else {
     w.appendChild(el(`<p class="note">No matches in this window.</p>`));
+  }
+
+  // Map win rate conditioned on a hero being banned out (by either team).
+  const bhw=Object.entries(t.banHeroWin).map(([h,v])=>({hero:h,role:HERO_ROLE[h]||'',
+      games:v.games,wr:pctOf(v.wins,v.games),wins:v.wins,byThem:v.byThem,byOpp:v.byOpp}))
+    .sort((a,b)=>b.games-a.games||b.wr-a.wr);
+  w.appendChild(el(sectionH('Win rate by banned hero',`<span class="note">map win % when this hero is banned out · either team</span>`)));
+  if(bhw.length){
+    w.appendChild(el(`<p class="note" style="margin-top:0">How ${esc(t.team)} does on maps where a given hero is banned (removed for both teams). Low map counts are noisy — sort by <b>Maps</b> to find the reliable ones.</p>`));
+    w.appendChild(table(
+      [{k:'hero',label:'Banned hero',html:r=>heroChip(r.hero)},
+       {k:'by',label:'Banned by',html:r=>`<span class="faint">${r.byThem?`${r.byThem} them`:''}${r.byThem&&r.byOpp?' · ':''}${r.byOpp?`${r.byOpp} opp`:''}</span>`},
+       {k:'games',label:'Maps',num:true},
+       {k:'wins',label:'Won',num:true},
+       {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], bhw));
+  } else {
+    w.appendChild(el(`<p class="note">No bans in this window.</p>`));
   }
 
   // Counter-bans — genuine responses only: the opponent banned first, this team
