@@ -299,7 +299,7 @@ function makeRecency(total, currentN, onChange, sliderMax){
 /* ---------- aggregation over a set of matches ---------- */
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
-  const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},counter:{},mapStats:{},
+  const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},perMapPick:{},counter:{},mapStats:{},
            firstBans:{},firstBanGames:0,games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
@@ -316,8 +316,11 @@ function aggregate(matches,team){
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
         if(mine){ inc(a.bans,mine.hero); if(mine.role)inc(a.banRoles,mine.role);
           (a.perMap[g.map]=a.perMap[g.map]||{}); inc(a.perMap[g.map],mine.hero);
+          if(g.map_picked_by===team){ (a.perMapPick[g.map]=a.perMapPick[g.map]||{}); inc(a.perMapPick[g.map],mine.hero); }
           if(mine.order===1){ a.firstBanGames++; inc(a.firstBans,mine.hero); }
-          if(oc){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero); } }
+          // counter-ban = the team's RESPONSE, i.e. only when the opponent
+          // banned first (order 1) and this team banned second (order 2).
+          if(oc && oc.order===1 && mine.order===2){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero); } }
       } else { inc(a.mapsPicked,g.map); g.bans.forEach(b=>{ inc(a.bans,b.hero); if(b.role)inc(a.banRoles,b.role); }); }
     });
   });
@@ -340,10 +343,10 @@ function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
 function renderOverview(){
   const s=D().summary, wrap=el(`<div></div>`);
 
-  const tiles=[['played_games','Games played',`${s.matches} matches`],
+  const tiles=[['played_games','Maps played',`${s.matches} matches`],
     ['teams','Teams',`${s.walkovers} walkovers`],
     ['matches_with_attribution','Matches w/ veto data',`of ${s.matches} — ${pctOf(s.matches_with_attribution,s.matches)}%`],
-    ['dc_games','Games w/ a DC',`stats stored as NULL`]];
+    ['dc_games','Maps w/ a DC',`stats stored as NULL`]];
   const g=el(`<div class="grid cols-auto"></div>`);
   tiles.forEach(([k,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${nf(s[k])}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
   wrap.appendChild(g);
@@ -420,8 +423,8 @@ function renderScoutBody(t){
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
   head.appendChild(el(`<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
     `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div>`));
-  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} games`,winVar(pctOf(t.gwins,t.games)))}</div>`+
-    `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no games</span>'}</div></div>`));
+  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</div>`+
+    `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   w.appendChild(head);
 
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
@@ -430,7 +433,7 @@ function renderScoutBody(t){
   banC.appendChild(el(`<p class="eyebrow">Preferred bans</p>`));
   banC.appendChild(el(barList(rank(t.bans).slice(0,12).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
   if(t.firstBanGames){
-    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note">(when they draft first — ${t.firstBanGames} games)</span></p>`));
+    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note">(when they draft first — ${t.firstBanGames} maps)</span></p>`));
     banC.appendChild(el(barList(rank(t.firstBans).slice(0,6).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
   }
   two.appendChild(banC);
@@ -446,7 +449,7 @@ function renderScoutBody(t){
   w.appendChild(two);
 
   // Recent replays — newest-first game replay codes (click to copy into OW2).
-  w.appendChild(el(sectionH('Recent replays',`<span class="note">${t.replays.length} games · click a code to copy</span>`)));
+  w.appendChild(el(sectionH('Recent replays',`<span class="note">${t.replays.length} maps · click a code to copy</span>`)));
   if(t.replays.length){
     const rr=t.replays.slice(0,24).map(r=>({...r, date:dshort(r.when), res:r.won?'W':'L'}));
     w.appendChild(table(
@@ -459,22 +462,30 @@ function renderScoutBody(t){
     w.appendChild(el(`<p class="note">No replay codes in this window.</p>`));
   }
 
-  // Counter-bans (full width — a key prep table)
-  w.appendChild(el(sectionH('Counter-bans',`<span class="note">when the opponent banned X, ${esc(t.team)} banned…</span>`)));
+  // Counter-bans — genuine responses only: the opponent banned first, this team
+  // banned second in reply. (Cases where this team banned first are excluded.)
+  w.appendChild(el(sectionH('Counter-bans',`<span class="note">opponent bans first → ${esc(t.team)}'s reply</span>`)));
   const cRows=rank(Object.fromEntries(Object.entries(t.counter).map(([k,v])=>[k,Object.values(v).reduce((x,y)=>x+y,0)])))
     .map(([opp,tot])=>({opp,tot,resp:rank(t.counter[opp]).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' ')}));
   w.appendChild(cRows.length?table(
-    [{k:'opp',label:'Opponent banned',html:r=>heroChip(r.opp)},{k:'tot',label:'×',num:true},
-     {k:'resp',label:`${esc(t.team)} responded with`,html:r=>r.resp}], cRows)
-   :el(`<p class="note">No paired bans yet (needs both teams' bans attributed).</p>`));
+    [{k:'opp',label:'Opponent banned first',html:r=>heroChip(r.opp)},{k:'tot',label:'×',num:true},
+     {k:'resp',label:`${esc(t.team)} replied with`,html:r=>r.resp}], cRows)
+   :el(`<p class="note">No counter-bans in this window (needs the opponent to have banned first with both bans attributed).</p>`));
 
-  // Bans by map
-  w.appendChild(el(sectionH('Bans by map')));
-  const bmRows=Object.keys(t.perMap).sort().map(mp=>({map:mp,n:Object.values(t.perMap[mp]).reduce((a,b)=>a+b,0),
-    heroes:rank(t.perMap[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}));
-  w.appendChild(bmRows.length?table(
-    [{k:'map',label:'Map'},{k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes}], bmRows)
-   :el(`<p class="note">No data.</p>`));
+  // Bans by map — split: on maps THEY picked, vs across all maps.
+  const banMapTable=(pm)=>{
+    const rows=Object.keys(pm).sort().map(mp=>({map:mp,cat:MAP_CAT[mp]||'',
+      n:Object.values(pm[mp]).reduce((a,b)=>a+b,0),
+      heroes:rank(pm[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}));
+    return rows.length?table(
+      [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
+       {k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes}], rows)
+     :el(`<p class="note">No data in this window.</p>`);
+  };
+  w.appendChild(el(sectionH('Bans on maps they pick',`<span class="note">what ${esc(t.team)} bans on maps they chose</span>`)));
+  w.appendChild(banMapTable(t.perMapPick));
+  w.appendChild(el(sectionH('Bans by map (all maps)')));
+  w.appendChild(banMapTable(t.perMap));
   return w;
 }
 
@@ -508,7 +519,7 @@ function renderMeta(){
   wrap.appendChild(el(sectionH('Attacking-first advantage',`<span class="note">Escort &amp; Hybrid only · all season</span>`)));
   wrap.appendChild(el(`<p class="note" style="margin-top:0">Mirrored modes (Control/Flashpoint/Push) excluded. Overall the first-attacking team won <b>${af.atk_first_wins}/${af.total_games}</b> = <b>${pctOf(af.atk_first_wins,af.total_games)}%</b>.</p>`));
   wrap.appendChild(table(
-    [{k:'name',label:'Map'},{k:'category',label:'Mode'},{k:'games',label:'Games',num:true},
+    [{k:'name',label:'Map'},{k:'category',label:'Mode'},{k:'games',label:'Maps',num:true},
      {k:'wr',label:'Atk-first win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}],
     af.by_map.map(m=>({...m,wr:pctOf(m.atk_first_wins,m.games)}))));
   return wrap;
@@ -550,7 +561,7 @@ function renderMatches(){
       m.games.filter(g=>g.map).forEach(g=>{
         const gEl=el(`<div class="game"></div>`);
         const un=g.bans.filter(b=>!b.faction);
-        gEl.appendChild(el(`<div class="game-hd"><span class="gno">G${g.game_no}</span>`+
+        gEl.appendChild(el(`<div class="game-hd"><span class="gno">M${g.game_no}</span>`+
           `<b>${esc(g.map)}</b> ${tag(g.map_category||'')} <span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>`+
           `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
           (g.was_restarted?tag('veto disrupted','warn'):'')+
@@ -581,7 +592,7 @@ function show(id){
 function updateHeader(){
   const s=D().summary;
   document.getElementById('title').textContent=s.championship;
-  document.getElementById('subtitle').textContent=`${s.matches} matches · ${s.played_games} games · ${dshort(s.date_from)} → ${dshort(s.date_to)}`;
+  document.getElementById('subtitle').textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`;
 }
 function setDivision(id){
   CURRENT_VIEW=id; recomputeDivision(); updateHeader();
