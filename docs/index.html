@@ -240,6 +240,52 @@ document.addEventListener('click',e=>{
     setTimeout(()=>{rc.textContent=o; rc.classList.remove('copied');},900); },()=>{});
 });
 
+/* ---------- shared match card (used by Matches tab and Scout page) ---------- */
+function rosterHTML(g){
+  return `<div class="rosters">`+(g.rosters||[]).map(rt=>{
+    const pls=rt.players.map(p=>{
+      const st=p.cap? `<span class="st">${nf(p.e)}e · ${nf(p.dmg)} dmg · ${nf(p.heal)} heal</span>`
+                     : `<span class="st faint">stats not captured (DC)</span>`;
+      return `<div class="pl"><span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
+             `<span>${esc(p.nick)}</span>${st}</div>`;
+    }).join('');
+    return `<div class="roster"><h4>${esc(rt.team)}</h4>${pls||'<span class="faint">—</span>'}</div>`;
+  }).join('')+`</div>`;
+}
+// Bans in draft order: 1st ban, 2nd ban — with the team that banned it.
+function bansOrdered(g){
+  const ord=[...g.bans].sort((a,b)=>(a.order||9)-(b.order||9));
+  return ord.map(b=>`<span class="banstep"><span class="ord">${b.order||'?'}</span> `+
+    `<b>${b.team?esc(b.team):'<span class=\'faint\'>?</span>'}</b> banned ${heroChip(b.hero)}</span>`).join('');
+}
+// One full match card: header (teams/score), then each map with bans + toggleable rosters.
+function matchCard(m){
+  const c=el(`<div class="card match"></div>`);
+  const w1=m.winner==='faction1',w2=m.winner==='faction2';
+  c.appendChild(el(`<div class="hd"><div class="teams"><span class="${w1?'win':'lose'}">${esc(m.f1||'?')}</span>`+
+    `<span class="score">${esc(m.series)}</span><span class="${w2?'win':'lose'}">${esc(m.f2||'?')}</span></div>`+
+    `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
+  m.games.filter(g=>g.map).forEach(g=>{
+    const gEl=el(`<div class="game"></div>`);
+    gEl.appendChild(el(`<div class="game-hd"><span class="gno">M${g.game_no}</span>`+
+      `<b>${esc(g.map)}</b> ${tag(g.map_category||'')} <span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>`+
+      `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
+      (g.was_restarted?tag('veto disrupted','warn'):'')+
+      `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
+        (g.demo_code?rcChip(g.demo_code):'<span class="faint" style="font-size:11.5px">no replay</span>')+
+        `<span class="faint rtog">▸ rosters</span></span></div>`));
+    gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
+    const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
+    gEl.appendChild(ros);
+    const toggle=gEl.querySelector('.game-hd');
+    toggle.onclick=(e)=>{ if(e.target.closest('.rc')) return;   // let replay-code copy
+      const open=ros.classList.toggle('hidden')===false;
+      gEl.querySelector('.rtog').textContent=open?'▾ rosters':'▸ rosters'; };
+    c.appendChild(gEl);
+  });
+  return c;
+}
+
 // horizontal bar list. items:[{label(html), value, color?}]
 function barList(items){
   if(!items.length) return `<p class="note">No data in this window.</p>`;
@@ -384,7 +430,7 @@ function renderOverview(){
 function scoutData(team,lim){
   const mine=MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team);
   const used=recent(mine,lim), a=aggregate(used,team), {from,to}=dateRange(used);
-  return {team,used:used.length,total:mine.length,from,to,...a};
+  return {team,used:used.length,total:mine.length,from,to,matches:used,...a};
 }
 
 const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team).length;
@@ -465,18 +511,13 @@ function renderScoutBody(t){
     w.appendChild(el(`<p class="note">No maps in this window where they both picked and banned first.</p>`));
   }
 
-  // Recent replays — newest-first game replay codes (click to copy into OW2).
-  w.appendChild(el(sectionH('Recent replays',`<span class="note">${t.replays.length} maps · click a code to copy</span>`)));
-  if(t.replays.length){
-    const rr=t.replays.slice(0,24).map(r=>({...r, date:dshort(r.when), res:r.won?'W':'L'}));
-    w.appendChild(table(
-      [{k:'date',label:'Date'},
-       {k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(MAP_CAT[r.map]||'')}</span>`},
-       {k:'opp',label:'vs'},
-       {k:'res',label:'Result',html:r=>`<span class="${r.won?'role-Support':'role-Damage'}" style="font-weight:700">${r.res}</span>`},
-       {k:'code',label:'Replay',html:r=>rcChip(r.code)}], rr));
+  // Matches — full match cards for this team (same view as searching them on the
+  // Matches tab): per-map bans in draft order, replay codes inline, toggleable rosters.
+  w.appendChild(el(sectionH('Matches',`<span class="note">${t.matches.length} match${t.matches.length===1?'':'es'} · click a map for rosters · replay codes inline</span>`)));
+  if(t.matches.length){
+    t.matches.forEach(m=>w.appendChild(matchCard(m)));
   } else {
-    w.appendChild(el(`<p class="note">No replay codes in this window.</p>`));
+    w.appendChild(el(`<p class="note">No matches in this window.</p>`));
   }
 
   // Counter-bans — genuine responses only: the opponent banned first, this team
@@ -573,55 +614,11 @@ function renderMatches(){
   const search=el(`<input placeholder="search team, hero, or map…" style="width:100%;margin-bottom:12px;font-size:15px;padding:11px 13px">`);
   const list=el(`<div></div>`); wrap.append(search,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
-
-  function rosterHTML(g){
-    return `<div class="rosters">`+(g.rosters||[]).map(rt=>{
-      const pls=rt.players.map(p=>{
-        const st=p.cap? `<span class="st">${nf(p.e)}e · ${nf(p.dmg)} dmg · ${nf(p.heal)} heal</span>`
-                       : `<span class="st faint">stats not captured (DC)</span>`;
-        return `<div class="pl"><span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-               `<span>${esc(p.nick)}</span>${st}</div>`;
-      }).join('');
-      return `<div class="roster"><h4>${esc(rt.team)}</h4>${pls||'<span class="faint">—</span>'}</div>`;
-    }).join('')+`</div>`;
-  }
-  // Bans in draft order: 1st ban, 2nd ban — with the team that banned it.
-  function bansOrdered(g){
-    const ord=[...g.bans].sort((a,b)=>(a.order||9)-(b.order||9));
-    return ord.map(b=>`<span class="banstep"><span class="ord">${b.order||'?'}</span> `+
-      `<b>${b.team?esc(b.team):'<span class=\'faint\'>?</span>'}</b> banned ${heroChip(b.hero)}</span>`).join('');
-  }
   function draw(q){
     q=(q||'').trim().toLowerCase(); list.innerHTML='';
     const shown=D().matches.filter(m=>!q||hay(m).includes(q));
     if(!shown.length){ list.appendChild(el(`<p class="note">No matches.</p>`)); return; }
-    shown.forEach(m=>{
-      const c=el(`<div class="card match"></div>`);
-      const w1=m.winner==='faction1',w2=m.winner==='faction2';
-      c.appendChild(el(`<div class="hd"><div class="teams"><span class="${w1?'win':'lose'}">${esc(m.f1||'?')}</span>`+
-        `<span class="score">${esc(m.series)}</span><span class="${w2?'win':'lose'}">${esc(m.f2||'?')}</span></div>`+
-        `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
-      m.games.filter(g=>g.map).forEach(g=>{
-        const gEl=el(`<div class="game"></div>`);
-        const un=g.bans.filter(b=>!b.faction);
-        gEl.appendChild(el(`<div class="game-hd"><span class="gno">M${g.game_no}</span>`+
-          `<b>${esc(g.map)}</b> ${tag(g.map_category||'')} <span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>`+
-          `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
-          (g.was_restarted?tag('veto disrupted','warn'):'')+
-          `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
-            (g.demo_code?rcChip(g.demo_code):'<span class="faint" style="font-size:11.5px">no replay</span>')+
-            `<span class="faint rtog">▸ rosters</span></span></div>`));
-        gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
-        const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
-        gEl.appendChild(ros);
-        const toggle=gEl.querySelector('.game-hd');
-        toggle.onclick=(e)=>{ if(e.target.closest('.rc')) return;   // let replay-code copy
-          const open=ros.classList.toggle('hidden')===false;
-          gEl.querySelector('.rtog').textContent=open?'▾ rosters':'▸ rosters'; };
-        c.appendChild(gEl);
-      });
-      list.appendChild(c);
-    });
+    shown.forEach(m=>list.appendChild(matchCard(m)));
   }
   search.oninput=()=>draw(search.value); draw(''); return wrap;
 }
