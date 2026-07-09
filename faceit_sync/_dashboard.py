@@ -68,6 +68,7 @@ main{max-width:1060px;margin:0 auto;padding:20px 18px 72px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}
 .grid{display:grid;gap:14px}
 .cols-2{grid-template-columns:1fr 1fr}
+.poolgrid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .cols-auto{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 @media (max-width:720px){.cols-2{grid-template-columns:1fr}}
 .section-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:26px 2px 10px}
@@ -113,6 +114,12 @@ tbody tr:hover{background:var(--surface2)}
 .track{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
 .fill{height:100%;border-radius:6px;background:var(--accent);min-width:3px;transition:width .2s ease}
 .barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
+.poolrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 2px;font-size:13px}
+.poolrow+.poolrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.poolrow .pm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.poolrow .pr{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+.poolrow .pk{font-weight:700}
+.poolrow .pp{color:var(--faint);font-size:11px;margin-left:7px}
 
 /* chips / badges */
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
@@ -300,7 +307,7 @@ function makeRecency(total, currentN, onChange, sliderMax){
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
   const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},perMapPick:{},counter:{},mapStats:{},
-           firstBans:{},firstBanGames:0,games:0,gwins:0,results:[],replays:[]};
+           firstBans:{},firstBanGames:0,pickFirstBan:{},games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
     if(team && !side) return;
@@ -318,6 +325,10 @@ function aggregate(matches,team){
           (a.perMap[g.map]=a.perMap[g.map]||{}); inc(a.perMap[g.map],mine.hero);
           if(g.map_picked_by===team){ (a.perMapPick[g.map]=a.perMapPick[g.map]||{}); inc(a.perMapPick[g.map],mine.hero); }
           if(mine.order===1){ a.firstBanGames++; inc(a.firstBans,mine.hero); }
+          // their pick + they ban first: a self-chosen setup — surfaces repeated strats.
+          if(g.map_picked_by===team && mine.order===1){
+            const p=a.pickFirstBan[g.map]||(a.pickFirstBan[g.map]={games:0,wins:0,bans:{}});
+            p.games++; if(won)p.wins++; inc(p.bans,mine.hero); }
           // counter-ban = the team's RESPONSE, i.e. only when the opponent
           // banned first (order 1) and this team banned second (order 2).
           if(oc && oc.order===1 && mine.order===2){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero); } }
@@ -448,6 +459,25 @@ function renderScoutBody(t){
   two.appendChild(mapC);
   w.appendChild(two);
 
+  // Signature setups — maps THEY pick AND ban first on (a fully self-chosen draft).
+  // A high win% on a repeated map+ban tells you it's a rehearsed strat to be ready for.
+  const pfb=Object.entries(t.pickFirstBan).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',
+      games:v.games,wr:pctOf(v.wins,v.games),
+      ban:rank(v.bans).slice(0,2).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' ')}))
+    .sort((a,b)=>b.games-a.games||b.wr-a.wr);
+  const pfbG=pfb.reduce((s,r)=>s+r.games,0), pfbW=pfb.reduce((s,r)=>s+Math.round(r.wr*r.games/100),0);
+  w.appendChild(el(sectionH('Signature setups',`<span class="note">maps they pick &amp; ban first on · self-chosen drafts</span>`)));
+  if(pfb.length){
+    w.appendChild(el(`<p class="note" style="margin-top:0">On maps ${esc(t.team)} both picked and opened the ban on, they won <b>${pfbW}/${pfbG}</b> = <b>${pctOf(pfbW,pfbG)}%</b>. A repeated map with a strong win rate is likely a rehearsed strat.</p>`));
+    w.appendChild(table(
+      [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
+       {k:'ban',label:'Their first ban',html:r=>r.ban},
+       {k:'games',label:'Maps',num:true},
+       {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], pfb));
+  } else {
+    w.appendChild(el(`<p class="note">No maps in this window where they both picked and banned first.</p>`));
+  }
+
   // Recent replays — newest-first game replay codes (click to copy into OW2).
   w.appendChild(el(sectionH('Recent replays',`<span class="note">${t.replays.length} maps · click a code to copy</span>`)));
   if(t.replays.length){
@@ -514,6 +544,32 @@ function renderMeta(){
     body.appendChild(v);
   }
   draw();
+
+  // Current map pool, grouped by mode the way FACEIT lays out the veto pool.
+  const MODE_ORDER=['Control','Escort','Flashpoint','Hybrid','Push','Clash'];
+  const pool={};
+  D().matches.forEach(m=>m.games.forEach(g=>{
+    if(!g.map) return;
+    const cat=MAP_CAT[g.map]||g.map_category||'—';
+    (pool[cat]=pool[cat]||{}); const e=pool[cat][g.map]||(pool[cat][g.map]={picks:0,plays:0});
+    e.plays++; if(g.map_picked_by) e.picks++;
+  }));
+  const cats=Object.keys(pool).sort((a,b)=>{const i=MODE_ORDER.indexOf(a),j=MODE_ORDER.indexOf(b);return (i<0?99:i)-(j<0?99:j)||a.localeCompare(b);});
+  const poolPicks=cats.reduce((s,c)=>s+Object.values(pool[c]).reduce((x,e)=>x+e.picks,0),0);
+  wrap.appendChild(el(sectionH('Map pool — picks by mode',`<span class="note">${cats.reduce((s,c)=>s+Object.keys(pool[c]).length,0)} maps · ${poolPicks} picks · all season</span>`)));
+  const pg=el(`<div class="grid poolgrid"></div>`);
+  cats.forEach(c=>{
+    const maps=Object.entries(pool[c]).map(([m,e])=>({map:m,picks:e.picks,plays:e.plays})).sort((a,b)=>b.picks-a.picks||b.plays-a.plays);
+    const tot=maps.reduce((s,m)=>s+m.picks,0);
+    const card=el(`<div class="card"></div>`);
+    card.appendChild(el(`<p class="eyebrow">${esc(c)} <span class="note" style="text-transform:none;letter-spacing:0">${tot} pick${tot===1?'':'s'}</span></p>`));
+    card.appendChild(el(`<div>`+maps.map(m=>
+      `<div class="poolrow"><span class="pm">${esc(m.map)}</span>`+
+      `<span class="pr"><span class="pk">${m.picks}</span><span class="pp">${m.plays} played</span></span></div>`).join('')+`</div>`));
+    pg.appendChild(card);
+  });
+  wrap.appendChild(pg);
+
   // attacking-first (all season)
   const af=D().attacking_first;
   wrap.appendChild(el(sectionH('Attacking-first advantage',`<span class="note">Escort &amp; Hybrid only · all season</span>`)));
