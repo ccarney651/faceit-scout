@@ -70,6 +70,10 @@ select,input,.btn{font:inherit;color:var(--fg);background:var(--surface);border:
 select:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .controls label{color:var(--muted);font-size:12px;font-weight:600}
+input[type=range]{-webkit-appearance:none;appearance:none;border:0;padding:0;background:transparent;
+  accent-color:var(--accent);height:22px;width:170px;cursor:pointer}
+input[type=number]{width:66px;text-align:right}
+.winlab{color:var(--fg);font-size:12.5px;font-weight:600;min-width:130px}
 .btn{cursor:pointer;font-weight:600;background:var(--accent);color:#fff;border-color:transparent}
 .btn:hover{filter:brightness(1.06)}
 
@@ -201,7 +205,7 @@ const winVar = (p)=> p>=58?'var(--good)': p>=42?'var(--mid)':'var(--bad)';
 let MATCHES_RECENT=[];
 function recomputeDivision(){
   MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
-  SCOUT_TEAM=D().team_names[0]||null;
+  SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
 }
 const recent=(arr,lim)=> (lim && lim<arr.length)? arr.slice(0,lim) : arr;
 const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();return {from:w[0]||'',to:w[w.length-1]||''};};
@@ -300,7 +304,7 @@ const TABS=[
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
-let SCOUT_WIN='all', META_WIN='20';
+let SCOUT_N=null, META_WIN='20';   // SCOUT_N: number of recent matches, null = all
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
 
@@ -353,23 +357,39 @@ function scoutData(team,lim){
   return {team,used:used.length,total:mine.length,from,to,...a};
 }
 
+const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team).length;
+
 function renderScout(){
   const wrap=el(`<div></div>`);
   const bar=el(`<div class="card controls"></div>`);
   bar.appendChild(el(`<label>Opponent</label>`));
   const sel=el(`<select style="min-width:190px"></select>`);
   D().team_names.forEach(n=>sel.appendChild(el(`<option ${n===SCOUT_TEAM?'selected':''}>${esc(n)}</option>`)));
-  sel.onchange=()=>{SCOUT_TEAM=sel.value;draw();};
   bar.appendChild(sel);
-  bar.appendChild(el(`<label>Form</label>`));
-  bar.appendChild(windowSelect(SCOUT_WIN,v=>{SCOUT_WIN=v;draw();},[['all','All matches'],['15','Last 15'],['10','Last 10'],['5','Last 5']]));
+  bar.appendChild(el(`<label>Recent matches</label>`));
+  const slider=el(`<input type="range" min="1" step="1">`);
+  const num=el(`<input type="number" min="1" step="1">`);
+  const lab=el(`<span class="winlab"></span>`);
+  bar.append(slider,num,lab);
   const body=el(`<div></div>`);
   wrap.append(bar,body);
-  function draw(){
-    const lim=SCOUT_WIN==='all'?null:parseInt(SCOUT_WIN,10);
-    const t=scoutData(SCOUT_TEAM,lim); body.innerHTML=''; body.appendChild(renderScoutBody(t));
+
+  let total=1;
+  function syncControls(){
+    total=Math.max(1,teamTotalMatches(SCOUT_TEAM));
+    if(SCOUT_N==null || SCOUT_N>total) SCOUT_N=total;   // default & clamp: all matches
+    slider.max=num.max=total; slider.value=num.value=SCOUT_N;
+    lab.textContent = SCOUT_N>=total ? `all ${total} matches` : `last ${SCOUT_N} of ${total}`;
   }
-  draw(); return wrap;
+  function render(){
+    body.innerHTML='';
+    body.appendChild(renderScoutBody(scoutData(SCOUT_TEAM, SCOUT_N>=total?null:SCOUT_N)));
+  }
+  function setN(v){ SCOUT_N=Math.max(1,Math.min(total,parseInt(v,10)||total)); syncControls(); render(); }
+  sel.onchange=()=>{ SCOUT_TEAM=sel.value; SCOUT_N=null; syncControls(); render(); };
+  slider.oninput=()=>setN(slider.value);
+  num.oninput=()=>setN(num.value);
+  syncControls(); render(); return wrap;
 }
 
 function renderScoutBody(t){
