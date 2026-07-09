@@ -70,10 +70,13 @@ select,input,.btn{font:inherit;color:var(--fg);background:var(--surface);border:
 select:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .controls label{color:var(--muted);font-size:12px;font-weight:600}
-input[type=range]{-webkit-appearance:none;appearance:none;border:0;padding:0;background:transparent;
-  accent-color:var(--accent);height:22px;width:170px;cursor:pointer}
-input[type=number]{width:66px;text-align:right}
-.winlab{color:var(--fg);font-size:12.5px;font-weight:600;min-width:130px}
+input[type=range]{appearance:auto;-webkit-appearance:auto;border:none;padding:0;margin:0;background:transparent;
+  box-shadow:none;accent-color:var(--accent);width:150px;height:18px;cursor:pointer;vertical-align:middle}
+input[type=range]:focus{outline:none;border-color:transparent;box-shadow:none}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:5px;border-radius:3px}
+input[type=number]{width:56px;text-align:center;padding:7px 6px}
+.recency{display:inline-flex;align-items:center;gap:10px}
+.winlab{color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap}
 .btn{cursor:pointer;font-weight:600;background:var(--accent);color:#fff;border-color:transparent}
 .btn:hover{filter:brightness(1.06)}
 
@@ -260,11 +263,21 @@ function table(cols,rows){
 
 function sectionH(title,right=''){ return `<div class="section-h"><h2>${esc(title)}</h2>${right}</div>`; }
 
-// window <select>
-function windowSelect(current,onchange,opts){
-  const s=el(`<select></select>`);
-  opts.forEach(([v,l])=>s.appendChild(el(`<option value="${v}" ${v===current?'selected':''}>${esc(l)}</option>`)));
-  s.onchange=()=>onchange(s.value); return s;
+// Recency control: a slider + number box (synced) over 1..total matches.
+// onChange gets the limit (a number, or null for "all"). Returns the group node.
+function makeRecency(total, currentN, onChange){
+  const g=el(`<span class="recency"></span>`);
+  const slider=el(`<input type="range" min="1" step="1" aria-label="recent matches">`);
+  const num=el(`<input type="number" min="1" step="1" aria-label="recent matches">`);
+  const lab=el(`<span class="winlab"></span>`);
+  slider.max=num.max=total;
+  const upd=(v,fire)=>{ const n=Math.max(1,Math.min(total,parseInt(v,10)||total));
+    slider.value=num.value=n; lab.textContent = n>=total ? `all ${total} matches` : `last ${n} of ${total}`;
+    if(fire) onChange(n>=total?null:n); };
+  slider.oninput=()=>upd(slider.value,true);
+  num.oninput=()=>upd(num.value,true);
+  g.append(slider,num,lab); upd(currentN,false);
+  return g;
 }
 
 /* ---------- aggregation over a set of matches ---------- */
@@ -304,7 +317,7 @@ const TABS=[
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
-let SCOUT_N=null, META_WIN='20';   // SCOUT_N: number of recent matches, null = all
+let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
 
@@ -367,29 +380,20 @@ function renderScout(){
   D().team_names.forEach(n=>sel.appendChild(el(`<option ${n===SCOUT_TEAM?'selected':''}>${esc(n)}</option>`)));
   bar.appendChild(sel);
   bar.appendChild(el(`<label>Recent matches</label>`));
-  const slider=el(`<input type="range" min="1" step="1">`);
-  const num=el(`<input type="number" min="1" step="1">`);
-  const lab=el(`<span class="winlab"></span>`);
-  bar.append(slider,num,lab);
+  const holder=el(`<span style="display:inline-flex"></span>`);
+  bar.appendChild(holder);
   const body=el(`<div></div>`);
   wrap.append(bar,body);
 
-  let total=1;
-  function syncControls(){
-    total=Math.max(1,teamTotalMatches(SCOUT_TEAM));
-    if(SCOUT_N==null || SCOUT_N>total) SCOUT_N=total;   // default & clamp: all matches
-    slider.max=num.max=total; slider.value=num.value=SCOUT_N;
-    lab.textContent = SCOUT_N>=total ? `all ${total} matches` : `last ${SCOUT_N} of ${total}`;
+  function renderBody(){ body.innerHTML=''; body.appendChild(renderScoutBody(scoutData(SCOUT_TEAM, SCOUT_N))); }
+  function rebuild(){                       // per-team total → rebuild the control
+    const total=Math.max(1,teamTotalMatches(SCOUT_TEAM));
+    if(SCOUT_N!=null && SCOUT_N>total) SCOUT_N=null;
+    holder.replaceChildren(makeRecency(total, SCOUT_N==null?total:SCOUT_N, n=>{ SCOUT_N=n; renderBody(); }));
+    renderBody();
   }
-  function render(){
-    body.innerHTML='';
-    body.appendChild(renderScoutBody(scoutData(SCOUT_TEAM, SCOUT_N>=total?null:SCOUT_N)));
-  }
-  function setN(v){ SCOUT_N=Math.max(1,Math.min(total,parseInt(v,10)||total)); syncControls(); render(); }
-  sel.onchange=()=>{ SCOUT_TEAM=sel.value; SCOUT_N=null; syncControls(); render(); };
-  slider.oninput=()=>setN(slider.value);
-  num.oninput=()=>setN(num.value);
-  syncControls(); render(); return wrap;
+  sel.onchange=()=>{ SCOUT_TEAM=sel.value; SCOUT_N=null; rebuild(); };
+  rebuild(); return wrap;
 }
 
 function renderScoutBody(t){
@@ -460,13 +464,14 @@ function renderScoutBody(t){
 function renderMeta(){
   const wrap=el(`<div></div>`);
   const bar=el(`<div class="card controls"></div>`);
-  bar.appendChild(el(`<label>Recency</label>`));
-  bar.appendChild(windowSelect(META_WIN,v=>{META_WIN=v;draw();},[['all','All matches'],['40','Last 40'],['20','Last 20'],['10','Last 10'],['5','Last 5']]));
+  bar.appendChild(el(`<label>Recent matches</label>`));
+  const metaTotal=Math.max(1,MATCHES_RECENT.length);
+  if(META_N!=null && META_N>metaTotal) META_N=null;
+  bar.appendChild(makeRecency(metaTotal, META_N==null?metaTotal:META_N, n=>{META_N=n;draw();}));
   bar.appendChild(el(`<span class="note">a nerfed hero fades from recent windows</span>`));
   const body=el(`<div></div>`); wrap.append(bar,body);
   function draw(){
-    const lim=META_WIN==='all'?null:parseInt(META_WIN,10);
-    const ms=recent(MATCHES_RECENT,lim), a=aggregate(ms,null), {from,to}=dateRange(ms);
+    const ms=recent(MATCHES_RECENT,META_N), a=aggregate(ms,null), {from,to}=dateRange(ms);
     body.innerHTML='';
     const v=el(`<div></div>`);
     v.appendChild(el(`<p class="note">${ms.length<MATCHES_RECENT.length?`last ${ms.length} of ${MATCHES_RECENT.length}`:`all ${ms.length}`} matches · ${dshort(from)} → ${dshort(to)}</p>`));
