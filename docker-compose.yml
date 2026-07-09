@@ -1,0 +1,17 @@
+services:
+  faceit-sync:
+    build: .
+    image: faceit-sync:latest
+    env_file:
+      - .env
+    environment:
+      # Override the DB path to point at the mounted volume.
+      FACEIT_DB: /data/faceit.sqlite3
+    volumes:
+      # SQLite database persists here on the host.
+      - ./data:/data
+    # Example: enumerate a championship (needs FACEIT_API_KEY in .env).
+    #   docker compose run --rm faceit-sync fetch --championship <id>
+    # Or mass-import specific matches (keyless):
+    #   docker compose run --rm faceit-sync fetch --matches <id-or-url> ...
+    command: ["--help"]

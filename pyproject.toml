@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faceit-sync"
+version = "0.1.0"
+description = "Incremental, idempotent ingest of FACEIT League (Overwatch 2) championship data into SQLite."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "responses>=0.25",
+    "mypy>=1.8",
+    "types-requests>=2.31",
+]
+
+[project.scripts]
+faceit-sync = "faceit_sync.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["faceit_sync*"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+# The SQLite rows we read back are Any-typed by nature; keep those localized.
+warn_return_any = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
