@@ -41,8 +41,10 @@ jobs:
           # Seed known teams from the committed match list (idempotent), then let
           # the keyless enumerator discover and ingest every finished league match
           # across all divisions. Already-stored finished matches are skipped.
-          faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt
-          faceit-sync --db faceit.sqlite3 fetch
+          # A stray unreachable match must not block the daily dashboard update,
+          # so fetch errors are tolerated; the export must still succeed.
+          faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt || echo "seed: some matches errored (continuing)"
+          faceit-sync --db faceit.sqlite3 fetch || echo "update: some matches errored (continuing)"
           faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
 
       - name: Save database cache

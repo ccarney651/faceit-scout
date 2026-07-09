@@ -668,7 +668,11 @@ class SyncEngine:
         return newly
 
     def known_team_ids(self, championship_id: str) -> list[str]:
-        """Team ids that have appeared in stored matches of this championship."""
+        """Real team ids in this championship (UUIDs).
+
+        Bracket byes appear as a pseudo-team id like ``bye`` which isn't a real
+        team (enumerating it 404s), so we keep only UUID-shaped ids.
+        """
         rows = self.db.conn.execute(
             """SELECT tid FROM (
                    SELECT faction1_team_id tid FROM matches WHERE championship_id=?
@@ -676,7 +680,8 @@ class SyncEngine:
                ) WHERE tid IS NOT NULL""",
             (championship_id, championship_id),
         ).fetchall()
-        return [str(r[0]) for r in rows]
+        return [str(r[0]) for r in rows
+                if len(str(r[0])) == 36 and str(r[0]).count("-") == 4]
 
     def _ingest_and_tally(
         self, mid: str, cid: str, result: "SyncResult", *,
