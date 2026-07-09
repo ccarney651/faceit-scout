@@ -278,13 +278,16 @@ function sectionH(title,right=''){ return `<div class="section-h"><h2>${esc(titl
 
 // Recency control: a slider + number box (synced) over 1..total matches.
 // onChange gets the limit (a number, or null for "all"). Returns the group node.
-function makeRecency(total, currentN, onChange){
+// `total` = matches actually available (drives the "all"/label logic); `sliderMax`
+// = how far the control can go (defaults to total; Scout sets a floor of 15).
+function makeRecency(total, currentN, onChange, sliderMax){
+  sliderMax = sliderMax || total;
   const g=el(`<span class="recency"></span>`);
   const slider=el(`<input type="range" min="1" step="1" aria-label="recent matches">`);
   const num=el(`<input type="number" min="1" step="1" aria-label="recent matches">`);
   const lab=el(`<span class="winlab"></span>`);
-  slider.max=num.max=total;
-  const upd=(v,fire)=>{ const n=Math.max(1,Math.min(total,parseInt(v,10)||total));
+  slider.max=num.max=sliderMax;
+  const upd=(v,fire)=>{ const n=Math.max(1,Math.min(sliderMax,parseInt(v,10)||sliderMax));
     slider.value=num.value=n; lab.textContent = n>=total ? `all ${total} matches` : `last ${n} of ${total}`;
     if(fire) onChange(n>=total?null:n); };
   slider.oninput=()=>upd(slider.value,true);
@@ -401,8 +404,9 @@ function renderScout(){
   function renderBody(){ body.innerHTML=''; body.appendChild(renderScoutBody(scoutData(SCOUT_TEAM, SCOUT_N))); }
   function rebuild(){                       // per-team total → rebuild the control
     const total=Math.max(1,teamTotalMatches(SCOUT_TEAM));
-    if(SCOUT_N!=null && SCOUT_N>total) SCOUT_N=null;
-    holder.replaceChildren(makeRecency(total, SCOUT_N==null?total:SCOUT_N, n=>{ SCOUT_N=n; renderBody(); }));
+    const smax=Math.max(15,total);          // let the window reach a full season
+    if(SCOUT_N!=null && SCOUT_N>smax) SCOUT_N=null;
+    holder.replaceChildren(makeRecency(total, SCOUT_N==null?smax:SCOUT_N, n=>{ SCOUT_N=n; renderBody(); }, smax));
     renderBody();
   }
   sel.onchange=()=>{ SCOUT_TEAM=sel.value; SCOUT_N=null; rebuild(); };
