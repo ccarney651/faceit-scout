@@ -132,6 +132,11 @@ tbody tr:hover{background:var(--surface2)}
   border-top:1px solid var(--line);font-size:12.5px}
 .roster .pl .st{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 .muted{color:var(--muted)} .faint{color:var(--faint)}
+.rc{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;
+  background:var(--surface2);color:var(--fg);padding:1.5px 7px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--line2);letter-spacing:.03em}
+.rc:hover{border-color:var(--accent);color:var(--accent)}
+.rc.copied{color:var(--good);border-color:var(--good)}
 .hidden{display:none}
 </style>
 </head>
@@ -205,6 +210,21 @@ const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();r
 function heroChip(name){ const r=HERO_ROLE[name]; return `<span class="chip"><span class="dot bg-${esc(r||'')}"></span>${esc(name)}</span>`; }
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
+// Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
+function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Copy replay code — paste in Overwatch → Watch">${esc(code)}</code>`; }
+function copyText(t){
+  if(navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
+  return new Promise((res,rej)=>{ try{ const ta=document.createElement('textarea');
+    ta.value=t; ta.style.position='fixed'; ta.style.top='-999px'; document.body.appendChild(ta);
+    ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta);
+    ok?res():rej(); }catch(err){ rej(err); } });
+}
+document.addEventListener('click',e=>{
+  const rc=e.target.closest('.rc'); if(!rc||!rc.dataset.rc) return;
+  const o=rc.textContent;
+  copyText(rc.dataset.rc).then(()=>{ rc.textContent='copied ✓'; rc.classList.add('copied');
+    setTimeout(()=>{rc.textContent=o; rc.classList.remove('copied');},900); },()=>{});
+});
 
 // horizontal bar list. items:[{label(html), value, color?}]
 function barList(items){
@@ -247,7 +267,7 @@ function windowSelect(current,onchange,opts){
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
   const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},counter:{},mapStats:{},
-           firstBans:{},firstBanGames:0,games:0,gwins:0,results:[]};
+           firstBans:{},firstBanGames:0,games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
     if(team && !side) return;
@@ -258,6 +278,8 @@ function aggregate(matches,team){
         const won=g.winner_faction===side; if(won)a.gwins++;
         const ms=a.mapStats[g.map]||(a.mapStats[g.map]={games:0,wins:0,picks:0}); ms.games++; if(won)ms.wins++;
         if(g.map_picked_by===team){ inc(a.mapsPicked,g.map); ms.picks++; }
+        if(g.demo_code) a.replays.push({when:m.finished_at,opp:(m.f1===team?m.f2:m.f1),
+          map:g.map,cat:g.map_category,gno:g.game_no,code:g.demo_code,won});
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
         if(mine){ inc(a.bans,mine.hero); if(mine.role)inc(a.banRoles,mine.role);
           (a.perMap[g.map]=a.perMap[g.map]||{}); inc(a.perMap[g.map],mine.hero);
@@ -382,6 +404,20 @@ function renderScoutBody(t){
   two.appendChild(mapC);
   w.appendChild(two);
 
+  // Recent replays — newest-first game replay codes (click to copy into OW2).
+  w.appendChild(el(sectionH('Recent replays',`<span class="note">${t.replays.length} games · click a code to copy</span>`)));
+  if(t.replays.length){
+    const rr=t.replays.slice(0,24).map(r=>({...r, date:dshort(r.when), res:r.won?'W':'L'}));
+    w.appendChild(table(
+      [{k:'date',label:'Date'},
+       {k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(MAP_CAT[r.map]||'')}</span>`},
+       {k:'opp',label:'vs'},
+       {k:'res',label:'Result',html:r=>`<span class="${r.won?'role-Support':'role-Damage'}" style="font-weight:700">${r.res}</span>`},
+       {k:'code',label:'Replay',html:r=>rcChip(r.code)}], rr));
+  } else {
+    w.appendChild(el(`<p class="note">No replay codes in this window.</p>`));
+  }
+
   // Counter-bans (full width — a key prep table)
   w.appendChild(el(sectionH('Counter-bans',`<span class="note">when the opponent banned X, ${esc(t.team)} banned…</span>`)));
   const cRows=rank(Object.fromEntries(Object.entries(t.counter).map(([k,v])=>[k,Object.values(v).reduce((x,y)=>x+y,0)])))
@@ -476,13 +512,16 @@ function renderMatches(){
           `<b>${esc(g.map)}</b> ${tag(g.map_category||'')} <span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>`+
           `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
           (g.was_restarted?tag('veto disrupted','warn'):'')+
-          `<span class="faint" style="margin-left:auto">▸ rosters</span></div>`));
+          `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
+            (g.demo_code?rcChip(g.demo_code):'<span class="faint" style="font-size:11.5px">no replay</span>')+
+            `<span class="faint rtog">▸ rosters</span></span></div>`));
         gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
         const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
         gEl.appendChild(ros);
         const toggle=gEl.querySelector('.game-hd');
-        toggle.onclick=()=>{ const open=ros.classList.toggle('hidden')===false;
-          toggle.querySelector('span:last-child').textContent=open?'▾ rosters':'▸ rosters'; };
+        toggle.onclick=(e)=>{ if(e.target.closest('.rc')) return;   // let replay-code copy
+          const open=ros.classList.toggle('hidden')===false;
+          gEl.querySelector('.rtog').textContent=open?'▾ rosters':'▸ rosters'; };
         c.appendChild(gEl);
       });
       list.appendChild(c);
