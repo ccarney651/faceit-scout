@@ -270,6 +270,9 @@ def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
         def team_of(faction: Optional[str]) -> Optional[str]:
             return f1 if faction == "faction1" else f2 if faction == "faction2" else None
 
+        # team_id -> team name, so per-game rosters can be grouped by side.
+        tid_name = {m["faction1_team_id"]: f1, m["faction2_team_id"]: f2}
+
         gs: list[dict[str, Any]] = []
         for g in rows("""SELECT g.game_no, mp.name map, g.map_category, g.faction1_score f1,
                                 g.faction2_score f2, g.winner_faction, g.was_restarted, g.demo_code
@@ -286,12 +289,25 @@ def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
             ]
             mp_by = scalar("SELECT picked_by_faction FROM map_picks WHERE match_id=? AND game_no=?",
                            m["id"], gno)
+            # Per-game rosters: which 5 played for each team, with role + stats.
+            by_team: dict[str, list[dict[str, Any]]] = {}
+            for rp in rows("""SELECT rp.team_id, COALESCE(p.nickname, rp.player_id) nick,
+                                     rp.role, rp.stats_captured cap, rp.eliminations e,
+                                     rp.deaths d, rp.damage dmg, rp.healing heal
+                              FROM round_players rp LEFT JOIN players p ON p.id=rp.player_id
+                              WHERE rp.match_id=? AND rp.game_no=?""", m["id"], gno):
+                tname = tid_name.get(rp["team_id"]) or "?"
+                by_team.setdefault(tname, []).append({
+                    "nick": rp["nick"], "role": rp["role"], "cap": bool(rp["cap"]),
+                    "e": rp["e"], "d": rp["d"], "dmg": rp["dmg"], "heal": rp["heal"],
+                })
+            rosters = [{"team": t, "players": pls} for t, pls in by_team.items()]
             gs.append({
                 "game_no": gno, "map": g["map"], "map_category": g["map_category"],
                 "f1": g["f1"], "f2": g["f2"], "winner_faction": g["winner_faction"],
                 "winner_team": team_of(g["winner_faction"]),
                 "was_restarted": g["was_restarted"], "demo_code": g["demo_code"],
-                "map_picked_by": team_of(mp_by), "bans": bans,
+                "map_picked_by": team_of(mp_by), "bans": bans, "rosters": rosters,
             })
         s1 = sum(1 for g in gs if g["winner_faction"] == "faction1")
         s2 = sum(1 for g in gs if g["winner_faction"] == "faction2")

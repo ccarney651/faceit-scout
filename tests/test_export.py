@@ -44,7 +44,8 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert "<script src" not in doc and "<link" not in doc
 
     # Embedded data parses back to JSON and reflects the ingest.
-    m = re.search(r"const DATA = (\{.*?\});\nconst \$", doc, re.S)
+    # (DATA is emitted on a single line, so match without DOTALL.)
+    m = re.search(r"const DATA = (\{.*\});", doc)
     assert m is not None
     data = json.loads(m.group(1).replace("<\\/", "</"))
     assert data["summary"]["matches"] == 1
