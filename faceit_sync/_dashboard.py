@@ -120,6 +120,29 @@ tbody tr:hover{background:var(--surface2)}
 .poolrow .pr{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
 .poolrow .pk{font-weight:700}
 .poolrow .pp{color:var(--faint);font-size:11px;margin-left:7px}
+/* draft simulator */
+.probbar{display:flex;height:38px;border-radius:10px;overflow:hidden;font-weight:750;font-size:13.5px;box-shadow:inset 0 0 0 1px var(--line)}
+.probbar>span{display:flex;align-items:center;padding:0 13px;white-space:nowrap;transition:flex-basis .35s ease}
+.probbar .pa{background:var(--accent);color:#fff}
+.probbar .pb{background:color-mix(in srgb,var(--bad) 78%,#000 0%);color:#fff;justify-content:flex-end}
+.simblock{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;background:var(--surface);position:relative}
+.simblock .bh{font-weight:680;font-size:13.5px;margin-bottom:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.simrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:7px 0}
+.simrow .rl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:82px;flex:none}
+.modelbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:74px;flex:none;font-weight:700}
+.opt{border:1px solid var(--line2);background:var(--surface2);border-radius:8px;padding:4px 9px;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;user-select:none;line-height:1.5}
+.opt:hover{border-color:var(--accent)}
+.opt.sel{background:var(--accent-weak);border-color:var(--accent);font-weight:650}
+.opt .pp{color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums}
+.opt.sel .pp{color:var(--accent)}
+.opt.dim{opacity:.55}
+.wsel{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.wbtn{border:1px solid var(--line2);border-radius:8px;padding:5px 12px;font-size:12.5px;cursor:pointer;font-weight:650}
+.wbtn:hover{border-color:var(--accent)}
+.wbtn.selA{background:var(--accent);color:#fff;border-color:var(--accent)}
+.wbtn.selB{background:color-mix(in srgb,var(--bad) 82%,#000);color:#fff;border-color:transparent}
+.simnext{font-size:11.5px;color:var(--faint);margin-top:8px}
+.simscore{font-variant-numeric:tabular-nums;font-weight:750}
 
 /* chips / badges */
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
@@ -219,6 +242,9 @@ const inc = (o,k,by=1)=>{ o[k]=(o[k]||0)+by; };
 const rank = (o)=> Object.entries(o).sort((a,b)=>b[1]-a[1]);   // NB: not `top` (window.top is reserved)
 
 const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
+// Full roster (all heroes, incl. never-banned ones) for the draft simulator's hero picker.
+const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
+ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 const roleVar = (r)=> ({Tank:'var(--tank)',Damage:'var(--damage)',Support:'var(--support)'}[r]||'var(--accent)');
 const winVar = (p)=> p>=58?'var(--good)': p>=42?'var(--mid)':'var(--bad)';
@@ -229,6 +255,8 @@ let MATCHES_RECENT=[];
 function recomputeDivision(){
   MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
   SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
+  const tn=D().team_names;
+  SIM_A=tn[0]||null; SIM_B=tn[1]||tn[0]||null; SIM_FIRST='A'; SIM_PATH=[];
 }
 const recent=(arr,lim)=> (lim && lim<arr.length)? arr.slice(0,lim) : arr;
 const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();return {from:w[0]||'',to:w[w.length-1]||''};};
@@ -393,12 +421,14 @@ function aggregate(matches,team){
 const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
  {id:'scout',label:'Scout a team',render:renderScout},
+ {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
  {id:'matches',label:'Matches',render:renderMatches},
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
+let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
 
@@ -582,6 +612,145 @@ function renderScoutBody(t){
   return w;
 }
 
+/* ================================================= DRAFT SIMULATOR (manual scenario planner) */
+// Per-team history over the active division: map-pick counts, per-map ban counts, overall ban counts.
+function simModel(team){
+  const pick={}, banByMap={}, bansAll={};
+  D().matches.forEach(m=>{
+    const side=m.f1===team?'faction1':(m.f2===team?'faction2':null); if(!side)return;
+    m.games.forEach(g=>{ if(!g.map)return;
+      if(g.map_picked_by===team) inc(pick,g.map);
+      g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{ (banByMap[g.map]=banByMap[g.map]||{}); inc(banByMap[g.map],b.hero); inc(bansAll,b.hero); });
+    });
+  });
+  return {team,pick,banByMap,bansAll};
+}
+function divMaps(){ const s={}; D().matches.forEach(m=>m.games.forEach(g=>{ if(g.map) s[g.map]=g.map_category||MAP_CAT[g.map]||''; })); return s; }
+// Ranked ban suggestions for a team on a map: on-map history first, then overall; skip illegal heroes.
+function banSuggest(model, map, illegal){
+  const onMap=model.banByMap[map]||{}, all=model.bansAll||{}, keys=new Set([...Object.keys(onMap),...Object.keys(all)]);
+  return [...keys].filter(h=>!illegal.has(h))
+    .map(h=>({hero:h,onMap:onMap[h]||0,all:all[h]||0}))
+    .sort((a,b)=>(b.onMap-a.onMap)||(b.all-a.all)).slice(0,7);
+}
+const ROLE_ORDER=['Tank','Damage','Support'];
+// Full-roster hero picker (grouped by role), excluding heroes already banned by this team.
+function heroSelect(current, illegal, onPick){
+  const s=el(`<select class="herosel" style="min-width:148px;margin-left:4px"><option value="">+ any hero…</option></select>`);
+  const groups={}; ROSTER.forEach(h=>{ const r=h.role||'Other'; (groups[r]=groups[r]||[]).push(h.name); });
+  const order=[...ROLE_ORDER.filter(r=>groups[r]), ...Object.keys(groups).filter(r=>!ROLE_ORDER.includes(r)).sort()];
+  order.forEach(r=>{ const og=el(`<optgroup label="${esc(r)}"></optgroup>`);
+    groups[r].sort((a,b)=>a.localeCompare(b)).forEach(name=>{
+      if(illegal.has(name)&&name!==current) return;
+      og.appendChild(el(`<option ${name===current?'selected':''}>${esc(name)}</option>`)); });
+    if(og.children.length) s.appendChild(og); });
+  s.onchange=()=>onPick(s.value||null);
+  return s;
+}
+
+function renderSim(){
+  const wrap=el(`<div></div>`), tn=D().team_names, pool=divMaps();
+  if(SIM_A==null){ SIM_A=tn[0]; SIM_B=tn[1]||tn[0]; }
+  const nameOf=ab=>ab==='A'?SIM_A:SIM_B;
+
+  const ctl=el(`<div class="card controls" style="flex-wrap:wrap;gap:12px 16px"></div>`);
+  const mkSel=(val,on)=>{ const s=el(`<select style="min-width:170px"></select>`); tn.forEach(n=>s.appendChild(el(`<option ${n===val?'selected':''}>${esc(n)}</option>`))); s.onchange=()=>on(s.value); return s; };
+  ctl.appendChild(el(`<label>Team A</label>`));
+  ctl.appendChild(mkSel(SIM_A,v=>{SIM_A=v;SIM_PATH=[];draw();}));
+  ctl.appendChild(el(`<span class="faint" style="font-weight:800">vs</span>`));
+  ctl.appendChild(el(`<label>Team B</label>`));
+  ctl.appendChild(mkSel(SIM_B,v=>{SIM_B=v;SIM_PATH=[];draw();}));
+  ctl.appendChild(el(`<label title="This team picks the Game 1 map and takes the first ban.">First pick &amp; ban</label>`));
+  const fb=el(`<div class="wsel"></div>`);
+  const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_PATH=[];draw();}; return b; };
+  fb.append(fbBtn('A'),fbBtn('B')); ctl.appendChild(fb);
+  const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset draft</span>`); reset.onclick=()=>{SIM_PATH=[];draw();};
+  ctl.appendChild(reset);
+  wrap.appendChild(ctl);
+  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Plan a Bo5 draft by hand. Each map, the team on the clock <b>picks the map</b> and <b>bans first</b>, then the other team bans. Click a suggested hero (from that team's history) or choose <b>any hero</b> from the dropdown — e.g. ban a pocket pick so the enemy can't take it. Mark who wins each map to continue (the loser picks next). A team can't repeat its own bans across the series; used heroes drop out of its list automatically.</p>`));
+  const body=el(`<div></div>`); wrap.appendChild(body);
+
+  function draw(){
+    body.innerHTML='';
+    if(SIM_A===SIM_B){ body.appendChild(el(`<p class="note" style="margin-top:14px">Pick two different teams.</p>`)); return; }
+    const A=simModel(SIM_A), B=simModel(SIM_B), modelOf=ab=>ab==='A'?A:B;
+    const ledgerCard=el(`<div class="card" style="margin-top:10px"></div>`); body.appendChild(ledgerCard);
+    const tree=el(`<div></div>`); body.appendChild(tree);
+
+    const banned={A:[],B:[]};                         // {hero,game,map} per team, built as we walk
+    const setOf=ab=>new Set(banned[ab].map(x=>x.hero));
+    let sa=0,sb=0; const used=new Set();
+    for(let i=0;i<5 && sa<3 && sb<3;i++){
+      const picker = i===0? SIM_FIRST : (SIM_PATH[i-1].winner==='A'?'B':'A');
+      const other = picker==='A'?'B':'A';
+      const node = SIM_PATH[i]||(SIM_PATH[i]={map:null,b1:null,b2:null,winner:null});
+      const blk=el(`<div class="simblock"></div>`);
+      blk.appendChild(el(`<div class="bh"><span class="gno">M${i+1}</span> <b>${esc(nameOf(picker))}</b> picks &amp; bans first <span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}</span></div>`));
+      // map pick — grouped by mode. Game 1 is always Control; later maps are never Control.
+      const pk=modelOf(picker), g1=(i===0);
+      const MODES=['Control','Escort','Flashpoint','Hybrid','Push'];
+      const allowed=g1?['Control']:MODES.filter(x=>x!=='Control');
+      const mrow=el(`<div class="simrow" style="align-items:flex-start"></div>`);
+      mrow.appendChild(el(`<span class="rl">Map pick${g1?'<br><span style="text-transform:none;letter-spacing:0;font-weight:400">G1 = Control</span>':''}</span>`));
+      const groups=el(`<div style="display:flex;flex-direction:column;gap:7px;flex:1;min-width:0"></div>`);
+      allowed.forEach(cat=>{
+        const maps=Object.keys(pool).filter(mp=>!used.has(mp)&&pool[mp]===cat)
+          .map(mp=>({map:mp,n:pk.pick[mp]||0})).sort((a,b)=>b.n-a.n||a.map.localeCompare(b.map));
+        if(!maps.length) return;
+        const grow=el(`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>`);
+        grow.appendChild(el(`<span class="modelbl">${esc(cat)}</span>`));
+        maps.forEach(d=>{ const o=el(`<span class="opt ${node.map===d.map?'sel':''} ${d.n<1?'dim':''}">${esc(d.map)}${d.n?` <span class="pp">picked ${d.n}×</span>`:''}</span>`);
+          o.onclick=()=>setMap(i,d.map); grow.appendChild(o); });
+        groups.appendChild(grow);
+      });
+      mrow.appendChild(groups); blk.appendChild(mrow);
+      if(node.map){
+        used.add(node.map);
+        // two ban rows: picker bans first, then the other team.
+        [['b1',picker],['b2',other]].forEach(([key,tab])=>{
+          const illegal=setOf(tab);
+          if(node[key] && illegal.has(node[key])) node[key]=null;      // heal an illegal repeat after an edit
+          const row=el(`<div class="simrow"><span class="rl">${esc(nameOf(tab))} ban</span></div>`);
+          const sugg=banSuggest(modelOf(tab), node.map, illegal);
+          sugg.forEach(s2=>{ const o=el(`<span class="opt ${node[key]===s2.hero?'sel':''} ${(s2.onMap+s2.all)<2?'dim':''}">${heroChip(s2.hero)}<span class="pp">${s2.onMap?s2.onMap+'× here':s2.all+'× total'}</span></span>`);
+            o.onclick=()=>{node[key]=s2.hero;draw();}; row.appendChild(o); });
+          row.appendChild(heroSelect(node[key], illegal, h=>{node[key]=h;draw();}));
+          if(node[key] && !sugg.some(x=>x.hero===node[key]))
+            row.appendChild(el(`<span class="opt sel">${heroChip(node[key])}<span class="pp">manual</span></span>`));
+          blk.appendChild(row);
+        });
+        if(node.b1) banned[picker].push({hero:node.b1,game:i+1,map:node.map});
+        if(node.b2) banned[other].push({hero:node.b2,game:i+1,map:node.map});
+        // map winner (drives who picks next)
+        const wr=el(`<div class="simrow"><span class="rl">Map winner</span></div>`);
+        const wa=el(`<span class="wbtn ${node.winner==='A'?'selA':''}">${esc(SIM_A)}</span>`); wa.onclick=()=>setWinner(i,'A');
+        const wb=el(`<span class="wbtn ${node.winner==='B'?'selB':''}">${esc(SIM_B)}</span>`); wb.onclick=()=>setWinner(i,'B');
+        wr.append(wa,wb); blk.appendChild(wr);
+        if(node.winner){ if(node.winner==='A')sa++; else sb++;
+          blk.appendChild(el(`<div class="simnext">↳ ${esc(nameOf(node.winner==='A'?'B':'A'))} lost — they pick next${(sa>=3||sb>=3)?' · series decided':''}.</div>`)); }
+      }
+      tree.appendChild(blk);
+      if(!node.map || !node.winner) break;
+    }
+    // series ban ledger (populated after the walk)
+    ledgerCard.appendChild(el(`<p class="eyebrow">Series ban ledger <span class="note" style="text-transform:none;letter-spacing:0">· a team can't repeat its own bans (opponents may)</span></p>`));
+    const grid=el(`<div class="grid cols-2" style="margin-top:6px"></div>`);
+    ['A','B'].forEach(ab=>{ const col=el(`<div></div>`);
+      col.appendChild(el(`<div style="font-weight:680;font-size:13px;margin-bottom:5px">${esc(nameOf(ab))} <span class="faint" style="font-weight:400">· ${banned[ab].length} banned</span></div>`));
+      if(banned[ab].length){ const chips=el(`<div style="display:flex;flex-wrap:wrap;gap:5px"></div>`);
+        banned[ab].forEach(x=>chips.appendChild(el(`<span class="opt" style="cursor:default">${heroChip(x.hero)}<span class="pp">M${x.game}</span></span>`)));
+        col.appendChild(chips);
+      } else col.appendChild(el(`<span class="faint" style="font-size:12.5px">no bans yet</span>`));
+      grid.appendChild(col); });
+    ledgerCard.appendChild(grid);
+    if(sa>=3||sb>=3) body.appendChild(el(`<div class="card" style="margin-top:10px"><b>Series result (your scenario):</b> ${esc(sa>sb?SIM_A:SIM_B)} win ${Math.max(sa,sb)}–${Math.min(sa,sb)}.</div>`));
+  }
+  function setMap(i,map){ SIM_PATH.length=i; SIM_PATH[i]={map,b1:null,b2:null,winner:null}; draw(); }
+  function setWinner(i,ab){ SIM_PATH.length=i+1; SIM_PATH[i].winner=ab; draw(); }
+  draw();
+  return wrap;
+}
+
 function renderMeta(){
   const wrap=el(`<div></div>`);
   const bar=el(`<div class="card controls"></div>`);
@@ -646,16 +815,21 @@ function renderMeta(){
 
 function renderMatches(){
   const wrap=el(`<div></div>`);
-  const search=el(`<input placeholder="search team, hero, or map…" style="width:100%;margin-bottom:12px;font-size:15px;padding:11px 13px">`);
-  const list=el(`<div></div>`); wrap.append(search,list);
+  const bar=el(`<div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap"></div>`);
+  const search=el(`<input placeholder="search team, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
+  const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
+  bar.append(search,sort);
+  const list=el(`<div></div>`); wrap.append(bar,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
-  function draw(q){
-    q=(q||'').trim().toLowerCase(); list.innerHTML='';
-    const shown=D().matches.filter(m=>!q||hay(m).includes(q));
+  function draw(){
+    const q=(search.value||'').trim().toLowerCase(); list.innerHTML='';
+    // MATCHES_RECENT is newest-first; reverse for oldest-first.
+    let shown=MATCHES_RECENT.filter(m=>!q||hay(m).includes(q));
+    if(sort.value==='old') shown=[...shown].reverse();
     if(!shown.length){ list.appendChild(el(`<p class="note">No matches.</p>`)); return; }
     shown.forEach(m=>list.appendChild(matchCard(m)));
   }
-  search.oninput=()=>draw(search.value); draw(''); return wrap;
+  search.oninput=draw; sort.onchange=draw; draw(); return wrap;
 }
 
 /* ---------- shell ---------- */

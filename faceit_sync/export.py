@@ -401,10 +401,20 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         if cid not in used:
             views.append({"id": cid, "label": name, "divisions": [cid], "region": None})
 
+    # Full hero roster (every hero, not just those banned this season) so the draft
+    # simulator can ban off-meta picks like Torbjörn that never show up in the data.
+    roster = [
+        {"name": r["name"], "role": r["role"]}
+        for r in db.conn.execute(
+            "SELECT name, role FROM heroes ORDER BY name"
+        ).fetchall()
+    ]
+
     data = {
         "divisions": divisions,
         "views": views,
         "heroes": list(heroes.values()),
+        "roster": roster,
         "maps": list(maps.values()),
     }
     title = "FACEIT OW2 — League Scouting"
