@@ -21,21 +21,39 @@ dev = [
     "mypy>=1.8",
     "types-requests>=2.31",
 ]
+# owscout (sibling tool) screen-capture / CV runtime deps. Optional so the
+# faceit-sync install and test suite need none of them; imported lazily.
+capture = [
+    "dxcam>=0.0.5",
+    "mss>=9.0",
+    "opencv-python>=4.9",
+    "numpy>=1.26",
+]
 
 [project.scripts]
 faceit-sync = "faceit_sync.cli:main"
+owscout = "owscout.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["faceit_sync*"]
+include = ["faceit_sync*", "owscout*"]
 
 [tool.mypy]
-python_version = "3.11"
+# Analysis targets 3.12 (the dev/CI interpreter, and what numpy's current stubs
+# require); runtime floor stays 3.11 via requires-python.
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
 # The SQLite rows we read back are Any-typed by nature; keep those localized.
 warn_return_any = false
 
+# owscout's capture stack ships no usable stubs (and numpy's are 3.12-only
+# syntax that trips a 3.11-targeted check), so skip following them entirely.
+[[tool.mypy.overrides]]
+module = ["cv2", "dxcam", "mss", "numpy", "numpy.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "owscout/tests"]
 addopts = "-q"
