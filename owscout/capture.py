@@ -73,30 +73,32 @@ def grab_frame(retries: int = 10, retry_delay: float = 0.05) -> tuple[Frame, int
     return frame, width, height
 
 
+# dxcam.create() spins up a D3D device (~seconds), and a second create for the
+# same output raises — so the camera is created once and reused across grabs.
+_DXCAM_CAMERA: Any = None
+
+
 def _grab_dxcam(retries: int, retry_delay: float) -> Frame | None:
+    global _DXCAM_CAMERA
     try:
         import dxcam
     except ImportError:
         log.debug("dxcam not available")
         return None
-    camera = dxcam.create(output_color="BGR")
+    if _DXCAM_CAMERA is None:
+        _DXCAM_CAMERA = dxcam.create(output_color="BGR")
+    camera = _DXCAM_CAMERA
     if camera is None:
         return None
-    try:
-        # grab() returns None when there is no new frame since the last call;
-        # retry briefly to get the first one.
-        for _ in range(max(1, retries)):
-            frame = camera.grab()
-            if frame is not None:
-                return frame
-            time.sleep(retry_delay)
-        log.debug("dxcam returned no frame after %d tries", retries)
-        return None
-    finally:
-        try:
-            camera.release()
-        except Exception:  # pragma: no cover - best-effort cleanup
-            pass
+    # grab() returns None when there is no new frame since the last call; retry
+    # briefly to get a fresh one.
+    for _ in range(max(1, retries)):
+        frame = camera.grab()
+        if frame is not None:
+            return frame
+        time.sleep(retry_delay)
+    log.debug("dxcam returned no frame after %d tries", retries)
+    return None
 
 
 def _grab_mss() -> Frame | None:
