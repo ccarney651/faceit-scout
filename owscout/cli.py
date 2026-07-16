@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .calibrate import default_frame_dir, run_calibration
-from .capture import DEFAULT_WRITE_INTERVAL_MS, run_capture
+from .capture import DEFAULT_WRITE_INTERVAL_MS, run_capture, run_hotkey_capture
 from .errors import CaptureError
 from .context import AmbiguousCode, CodeNotFound, derive_code_context, format_context
 from .derive import (
@@ -190,22 +190,27 @@ def cmd_capture(args: argparse.Namespace) -> int:
     if not os.path.exists(faceit_path):
         print(f"error: faceit DB not found: {faceit_path}", file=sys.stderr)
         return 2
+    require_division = None if args.division == "all" else args.division
     try:
         with Database(_db_path(args)) as db:
-            run_capture(
-                db,
-                faceit_path,
-                demo_code=args.code,
-                hud_variant=args.hud_variant,
-                speed=args.speed,
-                fps=args.fps,
-                duration_s=args.duration,
-                side_a_team=args.side_a_team,
-                write_interval_ms=args.write_interval_ms,
-                confidence_floor=args.confidence_floor,
-                require_division=None if args.division == "all" else args.division,
-                dry_run=args.dry_run,
-            )
+            if args.hotkey:
+                run_hotkey_capture(
+                    db, faceit_path,
+                    demo_code=args.code, hud_variant=args.hud_variant,
+                    side_a_team=args.side_a_team, hotkey=args.hotkey,
+                    confidence_floor=args.confidence_floor,
+                    require_division=require_division, dry_run=args.dry_run,
+                )
+            else:
+                run_capture(
+                    db, faceit_path,
+                    demo_code=args.code, hud_variant=args.hud_variant,
+                    speed=args.speed, fps=args.fps, duration_s=args.duration,
+                    side_a_team=args.side_a_team,
+                    write_interval_ms=args.write_interval_ms,
+                    confidence_floor=args.confidence_floor,
+                    require_division=require_division, dry_run=args.dry_run,
+                )
     except (CaptureError, CodeNotFound, AmbiguousCode, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -584,6 +589,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help=f"below this a slot is left unresolved (default: {DEFAULT_CONFIDENCE_FLOOR})")
     cap.add_argument("--division", default=DEFAULT_DIVISION,
                      help="only capture this division: master (default), expert, or all")
+    cap.add_argument("--hotkey", default=None, metavar="KEY",
+                     help="snapshot mode: press this key (e.g. f8) to grab the comp at "
+                          "bookmarked moments, instead of the continuous loop")
     cap.add_argument("--dry-run", action="store_true", help="match but do not write")
     cap.set_defaults(func=cmd_capture)
 

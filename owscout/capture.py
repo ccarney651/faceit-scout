@@ -440,6 +440,133 @@ def run_capture(  # pragma: no cover - runtime-only path
     return counts
 
 
+def run_hotkey_capture(  # pragma: no cover - runtime-only path
+    db: "Any",
+    faceit_db_path: str,
+    *,
+    demo_code: str,
+    hud_variant: str = "default",
+    side_a_team: Optional[str] = None,
+    hotkey: str = "f8",
+    confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
+    require_division: Optional[str] = None,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Snapshot capture: instead of a continuous loop, the operator navigates the
+    replay (using OW's bookmarks to jump to spawn / post-fight moments where comps
+    change) and presses ``hotkey`` to grab the comp on screen. Comps are step
+    functions, so snapshotting the steps is faster and cleaner than sampling.
+
+    The hotkey callback only signals; the grab/match/write all happen on the main
+    thread (SQLite is single-thread)."""
+    import threading
+
+    from .context import derive_code_context
+    from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
+    from .match import crop_roi, face_subrect, make_template_scorer, match_frame
+
+    try:
+        import keyboard
+    except ImportError as exc:
+        raise CaptureError(
+            "the 'keyboard' package is required for hotkey capture — "
+            "`pip install -e .[capture]`") from exc
+
+    cv2, _np = _import_cv2_np_for_capture()
+    ctx = derive_code_context(db, faceit_db_path, demo_code)
+    if require_division is not None and ctx.division != require_division:
+        raise CaptureError(
+            f"{demo_code} is a {ctx.division or 'unknown'}-division game "
+            f"({ctx.championship_name}); owscout is set to {require_division} only. "
+            f"Pass --division all to override.")
+
+    side_a_faction = "faction1"
+    with connect_ro(faceit_db_path) as fdb:
+        hero_roles = load_hero_roles(fdb)
+        hero_names = {h.guid: h.name for h in load_heroes(fdb)}
+        if side_a_team is not None:
+            tid = resolve_team_id(fdb, side_a_team)
+            side_a_faction = "faction1" if tid == ctx.faction1_team_id else "faction2"
+        else:
+            log.warning("no --side-a-team given; assuming side A (left) = %s",
+                        ctx.faction1_team_name)
+
+    profile, refs = _profile_and_refs(db, cv2, hud_variant)
+    banned = {b.hero_guid for b in ctx.bans}
+    map_instance_id: Optional[int] = None
+    if not dry_run:
+        map_instance_id = db.upsert_map_instance_from_context(
+            ctx, side_a_faction, profile_id=profile.id, map_verified=None)
+    score_fn = make_template_scorer(cv2)
+    side_slots = {s: [face_subrect(r) for r in profile.slots[s]] for s in (SIDE_LEFT, SIDE_RIGHT)}
+
+    snap_evt, done_evt = threading.Event(), threading.Event()
+    keyboard.add_hotkey(hotkey, snap_evt.set)
+    keyboard.add_hotkey("esc", done_evt.set)
+    print(f"HOTKEY capture ready for {ctx.map_name} ({ctx.faction1_team_name} vs "
+          f"{ctx.faction2_team_name}).")
+    print(f"  Jump to key moments in the replay, press '{hotkey}' to snapshot the comp. "
+          f"Press 'esc' when done.")
+
+    snaps = 0
+    written = 0
+    while not done_evt.is_set():
+        if not snap_evt.wait(timeout=0.15):
+            continue
+        snap_evt.clear()
+        frame, w, h = grab_frame()
+        if (w, h) != (profile.resolution_w, profile.resolution_h):
+            print(f"  resolution {w}x{h} != profile — skipped")
+            continue
+        line = []
+        for side in (SIDE_LEFT, SIDE_RIGHT):
+            matches = match_frame(frame, side_slots[side], refs, hero_roles, banned,
+                                  hero_names, confidence_floor=confidence_floor,
+                                  crop_fn=crop_roi, score_fn=score_fn)
+            if not dry_run and map_instance_id is not None:
+                if _persist_matches(db, map_instance_id, side, snaps, matches,
+                                    hero_roles, hero_names):
+                    written += 1
+            shown = "/".join((hero_names.get(m.hero_guid or "", "?")[:4] if m.resolved else "??")
+                             for m in matches)
+            line.append(f"{side}:{shown}")
+        snaps += 1
+        print(f"  snap {snaps}: " + "   ".join(line))
+
+    keyboard.clear_all_hotkeys()
+    if not dry_run:
+        db.upsert_code_status(demo_code, "captured")
+    print(f"done. {snaps} snapshot(s), {written} comp(s) written.")
+    return {"snaps": snaps, "written": written}
+
+
+def _persist_matches(  # pragma: no cover
+    db: "Any", map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
+    hero_roles: dict[str, str], hero_names: dict[str, str],
+) -> bool:
+    """Persist one frame's matches as a single observation (no smoothing). Returns
+    True if the observation fully resolved."""
+    from .comps import canonical_comp
+
+    guids = [m.hero_guid for m in matches]
+    resolved = all(g is not None for g in guids) and len(guids) > 0
+    comp = (canonical_comp([g for g in guids if g is not None], hero_roles, hero_names)
+            if resolved else None)
+    slots = [
+        {"slot_index": i, "hero_guid": m.hero_guid, "confidence": m.confidence,
+         "is_dead": 1 if m.state == "dead" else 0, "expected_role": None,
+         "ingame_name_raw": None, "player_id": None}
+        for i, m in enumerate(matches)
+    ]
+    db.upsert_comp_observation(
+        map_instance_id=map_instance_id, side=side, sample_ts_ms=ts,
+        comp_id=comp.comp_id if comp else None,
+        min_slot_confidence=min((m.confidence for m in matches), default=0.0),
+        resolved=1 if resolved else 0, slots=slots, comp=comp,
+    )
+    return resolved
+
+
 def _verify_map(  # pragma: no cover - runtime-only path
     db: "Any", cv2: Any, frame: Any, profile: Any, ctx: Any, map_instance_id: int
 ) -> Optional[int]:

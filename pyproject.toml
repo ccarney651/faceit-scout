@@ -28,6 +28,7 @@ capture = [
     "mss>=9.0",
     "opencv-python>=4.9",
     "numpy>=1.26",
+    "keyboard>=0.13",
 ]
 
 [project.scripts]
@@ -50,7 +51,7 @@ warn_return_any = false
 # owscout's capture stack ships no usable stubs (and numpy's are 3.12-only
 # syntax that trips a 3.11-targeted check), so skip following them entirely.
 [[tool.mypy.overrides]]
-module = ["cv2", "dxcam", "mss", "numpy", "numpy.*"]
+module = ["cv2", "dxcam", "mss", "numpy", "numpy.*", "keyboard"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
