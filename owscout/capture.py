@@ -450,6 +450,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     hotkey: str = "f8",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
+    emit: Callable[[str], None] = print,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Snapshot capture: instead of a continuous loop, the operator navigates the
@@ -503,9 +504,9 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     snap_evt, done_evt = threading.Event(), threading.Event()
     keyboard.add_hotkey(hotkey, snap_evt.set)
     keyboard.add_hotkey("esc", done_evt.set)
-    print(f"HOTKEY capture ready for {ctx.map_name} ({ctx.faction1_team_name} vs "
+    emit(f"HOTKEY capture ready for {ctx.map_name} ({ctx.faction1_team_name} vs "
           f"{ctx.faction2_team_name}).")
-    print(f"  Jump to key moments in the replay, press '{hotkey}' to snapshot the comp. "
+    emit(f"  Jump to key moments in the replay, press '{hotkey}' to snapshot the comp. "
           f"Press 'esc' when done.")
 
     snaps = 0
@@ -516,7 +517,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         snap_evt.clear()
         frame, w, h = grab_frame()
         if (w, h) != (profile.resolution_w, profile.resolution_h):
-            print(f"  resolution {w}x{h} != profile — skipped")
+            emit(f"  resolution {w}x{h} != profile — skipped")
             continue
         line = []
         for side in (SIDE_LEFT, SIDE_RIGHT):
@@ -531,12 +532,12 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                              for m in matches)
             line.append(f"{side}:{shown}")
         snaps += 1
-        print(f"  snap {snaps}: " + "   ".join(line))
+        emit(f"  snap {snaps}: " + "   ".join(line))
 
     keyboard.clear_all_hotkeys()
     if not dry_run:
         db.upsert_code_status(demo_code, "captured")
-    print(f"done. {snaps} snapshot(s), {written} comp(s) written.")
+    emit(f"done. {snaps} snapshot(s), {written} comp(s) written.")
     return {"snaps": snaps, "written": written}
 
 

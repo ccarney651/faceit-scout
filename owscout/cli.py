@@ -417,6 +417,11 @@ def cmd_scout_player(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    from .gui import main as gui_main
+    return gui_main()
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     import csv as _csv
     import json as _json
@@ -655,6 +660,9 @@ def build_parser() -> argparse.ArgumentParser:
     ct.add_argument("--min-samples", type=int, default=10)
     ct.add_argument("--limit", type=int, default=25)
     ct.set_defaults(func=cmd_comps_top)
+
+    gui = sub.add_parser("gui", help="launch the desktop app (clickable workflow)")
+    gui.set_defaults(func=cmd_gui)
 
     ex = sub.add_parser("export", help="export the comp table to csv/json")
     ex.add_argument("--format", choices=("csv", "json", "dashboard"), default="csv",
