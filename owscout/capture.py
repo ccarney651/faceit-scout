@@ -29,7 +29,7 @@ from .integrity import (
     map_names_match,
     over_ban_hit_threshold,
 )
-from .match import DEFAULT_SMOOTHING_WINDOW, SlotMatch, TemporalSmoother
+from .match import DEFAULT_CONFIDENCE_FLOOR, DEFAULT_SMOOTHING_WINDOW, SlotMatch, TemporalSmoother
 from .models import SIDE_LEFT, SIDE_RIGHT
 
 # A captured frame is a numpy HxWx3 uint8 array in BGR order. Kept as Any so the
@@ -308,7 +308,7 @@ def run_capture(  # pragma: no cover - runtime-only path
     duration_s: Optional[float] = None,
     side_a_team: Optional[str] = None,
     write_interval_ms: int = DEFAULT_WRITE_INTERVAL_MS,
-    confidence_floor: float = 0.80,
+    confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Sample the replay under speed-mode playback, match each side, temporally

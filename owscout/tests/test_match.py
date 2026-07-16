@@ -69,22 +69,31 @@ def test_composition_true_when_incomplete() -> None:
 # --- face_subrect (ult-overlay mask) -----------------------------------------
 
 
-def test_face_subrect_keeps_right_portion() -> None:
-    # 141px cell (measured pitch), 55% overlay -> 78px cut, 63px face on the right.
-    face = face_subrect(Rect(57, 95, 141, 55), 0.55)
+def test_face_subrect_keeps_top_right_portion() -> None:
+    # 141px cell, 55% ult overlay -> 78px cut, 63px face wide; full height kept.
+    face = face_subrect(Rect(57, 95, 141, 55), 0.55, top_fraction=1.0)
     assert face == Rect(57 + 78, 95, 141 - 78, 55)
-    assert face.y == 95 and face.h == 55  # vertical unchanged
 
 
-def test_face_subrect_default_fraction() -> None:
-    face = face_subrect(Rect(0, 0, 100, 50))
+def test_face_subrect_drops_name_bar() -> None:
+    # Keep only the top portion (portrait band), dropping the name/bar below.
+    face = face_subrect(Rect(0, 0, 100, 100), 0.55, top_fraction=0.58)
     assert face.x == 55 and face.w == 45
+    assert face.y == 0 and face.h == 58
+
+
+def test_face_subrect_default_fractions() -> None:
+    # Defaults: right ~45%, top ~58%.
+    face = face_subrect(Rect(0, 0, 100, 100))
+    assert face.x == 55 and face.w == 45 and face.h == 58
 
 
 def test_face_subrect_rejects_bad_fraction() -> None:
     import pytest
     with pytest.raises(ValueError):
         face_subrect(Rect(0, 0, 100, 50), 1.0)
+    with pytest.raises(ValueError):
+        face_subrect(Rect(0, 0, 100, 50), top_fraction=0.0)
 
 
 # --- reduce_candidates -------------------------------------------------------

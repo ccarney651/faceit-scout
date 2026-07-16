@@ -11,7 +11,7 @@ import pytest
 from owscout.db import Database
 from owscout.faceit import connect_ro, load_heroes
 from owscout.models import FaceitHero, HeroRef
-from owscout.refs import find_close_pairs, find_missing
+from owscout.refs import find_close_pairs, find_missing, resolve_hero_name
 
 
 # --- fixtures ----------------------------------------------------------------
@@ -69,28 +69,61 @@ def test_missing_faceit_db_raises(tmp_path: Path) -> None:
         connect_ro(str(tmp_path / "nope.sqlite3"))
 
 
+# --- resolve_hero_name (batch from-frame naming) -----------------------------
+
+
+def _heroes() -> list[FaceitHero]:
+    return [FaceitHero("g-ana", "Ana", "Support"),
+            FaceitHero("g-ashe", "Ashe", "Damage"),
+            FaceitHero("g-rein", "Reinhardt", "Tank"),
+            FaceitHero("g-ram", "Ramattra", "Tank")]
+
+
+def test_resolve_hero_exact_and_case() -> None:
+    assert resolve_hero_name(_heroes(), "ana").guid == "g-ana"  # type: ignore[union-attr]
+    assert resolve_hero_name(_heroes(), "REINHARDT").guid == "g-rein"  # type: ignore[union-attr]
+
+
+def test_resolve_hero_unique_substring() -> None:
+    assert resolve_hero_name(_heroes(), "rein").guid == "g-rein"  # type: ignore[union-attr]
+
+
+def test_resolve_hero_ambiguous_substring_is_none() -> None:
+    # "ra" hits Ramattra only? "a" hits many -> None. Use a genuinely ambiguous one.
+    assert resolve_hero_name(_heroes(), "a") is None
+
+
+def test_resolve_hero_typo_close_match() -> None:
+    assert resolve_hero_name(_heroes(), "ramatra").guid == "g-ram"  # type: ignore[union-attr]
+
+
+def test_resolve_hero_unknown_is_none() -> None:
+    assert resolve_hero_name(_heroes(), "zzzzz") is None
+    assert resolve_hero_name(_heroes(), "") is None
+
+
 # --- find_missing ------------------------------------------------------------
 
 
-def test_find_missing_reports_gaps() -> None:
+def test_find_missing_reports_missing_alive() -> None:
     heroes = [FaceitHero("g-winston", "Winston", "Tank"),
               FaceitHero("g-ana", "Ana", "Support")]
-    refs = [_ref("g-winston", "alive", "0" * 16),
-            _ref("g-winston", "dead", "1" * 16)]
-    missing = find_missing(heroes, refs)
-    assert missing == {"g-ana": ["alive", "dead"]}
+    refs = [_ref("g-winston", "alive", "0" * 16)]
+    # Only alive is required by default; Ana has no ref at all.
+    assert find_missing(heroes, refs) == {"g-ana": ["alive"]}
 
 
-def test_find_missing_empty_when_complete() -> None:
+def test_find_missing_dead_not_required_by_default() -> None:
     heroes = [FaceitHero("g-ana", "Ana", "Support")]
-    refs = [_ref("g-ana", "alive", "0" * 16), _ref("g-ana", "dead", "f" * 16)]
-    assert find_missing(heroes, refs) == {}
+    # Alive present, dead absent -> not flagged (dead is optional).
+    assert find_missing(heroes, [_ref("g-ana", "alive", "0" * 16)]) == {}
 
 
-def test_find_missing_partial_state() -> None:
+def test_find_missing_dead_reported_when_required() -> None:
     heroes = [FaceitHero("g-ana", "Ana", "Support")]
-    refs = [_ref("g-ana", "alive", "0" * 16)]
-    assert find_missing(heroes, refs) == {"g-ana": ["dead"]}
+    missing = find_missing(heroes, [_ref("g-ana", "alive", "0" * 16)],
+                           required_states=("alive", "dead"))
+    assert missing == {"g-ana": ["dead"]}
 
 
 # --- find_close_pairs --------------------------------------------------------

@@ -42,6 +42,8 @@ from .refs import (
     DEFAULT_CLOSE_THRESHOLD,
     default_refs_dir,
     run_refs_capture,
+    run_refs_from_frame,
+    run_refs_from_sheet,
     run_refs_verify,
 )
 
@@ -101,6 +103,44 @@ def cmd_refs_capture(args: argparse.Namespace) -> int:
                 slot=args.slot,
                 states=states,
                 only=args.only,
+                refs_dir=refs_dir,
+                dry_run=args.dry_run,
+            )
+    except (CaptureError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_refs_from_frame(args: argparse.Namespace) -> int:
+    db_path = _db_path(args)
+    refs_dir = args.refs_dir or default_refs_dir(db_path)
+    try:
+        with Database(db_path) as db:
+            run_refs_from_frame(
+                db,
+                _faceit_db_path(args),
+                hud_variant=args.hud_variant,
+                refs_dir=refs_dir,
+                state=args.state,
+                dry_run=args.dry_run,
+            )
+    except (CaptureError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_refs_from_sheet(args: argparse.Namespace) -> int:
+    db_path = _db_path(args)
+    refs_dir = args.refs_dir or default_refs_dir(db_path)
+    try:
+        with Database(db_path) as db:
+            run_refs_from_sheet(
+                db,
+                _faceit_db_path(args),
+                args.image,
+                hud_variant=args.hud_variant,
                 refs_dir=refs_dir,
                 dry_run=args.dry_run,
             )
@@ -481,6 +521,25 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--dry-run", action="store_true", help="hash but do not write")
     rc.set_defaults(func=cmd_refs_capture)
 
+    rs = rsub.add_parser("from-sheet",
+                         help="build the whole library from one hero-gallery screenshot")
+    rs.add_argument("image", help="path to the all-heroes gallery screenshot")
+    rs.add_argument("--hud-variant", default="default", help="HUD variant to attach refs to")
+    rs.add_argument("--refs-dir", default=None,
+                    help="where to store ref crops (default: refs/ next to the DB)")
+    rs.add_argument("--dry-run", action="store_true", help="detect + map but do not write")
+    rs.set_defaults(func=cmd_refs_from_sheet)
+
+    rf = rsub.add_parser("from-frame",
+                         help="batch: name all heroes visible in one observer frame")
+    rf.add_argument("--hud-variant", default="default", help="HUD variant to capture for")
+    rf.add_argument("--state", default="alive", choices=REF_STATES,
+                    help="visual state shown in this frame (default: alive)")
+    rf.add_argument("--refs-dir", default=None,
+                    help="where to store ref crops (default: refs/ next to the DB)")
+    rf.add_argument("--dry-run", action="store_true", help="hash but do not write")
+    rf.set_defaults(func=cmd_refs_from_frame)
+
     rv = rsub.add_parser("verify", help="report missing refs and near-duplicate portraits")
     rv.add_argument("--hud-variant", default="default", help="HUD variant to verify")
     rv.add_argument("--close-threshold", type=int, default=DEFAULT_CLOSE_THRESHOLD,
@@ -517,8 +576,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="team on the LEFT HUD strip (else assumes faction1 + warns)")
     cap.add_argument("--write-interval-ms", type=int, default=DEFAULT_WRITE_INTERVAL_MS,
                      help=f"heartbeat write cadence in GAME ms (default: {DEFAULT_WRITE_INTERVAL_MS})")
-    cap.add_argument("--confidence-floor", type=float, default=0.80,
-                     help="below this a slot is left unresolved (default: 0.80)")
+    cap.add_argument("--confidence-floor", type=float, default=DEFAULT_CONFIDENCE_FLOOR,
+                     help=f"below this a slot is left unresolved (default: {DEFAULT_CONFIDENCE_FLOOR})")
     cap.add_argument("--dry-run", action="store_true", help="match but do not write")
     cap.set_defaults(func=cmd_capture)
 

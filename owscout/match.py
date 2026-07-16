@@ -36,11 +36,16 @@ log = logging.getLogger("owscout.match")
 
 # Best template-match score below this and we refuse to resolve the slot (SPEC
 # §8.3). Better a NULL for review than a confident wrong answer.
-# Validated on a real observer frame (screenshots/, 2026-07-15): face-masked
-# TM_CCOEFF_NORMED gave 10/10 correct with the worst wrong-hero score at 0.53 and
-# self-match ~1.0, so 0.80 has comfortable headroom. (Un-masked, wrong scores
-# reached 0.72 — see ULT_OVERLAY_LEFT_FRACTION.) Tune on cross-frame data.
-DEFAULT_CONFIDENCE_FLOOR = 0.80
+#
+# The right value depends on the ref source, and matching is argmax over a
+# constrained set, so the floor only gates resolved-vs-review, not correctness:
+#   * observer-derived refs (refs capture/from-frame): correct ~0.83-0.92, worst
+#     wrong ~0.53 (validated on real frames, screenshots/).
+#   * one-image gallery-sheet refs (refs from-sheet): correct ~0.56-0.83, worst
+#     wrong <0.48 (validated on a real observer frame).
+# 0.55 resolves both while rejecting wrong heroes and empty slots; observer refs,
+# as they accumulate, sit comfortably above it.
+DEFAULT_CONFIDENCE_FLOOR = 0.55
 
 # Mean-saturation below this routes the ROI to the 'dead' (desaturated) ref set
 # before matching (SPEC §8.3). Tunable; the gate is where you learn the value.
@@ -61,6 +66,12 @@ DEFAULT_DEAD_SATURATION = 40.0
 # Validated: masking cut the worst wrong-hero confusion score from 0.72 (full
 # cell, where every identical "0%" box inflates correlation) to 0.53.
 ULT_OVERLAY_LEFT_FRACTION = 0.55
+
+# Operators naturally box the full HUD cell (portrait + player name + ability
+# bar). The name is player-specific noise, so we also keep only the top portion
+# of the cell — the portrait band — dropping the name/bar below it. Measured on
+# a real 2560x1440 calibration (portrait ~58% of the boxed cell height).
+PORTRAIT_TOP_FRACTION = 0.58
 
 # Injected primitive signatures.
 CropFn = Callable[[Any, Rect], Any]
@@ -113,17 +124,25 @@ def composition_consistent(
     return got == expected
 
 
-def face_subrect(rect: Rect, left_fraction: float = ULT_OVERLAY_LEFT_FRACTION) -> Rect:
-    """The face-only sub-ROI of a portrait cell: the right part, past the
-    ult-charge overlay that covers the left ``left_fraction`` (SPEC §8.3).
+def face_subrect(
+    rect: Rect,
+    left_fraction: float = ULT_OVERLAY_LEFT_FRACTION,
+    top_fraction: float = PORTRAIT_TOP_FRACTION,
+) -> Rect:
+    """The face-only sub-ROI of a portrait cell: the top-right band, past the
+    ult-charge overlay (left ``left_fraction``) and above the player name/ability
+    bar (keep the top ``top_fraction`` of the cell) — SPEC §8.3.
 
     Must be applied identically wherever a portrait is cropped — ref capture and
     matching — so a ref and a live crop describe the same pixels.
     """
     if not 0.0 <= left_fraction < 1.0:
         raise ValueError(f"left_fraction must be in [0, 1), got {left_fraction}")
+    if not 0.0 < top_fraction <= 1.0:
+        raise ValueError(f"top_fraction must be in (0, 1], got {top_fraction}")
     cut = round(rect.w * left_fraction)
-    return Rect(rect.x + cut, rect.y, rect.w - cut, rect.h)
+    height = round(rect.h * top_fraction)
+    return Rect(rect.x + cut, rect.y, rect.w - cut, height)
 
 
 def reduce_candidates(
@@ -284,9 +303,21 @@ def crop_roi(frame: Any, rect: Rect) -> Any:  # pragma: no cover
     return frame[rect.y : rect.y + rect.h, rect.x : rect.x + rect.w]
 
 
+# A ref this many times larger than the live crop is a "sheet" ref (a full
+# gallery portrait, not a tight observer crop). The observer face sits at a
+# different framing/scale inside it, so we search over scales instead of a
+# single resize. Range covers the observer-face-within-sheet scale (~0.7).
+SHEET_REF_SIZE_FACTOR = 1.4
+SHEET_SEARCH_SCALES = (0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85)
+
+
 def make_template_scorer(cv2: Any) -> ScoreFn:  # pragma: no cover
-    """TM_CCOEFF_NORMED best score of a ref against the crop (SPEC §8.3). The
-    ref is resized to the crop so template matching is a single correlation."""
+    """Best TM_CCOEFF_NORMED score of a ref against the crop (SPEC §8.3).
+
+    Observer-derived refs are ~crop-sized and matched with a single resize. Refs
+    from a hero-gallery sheet are larger and framed differently, so the crop is
+    searched within them across a scale range (the argmax over scales), which is
+    what makes a one-image ref library discriminate."""
     cache: dict[str, Any] = {}
 
     def score(crop: Any, ref: HeroRef) -> float:
@@ -297,7 +328,18 @@ def make_template_scorer(cv2: Any) -> ScoreFn:  # pragma: no cover
                 log.warning("could not read ref image %s", ref.image_path)
                 return 0.0
             cache[ref.image_path] = img
-        template = cv2.resize(img, (crop.shape[1], crop.shape[0]))
+        ch, cw = crop.shape[0], crop.shape[1]
+        rh, rw = img.shape[0], img.shape[1]
+        if rh > ch * SHEET_REF_SIZE_FACTOR and rw > cw * SHEET_REF_SIZE_FACTOR:
+            best = 0.0
+            for s in SHEET_SEARCH_SCALES:
+                tw, th = int(rw * s), int(rh * s)
+                if tw < 8 or th < 8 or tw >= rw or th >= rh:
+                    continue
+                res = cv2.matchTemplate(img, cv2.resize(crop, (tw, th)), cv2.TM_CCOEFF_NORMED)
+                best = max(best, float(res.max()))
+            return best
+        template = cv2.resize(img, (cw, ch))
         result = cv2.matchTemplate(crop, template, cv2.TM_CCOEFF_NORMED)
         return float(result.max())
 
