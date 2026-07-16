@@ -199,7 +199,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
                     demo_code=args.code, hud_variant=args.hud_variant,
                     side_a_team=args.side_a_team, hotkey=args.hotkey,
                     confidence_floor=args.confidence_floor,
-                    require_division=require_division, dry_run=args.dry_run,
+                    require_division=require_division,
+                    debug_dir=args.debug_dir, dry_run=args.dry_run,
                 )
             else:
                 run_capture(
@@ -613,6 +614,8 @@ def build_parser() -> argparse.ArgumentParser:
     cap.add_argument("--hotkey", default=None, metavar="KEY",
                      help="snapshot mode: press this key (e.g. f8) to grab the comp at "
                           "bookmarked moments, instead of the continuous loop")
+    cap.add_argument("--debug-dir", default=None, metavar="DIR",
+                     help="hotkey mode: save each snapshot's full frame here for diagnosis")
     cap.add_argument("--dry-run", action="store_true", help="match but do not write")
     cap.set_defaults(func=cmd_capture)
 

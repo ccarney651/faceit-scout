@@ -451,6 +451,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
+    debug_dir: Optional[str] = None,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Snapshot capture: instead of a continuous loop, the operator navigates the
@@ -519,6 +520,12 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         if (w, h) != (profile.resolution_w, profile.resolution_h):
             emit(f"  resolution {w}x{h} != profile — skipped")
             continue
+        if debug_dir is not None:  # diagnostics: save the exact frame we matched
+            import os as _os
+            _os.makedirs(debug_dir, exist_ok=True)
+            dpath = _os.path.join(debug_dir, f"snap_{snaps + 1:02d}_{w}x{h}.png")
+            cv2.imwrite(dpath, frame)
+            emit(f"  saved debug frame {dpath}")
         line = []
         for side in (SIDE_LEFT, SIDE_RIGHT):
             matches = match_frame(frame, side_slots[side], refs, hero_roles, banned,
