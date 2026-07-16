@@ -73,16 +73,22 @@ class _App:  # pragma: no cover - GUI runtime only
         self.code_var = tk.StringVar()
         self.code_box = ttk.Combobox(cap, textvariable=self.code_var, width=34, state="readonly")
         self.code_box.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+        self.code_box.bind("<<ComboboxSelected>>", lambda _e: self._on_code_selected())
         ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=0, column=2, padx=2)
         ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=0, column=3, padx=2)
-        ttk.Label(cap, text="Left team").grid(row=1, column=0, padx=6, pady=4, sticky="w")
+        # Left team: pick by clicking whichever team is on the LEFT of the HUD.
+        ttk.Label(cap, text="Left team").grid(row=1, column=0, padx=6, pady=4, sticky="nw")
         self.side_a_var = tk.StringVar()
-        ttk.Entry(cap, textvariable=self.side_a_var).grid(row=1, column=1, padx=6, pady=4, sticky="ew")
-        ttk.Label(cap, text="Hotkey").grid(row=2, column=0, padx=6, pady=4, sticky="w")
+        self.team_frame = ttk.Frame(cap)
+        self.team_frame.grid(row=1, column=1, columnspan=3, padx=6, pady=4, sticky="w")
+        self.roster_lbl = ttk.Label(cap, text="(pick a code to see the teams)",
+                                    foreground="#555", justify="left")
+        self.roster_lbl.grid(row=2, column=1, columnspan=3, padx=6, pady=2, sticky="w")
+        ttk.Label(cap, text="Hotkey").grid(row=3, column=0, padx=6, pady=4, sticky="w")
         self.hotkey_var = tk.StringVar(value="f8")
-        ttk.Entry(cap, textvariable=self.hotkey_var, width=8).grid(row=2, column=1, padx=6, pady=4, sticky="w")
+        ttk.Entry(cap, textvariable=self.hotkey_var, width=8).grid(row=3, column=1, padx=6, pady=4, sticky="w")
         self.cap_btn = ttk.Button(cap, text="Start hotkey capture", command=self._capture)
-        self.cap_btn.grid(row=3, column=1, padx=6, pady=6, sticky="w")
+        self.cap_btn.grid(row=4, column=1, padx=6, pady=6, sticky="w")
         cap.columnconfigure(1, weight=1)
 
         # --- 3. publish -----------------------------------------------------
@@ -208,7 +214,37 @@ class _App:  # pragma: no cover - GUI runtime only
             self.q.put(lambda: self.code_box.configure(values=items))
             if items:
                 self.q.put(lambda: self.code_var.set(items[0]))
+                self.q.put(self._on_code_selected)
         self._run(go, lock=False)
+
+    def _on_code_selected(self) -> None:
+        raw = self.code_var.get().strip()
+        if not raw:
+            return
+        code = raw.split()[0]
+
+        def go() -> None:
+            from .context import derive_code_context
+            with self._open_db() as db:
+                ctx = derive_code_context(db, self.faceit_var.get(), code)
+            t1, t2 = ctx.faction1_team_name, ctx.faction2_team_name
+            p1 = [p.nickname or "?" for p in ctx.players if p.faction == "faction1"]
+            p2 = [p.nickname or "?" for p in ctx.players if p.faction == "faction2"]
+            self.q.put(lambda: self._show_teams(t1, t2, p1, p2))
+        self._run(go, lock=False)
+
+    def _show_teams(self, t1: Optional[str], t2: Optional[str],
+                    p1: list[str], p2: list[str]) -> None:
+        from tkinter import ttk
+        for w in self.team_frame.winfo_children():
+            w.destroy()
+        self.side_a_var.set("")  # force a fresh choice per map
+        for name in (t1, t2):
+            if name:
+                ttk.Radiobutton(self.team_frame, text=name, value=name,
+                                variable=self.side_a_var).pack(side="left", padx=(0, 12))
+        self.roster_lbl.configure(
+            text=f"{t1 or '?'}:  {', '.join(p1) or '—'}\n{t2 or '?'}:  {', '.join(p2) or '—'}")
 
     def _copy_code(self) -> None:
         raw = self.code_var.get().strip()
@@ -228,6 +264,9 @@ class _App:  # pragma: no cover - GUI runtime only
             return
         code = raw.split()[0]
         side_a = self.side_a_var.get().strip() or None
+        if side_a is None:
+            self._emit("pick the LEFT team first (click its name under 'Left team').")
+            return
         hotkey = self.hotkey_var.get().strip() or "f8"
         from .capture import run_hotkey_capture
         self._emit(f"capture: {code} — press '{hotkey}' at key replay moments, 'esc' to finish.")
