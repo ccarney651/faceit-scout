@@ -290,13 +290,33 @@ def run_refs_from_sheet(  # pragma: no cover - runtime-only path
             cv2.imwrite(str(path), cell)
             db.save_ref(hero_guid=hero.guid, profile_id=profile.id, state="alive",
                         image_path=str(path), phash=phash, source="capture")
+            # Dead heroes render greyed/desaturated in the HUD, so a full-colour
+            # ref matches them poorly. Store a desaturated copy as the 'dead' ref;
+            # the matcher takes the best of both states, so a dead hero is still
+            # identified. (TM_CCOEFF_NORMED is brightness/contrast-invariant, so
+            # the desaturation, not any dimming, is what matters.)
+            dead = _desaturate(cv2, cell)
+            dpath = out_dir / f"{_safe(hero)}_sheet_dead.png"
+            cv2.imwrite(str(dpath), dead)
+            db.save_ref(hero_guid=hero.guid, profile_id=profile.id, state="dead",
+                        image_path=str(dpath), phash=phash_image(dead), source="capture")
         written += 1
 
     verify_path = out_dir / "_sheet_labeled.png"
     cv2.imwrite(str(verify_path), labeled)
-    print(f"stored {written} refs from sheet.")
+    print(f"stored {written} heroes (alive + dead refs) from sheet.")
     print(f"VERIFY the mapping is correct: {verify_path}")
     return written
+
+
+def _desaturate(cv2: Any, bgr: Any) -> Any:  # pragma: no cover
+    """A greyed copy approximating a dead-hero portrait: mostly desaturated but
+    keeping a little colour so it still discriminates."""
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype("float32")
+    hsv[:, :, 1] *= 0.25  # cut saturation to ~25%
+    hsv[:, :, 2] *= 0.85  # slight dim
+    import numpy as np
+    return cv2.cvtColor(np.clip(hsv, 0, 255).astype("uint8"), cv2.COLOR_HSV2BGR)
 
 
 def _safe(hero: FaceitHero) -> str:

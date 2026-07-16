@@ -15,17 +15,28 @@ from __future__ import annotations
 import os
 import queue
 import threading
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from .db import Database
 
 
+def _base_dir() -> str:
+    """A stable folder for owscout's data, independent of where the app is
+    launched from — so calibration and refs persist between sessions. Prefer
+    $OWSCOUT_HOME, else the repo dir (the parent of the owscout package)."""
+    home = os.getenv("OWSCOUT_HOME")
+    if home:
+        return home
+    return str(Path(__file__).resolve().parent.parent)
+
+
 def _default_db() -> str:
-    return os.getenv("OWSCOUT_DB", "owscout.sqlite3")
+    return os.getenv("OWSCOUT_DB") or os.path.join(_base_dir(), "owscout.sqlite3")
 
 
 def _default_faceit() -> str:
-    return os.getenv("FACEIT_DB", "faceit.sqlite3")
+    return os.getenv("FACEIT_DB") or os.path.join(_base_dir(), "faceit.sqlite3")
 
 
 class _App:  # pragma: no cover - GUI runtime only
