@@ -133,8 +133,12 @@ def run_calibration(
     frame_path = capture.save_frame(frame, frame_dir, f"{width}x{height}_{hud_variant}")
     log.info("saved full frame to %s", frame_path)
 
-    left = _select_box(cv2, frame, "LEFT team hero strip (side A) — drag, then ENTER")
-    right = _select_box(cv2, frame, "RIGHT team hero strip (side B) — drag, then ENTER")
+    print("\nCALIBRATION — a window titled 'owscout calibrate' is open.")
+    print("  Drag a box, then press ENTER (or SPACE) to confirm each one.\n")
+    left = _select_box(cv2, frame,
+                       "STEP 1/4: box the LEFT team's 5 hero portraits, then ENTER")
+    right = _select_box(cv2, frame,
+                        "STEP 2/4: box the RIGHT team's 5 hero portraits, then ENTER")
 
     profile = build_profile(
         resolution_w=width,
@@ -176,13 +180,14 @@ def _import_cv2() -> Any:
 
 
 def _select_box(cv2: Any, frame: Any, prompt: str) -> Rect:  # pragma: no cover
-    """Drag a single ROI via cv2.selectROI. Raises if the selection is empty."""
-    window = "owscout calibrate"
-    x, y, w, h = cv2.selectROI(window, frame, showCrosshair=True, fromCenter=False)
-    cv2.destroyWindow(window)
+    """Drag a single ROI via cv2.selectROI. The prompt is the window title, so the
+    step instruction is visible while dragging. Raises if the selection is empty."""
+    x, y, w, h = cv2.selectROI(prompt, frame, showCrosshair=True, fromCenter=False)
+    cv2.destroyWindow(prompt)
     rect = Rect(int(x), int(y), int(w), int(h))
     if rect.is_empty:
-        raise RuntimeError(f"empty selection for: {prompt}")
+        raise RuntimeError(
+            f"nothing was boxed for: {prompt}. Drag a box before pressing ENTER.")
     return rect
 
 
@@ -192,7 +197,7 @@ def _preview_slots(cv2: Any, frame: Any, slots: dict[str, list[Rect]]) -> None: 
     for rects in slots.values():
         for r in rects:
             cv2.rectangle(preview, (r.x, r.y), (r.x + r.w, r.y + r.h), (0, 255, 0), 2)
-    window = "owscout calibrate — subdivided slots (any key to confirm)"
+    window = "STEP 3/4: do the green boxes sit on the portraits? press any key to confirm"
     cv2.imshow(window, preview)
     cv2.waitKey(0)
     cv2.destroyWindow(window)
@@ -202,21 +207,22 @@ def _select_anchors(cv2: Any, frame: Any) -> list[Anchor]:  # pragma: no cover
     """Collect 2-3 named anchor boxes over fixed HUD furniture."""
     anchors: list[Anchor] = []
     print(
-        "\nAnchors: drag 2-3 boxes over fixed HUD furniture (objective bar, "
-        "timer, scoreboard chrome). Blank name when done."
+        "\nSTEP 4/4: box 2-3 FIXED HUD elements (the timer, objective bar, or "
+        "scoreboard). Type a name for each and press ENTER; leave the name blank "
+        "and press ENTER when you have at least 2."
     )
     while True:
         default = _suggest_anchor_name(len(anchors))
-        name = input(f"  anchor name [{default}] (blank to finish): ").strip()
+        name = input(f"  name this HUD element [{default}] (blank to finish): ").strip()
         if not name:
             if len(anchors) >= 2:
                 break
-            print(f"  need at least 2 anchors ({len(anchors)} so far)")
+            print(f"  need at least 2 — you have {len(anchors)}. Box another one.")
             continue
-        rect = _select_box(cv2, frame, f"anchor '{name}'")
+        rect = _select_box(cv2, frame, f"STEP 4/4: box the '{name}', then ENTER")
         anchors.append(Anchor(name=name, rect=rect))
         if len(anchors) >= 3:
-            print("  3 anchors captured (the recommended maximum).")
+            print("  3 anchors captured (that's plenty). Finishing.")
             break
     return anchors
 

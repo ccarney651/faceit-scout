@@ -59,8 +59,9 @@ class _App:  # pragma: no cover - GUI runtime only
         setup.pack(fill="x", **pad)
         ttk.Button(setup, text="Calibrate (drag ROI boxes)",
                    command=self._calibrate).grid(row=0, column=0, padx=6, pady=6, sticky="w")
-        ttk.Button(setup, text="Load hero-gallery image…",
-                   command=self._load_sheet).grid(row=0, column=1, padx=6, pady=6, sticky="w")
+        self.sheet_btn = ttk.Button(setup, text="Build hero library (load gallery)…",
+                                    command=self._load_sheet)
+        self.sheet_btn.grid(row=0, column=1, padx=6, pady=6, sticky="w")
         ttk.Button(setup, text="Check refs",
                    command=self._verify_refs).grid(row=0, column=2, padx=6, pady=6, sticky="w")
         self.setup_status = ttk.Label(setup, text="", foreground="#555")
@@ -158,13 +159,23 @@ class _App:  # pragma: no cover - GUI runtime only
 
     def _calibrate(self) -> None:
         from .calibrate import default_frame_dir, run_calibration
-        self._emit("calibrate: a window will open — drag the two strips, then anchors.")
+        for msg in (
+            "CALIBRATE — first get an Overwatch observer/replay view on screen (the",
+            "  bar of 10 hero portraits along the top). A screenshot window will open:",
+            "  1. Drag a box tightly around the LEFT team's 5 portraits, press ENTER.",
+            "  2. Drag a box around the RIGHT team's 5 portraits, press ENTER.",
+            "  3. A preview shows the 5+5 slots — press any key if they look right.",
+            "  4. Drag 2-3 boxes over fixed HUD bits (timer, objective), name each;",
+            "     leave the name blank and press ENTER to finish.",
+            "  (Tip: box just the portrait row — including names below is fine.)",
+        ):
+            self._emit(msg)
 
         def go() -> None:
             with self._open_db() as db:
                 run_calibration(db, hud_variant="default", team_size=5,
                                 frame_dir=default_frame_dir(self.db_var.get()))
-            self._emit("calibrate: done.")
+            self._emit("calibrate: saved. You can close the calibrate window now.")
             self.q.put(self._verify_refs)
         self._run(go)
 
@@ -189,17 +200,34 @@ class _App:  # pragma: no cover - GUI runtime only
 
     def _verify_refs(self) -> None:
         def go() -> None:
+            complete = False
             try:
                 with self._open_db() as db:
                     prof = db.latest_active_profile("default")
                     if prof is None:
-                        txt = "no calibration yet — click Calibrate."
+                        txt = "Step 1: not calibrated yet — click Calibrate."
                     else:
-                        n = len(db.get_refs(prof.id)) if prof.id else 0
-                        txt = f"profile {prof.resolution_w}x{prof.resolution_h}, {n} hero refs."
+                        have = len({r.hero_guid for r in db.get_refs(prof.id)}) if prof.id else 0
+                        total = have
+                        try:
+                            from .faceit import connect_ro, load_heroes
+                            with connect_ro(self.faceit_var.get()) as f:
+                                total = len(load_heroes(f))
+                        except Exception:  # noqa: BLE001
+                            pass
+                        complete = have > 0 and have >= total
+                        res = f"{prof.resolution_w}x{prof.resolution_h}"
+                        if have == 0:
+                            txt = f"profile {res} · Step 2: no hero library yet — click Build hero library."
+                        elif complete:
+                            txt = f"profile {res} · hero library complete ({have}/{total}). Ready to capture."
+                        else:
+                            txt = f"profile {res} · hero library {have}/{total} — rebuild to fill gaps."
             except Exception as exc:  # noqa: BLE001
                 txt = f"({exc})"
             self.q.put(lambda: self.setup_status.configure(text=txt))
+            # Grey the button out once the library is complete; re-enable if a hero is missing.
+            self.q.put(lambda: self.sheet_btn.configure(state="disabled" if complete else "normal"))
         self._run(go, lock=False)
 
     def _refresh_codes(self) -> None:
