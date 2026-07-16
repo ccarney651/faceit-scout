@@ -164,10 +164,9 @@ class _App:  # pragma: no cover - GUI runtime only
             "  bar of 10 hero portraits along the top). A screenshot window will open:",
             "  1. Drag a box tightly around the LEFT team's 5 portraits, press ENTER.",
             "  2. Drag a box around the RIGHT team's 5 portraits, press ENTER.",
-            "  3. A preview shows the 5+5 slots — press any key if they look right.",
-            "  4. Drag 2-3 boxes over fixed HUD bits (timer, objective), name each;",
-            "     leave the name blank and press ENTER to finish.",
-            "  (Tip: box just the portrait row — including names below is fine.)",
+            "  3. A preview shows the 5+5 slots — press any key to save (or close the",
+            "     window and redo if they don't line up). That's it.",
+            "  (Tip: box just the portrait row — including the names below is fine.)",
         ):
             self._emit(msg)
 

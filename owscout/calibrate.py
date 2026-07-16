@@ -107,9 +107,14 @@ def run_calibration(
     hud_variant: str,
     team_size: int,
     frame_dir: str | Path,
+    capture_anchors: bool = False,
     dry_run: bool = False,
 ) -> RoiProfile:
     """Grab a frame, run the interactive selection, and persist the profile.
+
+    Anchors (fixed-HUD landmarks) are off by default — they were meant for a
+    live-view validity gate that is not wired, so capturing them is just friction.
+    Pass ``capture_anchors=True`` to collect them if that gate is ever added.
 
     Returns the built profile (with ``id`` set when persisted).
     """
@@ -133,12 +138,12 @@ def run_calibration(
     frame_path = capture.save_frame(frame, frame_dir, f"{width}x{height}_{hud_variant}")
     log.info("saved full frame to %s", frame_path)
 
-    print("\nCALIBRATION — a window titled 'owscout calibrate' is open.")
-    print("  Drag a box, then press ENTER (or SPACE) to confirm each one.\n")
+    print("\nCALIBRATION — a window will open. Drag a box, then press ENTER "
+          "(or SPACE) to confirm each one.\n")
     left = _select_box(cv2, frame,
-                       "STEP 1/4: box the LEFT team's 5 hero portraits, then ENTER")
+                       "STEP 1/3: box the LEFT team's 5 hero portraits, then ENTER")
     right = _select_box(cv2, frame,
-                        "STEP 2/4: box the RIGHT team's 5 hero portraits, then ENTER")
+                        "STEP 2/3: box the RIGHT team's 5 hero portraits, then ENTER")
 
     profile = build_profile(
         resolution_w=width,
@@ -151,7 +156,8 @@ def run_calibration(
     )
     _preview_slots(cv2, frame, profile.slots)
 
-    profile.anchors = _select_anchors(cv2, frame)
+    if capture_anchors:
+        profile.anchors = _select_anchors(cv2, frame)
 
     if dry_run:
         log.info(
@@ -197,39 +203,31 @@ def _preview_slots(cv2: Any, frame: Any, slots: dict[str, list[Rect]]) -> None: 
     for rects in slots.values():
         for r in rects:
             cv2.rectangle(preview, (r.x, r.y), (r.x + r.w, r.y + r.h), (0, 255, 0), 2)
-    window = "STEP 3/4: do the green boxes sit on the portraits? press any key to confirm"
+    window = "STEP 3/3: do the green boxes sit on the portraits? press any key to save"
     cv2.imshow(window, preview)
     cv2.waitKey(0)
     cv2.destroyWindow(window)
 
 
-def _select_anchors(cv2: Any, frame: Any) -> list[Anchor]:  # pragma: no cover
-    """Collect 2-3 named anchor boxes over fixed HUD furniture."""
+def _select_anchors(cv2: Any, frame: Any, limit: int = 3) -> list[Anchor]:  # pragma: no cover
+    """Collect optional anchor boxes over fixed HUD furniture — click-only, no
+    typing (so it works in the windowed app too). Draw a box and press ENTER to
+    keep it, or press ESC / 'c' to finish. Anchors are auto-named."""
     anchors: list[Anchor] = []
-    print(
-        "\nSTEP 4/4: box 2-3 FIXED HUD elements (the timer, objective bar, or "
-        "scoreboard). Type a name for each and press ENTER; leave the name blank "
-        "and press ENTER when you have at least 2."
-    )
-    while True:
-        default = _suggest_anchor_name(len(anchors))
-        name = input(f"  name this HUD element [{default}] (blank to finish): ").strip()
-        if not name:
-            if len(anchors) >= 2:
-                break
-            print(f"  need at least 2 — you have {len(anchors)}. Box another one.")
-            continue
-        rect = _select_box(cv2, frame, f"STEP 4/4: box the '{name}', then ENTER")
-        anchors.append(Anchor(name=name, rect=rect))
-        if len(anchors) >= 3:
-            print("  3 anchors captured (that's plenty). Finishing.")
+    print("\nSTEP 4/4 (optional): box fixed HUD landmarks (timer, objective bar) "
+          "as extra reference. Press ENTER after each box, or press ESC / 'c' to "
+          "finish — you can also finish with none.")
+    while len(anchors) < limit:
+        title = (f"STEP 4/4 (optional): box a fixed HUD element then ENTER, "
+                 f"or ESC/c to finish  [{len(anchors)} so far]")
+        x, y, w, h = cv2.selectROI(title, frame, showCrosshair=True, fromCenter=False)
+        cv2.destroyWindow(title)
+        rect = Rect(int(x), int(y), int(w), int(h))
+        if rect.is_empty:  # ESC / cancel -> done
             break
+        anchors.append(Anchor(name=f"anchor_{len(anchors) + 1}", rect=rect))
+    print(f"  {len(anchors)} anchor(s) captured.")
     return anchors
-
-
-def _suggest_anchor_name(index: int) -> str:
-    suggestions = ("objective_bar", "timer", "scoreboard")
-    return suggestions[index] if index < len(suggestions) else f"anchor_{index}"
 
 
 def default_frame_dir(db_path: str) -> str:
