@@ -240,9 +240,19 @@ class _App:  # pragma: no cover - GUI runtime only
                 payload = dashboard_comps(db.resolved_observations())
             with open("owscout_comps.json", "w", encoding="utf-8") as fh:
                 json.dump(payload, fh, indent=2)
-            teams = len(payload["teams"])  # type: ignore[arg-type]
-            self._emit(f"publish: wrote owscout_comps.json ({teams} team(s)). "
-                       "Rebuild the dashboard / commit to publish.")
+            teams = len(payload["teams"])
+            self._emit(f"publish: wrote owscout_comps.json ({teams} team(s)).")
+            # Rebuild the dashboard so the comps show up immediately.
+            try:
+                from faceit_sync.db import Database as FaceitDb
+                from faceit_sync.export import export_html
+                with FaceitDb(self.faceit_var.get()) as fdb, \
+                        open("dashboard.html", "w", encoding="utf-8") as out:
+                    n = export_html(fdb, out)
+                self._emit(f"publish: rebuilt dashboard.html ({n} division(s)). "
+                           "Commit + push to update the online site.")
+            except Exception as exc:  # noqa: BLE001
+                self._emit(f"publish: JSON written; dashboard rebuild skipped ({exc}).")
         self._run(go)
 
     def run(self) -> None:
