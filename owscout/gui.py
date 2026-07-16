@@ -74,6 +74,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self.code_box = ttk.Combobox(cap, textvariable=self.code_var, width=34, state="readonly")
         self.code_box.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
         ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=0, column=2, padx=2)
+        ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=0, column=3, padx=2)
         ttk.Label(cap, text="Left team").grid(row=1, column=0, padx=6, pady=4, sticky="w")
         self.side_a_var = tk.StringVar()
         ttk.Entry(cap, textvariable=self.side_a_var).grid(row=1, column=1, padx=6, pady=4, sticky="ew")
@@ -208,6 +209,17 @@ class _App:  # pragma: no cover - GUI runtime only
             if items:
                 self.q.put(lambda: self.code_var.set(items[0]))
         self._run(go, lock=False)
+
+    def _copy_code(self) -> None:
+        raw = self.code_var.get().strip()
+        if not raw:
+            self._emit("no code selected to copy.")
+            return
+        code = raw.split()[0]
+        self.root.clipboard_clear()
+        self.root.clipboard_append(code)
+        self.root.update()  # keep it on the clipboard after focus changes
+        self._emit(f"copied '{code}' — paste it into the OW replay code field.")
 
     def _capture(self) -> None:
         raw = self.code_var.get().strip()
