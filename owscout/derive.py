@@ -91,6 +91,7 @@ class ObsRow:
     map_guid: Optional[str]
     team_id: Optional[str]
     won: bool
+    team_name: Optional[str] = None
 
 
 @dataclass
@@ -233,6 +234,33 @@ class PoolEntry:
     role: Optional[str]
     maps: int          # distinct maps the player was seen on this hero
     pick_rate: float   # maps_on_hero / total_maps
+
+
+def dashboard_comps(rows: Iterable[ObsRow]) -> dict[str, object]:
+    """Team-keyed captured-comp summary for the faceit-scout dashboard (§10). This
+    is the sync artifact: owscout writes it, the dashboard reads it — a git-native
+    hand-off, no shared database."""
+    from collections import defaultdict
+
+    by_team: dict[str, list[ObsRow]] = defaultdict(list)
+    for r in rows:
+        if r.team_name:
+            by_team[r.team_name].append(r)
+    teams: dict[str, object] = {}
+    for team, trows in by_team.items():
+        stats = aggregate_comps(trows)
+        team_maps = len({(r.map_instance_id, r.side) for r in trows})
+        teams[team] = {
+            "maps_captured": team_maps,
+            "comps": [
+                {"heroes": [h.strip() for h in c.hero_names.split(",")],
+                 "samples": c.samples, "maps": c.distinct_maps,
+                 "games": round(c.games, 2), "wins": round(c.wins, 2),
+                 "win_rate": round(c.win_rate, 3), "wilson": round(c.wilson, 3)}
+                for c in stats
+            ],
+        }
+    return {"teams": teams}
 
 
 def player_pool(

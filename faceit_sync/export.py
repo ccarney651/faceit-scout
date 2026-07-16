@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import html
 import json
+import os
 import sqlite3
 from typing import Any, Optional, TextIO
 
@@ -410,12 +411,26 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         ).fetchall()
     ]
 
+    # Captured comps synced in from owscout (if present). Team-keyed JSON written
+    # by `owscout export --format dashboard --out owscout_comps.json`; the operator
+    # commits it and the dashboard renders it on team Scout pages. Git-native sync,
+    # no shared database.
+    owscout_comps: dict[str, object] = {}
+    oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
+    if os.path.exists(oc_path):
+        try:
+            with open(oc_path, encoding="utf-8") as fh:
+                owscout_comps = json.load(fh).get("teams", {})
+        except (json.JSONDecodeError, OSError):
+            owscout_comps = {}
+
     data = {
         "divisions": divisions,
         "views": views,
         "heroes": list(heroes.values()),
         "roster": roster,
         "maps": list(maps.values()),
+        "owscout_comps": owscout_comps,
     }
     title = "FACEIT OW2 — League Scouting"
     payload = json.dumps(data).replace("</", "<\\/")

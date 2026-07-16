@@ -420,12 +420,23 @@ def cmd_scout_player(args: argparse.Namespace) -> int:
 def cmd_export(args: argparse.Namespace) -> int:
     import csv as _csv
     import json as _json
-    faceit_path = _faceit_db_path(args)
-    if not os.path.exists(faceit_path):
-        print(f"error: faceit DB not found: {faceit_path}", file=sys.stderr)
-        return 2
     with Database(_db_path(args)) as db:
-        stats = aggregate_comps(db.resolved_observations())
+        rows = db.resolved_observations()
+
+    if args.format == "dashboard":
+        # The sync artifact: team-keyed comps for the faceit-scout dashboard.
+        from .derive import dashboard_comps
+        payload = _json.dumps(dashboard_comps(rows), indent=2)
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+            teams = len(cast("dict[str, object]", dashboard_comps(rows)["teams"]))
+            print(f"wrote {args.out} ({teams} team(s) with captured comps)")
+        else:
+            print(payload)
+        return 0
+
+    stats = aggregate_comps(rows)
     records = [
         {"comp": s.hero_names, "comp_id": s.comp_id, "samples": s.samples,
          "distinct_maps": s.distinct_maps, "distinct_teams": s.distinct_teams,
@@ -433,14 +444,19 @@ def cmd_export(args: argparse.Namespace) -> int:
          "win_rate": round(s.win_rate, 4), "wilson": round(s.wilson, 4)}
         for s in stats
     ]
-    if args.format == "json":
-        print(_json.dumps(records, indent=2))
-    else:
-        w = _csv.DictWriter(sys.stdout, fieldnames=list(records[0].keys()) if records
-                            else ["comp", "comp_id", "samples", "distinct_maps",
-                                  "distinct_teams", "games", "wins", "win_rate", "wilson"])
-        w.writeheader()
-        w.writerows(records)
+    out = open(args.out, "w", newline="", encoding="utf-8") if args.out else sys.stdout
+    try:
+        if args.format == "json":
+            out.write(_json.dumps(records, indent=2))
+        else:
+            w = _csv.DictWriter(out, fieldnames=list(records[0].keys()) if records
+                                else ["comp", "comp_id", "samples", "distinct_maps",
+                                      "distinct_teams", "games", "wins", "win_rate", "wilson"])
+            w.writeheader()
+            w.writerows(records)
+    finally:
+        if out is not sys.stdout:
+            out.close()
     return 0
 
 
@@ -641,7 +657,9 @@ def build_parser() -> argparse.ArgumentParser:
     ct.set_defaults(func=cmd_comps_top)
 
     ex = sub.add_parser("export", help="export the comp table to csv/json")
-    ex.add_argument("--format", choices=("csv", "json"), default="csv")
+    ex.add_argument("--format", choices=("csv", "json", "dashboard"), default="csv",
+                    help="csv/json: comp table; dashboard: team-keyed JSON for the scout site")
+    ex.add_argument("--out", default=None, help="output file (default: stdout)")
     ex.set_defaults(func=cmd_export)
 
     vc = sub.add_parser(

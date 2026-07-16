@@ -15,3 +15,9 @@ build/
 # runtime
 auto-update.log
 *.log
+
+# owscout runtime artifacts
+calibration/
+refs/
+screenshots/
+overwatch-hero-icons/

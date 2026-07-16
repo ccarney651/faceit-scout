@@ -8,6 +8,7 @@ from owscout.derive import (
     ObsRow,
     aggregate_comps,
     choose_level,
+    dashboard_comps,
     modal_comp,
     player_pool,
     render_rate,
@@ -103,6 +104,29 @@ def test_distinct_maps_and_teams_counted() -> None:
             _obs("A", 2, "a", False, map_guid="m2", team="t2")]
     s = aggregate_comps(rows)[0]
     assert s.distinct_maps == 2 and s.distinct_teams == 2 and s.samples == 2
+
+
+# --- dashboard_comps (sync artifact) -----------------------------------------
+
+
+def test_dashboard_comps_keyed_by_team() -> None:
+    rows = [
+        ObsRow("A", "Ana, DVa", 1, "a", "m1", "t1", True, team_name="Alpha"),
+        ObsRow("A", "Ana, DVa", 2, "a", "m2", "t1", False, team_name="Alpha"),
+        ObsRow("B", "Ashe, Rein", 3, "a", "m1", "t2", True, team_name="Bravo"),
+    ]
+    out = dashboard_comps(rows)
+    teams = out["teams"]
+    assert isinstance(teams, dict) and set(teams) == {"Alpha", "Bravo"}
+    alpha = teams["Alpha"]
+    assert alpha["maps_captured"] == 2
+    assert alpha["comps"][0]["heroes"] == ["Ana", "DVa"]
+    assert alpha["comps"][0]["maps"] == 2
+
+
+def test_dashboard_comps_skips_unnamed_team() -> None:
+    rows = [ObsRow("A", "Ana", 1, "a", "m", "t1", True, team_name=None)]
+    assert dashboard_comps(rows) == {"teams": {}}
 
 
 # --- modal comp --------------------------------------------------------------

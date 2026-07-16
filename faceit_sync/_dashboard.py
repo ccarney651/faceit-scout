@@ -519,6 +519,21 @@ function renderScoutBody(t){
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   w.appendChild(head);
 
+  // Captured comps (owscout) — the actual hero compositions this team ran, from
+  // replay capture. This is the data FACEIT never exposes; synced in from owscout.
+  const oc=(DATA.owscout_comps||{})[t.team];
+  if(oc && oc.comps && oc.comps.length){
+    w.appendChild(el(sectionH('Captured comps',`<span class="note">actual comps from replay capture · ${oc.maps_captured} map${oc.maps_captured===1?'':'s'} scouted · low n, directional</span>`)));
+    const card=el(`<div class="card"></div>`);
+    oc.comps.slice().sort((a,b)=>(b.wilson-a.wilson)||(b.maps-a.maps)).forEach(c=>{
+      const chips=c.heroes.map(h=>heroChip(h)).join(' ');
+      const rec=`${Math.round(c.wins)}W-${Math.round(c.games-c.wins)}L`;
+      card.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
+        `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${rec}</span></div>`));
+    });
+    w.appendChild(card);
+  }
+
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
   const banC=el(`<div class="card"></div>`);

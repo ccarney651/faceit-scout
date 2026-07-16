@@ -601,6 +601,7 @@ class Database:
             SELECT o.comp_id, c.hero_names_sorted AS hero_names, o.map_instance_id, o.side,
                    mi.map_guid,
                    CASE o.side WHEN 'a' THEN mi.side_a_team_id ELSE mi.side_b_team_id END AS team_id,
+                   CASE o.side WHEN 'a' THEN mi.side_a_label ELSE mi.side_b_label END AS team_name,
                    (mi.winner_side = o.side) AS won
             FROM comp_observations o
             JOIN map_instances mi ON mi.id = o.map_instance_id
@@ -618,6 +619,7 @@ class Database:
                 comp_id=str(r["comp_id"]), hero_names=str(r["hero_names"]),
                 map_instance_id=int(r["map_instance_id"]), side=str(r["side"]),
                 map_guid=r["map_guid"], team_id=r["team_id"], won=bool(r["won"]),
+                team_name=r["team_name"],
             )
             for r in rows
         ]
