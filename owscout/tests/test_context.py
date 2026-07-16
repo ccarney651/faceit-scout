@@ -35,7 +35,9 @@ def _build_faceit(path: Path) -> str:
         """
         CREATE TABLE games(match_id TEXT, game_no INT, map_guid TEXT, map_category TEXT,
                            winner_faction TEXT, demo_code TEXT);
-        CREATE TABLE matches(id TEXT PRIMARY KEY, faction1_team_id TEXT, faction2_team_id TEXT);
+        CREATE TABLE matches(id TEXT PRIMARY KEY, faction1_team_id TEXT, faction2_team_id TEXT,
+                            championship_id TEXT);
+        CREATE TABLE championships(id TEXT PRIMARY KEY, name TEXT);
         CREATE TABLE maps(guid TEXT PRIMARY KEY, name TEXT, category TEXT);
         CREATE TABLE teams(id TEXT PRIMARY KEY, name TEXT);
         CREATE TABLE heroes(guid TEXT PRIMARY KEY, name TEXT, role TEXT);
@@ -45,7 +47,8 @@ def _build_faceit(path: Path) -> str:
         CREATE TABLE players(id TEXT PRIMARY KEY, nickname TEXT);
         """
     )
-    c.execute("INSERT INTO matches VALUES('M1','tA','tB')")
+    c.execute("INSERT INTO championships VALUES('c1','S9 Test Master Central')")
+    c.execute("INSERT INTO matches VALUES('M1','tA','tB','c1')")
     c.execute("INSERT INTO teams VALUES('tA','Alpha'),('tB','Bravo')")
     c.execute("INSERT INTO maps VALUES('map-kr','Kings Row','Hybrid')")
     c.execute("INSERT INTO games VALUES('M1',1,'map-kr','Hybrid','faction2','ABC123')")
@@ -135,6 +138,7 @@ def test_derive_full_context(db: Database, tmp_path: Path) -> None:
     ctx = derive_code_context(db, fp, "ABC123")
     assert (ctx.match_id, ctx.game_no) == ("M1", 1)
     assert ctx.map_name == "Kings Row" and ctx.map_category == "Hybrid"
+    assert ctx.championship_name == "S9 Test Master Central" and ctx.division == "master"
     assert ctx.faction1_team_name == "Alpha" and ctx.faction2_team_name == "Bravo"
     assert ctx.winner_faction == "faction2"
     assert ctx.team_name(ctx.winner_faction) == "Bravo"

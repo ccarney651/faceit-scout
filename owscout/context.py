@@ -13,7 +13,7 @@ whether the map was already captured — the payoff of the ATTACH layer (SPEC §
 from __future__ import annotations
 
 from .db import Database
-from .models import BanInfo, CodeContext, PlayerInfo
+from .models import BanInfo, CodeContext, PlayerInfo, division_of
 
 
 class CodeNotFound(LookupError):
@@ -43,12 +43,14 @@ def derive_code_context(db: Database, faceit_db_path: str, demo_code: str) -> Co
                   g.winner_faction AS winner,
                   m.faction1_team_id AS f1, m.faction2_team_id AS f2,
                   mp.name AS map_name, mp.category AS map_category,
-                  t1.name AS f1_name, t2.name AS f2_name
+                  t1.name AS f1_name, t2.name AS f2_name,
+                  ch.name AS championship_name
            FROM faceit.games g
            JOIN faceit.matches m ON m.id = g.match_id
            LEFT JOIN faceit.maps  mp ON mp.guid = g.map_guid
            LEFT JOIN faceit.teams t1 ON t1.id = m.faction1_team_id
            LEFT JOIN faceit.teams t2 ON t2.id = m.faction2_team_id
+           LEFT JOIN faceit.championships ch ON ch.id = m.championship_id
            WHERE g.demo_code = ?""",
         (demo_code,),
     ).fetchall()
@@ -124,6 +126,8 @@ def derive_code_context(db: Database, faceit_db_path: str, demo_code: str) -> Co
         bans=bans,
         players=players,
         already_captured=already,
+        championship_name=g["championship_name"],
+        division=division_of(g["championship_name"]),
     )
 
 

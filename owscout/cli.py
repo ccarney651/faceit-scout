@@ -37,7 +37,7 @@ from .derive import (
 from .integrity import verify_codes_report
 from .db import Database
 from .match import DEFAULT_CONFIDENCE_FLOOR, run_match
-from .models import DEFAULT_TEAM_SIZE, REF_STATES, SIDE_LEFT
+from .models import DEFAULT_DIVISION, DEFAULT_TEAM_SIZE, REF_STATES, SIDE_LEFT
 from .refs import (
     DEFAULT_CLOSE_THRESHOLD,
     default_refs_dir,
@@ -203,6 +203,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 side_a_team=args.side_a_team,
                 write_interval_ms=args.write_interval_ms,
                 confidence_floor=args.confidence_floor,
+                require_division=None if args.division == "all" else args.division,
                 dry_run=args.dry_run,
             )
     except (CaptureError, CodeNotFound, AmbiguousCode, FileNotFoundError) as exc:
@@ -223,7 +224,9 @@ def cmd_codes_list(args: argparse.Namespace) -> int:
     with Database(_db_path(args)) as db:
         rows = db.list_codes(
             faceit_path, team=args.team, uncaptured=args.uncaptured,
-            include_wiped=args.include_wiped, limit=args.limit,
+            include_wiped=args.include_wiped,
+            division=None if args.division == "all" else args.division,
+            limit=args.limit,
         )
     if not rows:
         hint = "" if args.include_wiped else " (all stored codes may pre-date the last wipe - try --include-wiped)"
@@ -253,7 +256,8 @@ def cmd_codes_age(args: argparse.Namespace) -> int:
         print(f"error: faceit DB not found: {faceit_path}", file=sys.stderr)
         return 2
     with Database(_db_path(args)) as db:
-        s = db.code_age_summary(faceit_path)
+        s = db.code_age_summary(faceit_path,
+                                division=None if args.division == "all" else args.division)
     print(f"latest wipe:   {s['latest_wipe'] or '(none recorded)'}")
     print(f"stored codes:  {s['total_codes']}")
     print(f"  alive (post-wipe, capturable): {s['alive_codes']}")
@@ -578,6 +582,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help=f"heartbeat write cadence in GAME ms (default: {DEFAULT_WRITE_INTERVAL_MS})")
     cap.add_argument("--confidence-floor", type=float, default=DEFAULT_CONFIDENCE_FLOOR,
                      help=f"below this a slot is left unresolved (default: {DEFAULT_CONFIDENCE_FLOOR})")
+    cap.add_argument("--division", default=DEFAULT_DIVISION,
+                     help="only capture this division: master (default), expert, or all")
     cap.add_argument("--dry-run", action="store_true", help="match but do not write")
     cap.set_defaults(func=cmd_capture)
 
@@ -587,6 +593,8 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--team", default=None, help="only this team's codes")
     cl.add_argument("--uncaptured", action="store_true", help="only codes not yet captured")
     cl.add_argument("--include-wiped", action="store_true", help="include dead (pre-wipe) codes")
+    cl.add_argument("--division", default=DEFAULT_DIVISION,
+                    help="skill division: master (default), expert, or all")
     cl.add_argument("--limit", type=int, default=None, help="cap the number shown")
     cl.set_defaults(func=cmd_codes_list)
     cm = csub.add_parser("mark", help="record operator intent/outcome for a code")
@@ -595,6 +603,8 @@ def build_parser() -> argparse.ArgumentParser:
     cm.add_argument("--notes", default=None)
     cm.set_defaults(func=cmd_codes_mark)
     ca = csub.add_parser("age", help="wipe date and alive/dead code counts")
+    ca.add_argument("--division", default=DEFAULT_DIVISION,
+                    help="skill division: master (default), expert, or all")
     ca.set_defaults(func=cmd_codes_age)
 
     rev = sub.add_parser("review", help="the unresolved-observation queue (SPEC appendix)")

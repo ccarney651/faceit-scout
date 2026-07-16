@@ -27,6 +27,22 @@ WORKING_RESOLUTION: tuple[int, int] = (2560, 1440)
 SIDE_LEFT = "a"
 SIDE_RIGHT = "b"
 
+# FACEIT championships split into skill divisions named in the championship title
+# ("... Master Central ...", "... Expert Central ..."). owscout defaults to Master.
+DEFAULT_DIVISION = "master"
+
+
+def division_of(championship_name: str | None) -> str | None:
+    """The skill division a championship belongs to, from its name."""
+    if not championship_name:
+        return None
+    low = championship_name.lower()
+    if "master" in low:
+        return "master"
+    if "expert" in low:
+        return "expert"
+    return None
+
 # A hero portrait is captured in two visual states (SPEC §6). "dead" is a
 # greyed/desaturated STATE of the same hero, not a different hero — the
 # hero_guid must still resolve when dead.
@@ -169,6 +185,8 @@ class CodeContext:
     bans: list[BanInfo]
     players: list[PlayerInfo]
     already_captured: bool             # a map_instance already exists (cross-DB)
+    championship_name: str | None = None
+    division: str | None = None        # 'master' | 'expert' | None, from the championship name
 
     def team_name(self, faction: str | None) -> str | None:
         if faction == "faction1":

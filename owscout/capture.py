@@ -311,6 +311,7 @@ def run_capture(  # pragma: no cover - runtime-only path
     side_a_team: Optional[str] = None,
     write_interval_ms: int = DEFAULT_WRITE_INTERVAL_MS,
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
+    require_division: Optional[str] = None,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Sample the replay under speed-mode playback, match each side, temporally
@@ -329,6 +330,11 @@ def run_capture(  # pragma: no cover - runtime-only path
     cv2, _np = _import_cv2_np_for_capture()
 
     ctx = derive_code_context(db, faceit_db_path, demo_code)
+    if require_division is not None and ctx.division != require_division:
+        raise CaptureError(
+            f"{demo_code} is a {ctx.division or 'unknown'}-division game "
+            f"({ctx.championship_name}); owscout is set to {require_division} only. "
+            f"Pass --division all to override.")
     log.info("capturing %s: %s game %d (%s)", demo_code, ctx.match_id, ctx.game_no, ctx.map_name)
 
     # Establish which faction is on the LEFT HUD strip (side A). OCR-based auto

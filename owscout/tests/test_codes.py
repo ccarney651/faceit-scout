@@ -25,15 +25,18 @@ def _faceit(path: Path) -> str:
     c = sqlite3.connect(str(path))
     c.executescript("""
         CREATE TABLE games(match_id TEXT, game_no INT, map_guid TEXT, demo_code TEXT);
-        CREATE TABLE matches(id TEXT PRIMARY KEY, faction1_team_id TEXT, faction2_team_id TEXT, finished_at TEXT);
+        CREATE TABLE matches(id TEXT PRIMARY KEY, faction1_team_id TEXT, faction2_team_id TEXT,
+                            finished_at TEXT, championship_id TEXT);
+        CREATE TABLE championships(id TEXT PRIMARY KEY, name TEXT);
         CREATE TABLE maps(guid TEXT PRIMARY KEY, name TEXT, category TEXT);
         CREATE TABLE teams(id TEXT PRIMARY KEY, name TEXT);
     """)
+    c.execute("INSERT INTO championships VALUES('cm','S9 Master Central'),('ce','S9 Expert Central')")
     c.execute("INSERT INTO teams VALUES('tA','Alpha'),('tB','Bravo'),('tC','Cabra')")
     c.execute("INSERT INTO maps VALUES('m-ilios','Ilios','Control')")
-    # pre-wipe match (2026-07-08) and post-wipe match (2026-07-15)
-    c.execute("INSERT INTO matches VALUES('OLD','tA','tB','2026-07-08T20:00:00Z')")
-    c.execute("INSERT INTO matches VALUES('NEW','tA','tC','2026-07-15T20:00:00Z')")
+    # pre-wipe match (2026-07-08) and post-wipe match (2026-07-15), both Master
+    c.execute("INSERT INTO matches VALUES('OLD','tA','tB','2026-07-08T20:00:00Z','cm')")
+    c.execute("INSERT INTO matches VALUES('NEW','tA','tC','2026-07-15T20:00:00Z','cm')")
     c.executemany("INSERT INTO games VALUES(?,?,?,?)", [
         ("OLD", 1, "m-ilios", "OLD111"),
         ("NEW", 1, "m-ilios", "NEW111"),
@@ -84,6 +87,17 @@ def test_list_codes_captured_flag_and_uncaptured(db: Database, tmp_path: Path) -
     rows = {r.demo_code: r for r in db.list_codes(fp)}
     assert rows["NEW111"].captured is True and rows["NEW222"].captured is False
     assert {r.demo_code for r in db.list_codes(fp, uncaptured=True)} == {"NEW222"}
+
+
+def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
+    fp = _faceit(tmp_path / "faceit.sqlite3")
+    con = sqlite3.connect(fp)
+    con.execute("INSERT INTO matches VALUES('EXP','tA','tB','2026-07-15T20:00:00Z','ce')")
+    con.execute("INSERT INTO games VALUES('EXP',1,'m-ilios','EXP111')")
+    con.commit(); con.close()
+    assert "EXP111" not in {r.demo_code for r in db.list_codes(fp)}          # master default
+    assert "EXP111" in {r.demo_code for r in db.list_codes(fp, division="expert")}
+    assert {"NEW111", "NEW222", "EXP111"} <= {r.demo_code for r in db.list_codes(fp, division=None)}
 
 
 def test_code_age_summary(db: Database, tmp_path: Path) -> None:

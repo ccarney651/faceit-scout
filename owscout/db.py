@@ -20,7 +20,7 @@ from typing import Iterator, Mapping, Optional, Sequence
 from .derive import ObsRow
 from .faceit import faceit_ro_uri
 from .integrity import VerifyCodesRow
-from .models import CodeContext, CodeListing, Comp, HeroRef, RoiProfile
+from .models import DEFAULT_DIVISION, CodeContext, CodeListing, Comp, HeroRef, RoiProfile
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -429,11 +429,13 @@ class Database:
         team: Optional[str] = None,
         uncaptured: bool = False,
         include_wiped: bool = False,
+        division: Optional[str] = DEFAULT_DIVISION,
         limit: Optional[int] = None,
     ) -> list[CodeListing]:
         """Capturable codes joined faceit games→matches→teams, with a captured
         flag (does a map_instance exist) and wipe status. Filters out codes whose
-        game pre-dates the latest wipe by default (SPEC §2, §7). Newest first."""
+        game pre-dates the latest wipe by default (SPEC §2, §7), and restricts to
+        one skill division (default Master). Newest first."""
         self.attach_faceit(faceit_db_path)
         wipe = self.latest_wipe_date()
         sql = """
@@ -447,9 +449,13 @@ class Database:
             LEFT JOIN faceit.maps  mp ON mp.guid = g.map_guid
             LEFT JOIN faceit.teams t1 ON t1.id = m.faction1_team_id
             LEFT JOIN faceit.teams t2 ON t2.id = m.faction2_team_id
+            LEFT JOIN faceit.championships ch ON ch.id = m.championship_id
             WHERE g.demo_code IS NOT NULL
         """
         params: list[object] = []
+        if division is not None:
+            sql += " AND ch.name LIKE ?"
+            params.append(f"%{division}%")
         if team is not None:
             sql += " AND (t1.name = ? COLLATE NOCASE OR t2.name = ? COLLATE NOCASE)"
             params += [team, team]
@@ -478,20 +484,29 @@ class Database:
             for r in rows
         ]
 
-    def code_age_summary(self, faceit_db_path: str) -> dict[str, object]:
+    def code_age_summary(
+        self, faceit_db_path: str, division: Optional[str] = DEFAULT_DIVISION
+    ) -> dict[str, object]:
         """Totals for ``owscout codes age``: latest wipe and how many stored
-        codes are alive (post-wipe) vs dead, and how many captured."""
+        codes are alive (post-wipe) vs dead, and how many captured — within one
+        skill division (default Master)."""
         self.attach_faceit(faceit_db_path)
         wipe = self.latest_wipe_date()
+        div = f"%{division}%" if division is not None else "%"
         total = self.conn.execute(
-            "SELECT COUNT(*) FROM faceit.games WHERE demo_code IS NOT NULL"
+            """SELECT COUNT(*) FROM faceit.games g JOIN faceit.matches m ON m.id=g.match_id
+               JOIN faceit.championships ch ON ch.id=m.championship_id
+               WHERE g.demo_code IS NOT NULL AND ch.name LIKE ?""",
+            (div,),
         ).fetchone()[0]
         alive = 0
         if wipe is not None:
             alive = self.conn.execute(
-                "SELECT COUNT(*) FROM faceit.games g JOIN faceit.matches m ON m.id=g.match_id "
-                "WHERE g.demo_code IS NOT NULL AND substr(m.finished_at,1,10) > ?",
-                (wipe,),
+                """SELECT COUNT(*) FROM faceit.games g JOIN faceit.matches m ON m.id=g.match_id
+                   JOIN faceit.championships ch ON ch.id=m.championship_id
+                   WHERE g.demo_code IS NOT NULL AND ch.name LIKE ?
+                     AND substr(m.finished_at,1,10) > ?""",
+                (div, wipe),
             ).fetchone()[0]
         captured = self.conn.execute(
             "SELECT COUNT(*) FROM map_instances WHERE match_id IS NOT NULL"
