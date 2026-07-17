@@ -185,6 +185,15 @@ class _App:  # pragma: no cover - GUI runtime only
     # --- actions ------------------------------------------------------------
 
     def _calibrate(self) -> None:
+        from tkinter import messagebox
+        if not messagebox.askyesno(
+            "Recalibrate ROI boxes?",
+            "This starts a NEW calibration and DETACHES every hero you've learned "
+            "from the current profile — you'd have to learn them all again.\n\n"
+            "You only need this once, or after a HUD/resolution change. Continue?",
+            icon="warning", default="no", parent=self.root):
+            self._emit("calibrate: cancelled (your learned heroes are untouched).")
+            return
         from .calibrate import default_frame_dir, run_calibration
         for msg in (
             "CALIBRATE — first get an Overwatch observer/replay view on screen (the",
@@ -225,6 +234,15 @@ class _App:  # pragma: no cover - GUI runtime only
         self._run(go)
 
     def _open_learn(self) -> None:
+        from tkinter import messagebox
+        if not messagebox.askyesno(
+            "Open Learn heroes?",
+            "Opens the hero-portrait learning tool. Your existing refs are kept — "
+            "a hero only changes when you confirm/save it here.\n\n"
+            "(Inside, avoid ‘Calibrate one portrait’ unless you mean to move the "
+            "learn box.) Continue?",
+            default="yes", parent=self.root):
+            return
         try:
             _LearnWindow(self)
         except Exception as exc:  # noqa: BLE001
