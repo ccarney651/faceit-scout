@@ -54,12 +54,14 @@ CREATE TABLE IF NOT EXISTS hero_refs (
     image_path TEXT    NOT NULL,
     phash      TEXT    NOT NULL,
     added_at   TEXT    NOT NULL,
-    source     TEXT    NOT NULL CHECK(source IN ('capture','review'))
+    source     TEXT    NOT NULL CHECK(source IN ('capture','review')),
+    variant    TEXT    NOT NULL DEFAULT 'a'   -- 'a'=left/blue team, 'b'=right/red team
 );
--- One canonical 'capture' ref per (hero, profile, state); 'review' exemplars
--- accumulate freely (SPEC appendix: review may add crops to improve matching).
+-- One canonical 'capture' ref per (hero, profile, state, variant); 'review'
+-- exemplars accumulate freely. The variant lets a hero carry a blue-team AND a
+-- red-team portrait, since the HUD tints the background by team.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_hero_refs_capture
-    ON hero_refs(hero_guid, profile_id, state) WHERE source = 'capture';
+    ON hero_refs(hero_guid, profile_id, state, variant) WHERE source = 'capture';
 
 CREATE TABLE IF NOT EXISTS game_builds (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,6 +229,7 @@ class Database:
         self.init_schema()
 
     def init_schema(self) -> None:
+        self._migrate()
         self.conn.executescript(SCHEMA)
         for wiped_at, source, notes in _SEED_WIPES:
             self.conn.execute(
@@ -234,6 +237,20 @@ class Database:
                 (wiped_at, source, notes),
             )
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """In-place upgrades for DBs created before a column existed. Runs before
+        the CREATE-IF-NOT-EXISTS schema, which can't add columns to a live table."""
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if "hero_refs" in tables:
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(hero_refs)")}
+            if "variant" not in cols:
+                # Existing refs are all from the left/blue team.
+                self.conn.execute(
+                    "ALTER TABLE hero_refs ADD COLUMN variant TEXT NOT NULL DEFAULT 'a'")
+                self.conn.execute("DROP INDEX IF EXISTS ux_hero_refs_capture")
+                self.conn.commit()
 
     # --- read-only ATTACH of the faceit DB (SPEC §3) -------------------------
 
@@ -369,25 +386,27 @@ class Database:
         image_path: str,
         phash: str,
         source: str = "capture",
+        variant: str = "a",
     ) -> int:
         """Store a reference portrait. A 'capture' ref replaces the existing
-        canonical one for (hero, profile, state) — idempotent re-capture
-        (SPEC §12). 'review' refs are additive. Returns the row id."""
+        canonical one for (hero, profile, state, variant) — idempotent re-capture
+        (SPEC §12). 'review' refs are additive. ``variant`` distinguishes the
+        blue-team ('a') from the red-team ('b') portrait. Returns the row id."""
         now = _utcnow()
         with self.transaction() as c:
             if source == "capture":
                 c.execute(
                     """DELETE FROM hero_refs
                        WHERE hero_guid = ? AND profile_id = ? AND state = ?
-                         AND source = 'capture'""",
-                    (hero_guid, profile_id, state),
+                         AND variant = ? AND source = 'capture'""",
+                    (hero_guid, profile_id, state, variant),
                 )
             cur = c.execute(
                 """INSERT INTO hero_refs (
                        hero_guid, profile_id, state, image_path, phash,
-                       added_at, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (hero_guid, profile_id, state, image_path, phash, now, source),
+                       added_at, source, variant)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (hero_guid, profile_id, state, image_path, phash, now, source, variant),
             )
         return int(cur.lastrowid or 0)
 
@@ -422,6 +441,7 @@ class Database:
             phash=str(row["phash"]),
             added_at=row["added_at"],
             source=str(row["source"]),
+            variant=str(row["variant"]) if "variant" in row.keys() else "a",
         )
 
     @staticmethod

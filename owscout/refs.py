@@ -483,17 +483,30 @@ def rank_learn_slots(  # pragma: no cover - needs cv2
     return ranked
 
 
+def variant_for_cell(cell: Rect, profile: RoiProfile) -> str:
+    """Which team a portrait cell belongs to, from its horizontal position: the
+    left half of the HUD is the blue team ('a'), the right half is red ('b'). The
+    HUD tints the portrait background by team, so refs are kept per-variant."""
+    return "a" if (cell.x + cell.w / 2) < profile.resolution_w / 2 else "b"
+
+
 def save_learn_ref(  # pragma: no cover - needs cv2
     db: Database, refs_dir: str | Path, *, pid: int, hero: FaceitHero,
-    crop: Any, state: str = STATE_ALIVE,
+    crop: Any, state: str = STATE_ALIVE, variant: str = "a",
 ) -> None:
-    """Persist a confirmed HUD crop as the hero's canonical ref (source=capture,
-    replacing any gallery bootstrap ref for that hero+state)."""
+    """Persist a confirmed HUD crop as the hero's canonical ref for one team
+    variant (source=capture, replacing any prior ref for that hero+state+variant).
+    The blue ('a') and red ('b') portraits are stored separately."""
     import cv2
+    # Keep the two team variants in distinct files so they never overwrite.
+    suffix = "" if variant == "a" else f"_{variant}"
     path = _ref_image_path(refs_dir, pid, hero, state)
+    if suffix:
+        path = path.with_name(path.stem + suffix + path.suffix)
     cv2.imwrite(str(path), crop)
     db.save_ref(hero_guid=hero.guid, profile_id=pid, state=state,
-                image_path=str(path), phash=phash_image(crop), source="capture")
+                image_path=str(path), phash=phash_image(crop), source="capture",
+                variant=variant)
 
 
 def calibrate_learn_slot(  # pragma: no cover - needs cv2/game
@@ -628,11 +641,14 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
             if hero is None:
                 print("    couldn't resolve that name (ambiguous/unknown) — try again.")
                 continue
+            variant = variant_for_cell(s.cell, ctx.profile)
             if not dry_run:
-                save_learn_ref(db, refs_dir, pid=pid, hero=hero, crop=s.crop, state=state)
+                save_learn_ref(db, refs_dir, pid=pid, hero=hero, crop=s.crop,
+                               state=state, variant=variant)
             written += 1
             confirmed.add(hero.guid)
-            print(f"    stored {hero.name}  "
+            team = "blue" if variant == "a" else "red"
+            print(f"    stored {hero.name} ({team})  "
                   f"({len(confirmed)}/{len(heroes)} heroes learned this session)")
             break
 

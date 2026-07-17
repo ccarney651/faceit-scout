@@ -223,5 +223,6 @@ class HeroRef:
     image_path: str
     phash: str
     source: str  # 'capture' | 'review'
+    variant: str = "a"  # 'a' = left/blue team, 'b' = right/red team
     id: int | None = None
     added_at: str | None = None

@@ -408,7 +408,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.ctx: Any = None
         self.ranked: list[Any] = []
         self.cursor = 0
-        self.learned: set[str] = set()
+        self.learned: set[tuple[str, str]] = set()  # (hero_guid, variant) this session
         self._imgref: Any = None  # keep a ref so Tk doesn't GC the preview
         self._frame: Any = None   # last grabbed frame, for the portrait preview
         self.busy = False
@@ -657,24 +657,26 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self._save(hero)
 
     def _save(self, hero: Any) -> None:
-        from .refs import default_refs_dir, save_learn_ref
+        from .refs import default_refs_dir, save_learn_ref, variant_for_cell
         if hero is None:
             return
         s = self.ranked[self.cursor]
         crop = s.crop
+        variant = variant_for_cell(s.cell, self.ctx.profile)
+        team = "blue" if variant == "a" else "red"
 
         def go() -> None:
             with Database(self.app.db_var.get()) as db:
                 save_learn_ref(db, default_refs_dir(self.app.db_var.get()),
-                               pid=self.ctx.pid, hero=hero, crop=crop)
-            self.learned.add(hero.guid)
+                               pid=self.ctx.pid, hero=hero, crop=crop, variant=variant)
+            self.learned.add((hero.guid, variant))
 
             def apply() -> None:
                 self.progress.configure(
                     text=f"Learned this session: {len(self.learned)}  "
-                         f"(last: {hero.name})")
-                self.status.configure(text=f"saved {hero.name} — show the next hero, then Grab.")
-                self.guess_lbl.configure(text=f"✓ saved {hero.name}")
+                         f"(last: {hero.name} / {team})")
+                self.status.configure(text=f"saved {hero.name} ({team}) — show the next hero, then Grab.")
+                self.guess_lbl.configure(text=f"✓ saved {hero.name} ({team})")
                 for b in (self.yes_btn, self.next_btn, self.saveas_btn):
                     b.configure(state="disabled")
             self._post(apply)
