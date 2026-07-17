@@ -523,8 +523,27 @@ def calibrate_learn_slot(  # pragma: no cover - needs cv2/game
     rect = Rect(int(x), int(y), int(bw), int(bh))
     if rect.is_empty:
         raise CaptureError("nothing was boxed — drag a box before pressing ENTER")
-    db.set_learn_slot(profile.id, rect)
-    return rect
+    # Snap to the calibrated capture cell the box overlaps, so the learn crop has
+    # EXACTLY the geometry capture extracts. A free-hand box of a different size
+    # crops a different slice of the face and matches poorly (SPEC §8.3).
+    snapped = _snap_to_slot(rect, profile) or rect
+    db.set_learn_slot(profile.id, snapped)
+    return snapped
+
+
+def _snap_to_slot(box: Rect, profile: RoiProfile) -> Optional[Rect]:
+    """The calibrated portrait cell whose rect overlaps ``box`` most, or None if
+    the box doesn't touch any slot."""
+    best: Optional[Rect] = None
+    best_area = 0
+    for rects in profile.slots.values():
+        for r in rects:
+            ix = max(0, min(box.x + box.w, r.x + r.w) - max(box.x, r.x))
+            iy = max(0, min(box.y + box.h, r.y + r.h) - max(box.y, r.y))
+            area = ix * iy
+            if area > best_area:
+                best_area, best = area, r
+    return best
 
 
 def run_refs_learn(  # pragma: no cover - runtime-only path
