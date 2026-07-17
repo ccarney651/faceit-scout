@@ -399,7 +399,9 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         # The [big-preview] tag lets us confirm at a glance the latest code is
         # running (an old still-open window won't have it).
         self.win.title("Learn heroes — teach owscout your HUD portraits  [big-preview]")
-        self.win.geometry("620x680")
+        self.win.geometry("620x720")
+        self.win.minsize(560, 640)
+        self.win.resizable(True, True)
         self.win.transient(app.root)
 
         pad = {"padx": 12, "pady": 6}
@@ -436,30 +438,14 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.status = ttk.Label(grabrow, text="loading…", foreground="#555")
         self.status.pack(side="left", padx=12)
 
-        # Preview of the current slot's portrait.
-        # NB: width/height are CHARACTER units while the label shows text, but
-        # switch to PIXELS once it shows an image — so we clear them in _show_slot,
-        # otherwise the portrait would be clamped to a ~44x9px sliver.
-        self.preview = tk.Label(self.win, text="(no capture yet)", width=44, height=9,
-                                relief="groove", bg="#111", fg="#888")
-        self.preview.pack(**pad)
-
-        self.guess_lbl = tk.Label(self.win, text="", font=("Segoe UI", 15, "bold"),
-                                  fg="#1a5")
-        self.guess_lbl.pack(**pad)
-
-        # Confirm / correct controls.
-        confirm = ttk.Frame(self.win)
-        confirm.pack(fill="x", **pad)
-        self.yes_btn = ttk.Button(confirm, text="✓  Correct — save",
-                                  command=self._accept, state="disabled")
-        self.yes_btn.grid(row=0, column=0, padx=(0, 8), pady=3, sticky="w")
-        self.next_btn = ttk.Button(confirm, text="↷ Different slot",
-                                   command=self._next_slot, state="disabled")
-        self.next_btn.grid(row=0, column=1, padx=4, pady=3)
+        # Bottom controls are packed FIRST (bottom-up) so they stay visible no
+        # matter how tall the preview is; the preview then fills the middle.
+        self.progress = ttk.Label(self.win, text="Learned this session: 0",
+                                   foreground="#333", font=("Segoe UI", 10, "bold"))
+        self.progress.pack(side="bottom", **pad)
 
         pick = ttk.Frame(self.win)
-        pick.pack(fill="x", **pad)
+        pick.pack(side="bottom", fill="x", **pad)
         ttk.Label(pick, text="Wrong? pick the right hero:").grid(
             row=0, column=0, columnspan=2, sticky="w")
         self.hero_var = tk.StringVar()
@@ -469,9 +455,26 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
                                      state="disabled")
         self.saveas_btn.grid(row=1, column=1, pady=3, sticky="w")
 
-        self.progress = ttk.Label(self.win, text="Learned this session: 0",
-                                   foreground="#333", font=("Segoe UI", 10, "bold"))
-        self.progress.pack(side="bottom", **pad)
+        confirm = ttk.Frame(self.win)
+        confirm.pack(side="bottom", fill="x", **pad)
+        self.yes_btn = ttk.Button(confirm, text="✓  Correct — save",
+                                  command=self._accept, state="disabled")
+        self.yes_btn.grid(row=0, column=0, padx=(0, 8), pady=3, sticky="w")
+        self.next_btn = ttk.Button(confirm, text="↷ Different slot",
+                                   command=self._next_slot, state="disabled")
+        self.next_btn.grid(row=0, column=1, padx=4, pady=3)
+
+        self.guess_lbl = tk.Label(self.win, text="", font=("Segoe UI", 15, "bold"),
+                                  fg="#1a5")
+        self.guess_lbl.pack(side="bottom", **pad)
+
+        # Preview fills the remaining space between the grab row and the controls.
+        # NB: width/height are CHARACTER units while the label shows text, but
+        # switch to PIXELS once it shows an image — so we clear them in _show_slot,
+        # otherwise the portrait would be clamped to a ~44x9px sliver.
+        self.preview = tk.Label(self.win, text="(no capture yet)", width=44, height=9,
+                                relief="groove", bg="#111", fg="#888")
+        self.preview.pack(side="top", fill="both", expand=True, **pad)
 
         self._init_ctx()
 
@@ -587,7 +590,8 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
             disp = frame[y0:c.y + c.h + pad, x0:c.x + c.w + pad].copy()
             rx, ry = s.roi.x - x0, s.roi.y - y0
             cv2.rectangle(disp, (rx, ry), (rx + s.roi.w, ry + s.roi.h), (0, 255, 0), 2)
-            scale = max(3, 460 // max(1, disp.shape[1]))
+            # Cap so the portrait stays big but never pushes the controls off-screen.
+            scale = max(2, min(380 // max(1, disp.shape[1]), 230 // max(1, disp.shape[0])))
             big = cv2.resize(disp, (disp.shape[1] * scale, disp.shape[0] * scale),
                              interpolation=cv2.INTER_CUBIC)
         else:
