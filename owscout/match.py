@@ -59,24 +59,25 @@ DEFAULT_DEAD_SATURATION = 40.0
 # composition (from round_players) is used as a consistency check, not a per-slot
 # filter. This supersedes the fixed-order reading of SPEC §8.1 step 2.
 
-# Measured from a real 2557x1438 observer frame (screenshots/, 2026-07-15): the
-# ult-charge "N%" overlay is a diagonal parallelogram over the LEFT ~55% of each
-# portrait cell; the hero face occupies the right ~45%. We match on the face
-# region only, so the (variable) ult number never enters the template (SPEC §8.3).
-# Applied identically to ref capture and to matching so the two stay aligned.
-# Validated: masking cut the worst wrong-hero confusion score from 0.72 (full
-# cell, where every identical "0%" box inflates correlation) to 0.53.
-ULT_OVERLAY_LEFT_FRACTION = 0.55
+# The ult indicator (charge "N%" or the ready checkmark) sits to the LEFT of the
+# portrait and never overlaps the face (operator-confirmed 2026-07-17, verified
+# on screenshots/dead/). The hero face occupies roughly the right ~58% of the
+# cell. We start the crop at 0.42 so it captures the FULL face width while staying
+# clear of the ult digits (which end ~0.42 even at 99%). Applied identically to
+# ref capture and to matching so the two stay aligned. Widening from the old 0.55
+# (right 45%, which cut the face in half) to 0.42 keeps self-match ~0.99 and
+# nudges the hard cross-ult-charge case up (0.877 -> 0.894 on real frames).
+ULT_OVERLAY_LEFT_FRACTION = 0.42
 
-# Operators naturally box the full HUD cell (portrait + player name + ability
-# bar). The name is player-specific noise, so we keep only the TOP band of the
-# cell. Kept deliberately short: the ult-charge "N%" digits sit in the LOWER
-# half of the portrait, so a shallow top band grabs the upper face (hair/brow/
-# eyes) and excludes the (variable) charge number entirely. Validated on real
-# 2560x1440 frames (screenshots/dead/): at 0.45 the same hero across frames with
-# DIFFERENT ult charge matches HUD-ref-to-HUD-ref at ~0.88-0.99, and the gallery
-# bootstrap resolves all five knowns correctly; at 0.58 the digit zone leaks in
-# and drops the charge-varying case to ~0.5 and misresolves Tracer as Moira.
+# Operators box the full HUD cell (portrait + player name + ability bar). We keep
+# only the TOP band of the cell and STOP ABOVE THE NAME BAR — the real vertical
+# constraint. The name bar's background flips (black when the hero is dead, grey
+# when alive), so any crop that reaches it matches badly across a hero's own
+# alive/dead frames. Verified on real 2560x1440 frames (screenshots/dead/): at
+# 0.45 the same hero across DEAD vs ALIVE frames self-matches ~0.88; at 0.52 the
+# name bar starts leaking in and it falls to ~0.72; by 0.62 it's ~0.51. So 0.45
+# is the tallest safe band — it holds the eyes/brow/upper face, cleanly above the
+# name bar. (This is NOT about the ult number, which sits to the left — see above.)
 PORTRAIT_TOP_FRACTION = 0.45
 
 # Injected primitive signatures.
