@@ -440,11 +440,9 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
                  for side in (SIDE_LEFT, SIDE_RIGHT)
                  for i in range(profile.team_size)]
 
-    def have_guids() -> set[str]:
-        return {r.hero_guid for r in db.get_refs(pid)}
-
     win = "owscout refs learn — is this the right hero?"
     written = 0
+    confirmed: set[str] = set()  # distinct heroes upgraded to a HUD ref this session
     print(f"LEARN HUD refs for profile #{profile.id} "
           f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}').")
     print("  Show ONE hero in the spectator bar, then press ENTER to grab. "
@@ -506,9 +504,9 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
                 db.save_ref(hero_guid=hero.guid, profile_id=pid, state=state,
                             image_path=str(path), phash=phash, source="capture")
             written += 1
-            remaining = len(heroes) - len(have_guids())
-            print(f"    stored {hero.name}  ({written} this session, "
-                  f"~{remaining} hero(es) still on gallery/no ref)")
+            confirmed.add(hero.guid)
+            print(f"    stored {hero.name}  "
+                  f"({len(confirmed)}/{len(heroes)} heroes learned this session)")
             break
 
     cv2.destroyWindow(win)
