@@ -392,6 +392,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.cursor = 0
         self.learned: set[str] = set()
         self._imgref: Any = None  # keep a ref so Tk doesn't GC the preview
+        self._frame: Any = None   # last grabbed frame, for the portrait preview
         self.busy = False
 
         self.win = tk.Toplevel(app.root)
@@ -499,7 +500,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.ctx = ctx
         names = sorted(ctx.names.values())
         res = f"{ctx.profile.resolution_w}x{ctx.profile.resolution_h}"
-        single = ctx.learn_roi is not None
+        single = ctx.learn_box is not None
 
         def apply() -> None:
             self.hero_box.configure(values=names)
@@ -561,6 +562,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
                 ranked = rank_learn_slots(db, frame, self.ctx)
             self.ranked = ranked
             self.cursor = 0
+            self._frame = frame
             self._post(self._show_slot)
         self._work(go)
 
@@ -570,7 +572,21 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
             return
         s = self.ranked[self.cursor]
         cv2 = self.ctx.cv2
-        big = cv2.resize(s.crop, (s.roi.w * 5, s.roi.h * 5), interpolation=cv2.INTER_NEAREST)
+        # Show the WHOLE portrait cell (recognizable), enlarged, with the matched
+        # face region outlined in green — not just the tiny match patch.
+        frame = getattr(self, "_frame", None)
+        if frame is not None:
+            c = s.cell
+            pad = 4
+            y0, x0 = max(0, c.y - pad), max(0, c.x - pad)
+            disp = frame[y0:c.y + c.h + pad, x0:c.x + c.w + pad].copy()
+            rx, ry = s.roi.x - x0, s.roi.y - y0
+            cv2.rectangle(disp, (rx, ry), (rx + s.roi.w, ry + s.roi.h), (0, 255, 0), 1)
+            scale = max(2, 380 // max(1, disp.shape[1]))
+            big = cv2.resize(disp, (disp.shape[1] * scale, disp.shape[0] * scale),
+                             interpolation=cv2.INTER_CUBIC)
+        else:
+            big = cv2.resize(s.crop, (s.roi.w * 5, s.roi.h * 5), interpolation=cv2.INTER_NEAREST)
         ok, buf = cv2.imencode(".png", big)
         if ok:
             data = self.base64.b64encode(buf.tobytes()).decode("ascii")

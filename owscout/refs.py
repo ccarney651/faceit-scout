@@ -407,19 +407,20 @@ class LearnContext(NamedTuple):
     heroes: list[FaceitHero]
     names: dict[str, str]
     score_fn: Any
-    all_slots: list[tuple[str, int, Rect]]
+    all_slots: list[tuple[str, int, Rect]]  # (side, index, full CELL rect)
     cv2: Any
     # If a single-portrait learn ROI is calibrated, the learning loop reads just
-    # this one box (face-cropped) instead of scanning all ten HUD slots.
-    learn_roi: Optional[Rect] = None
+    # this one cell instead of scanning all ten HUD slots.
+    learn_box: Optional[Rect] = None
 
 
 class LearnSlot(NamedTuple):
     score: float
     side: str
     slot_index: int
-    roi: Rect
-    crop: Any  # BGR ndarray
+    roi: Rect   # the face sub-rect actually matched
+    cell: Rect  # the full portrait cell (for a recognizable preview)
+    crop: Any   # BGR ndarray of the matched face region
     guess_guid: Optional[str]
     guess_name: Optional[str]
 
@@ -441,15 +442,14 @@ def prepare_learn(  # pragma: no cover - needs cv2/faceit
     assert profile.id is not None
     with connect_ro(faceit_db_path) as fdb:
         heroes = load_heroes(fdb)
-    all_slots = [(side, i, face_subrect(profile.slots[side][i]))
+    all_slots = [(side, i, profile.slots[side][i])
                  for side in (SIDE_LEFT, SIDE_RIGHT)
                  for i in range(profile.team_size)]
-    learn_box = db.get_learn_slot(profile.id)
     return LearnContext(
         profile=profile, pid=profile.id, heroes=heroes,
         names={h.guid: h.name for h in heroes},
         score_fn=make_template_scorer(cv2), all_slots=all_slots, cv2=cv2,
-        learn_roi=face_subrect(learn_box) if learn_box else None)
+        learn_box=db.get_learn_slot(profile.id))
 
 
 def rank_learn_slots(  # pragma: no cover - needs cv2
@@ -458,11 +458,12 @@ def rank_learn_slots(  # pragma: no cover - needs cv2
     """Score every HUD slot's face crop against the current (bootstrap) ref set
     and return them best-guess-confidence first — so the populated slot(s) with a
     real hero sort to the top and empty slots fall to the bottom."""
-    from .match import reduce_candidates
+    from .match import face_subrect, reduce_candidates
     cand = reduce_candidates(db.get_refs(ctx.pid), state=None,
                              expected_role=None, banned_guids=set(), hero_roles={})
 
-    def score_roi(side: str, i: int, roi: Rect) -> LearnSlot:
+    def score_cell(side: str, i: int, cell: Rect) -> LearnSlot:
+        roi = face_subrect(cell)
         crop = _crop(frame, roi)
         best_ref, best = None, 0.0
         for rf in cand:
@@ -470,14 +471,14 @@ def rank_learn_slots(  # pragma: no cover - needs cv2
             if sc > best:
                 best, best_ref = sc, rf
         guid = best_ref.hero_guid if best_ref else None
-        return LearnSlot(best, side, i, roi, crop, guid,
+        return LearnSlot(best, side, i, roi, cell, crop, guid,
                          ctx.names.get(guid) if guid else None)
 
     # Single-box mode: one calibrated portrait, no scanning.
-    if ctx.learn_roi is not None:
-        return [score_roi("learn", 0, ctx.learn_roi)]
+    if ctx.learn_box is not None:
+        return [score_cell("learn", 0, ctx.learn_box)]
 
-    ranked = [score_roi(side, i, roi) for side, i, roi in ctx.all_slots]
+    ranked = [score_cell(side, i, cell) for side, i, cell in ctx.all_slots]
     ranked.sort(key=lambda s: s.score, reverse=True)
     return ranked
 
@@ -583,7 +584,7 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
     win = "owscout refs learn — is this the right hero?"
     written = 0
     confirmed: set[str] = set()  # distinct heroes upgraded to a HUD ref this session
-    mode = "single calibrated box" if ctx.learn_roi is not None else "scanning all 10 slots"
+    mode = "single calibrated box" if ctx.learn_box is not None else "scanning all 10 slots"
     print(f"LEARN HUD refs for profile #{profile.id} "
           f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}') — {mode}.")
     print("  Show ONE hero in the spectator bar, then press ENTER to grab. "
