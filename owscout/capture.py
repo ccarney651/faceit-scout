@@ -429,7 +429,10 @@ def run_capture(  # pragma: no cover - runtime-only path
             low_confidence=integ["low_conf"], banned_hero_hits=integ["banned_hits"],
             map_mismatch=map_mismatch, errors=1 if over else 0,
         )
-        db.upsert_code_status(demo_code, "failed" if over else "captured")
+        # Mark a broken run failed; a good run stays a DRAFT (not greenlit) until
+        # the operator reviews and finalizes it.
+        if over:
+            db.upsert_code_status(demo_code, "failed")
     log.info("done: %d frames, %d observations written, %d skipped (%d banned-hits, mismatch=%s)",
              counts["frames"], counts["written"], counts["skipped"],
              integ["banned_hits"], map_mismatch)
@@ -542,9 +545,11 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         emit(f"  snap {snaps}: " + "   ".join(line))
 
     keyboard.clear_all_hotkeys()
-    if not dry_run:
-        db.upsert_code_status(demo_code, "captured")
-    emit(f"done. {snaps} snapshot(s), {written} comp(s) written.")
+    # Do NOT greenlight the code here — a capture is a DRAFT until the operator
+    # reviews it and finalizes. Finalizing marks the code captured and lets the
+    # map into exports (see Database.finalize_map).
+    emit(f"done. {snaps} snapshot(s) captured as a DRAFT — review and finalize "
+         "to include it in the scout data.")
     return {"snaps": snaps, "written": written}
 
 

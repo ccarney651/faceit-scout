@@ -26,6 +26,7 @@ from .models import (
     CodeContext,
     CodeListing,
     Comp,
+    DraftMap,
     HeroRef,
     Rect,
     RoiProfile,
@@ -101,6 +102,7 @@ CREATE TABLE IF NOT EXISTS map_instances (
     profile_id     INTEGER REFERENCES roi_profiles(id),
     map_verified   INTEGER CHECK(map_verified IN (0,1)),   -- see SPEC §9
     captured_at    TEXT,
+    finalized_at   TEXT,                     -- NULL => draft (excluded from exports)
     -- Exactly one of (match_id AND game_no) or scrim_id is non-null.
     CHECK ((match_id IS NOT NULL AND game_no IS NOT NULL AND scrim_id IS NULL)
         OR (match_id IS NULL AND game_no IS NULL AND scrim_id IS NOT NULL)),
@@ -250,6 +252,11 @@ class Database:
                 self.conn.execute(
                     "ALTER TABLE hero_refs ADD COLUMN variant TEXT NOT NULL DEFAULT 'a'")
                 self.conn.execute("DROP INDEX IF EXISTS ux_hero_refs_capture")
+                self.conn.commit()
+        if "map_instances" in tables:
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(map_instances)")}
+            if "finalized_at" not in cols:
+                self.conn.execute("ALTER TABLE map_instances ADD COLUMN finalized_at TEXT")
                 self.conn.commit()
 
     # --- read-only ATTACH of the faceit DB (SPEC §3) -------------------------
@@ -672,6 +679,7 @@ class Database:
             JOIN map_instances mi ON mi.id = o.map_instance_id
             JOIN comps c ON c.comp_id = o.comp_id
             WHERE o.resolved = 1 AND o.comp_id IS NOT NULL
+              AND mi.finalized_at IS NOT NULL
         """
         params: list[object] = []
         if team_id is not None:
@@ -689,11 +697,80 @@ class Database:
             for r in rows
         ]
 
+    # --- draft review / finalize (the greenlight gate) -----------------------
+
+    def list_draft_maps(self) -> list[DraftMap]:
+        """Captured-but-not-finalized maps that have observations, newest first.
+        These are awaiting operator review; none are in the export yet."""
+        rows = self.conn.execute(
+            """SELECT mi.id, mi.demo_code, mi.map_name, mi.side_a_label,
+                      mi.side_b_label, mi.captured_at, COUNT(o.id) AS obs
+               FROM map_instances mi
+               JOIN comp_observations o ON o.map_instance_id = mi.id
+               WHERE mi.finalized_at IS NULL
+               GROUP BY mi.id
+               ORDER BY mi.id DESC"""
+        ).fetchall()
+        return [
+            DraftMap(id=int(r["id"]), demo_code=r["demo_code"], map_name=r["map_name"],
+                     side_a=r["side_a_label"], side_b=r["side_b_label"],
+                     observations=int(r["obs"]), captured_at=r["captured_at"])
+            for r in rows
+        ]
+
+    def map_side_comps(self, map_instance_id: int) -> dict[str, list[tuple[str, int, bool]]]:
+        """Per side ('a'/'b'), the distinct comps observed as
+        (hero_names, times_seen, resolved), most-seen first — for review display."""
+        rows = self.conn.execute(
+            """SELECT o.side, o.resolved AS resolved, c.hero_names_sorted AS names,
+                      COUNT(*) AS n
+               FROM comp_observations o
+               LEFT JOIN comps c ON c.comp_id = o.comp_id
+               WHERE o.map_instance_id = ?
+               GROUP BY o.side, o.comp_id
+               ORDER BY o.side, n DESC""",
+            (map_instance_id,),
+        ).fetchall()
+        out: dict[str, list[tuple[str, int, bool]]] = {"a": [], "b": []}
+        for r in rows:
+            out.setdefault(str(r["side"]), []).append(
+                (r["names"] or "(unresolved)", int(r["n"]), bool(r["resolved"])))
+        return out
+
+    def finalize_map(self, map_instance_id: int) -> None:
+        """Greenlight a reviewed map: mark it finalized (enters exports) and its
+        code captured. Idempotent."""
+        now = _utcnow()
+        with self.transaction() as c:
+            c.execute("UPDATE map_instances SET finalized_at = ? WHERE id = ?",
+                      (now, map_instance_id))
+            row = c.execute("SELECT demo_code FROM map_instances WHERE id = ?",
+                            (map_instance_id,)).fetchone()
+            if row and row["demo_code"]:
+                c.execute(
+                    """INSERT INTO code_status (demo_code, first_seen_at, status, notes)
+                       VALUES (?, ?, 'captured', NULL)
+                       ON CONFLICT(demo_code) DO UPDATE SET status = 'captured'""",
+                    (row["demo_code"], now))
+
+    def discard_map(self, map_instance_id: int) -> None:
+        """Delete a draft map and its observations — for test runs / bad captures.
+        Leaves the code un-greenlit."""
+        with self.transaction() as c:
+            c.execute(
+                """DELETE FROM comp_slots WHERE observation_id IN
+                   (SELECT id FROM comp_observations WHERE map_instance_id = ?)""",
+                (map_instance_id,))
+            c.execute("DELETE FROM comp_observations WHERE map_instance_id = ?",
+                      (map_instance_id,))
+            c.execute("DELETE FROM map_instances WHERE id = ?", (map_instance_id,))
+
     def capture_coverage(self, faceit_db_path: str) -> tuple[int, int]:
         """(captured maps, total played maps) for the §10.3 bias disclosure."""
         self.attach_faceit(faceit_db_path)
         captured = self.conn.execute(
-            "SELECT COUNT(*) FROM map_instances WHERE source_type = 'faceit'"
+            "SELECT COUNT(*) FROM map_instances "
+            "WHERE source_type = 'faceit' AND finalized_at IS NOT NULL"
         ).fetchone()[0]
         total = self.conn.execute(
             "SELECT COUNT(*) FROM faceit.games WHERE demo_code IS NOT NULL"

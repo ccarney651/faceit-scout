@@ -111,11 +111,16 @@ class _App:  # pragma: no cover - GUI runtime only
         self.cap_btn.grid(row=4, column=1, padx=6, pady=6, sticky="w")
         cap.columnconfigure(1, weight=1)
 
-        # --- 3. publish -----------------------------------------------------
-        pub = ttk.LabelFrame(self.root, text="3. Publish to the scout dashboard")
+        # --- 3. review + publish -------------------------------------------
+        pub = ttk.LabelFrame(self.root, text="3. Review, then publish")
         pub.pack(fill="x", **pad)
-        ttk.Button(pub, text="Export comps → owscout_comps.json",
-                   command=self._publish).grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Button(pub, text="📋 Review captured maps…",
+                   command=self._open_review).grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Button(pub, text="Export finalized comps → owscout_comps.json",
+                   command=self._publish).grid(row=0, column=1, padx=6, pady=6, sticky="w")
+        ttk.Label(pub, text="Captures are drafts until you review + finalize them; "
+                            "only finalized maps are exported.",
+                  foreground="#555").grid(row=1, column=0, columnspan=2, padx=6, sticky="w")
 
         # --- log ------------------------------------------------------------
         logf = ttk.LabelFrame(self.root, text="Log")
@@ -232,6 +237,12 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit(f"refs: stored {n} portraits. Verify the labeled image in refs/.")
             self.q.put(self._verify_refs)
         self._run(go)
+
+    def _open_review(self) -> None:
+        try:
+            _ReviewWindow(self)
+        except Exception as exc:  # noqa: BLE001
+            self._emit(f"review: {exc}")
 
     def _open_learn(self) -> None:
         from tkinter import messagebox
@@ -682,6 +693,120 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
             self._post(apply)
             self._post(self.app._verify_refs)
         self._work(go)
+
+
+class _ReviewWindow:  # pragma: no cover - GUI runtime only
+    """Review captured DRAFT maps and either finalize (greenlight -> export) or
+    discard (e.g. a test run). Nothing reaches the scout data until finalized."""
+
+    def __init__(self, app: "_App") -> None:
+        from tkinter import ttk
+        self.app = app
+        tk = app.tk
+        self.drafts: list[Any] = []
+
+        self.win = tk.Toplevel(app.root)
+        self.win.title("Review captured maps")
+        self.win.geometry("720x460")
+        self.win.transient(app.root)
+        pad = {"padx": 10, "pady": 6}
+
+        tk.Label(self.win, justify="left", anchor="w", fg="#222", font=("Segoe UI", 9),
+                 text="Captured maps are DRAFTS. Check the comps, then Finalize to send "
+                      "to the scout data, or Discard a test run.").pack(fill="x", **pad)
+
+        body = ttk.Frame(self.win)
+        body.pack(fill="both", expand=True, **pad)
+        left = ttk.Frame(body)
+        left.pack(side="left", fill="y")
+        tk.Label(left, text="Draft maps").pack(anchor="w")
+        self.listbox = tk.Listbox(left, width=34, height=16, exportselection=False)
+        self.listbox.pack(fill="y", expand=True)
+        self.listbox.bind("<<ListboxSelect>>", lambda _e: self._show_selected())
+
+        self.detail = tk.Text(body, wrap="word", state="disabled", bg="#111", fg="#ddd",
+                              font=("Consolas", 10))
+        self.detail.pack(side="left", fill="both", expand=True, padx=(10, 0))
+
+        btns = ttk.Frame(self.win)
+        btns.pack(fill="x", **pad)
+        ttk.Button(btns, text="↻ Refresh", command=self._refresh).pack(side="left")
+        ttk.Button(btns, text="✓ Finalize (send to scout data)",
+                   command=self._finalize).pack(side="left", padx=8)
+        ttk.Button(btns, text="🗑 Discard draft", command=self._discard).pack(side="left")
+
+        self._refresh()
+
+    def _db(self) -> Database:
+        return Database(self.app.db_var.get())
+
+    def _refresh(self) -> None:
+        with self._db() as db:
+            self.drafts = db.list_draft_maps()
+        self.listbox.delete(0, "end")
+        for d in self.drafts:
+            self.listbox.insert(
+                "end", f"{d.demo_code or '—'}  {d.map_name or '?'}  ({d.observations} obs)")
+        self._set_detail("Select a draft map to review its comps."
+                         if self.drafts else "No draft maps. Capture a replay first.")
+
+    def _selected(self) -> Any:
+        sel = self.listbox.curselection()
+        return self.drafts[sel[0]] if sel else None
+
+    def _set_detail(self, text: str) -> None:
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        self.detail.insert("end", text)
+        self.detail.configure(state="disabled")
+
+    def _show_selected(self) -> None:
+        d = self._selected()
+        if d is None:
+            return
+        with self._db() as db:
+            comps = db.map_side_comps(d.id)
+        lines = [f"{d.demo_code or '—'}  ·  {d.map_name or '?'}",
+                 f"LEFT (a): {d.side_a or '?'}    RIGHT (b): {d.side_b or '?'}", ""]
+        for side, label in (("a", d.side_a), ("b", d.side_b)):
+            lines.append(f"— {label or side.upper()} —")
+            rows = comps.get(side) or []
+            if not rows:
+                lines.append("   (no comps)")
+            for names, n, resolved in rows:
+                flag = "" if resolved else "  [unresolved]"
+                lines.append(f"   x{n}: {names}{flag}")
+            lines.append("")
+        self._set_detail("\n".join(lines))
+
+    def _finalize(self) -> None:
+        d = self._selected()
+        if d is None:
+            self._set_detail("Pick a draft map first.")
+            return
+        with self._db() as db:
+            db.finalize_map(d.id)
+        self.app._emit(f"review: finalized {d.demo_code or d.id} ({d.map_name}) — "
+                       "now in the scout export.")
+        self.app.q.put(self.app._refresh_codes)
+        self._refresh()
+
+    def _discard(self) -> None:
+        from tkinter import messagebox
+        d = self._selected()
+        if d is None:
+            self._set_detail("Pick a draft map first.")
+            return
+        if not messagebox.askyesno(
+            "Discard draft?",
+            f"Delete the draft capture for {d.demo_code or d.id} ({d.map_name}) and its "
+            f"{d.observations} observations? This can't be undone.",
+            icon="warning", default="no", parent=self.win):
+            return
+        with self._db() as db:
+            db.discard_map(d.id)
+        self.app._emit(f"review: discarded draft {d.demo_code or d.id}.")
+        self._refresh()
 
 
 def main() -> int:  # pragma: no cover

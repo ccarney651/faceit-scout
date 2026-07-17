@@ -18,6 +18,19 @@ from typing import NamedTuple
 # operator does not override it (SPEC §4: "do not hardcode 5 anywhere").
 DEFAULT_TEAM_SIZE = 5
 
+
+class DraftMap(NamedTuple):
+    """A captured-but-not-finalized map awaiting operator review. Nothing reaches
+    the scout export until the operator finalizes it (the greenlight step)."""
+
+    id: int
+    demo_code: str | None
+    map_name: str | None
+    side_a: str | None
+    side_b: str | None
+    observations: int
+    captured_at: str | None
+
 # The assumed working resolution. SPEC §5: assume 2560x1440 but DERIVE it from
 # the grabbed frame, never assume it. A profile is only valid at the resolution
 # it was calibrated on.

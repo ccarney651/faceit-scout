@@ -335,6 +335,34 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_drafts(args: argparse.Namespace) -> int:
+    with Database(_db_path(args)) as db:
+        if args.finalize is not None:
+            db.finalize_map(args.finalize)
+            print(f"finalized map {args.finalize} - now included in exports.")
+            return 0
+        if args.discard is not None:
+            db.discard_map(args.discard)
+            print(f"discarded draft map {args.discard}.")
+            return 0
+        drafts = db.list_draft_maps()
+        if not drafts:
+            print("no draft maps - capture a replay first (captures are drafts).")
+            return 0
+        print(f"{len(drafts)} draft map(s) awaiting review (NOT yet in exports):")
+        for d in drafts:
+            print(f"  map {d.id}  {d.demo_code or '-'}  {d.map_name or '?'}  "
+                  f"[{d.side_a or '?'} vs {d.side_b or '?'}]  {d.observations} obs")
+            comps = db.map_side_comps(d.id)
+            for side, label in (("a", d.side_a), ("b", d.side_b)):
+                for names, n, resolved in (comps.get(side) or []):
+                    tag = "" if resolved else " [unresolved]"
+                    print(f"      {side} {label or '?':<16} x{n}: {names}{tag}")
+        print("\nFinalize with:  owscout drafts --finalize <map_id>"
+              "   |   discard:  owscout drafts --discard <map_id>")
+    return 0
+
+
 def _resolve_team(db: Database, faceit_path: str, name: str) -> Optional[tuple[str, str]]:
     from .faceit import connect_ro, resolve_team_id
     with connect_ro(faceit_path) as fdb:
@@ -680,6 +708,13 @@ def build_parser() -> argparse.ArgumentParser:
     rev.add_argument("--slot", type=int, default=None, help="slot index to resolve")
     rev.add_argument("--hero", default=None, help="hero name to set for --observation/--slot")
     rev.set_defaults(func=cmd_review)
+
+    dr = sub.add_parser("drafts", help="review captured DRAFT maps; finalize or discard")
+    dr.add_argument("--finalize", type=int, default=None, metavar="MAP_ID",
+                    help="finalize a draft (greenlight -> included in exports)")
+    dr.add_argument("--discard", type=int, default=None, metavar="MAP_ID",
+                    help="delete a draft map and its observations")
+    dr.set_defaults(func=cmd_drafts)
 
     scout = sub.add_parser("scout", help="scouting output for a team or player (SPEC 10)")
     ssub = scout.add_subparsers(dest="scout_command", required=True)
