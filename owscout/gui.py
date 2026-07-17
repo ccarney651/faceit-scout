@@ -396,8 +396,10 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.busy = False
 
         self.win = tk.Toplevel(app.root)
-        self.win.title("Learn heroes — teach owscout your HUD portraits")
-        self.win.geometry("560x620")
+        # The [big-preview] tag lets us confirm at a glance the latest code is
+        # running (an old still-open window won't have it).
+        self.win.title("Learn heroes — teach owscout your HUD portraits  [big-preview]")
+        self.win.geometry("620x680")
         self.win.transient(app.root)
 
         pad = {"padx": 12, "pady": 6}
@@ -581,8 +583,8 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
             y0, x0 = max(0, c.y - pad), max(0, c.x - pad)
             disp = frame[y0:c.y + c.h + pad, x0:c.x + c.w + pad].copy()
             rx, ry = s.roi.x - x0, s.roi.y - y0
-            cv2.rectangle(disp, (rx, ry), (rx + s.roi.w, ry + s.roi.h), (0, 255, 0), 1)
-            scale = max(2, 380 // max(1, disp.shape[1]))
+            cv2.rectangle(disp, (rx, ry), (rx + s.roi.w, ry + s.roi.h), (0, 255, 0), 2)
+            scale = max(3, 460 // max(1, disp.shape[1]))
             big = cv2.resize(disp, (disp.shape[1] * scale, disp.shape[0] * scale),
                              interpolation=cv2.INTER_CUBIC)
         else:
