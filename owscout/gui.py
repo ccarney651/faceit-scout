@@ -77,6 +77,14 @@ class _App:  # pragma: no cover - GUI runtime only
                    command=self._verify_refs).grid(row=0, column=2, padx=6, pady=6, sticky="w")
         self.setup_status = ttk.Label(setup, text="", foreground="#555")
         self.setup_status.grid(row=1, column=0, columnspan=3, padx=6, sticky="w")
+        # Accuracy upgrade: teach the tool the real in-game HUD portraits.
+        ttk.Separator(setup, orient="horizontal").grid(
+            row=2, column=0, columnspan=3, sticky="ew", padx=6, pady=(8, 4))
+        ttk.Label(setup, text="Best accuracy — teach owscout your in-game portraits:",
+                  foreground="#333").grid(row=3, column=0, columnspan=3, padx=6, sticky="w")
+        self.learn_btn = ttk.Button(setup, text="⭐ Learn heroes from a replay…",
+                                    command=self._open_learn)
+        self.learn_btn.grid(row=4, column=0, columnspan=2, padx=6, pady=(2, 8), sticky="w")
 
         # --- 2. capture -----------------------------------------------------
         cap = ttk.LabelFrame(self.root, text="2. Capture a replay (Master division)")
@@ -207,6 +215,12 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit(f"refs: stored {n} portraits. Verify the labeled image in refs/.")
             self.q.put(self._verify_refs)
         self._run(go)
+
+    def _open_learn(self) -> None:
+        try:
+            _LearnWindow(self)
+        except Exception as exc:  # noqa: BLE001
+            self._emit(f"learn: {exc}")
 
     def _verify_refs(self) -> None:
         def go() -> None:
@@ -346,6 +360,227 @@ class _App:  # pragma: no cover - GUI runtime only
 
     def run(self) -> None:
         self.root.mainloop()
+
+
+class _LearnWindow:  # pragma: no cover - GUI runtime only
+    """Teach owscout the real in-game HUD portraits, one hero at a time.
+
+    Workflow (shown to the operator in the window): cycle every hero in a custom
+    game, open the replay, scrub so ONE hero shows in the spectator top-bar, click
+    Grab, confirm the guess. Each confirmed portrait becomes that hero's ref and
+    is matched near-perfectly from then on. All grabbing/scoring runs on a worker
+    thread; UI updates are marshalled back through the parent app's queue.
+    """
+
+    def __init__(self, app: "_App") -> None:
+        import base64  # noqa: F401 - used in _show_slot
+        from tkinter import ttk
+
+        self.app = app
+        self.base64 = base64
+        tk = app.tk
+        self.ctx: Any = None
+        self.ranked: list[Any] = []
+        self.cursor = 0
+        self.learned: set[str] = set()
+        self._imgref: Any = None  # keep a ref so Tk doesn't GC the preview
+        self.busy = False
+
+        self.win = tk.Toplevel(app.root)
+        self.win.title("Learn heroes — teach owscout your HUD portraits")
+        self.win.geometry("560x620")
+        self.win.transient(app.root)
+
+        pad = {"padx": 12, "pady": 6}
+        steps = (
+            "Build the most accurate library by teaching the tool the ACTUAL\n"
+            "in-game portraits (they match ~0.9 vs ~0.5 for the gallery art):\n"
+            "\n"
+            "   1.  In a CUSTOM GAME, switch through every hero you want covered.\n"
+            "   2.  Open the REPLAY of that game.\n"
+            "   3.  Scrub so ONE hero shows in the spectator bar along the top.\n"
+            "   4.  Click ‘Grab screen’ below, then confirm the hero.\n"
+            "   5.  Repeat for each hero. Do a few, then re-capture to check.\n"
+        )
+        lbl = tk.Label(self.win, text=steps, justify="left", anchor="w",
+                       font=("Segoe UI", 9), fg="#222")
+        lbl.pack(fill="x", **pad)
+
+        grabrow = ttk.Frame(self.win)
+        grabrow.pack(fill="x", **pad)
+        self.grab_btn = ttk.Button(grabrow, text="📷  Grab screen", command=self._grab)
+        self.grab_btn.pack(side="left")
+        self.status = ttk.Label(grabrow, text="loading…", foreground="#555")
+        self.status.pack(side="left", padx=12)
+
+        # Preview of the current slot's portrait.
+        self.preview = tk.Label(self.win, text="(no capture yet)", width=44, height=9,
+                                relief="groove", bg="#111", fg="#888")
+        self.preview.pack(**pad)
+
+        self.guess_lbl = tk.Label(self.win, text="", font=("Segoe UI", 15, "bold"),
+                                  fg="#1a5")
+        self.guess_lbl.pack(**pad)
+
+        # Confirm / correct controls.
+        confirm = ttk.Frame(self.win)
+        confirm.pack(fill="x", **pad)
+        self.yes_btn = ttk.Button(confirm, text="✓  Correct — save",
+                                  command=self._accept, state="disabled")
+        self.yes_btn.grid(row=0, column=0, padx=(0, 8), pady=3, sticky="w")
+        self.next_btn = ttk.Button(confirm, text="↷ Different slot",
+                                   command=self._next_slot, state="disabled")
+        self.next_btn.grid(row=0, column=1, padx=4, pady=3)
+
+        pick = ttk.Frame(self.win)
+        pick.pack(fill="x", **pad)
+        ttk.Label(pick, text="Wrong? pick the right hero:").grid(
+            row=0, column=0, columnspan=2, sticky="w")
+        self.hero_var = tk.StringVar()
+        self.hero_box = ttk.Combobox(pick, textvariable=self.hero_var, width=28)
+        self.hero_box.grid(row=1, column=0, padx=(0, 8), pady=3, sticky="w")
+        self.saveas_btn = ttk.Button(pick, text="Save as this", command=self._save_as,
+                                     state="disabled")
+        self.saveas_btn.grid(row=1, column=1, pady=3, sticky="w")
+
+        self.progress = ttk.Label(self.win, text="Learned this session: 0",
+                                   foreground="#333", font=("Segoe UI", 10, "bold"))
+        self.progress.pack(side="bottom", **pad)
+
+        self._init_ctx()
+
+    # --- infra: run on a worker, update UI via the app queue ----------------
+
+    def _post(self, fn: Callable[[], Any]) -> None:
+        self.app.q.put(fn)
+
+    def _work(self, fn: Callable[[], None]) -> None:
+        if self.busy:
+            return
+        self.busy = True
+
+        def worker() -> None:
+            try:
+                fn()
+            except Exception as exc:  # noqa: BLE001
+                self._post(lambda: self.status.configure(text=f"error: {exc}"))
+            finally:
+                self.busy = False
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _init_ctx(self) -> None:
+        from .refs import prepare_learn
+
+        def go() -> None:
+            with Database(self.app.db_var.get()) as db:
+                ctx = prepare_learn(db, self.app.faceit_var.get(), hud_variant="default")
+            self.ctx = ctx
+            names = sorted(ctx.names.values())
+            res = f"{ctx.profile.resolution_w}x{ctx.profile.resolution_h}"
+
+            def apply() -> None:
+                self.hero_box.configure(values=names)
+                self.status.configure(
+                    text=f"ready · profile {res} · show a hero and click Grab")
+            self._post(apply)
+        self._work(go)
+
+    # --- actions ------------------------------------------------------------
+
+    def _grab(self) -> None:
+        from . import capture
+        from .refs import rank_learn_slots
+        if self.ctx is None:
+            return
+        self._post(lambda: self.status.configure(text="grabbing…"))
+
+        def go() -> None:
+            frame, fw, fh = capture.grab_frame()
+            prof = self.ctx.profile
+            if (fw, fh) != (prof.resolution_w, prof.resolution_h):
+                msg = (f"screen is {fw}x{fh} but the profile is "
+                       f"{prof.resolution_w}x{prof.resolution_h} — match your "
+                       "resolution/scale, then Grab again.")
+                self._post(lambda: self.status.configure(text=msg))
+                return
+            with Database(self.app.db_var.get()) as db:
+                ranked = rank_learn_slots(db, frame, self.ctx)
+            self.ranked = ranked
+            self.cursor = 0
+            self._post(self._show_slot)
+        self._work(go)
+
+    def _show_slot(self) -> None:
+        if not self.ranked:
+            self.status.configure(text="nothing found — try Grab again.")
+            return
+        s = self.ranked[self.cursor]
+        cv2 = self.ctx.cv2
+        big = cv2.resize(s.crop, (s.roi.w * 5, s.roi.h * 5), interpolation=cv2.INTER_NEAREST)
+        ok, buf = cv2.imencode(".png", big)
+        if ok:
+            data = self.base64.b64encode(buf.tobytes()).decode("ascii")
+            self._imgref = self.app.tk.PhotoImage(data=data)
+            self.preview.configure(image=self._imgref, text="")
+        name = s.guess_name or "?"
+        self.guess_lbl.configure(text=f"Looks like:  {name}   ({s.score:.2f})")
+        self.hero_var.set(s.guess_name or "")
+        self.status.configure(
+            text=f"slot {s.side}#{s.slot_index}  ·  "
+                 f"{self.cursor + 1} of {len(self.ranked)} slots")
+        for b in (self.yes_btn, self.next_btn, self.saveas_btn):
+            b.configure(state="normal")
+
+    def _next_slot(self) -> None:
+        if self.ranked:
+            self.cursor = (self.cursor + 1) % len(self.ranked)
+            self._show_slot()
+
+    def _accept(self) -> None:
+        if not self.ranked:
+            return
+        s = self.ranked[self.cursor]
+        if not s.guess_guid:
+            self.status.configure(text="no guess — pick the hero from the list instead.")
+            return
+        hero = next((h for h in self.ctx.heroes if h.guid == s.guess_guid), None)
+        self._save(hero)
+
+    def _save_as(self) -> None:
+        from .refs import resolve_hero_name
+        if not self.ranked:
+            return
+        typed = self.hero_var.get().strip()
+        hero = resolve_hero_name(self.ctx.heroes, typed) if typed else None
+        if hero is None:
+            self.status.configure(text=f"couldn't match '{typed}' — pick an exact name.")
+            return
+        self._save(hero)
+
+    def _save(self, hero: Any) -> None:
+        from .refs import default_refs_dir, save_learn_ref
+        if hero is None:
+            return
+        s = self.ranked[self.cursor]
+        crop = s.crop
+
+        def go() -> None:
+            with Database(self.app.db_var.get()) as db:
+                save_learn_ref(db, default_refs_dir(self.app.db_var.get()),
+                               pid=self.ctx.pid, hero=hero, crop=crop)
+            self.learned.add(hero.guid)
+
+            def apply() -> None:
+                self.progress.configure(
+                    text=f"Learned this session: {len(self.learned)}  "
+                         f"(last: {hero.name})")
+                self.status.configure(text=f"saved {hero.name} — show the next hero, then Grab.")
+                self.guess_lbl.configure(text=f"✓ saved {hero.name}")
+                for b in (self.yes_btn, self.next_btn, self.saveas_btn):
+                    b.configure(state="disabled")
+            self._post(apply)
+            self._post(self.app._verify_refs)
+        self._work(go)
 
 
 def main() -> int:  # pragma: no cover

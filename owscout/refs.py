@@ -398,6 +398,92 @@ def run_refs_from_frame(  # pragma: no cover - runtime-only path
     return written
 
 
+# --- shared HUD-ref learning core (used by the CLI loop AND the GUI window) ---
+
+
+class LearnContext(NamedTuple):
+    profile: RoiProfile
+    pid: int
+    heroes: list[FaceitHero]
+    names: dict[str, str]
+    score_fn: Any
+    all_slots: list[tuple[str, int, Rect]]
+    cv2: Any
+
+
+class LearnSlot(NamedTuple):
+    score: float
+    side: str
+    slot_index: int
+    roi: Rect
+    crop: Any  # BGR ndarray
+    guess_guid: Optional[str]
+    guess_name: Optional[str]
+
+
+def prepare_learn(  # pragma: no cover - needs cv2/faceit
+    db: Database, faceit_db_path: str, *, hud_variant: str,
+) -> LearnContext:
+    """Load everything the learning loop needs: the calibrated profile, the hero
+    roster, a template scorer, and the face ROI of every HUD slot. Raises
+    CaptureError if there is no profile yet."""
+    from .match import face_subrect, make_template_scorer
+    from .models import SIDE_LEFT, SIDE_RIGHT
+
+    cv2 = _import_cv2()
+    profile = db.latest_active_profile(hud_variant)
+    if profile is None:
+        raise CaptureError(
+            f"no calibrated profile for '{hud_variant}' — calibrate first")
+    assert profile.id is not None
+    with connect_ro(faceit_db_path) as fdb:
+        heroes = load_heroes(fdb)
+    all_slots = [(side, i, face_subrect(profile.slots[side][i]))
+                 for side in (SIDE_LEFT, SIDE_RIGHT)
+                 for i in range(profile.team_size)]
+    return LearnContext(
+        profile=profile, pid=profile.id, heroes=heroes,
+        names={h.guid: h.name for h in heroes},
+        score_fn=make_template_scorer(cv2), all_slots=all_slots, cv2=cv2)
+
+
+def rank_learn_slots(  # pragma: no cover - needs cv2
+    db: Database, frame: Any, ctx: LearnContext,
+) -> list[LearnSlot]:
+    """Score every HUD slot's face crop against the current (bootstrap) ref set
+    and return them best-guess-confidence first — so the populated slot(s) with a
+    real hero sort to the top and empty slots fall to the bottom."""
+    from .match import reduce_candidates
+    cand = reduce_candidates(db.get_refs(ctx.pid), state=None,
+                             expected_role=None, banned_guids=set(), hero_roles={})
+    ranked: list[LearnSlot] = []
+    for side, i, roi in ctx.all_slots:
+        crop = _crop(frame, roi)
+        best_ref, best = None, 0.0
+        for rf in cand:
+            sc = ctx.score_fn(crop, rf)
+            if sc > best:
+                best, best_ref = sc, rf
+        guid = best_ref.hero_guid if best_ref else None
+        ranked.append(LearnSlot(best, side, i, roi, crop, guid,
+                                ctx.names.get(guid) if guid else None))
+    ranked.sort(key=lambda s: s.score, reverse=True)
+    return ranked
+
+
+def save_learn_ref(  # pragma: no cover - needs cv2
+    db: Database, refs_dir: str | Path, *, pid: int, hero: FaceitHero,
+    crop: Any, state: str = STATE_ALIVE,
+) -> None:
+    """Persist a confirmed HUD crop as the hero's canonical ref (source=capture,
+    replacing any gallery bootstrap ref for that hero+state)."""
+    import cv2
+    path = _ref_image_path(refs_dir, pid, hero, state)
+    cv2.imwrite(str(path), crop)
+    db.save_ref(hero_guid=hero.guid, profile_id=pid, state=state,
+                image_path=str(path), phash=phash_image(crop), source="capture")
+
+
 def run_refs_learn(  # pragma: no cover - runtime-only path
     db: Database,
     faceit_db_path: str,
@@ -418,27 +504,10 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
     replaced by a same-source HUD ref that later matches at ~0.9 instead of ~0.5.
     """
     from . import capture
-    from .match import (
-        face_subrect, make_template_scorer, reduce_candidates,
-    )
-    from .models import SIDE_LEFT, SIDE_RIGHT
 
-    cv2 = _import_cv2()
-
-    profile = db.latest_active_profile(hud_variant)
-    if profile is None:
-        raise CaptureError(
-            f"no calibrated profile for '{hud_variant}' — run `owscout calibrate` first")
-    assert profile.id is not None
-    pid = profile.id
-    with connect_ro(faceit_db_path) as fdb:
-        heroes = load_heroes(fdb)
-    names = {h.guid: h.name for h in heroes}
-
-    score_fn = make_template_scorer(cv2)
-    all_slots = [(side, i, face_subrect(profile.slots[side][i]))
-                 for side in (SIDE_LEFT, SIDE_RIGHT)
-                 for i in range(profile.team_size)]
+    ctx = prepare_learn(db, faceit_db_path, hud_variant=hud_variant)
+    profile, pid, heroes, names, cv2 = (
+        ctx.profile, ctx.pid, ctx.heroes, ctx.names, ctx.cv2)
 
     win = "owscout refs learn — is this the right hero?"
     written = 0
@@ -457,29 +526,18 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
                   f"{profile.resolution_w}x{profile.resolution_h} — fix display/scale "
                   "and try again.")
             continue
-        cand = reduce_candidates(db.get_refs(pid), state=None,
-                                 expected_role=None, banned_guids=set(), hero_roles={})
         # Rank every slot by its best guess confidence; the populated slot(s) win.
-        ranked = []
-        for side, i, roi in all_slots:
-            crop = _crop(frame, roi)
-            best_ref, best = None, 0.0
-            for rf in cand:
-                sc = score_fn(crop, rf)
-                if sc > best:
-                    best, best_ref = sc, rf
-            ranked.append((best, side, i, roi, crop, best_ref))
-        ranked.sort(key=lambda t: t[0], reverse=True)
+        ranked = rank_learn_slots(db, frame, ctx)
 
         cursor = 0
         while cursor < len(ranked):
-            best, side, i, roi, crop, best_ref = ranked[cursor]
-            guess = names.get(best_ref.hero_guid) if best_ref else None
-            preview = cv2.resize(crop, (roi.w * 4, roi.h * 4), interpolation=cv2.INTER_NEAREST)
+            s = ranked[cursor]
+            preview = ctx.cv2.resize(s.crop, (s.roi.w * 4, s.roi.h * 4),
+                                     interpolation=cv2.INTER_NEAREST)
             cv2.imshow(win, preview)
             cv2.waitKey(1)
-            gtxt = f"{guess} ({best:.2f})" if guess else "no guess"
-            raw = input(f"  slot {side}#{i} looks like: {gtxt}  "
+            gtxt = f"{s.guess_name} ({s.score:.2f})" if s.guess_name else "no guess"
+            raw = input(f"  slot {s.side}#{s.slot_index} looks like: {gtxt}  "
                         f"[ENTER=yes, name=fix, n=next slot, s=skip, q=quit]: ").strip()
             low = raw.lower()
             if low == "q":
@@ -492,17 +550,13 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
                 cursor += 1
                 continue
             hero = resolve_hero_name(heroes, raw) if raw else (
-                next((h for h in heroes if h.guid == best_ref.hero_guid), None)
-                if best_ref else None)
+                next((h for h in heroes if h.guid == s.guess_guid), None)
+                if s.guess_guid else None)
             if hero is None:
                 print("    couldn't resolve that name (ambiguous/unknown) — try again.")
                 continue
-            phash = phash_image(crop)
             if not dry_run:
-                path = _ref_image_path(refs_dir, pid, hero, state)
-                cv2.imwrite(str(path), crop)
-                db.save_ref(hero_guid=hero.guid, profile_id=pid, state=state,
-                            image_path=str(path), phash=phash, source="capture")
+                save_learn_ref(db, refs_dir, pid=pid, hero=hero, crop=s.crop, state=state)
             written += 1
             confirmed.add(hero.guid)
             print(f"    stored {hero.name}  "
