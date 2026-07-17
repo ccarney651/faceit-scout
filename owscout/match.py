@@ -68,10 +68,15 @@ DEFAULT_DEAD_SATURATION = 40.0
 ULT_OVERLAY_LEFT_FRACTION = 0.55
 
 # Operators naturally box the full HUD cell (portrait + player name + ability
-# bar). The name is player-specific noise, so we also keep only the top portion
-# of the cell — the portrait band — dropping the name/bar below it. Measured on
-# a real 2560x1440 calibration (portrait ~58% of the boxed cell height).
-PORTRAIT_TOP_FRACTION = 0.58
+# bar). The name is player-specific noise, so we keep only the TOP band of the
+# cell. Kept deliberately short: the ult-charge "N%" digits sit in the LOWER
+# half of the portrait, so a shallow top band grabs the upper face (hair/brow/
+# eyes) and excludes the (variable) charge number entirely. Validated on real
+# 2560x1440 frames (screenshots/dead/): at 0.45 the same hero across frames with
+# DIFFERENT ult charge matches HUD-ref-to-HUD-ref at ~0.88-0.99, and the gallery
+# bootstrap resolves all five knowns correctly; at 0.58 the digit zone leaks in
+# and drops the charge-varying case to ~0.5 and misresolves Tracer as Moira.
+PORTRAIT_TOP_FRACTION = 0.45
 
 # Injected primitive signatures.
 CropFn = Callable[[Any, Rect], Any]

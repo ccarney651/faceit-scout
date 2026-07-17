@@ -83,9 +83,9 @@ def test_face_subrect_drops_name_bar() -> None:
 
 
 def test_face_subrect_default_fractions() -> None:
-    # Defaults: right ~45%, top ~58%.
+    # Defaults: right ~45%, top ~45% (shallow band excludes the ult-% digits).
     face = face_subrect(Rect(0, 0, 100, 100))
-    assert face.x == 55 and face.w == 45 and face.h == 58
+    assert face.x == 55 and face.w == 45 and face.h == 45
 
 
 def test_face_subrect_rejects_bad_fraction() -> None:

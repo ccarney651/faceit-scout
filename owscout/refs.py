@@ -398,6 +398,124 @@ def run_refs_from_frame(  # pragma: no cover - runtime-only path
     return written
 
 
+def run_refs_learn(  # pragma: no cover - runtime-only path
+    db: Database,
+    faceit_db_path: str,
+    *,
+    hud_variant: str,
+    refs_dir: str | Path,
+    state: str = "alive",
+    dry_run: bool = False,
+) -> int:
+    """Live HUD-ref learning loop — the reliable way to seed the library.
+
+    Show one hero at a time in the spectator top-bar (e.g. cycle every hero in a
+    custom game, then scrub the replay), press ENTER, and the tool grabs a frame
+    AT THE CALIBRATED RESOLUTION (so it aligns with the profile — manual
+    screenshots do not), auto-focuses the populated portrait slot, pre-guesses the
+    hero from the existing (bootstrap) refs, and asks you to confirm. Each
+    confirmed crop is stored as the hero's canonical ref, so a gallery guess is
+    replaced by a same-source HUD ref that later matches at ~0.9 instead of ~0.5.
+    """
+    from . import capture
+    from .match import (
+        face_subrect, make_template_scorer, reduce_candidates,
+    )
+    from .models import SIDE_LEFT, SIDE_RIGHT
+
+    cv2 = _import_cv2()
+
+    profile = db.latest_active_profile(hud_variant)
+    if profile is None:
+        raise CaptureError(
+            f"no calibrated profile for '{hud_variant}' — run `owscout calibrate` first")
+    assert profile.id is not None
+    pid = profile.id
+    with connect_ro(faceit_db_path) as fdb:
+        heroes = load_heroes(fdb)
+    names = {h.guid: h.name for h in heroes}
+
+    score_fn = make_template_scorer(cv2)
+    all_slots = [(side, i, face_subrect(profile.slots[side][i]))
+                 for side in (SIDE_LEFT, SIDE_RIGHT)
+                 for i in range(profile.team_size)]
+
+    def have_guids() -> set[str]:
+        return {r.hero_guid for r in db.get_refs(pid)}
+
+    win = "owscout refs learn — is this the right hero?"
+    written = 0
+    print(f"LEARN HUD refs for profile #{profile.id} "
+          f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}').")
+    print("  Show ONE hero in the spectator bar, then press ENTER to grab. "
+          "Commands at the prompt: ENTER=accept guess, a name=correct it, "
+          "n=next-best slot, s=skip, q=quit.\n")
+    while True:
+        if input("ready — ENTER to grab (q=quit): ").strip().lower() == "q":
+            break
+        frame, fw, fh = capture.grab_frame()
+        if (fw, fh) != (profile.resolution_w, profile.resolution_h):
+            print(f"  resolution {fw}x{fh} != profile "
+                  f"{profile.resolution_w}x{profile.resolution_h} — fix display/scale "
+                  "and try again.")
+            continue
+        cand = reduce_candidates(db.get_refs(pid), state=None,
+                                 expected_role=None, banned_guids=set(), hero_roles={})
+        # Rank every slot by its best guess confidence; the populated slot(s) win.
+        ranked = []
+        for side, i, roi in all_slots:
+            crop = _crop(frame, roi)
+            best_ref, best = None, 0.0
+            for rf in cand:
+                sc = score_fn(crop, rf)
+                if sc > best:
+                    best, best_ref = sc, rf
+            ranked.append((best, side, i, roi, crop, best_ref))
+        ranked.sort(key=lambda t: t[0], reverse=True)
+
+        cursor = 0
+        while cursor < len(ranked):
+            best, side, i, roi, crop, best_ref = ranked[cursor]
+            guess = names.get(best_ref.hero_guid) if best_ref else None
+            preview = cv2.resize(crop, (roi.w * 4, roi.h * 4), interpolation=cv2.INTER_NEAREST)
+            cv2.imshow(win, preview)
+            cv2.waitKey(1)
+            gtxt = f"{guess} ({best:.2f})" if guess else "no guess"
+            raw = input(f"  slot {side}#{i} looks like: {gtxt}  "
+                        f"[ENTER=yes, name=fix, n=next slot, s=skip, q=quit]: ").strip()
+            low = raw.lower()
+            if low == "q":
+                cv2.destroyWindow(win)
+                print(f"done. {written} HUD ref(s) written.")
+                return written
+            if low == "s":
+                break
+            if low == "n":
+                cursor += 1
+                continue
+            hero = resolve_hero_name(heroes, raw) if raw else (
+                next((h for h in heroes if h.guid == best_ref.hero_guid), None)
+                if best_ref else None)
+            if hero is None:
+                print("    couldn't resolve that name (ambiguous/unknown) — try again.")
+                continue
+            phash = phash_image(crop)
+            if not dry_run:
+                path = _ref_image_path(refs_dir, pid, hero, state)
+                cv2.imwrite(str(path), crop)
+                db.save_ref(hero_guid=hero.guid, profile_id=pid, state=state,
+                            image_path=str(path), phash=phash, source="capture")
+            written += 1
+            remaining = len(heroes) - len(have_guids())
+            print(f"    stored {hero.name}  ({written} this session, "
+                  f"~{remaining} hero(es) still on gallery/no ref)")
+            break
+
+    cv2.destroyWindow(win)
+    print(f"done. {written} HUD ref(s) written.")
+    return written
+
+
 def run_refs_verify(
     db: Database,
     faceit_db_path: str,

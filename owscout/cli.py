@@ -44,6 +44,7 @@ from .refs import (
     run_refs_capture,
     run_refs_from_frame,
     run_refs_from_sheet,
+    run_refs_learn,
     run_refs_verify,
 )
 
@@ -142,6 +143,25 @@ def cmd_refs_from_sheet(args: argparse.Namespace) -> int:
                 args.image,
                 hud_variant=args.hud_variant,
                 refs_dir=refs_dir,
+                dry_run=args.dry_run,
+            )
+    except (CaptureError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_refs_learn(args: argparse.Namespace) -> int:
+    db_path = _db_path(args)
+    refs_dir = args.refs_dir or default_refs_dir(db_path)
+    try:
+        with Database(db_path) as db:
+            run_refs_learn(
+                db,
+                _faceit_db_path(args),
+                hud_variant=args.hud_variant,
+                refs_dir=refs_dir,
+                state=args.state,
                 dry_run=args.dry_run,
             )
     except (CaptureError, FileNotFoundError) as exc:
@@ -570,6 +590,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="where to store ref crops (default: refs/ next to the DB)")
     rf.add_argument("--dry-run", action="store_true", help="hash but do not write")
     rf.set_defaults(func=cmd_refs_from_frame)
+
+    rl = rsub.add_parser("learn",
+                         help="live loop: show each hero, confirm the guess -> HUD ref "
+                              "(the reliable way to seed/upgrade the library)")
+    rl.add_argument("--hud-variant", default="default", help="HUD variant to capture for")
+    rl.add_argument("--state", default="alive", choices=REF_STATES,
+                    help="visual state shown while learning (default: alive)")
+    rl.add_argument("--refs-dir", default=None,
+                    help="where to store ref crops (default: refs/ next to the DB)")
+    rl.add_argument("--dry-run", action="store_true", help="guess + preview but do not write")
+    rl.set_defaults(func=cmd_refs_learn)
 
     rv = rsub.add_parser("verify", help="report missing refs and near-duplicate portraits")
     rv.add_argument("--hud-variant", default="default", help="HUD variant to verify")
