@@ -519,6 +519,7 @@ def calibrate_learn_slot(  # pragma: no cover - needs cv2/game
               "then press ENTER")
     x, y, bw, bh = cv2.selectROI(prompt, frame, showCrosshair=True, fromCenter=False)
     cv2.destroyWindow(prompt)
+    cv2.waitKey(1)  # pump the event loop so the highgui window actually closes
     rect = Rect(int(x), int(y), int(bw), int(bh))
     if rect.is_empty:
         raise CaptureError("nothing was boxed — drag a box before pressing ENTER")

@@ -145,12 +145,20 @@ class _App:  # pragma: no cover - GUI runtime only
         self.log.configure(state="disabled")
 
     def _drain(self) -> None:
+        # One failing UI callback must never kill the drain loop — otherwise every
+        # later queued update (status, previews, logs) silently stops and the app
+        # looks frozen. Catch per-callback, and always reschedule via finally.
         try:
             while True:
-                self.q.get_nowait()()
+                cb = self.q.get_nowait()
+                try:
+                    cb()
+                except Exception as exc:  # noqa: BLE001
+                    self._write(f"ui error: {exc}")
         except queue.Empty:
             pass
-        self.root.after(80, self._drain)
+        finally:
+            self.root.after(80, self._drain)
 
     def _run(self, fn: Callable[[], None], *, lock: bool = True) -> None:
         if lock and self.busy:
@@ -476,6 +484,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
                 fn()
             except Exception as exc:  # noqa: BLE001
                 self._post(lambda: self.status.configure(text=f"error: {exc}"))
+                self.app._emit(f"learn: error — {exc}")
             finally:
                 self.busy = False
         threading.Thread(target=worker, daemon=True).start()
@@ -529,9 +538,15 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
     def _grab(self) -> None:
         from . import capture
         from .refs import rank_learn_slots
-        if self.ctx is None:
+        if self.busy:
+            self.status.configure(
+                text="busy — wait for the current step (close the box-drag window if open)")
             return
-        self._post(lambda: self.status.configure(text="grabbing…"))
+        if self.ctx is None:
+            self.status.configure(text="still loading the profile — retrying, try Grab again…")
+            self._init_ctx()
+            return
+        self.status.configure(text="grabbing…")
 
         def go() -> None:
             frame, fw, fh = capture.grab_frame()
