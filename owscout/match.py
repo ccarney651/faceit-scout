@@ -14,6 +14,7 @@ dead-state detection are the injected defaults, exercised only at runtime.
 from __future__ import annotations
 
 import logging
+import os
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, Optional, Sequence
@@ -322,17 +323,28 @@ def make_template_scorer(cv2: Any) -> ScoreFn:  # pragma: no cover
     Observer-derived refs are ~crop-sized and matched with a single resize. Refs
     from a hero-gallery sheet are larger and framed differently, so the crop is
     searched within them across a scale range (the argmax over scales), which is
-    what makes a one-image ref library discriminate."""
-    cache: dict[str, Any] = {}
+    what makes a one-image ref library discriminate.
+
+    The image cache keys on (path, mtime), so overwriting a ref file — e.g.
+    re-learning a hero to correct a mislabel — is picked up on the next score
+    instead of serving a stale image for the life of the scorer."""
+    cache: dict[str, tuple[int, Any]] = {}
 
     def score(crop: Any, ref: HeroRef) -> float:
-        img = cache.get(ref.image_path)
-        if img is None:
+        try:
+            st = os.stat(ref.image_path)
+            mtime = st.st_mtime_ns ^ st.st_size  # size guards same-ns overwrites
+        except OSError:
+            mtime = 0
+        entry = cache.get(ref.image_path)
+        if entry is None or entry[0] != mtime:
             img = cv2.imread(ref.image_path)
             if img is None:
                 log.warning("could not read ref image %s", ref.image_path)
                 return 0.0
-            cache[ref.image_path] = img
+            cache[ref.image_path] = (mtime, img)
+        else:
+            img = entry[1]
         ch, cw = crop.shape[0], crop.shape[1]
         rh, rw = img.shape[0], img.shape[1]
         if rh > ch * SHEET_REF_SIZE_FACTOR and rw > cw * SHEET_REF_SIZE_FACTOR:
