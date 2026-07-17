@@ -442,6 +442,7 @@ def prepare_learn(  # pragma: no cover - needs cv2/faceit
     assert profile.id is not None
     with connect_ro(faceit_db_path) as fdb:
         heroes = load_heroes(fdb)
+    heroes = heroes + db.list_custom_heroes()  # include operator-added heroes
     all_slots = [(side, i, profile.slots[side][i])
                  for side in (SIDE_LEFT, SIDE_RIGHT)
                  for i in range(profile.team_size)]

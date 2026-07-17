@@ -363,6 +363,33 @@ def cmd_drafts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_heroes_add(args: argparse.Namespace) -> int:
+    with Database(_db_path(args)) as db:
+        guid = db.add_custom_hero(args.name, args.role)
+    print(f"added hero {args.name!r} (role={args.role or 'unset'}) as {guid}.")
+    print("Now learn its portrait:  open the app -> Learn heroes, or `owscout refs learn`.")
+    return 0
+
+
+def cmd_heroes_list(args: argparse.Namespace) -> int:
+    with Database(_db_path(args)) as db:
+        heroes = db.list_custom_heroes()
+    if not heroes:
+        print("no operator-added heroes.")
+        return 0
+    print(f"{len(heroes)} operator-added hero(es):")
+    for h in heroes:
+        print(f"  {h.guid:<28} {h.name:<18} role={h.role or 'unset'}")
+    return 0
+
+
+def cmd_heroes_remove(args: argparse.Namespace) -> int:
+    with Database(_db_path(args)) as db:
+        db.remove_custom_hero(args.guid)
+    print(f"removed {args.guid}.")
+    return 0
+
+
 def _resolve_team(db: Database, faceit_path: str, name: str) -> Optional[tuple[str, str]]:
     from .faceit import connect_ro, resolve_team_id
     with connect_ro(faceit_path) as fdb:
@@ -715,6 +742,19 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--discard", type=int, default=None, metavar="MAP_ID",
                     help="delete a draft map and its observations")
     dr.set_defaults(func=cmd_drafts)
+
+    her = sub.add_parser("heroes", help="add/list operator-added heroes (new OW2 releases)")
+    hsub = her.add_subparsers(dest="heroes_command", required=True)
+    ha = hsub.add_parser("add", help="register a hero not yet in faceit's roster")
+    ha.add_argument("name", help="hero display name (e.g. 'Aqua')")
+    ha.add_argument("--role", default=None, choices=("tank", "damage", "support"),
+                    help="hero role (optional but recommended)")
+    ha.set_defaults(func=cmd_heroes_add)
+    hl = hsub.add_parser("list", help="list operator-added heroes")
+    hl.set_defaults(func=cmd_heroes_list)
+    hr = hsub.add_parser("remove", help="remove an operator-added hero by guid")
+    hr.add_argument("guid", help="the custom:... guid (see 'heroes list')")
+    hr.set_defaults(func=cmd_heroes_remove)
 
     scout = sub.add_parser("scout", help="scouting output for a team or player (SPEC 10)")
     ssub = scout.add_subparsers(dest="scout_command", required=True)

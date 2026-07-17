@@ -344,6 +344,10 @@ def run_capture(  # pragma: no cover - runtime-only path
     with connect_ro(faceit_db_path) as fdb:
         hero_roles = load_hero_roles(fdb)
         hero_names = {h.guid: h.name for h in load_heroes(fdb)}
+    for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
+        hero_names[_h.guid] = _h.name
+        if _h.role:
+            hero_roles[_h.guid] = _h.role
         if side_a_team is not None:
             tid = resolve_team_id(fdb, side_a_team)
             side_a_faction = "faction1" if tid == ctx.faction1_team_id else "faction2"
@@ -489,6 +493,10 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     with connect_ro(faceit_db_path) as fdb:
         hero_roles = load_hero_roles(fdb)
         hero_names = {h.guid: h.name for h in load_heroes(fdb)}
+    for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
+        hero_names[_h.guid] = _h.name
+        if _h.role:
+            hero_roles[_h.guid] = _h.role
         if side_a_team is not None:
             tid = resolve_team_id(fdb, side_a_team)
             side_a_faction = "faction1" if tid == ctx.faction1_team_id else "faction2"

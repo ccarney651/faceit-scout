@@ -27,6 +27,7 @@ from .models import (
     CodeListing,
     Comp,
     DraftMap,
+    FaceitHero,
     HeroRef,
     Rect,
     RoiProfile,
@@ -190,6 +191,16 @@ CREATE TABLE IF NOT EXISTS learn_slots (
     rect_json  TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Heroes added by the operator ahead of faceit's roster catching up (OW2 is a
+-- live game). Merged with faceit.heroes for learning and matching; guids are
+-- namespaced 'custom:...' so they never collide with faceit guids.
+CREATE TABLE IF NOT EXISTS custom_heroes (
+    guid     TEXT PRIMARY KEY,
+    name     TEXT NOT NULL UNIQUE,
+    role     TEXT CHECK(role IN ('tank','damage','support') OR role IS NULL),
+    added_at TEXT NOT NULL
+);
 """
 
 # The known wipe that invalidated every stored S9 code (SPEC §2, §4). Seeded
@@ -346,6 +357,36 @@ class Database:
         scanning all ten slots."""
         with self.transaction() as c:
             c.execute("DELETE FROM learn_slots WHERE profile_id = ?", (profile_id,))
+
+    # --- custom heroes (live-game roster additions) --------------------------
+
+    def add_custom_hero(self, name: str, role: Optional[str] = None) -> str:
+        """Register a hero not yet in faceit.heroes (a freshly-released OW2 hero).
+        Returns its namespaced guid. Idempotent on name (updates the role)."""
+        name = name.strip()
+        if not name:
+            raise ValueError("hero name is required")
+        slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+        guid = f"custom:{slug}"
+        with self.transaction() as c:
+            c.execute(
+                """INSERT INTO custom_heroes (guid, name, role, added_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(name) DO UPDATE SET role = excluded.role""",
+                (guid, name, role, _utcnow()),
+            )
+        return guid
+
+    def list_custom_heroes(self) -> list[FaceitHero]:
+        """Operator-added heroes, as FaceitHero records to merge with the roster."""
+        rows = self.conn.execute(
+            "SELECT guid, name, role FROM custom_heroes ORDER BY name").fetchall()
+        return [FaceitHero(guid=str(r["guid"]), name=str(r["name"]), role=r["role"])
+                for r in rows]
+
+    def remove_custom_hero(self, guid: str) -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM custom_heroes WHERE guid = ?", (guid,))
 
     def get_learn_slot(self, profile_id: int) -> Optional[Rect]:
         """The single-portrait learn ROI for a profile, or None if not set."""

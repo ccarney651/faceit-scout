@@ -85,6 +85,8 @@ class _App:  # pragma: no cover - GUI runtime only
         self.learn_btn = ttk.Button(setup, text="⭐ Learn heroes from a replay…",
                                     command=self._open_learn)
         self.learn_btn.grid(row=4, column=0, columnspan=2, padx=6, pady=(2, 8), sticky="w")
+        ttk.Button(setup, text="➕ Add new hero",
+                   command=self._add_hero).grid(row=4, column=2, padx=6, pady=(2, 8), sticky="w")
 
         # --- 2. capture -----------------------------------------------------
         cap = ttk.LabelFrame(self.root, text="2. Capture a replay (Master division)")
@@ -237,6 +239,45 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit(f"refs: stored {n} portraits. Verify the labeled image in refs/.")
             self.q.put(self._verify_refs)
         self._run(go)
+
+    def _add_hero(self) -> None:
+        """Register a hero not yet in faceit's roster (a new OW2 release), then
+        it shows up in Learn heroes and in matching."""
+        import tkinter as tk
+        from tkinter import ttk, messagebox
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Add new hero")
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        frm = ttk.Frame(dlg)
+        frm.pack(padx=14, pady=12)
+        ttk.Label(frm, text="Hero name").grid(row=0, column=0, sticky="w", pady=4)
+        name_var = tk.StringVar()
+        ttk.Entry(frm, textvariable=name_var, width=24).grid(row=0, column=1, pady=4)
+        ttk.Label(frm, text="Role").grid(row=1, column=0, sticky="w", pady=4)
+        role_var = tk.StringVar(value="damage")
+        ttk.Combobox(frm, textvariable=role_var, values=("tank", "damage", "support"),
+                     state="readonly", width=21).grid(row=1, column=1, pady=4)
+
+        def save() -> None:
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Add hero", "Enter a name.", parent=dlg)
+                return
+            try:
+                with self._open_db() as db:
+                    guid = db.add_custom_hero(name, role_var.get())
+            except Exception as exc:  # noqa: BLE001
+                messagebox.showerror("Add hero", str(exc), parent=dlg)
+                return
+            self._emit(f"added hero {name} ({role_var.get()}) as {guid} — now learn its "
+                       "portrait in Learn heroes.")
+            dlg.destroy()
+
+        btns = ttk.Frame(dlg)
+        btns.pack(pady=(0, 12))
+        ttk.Button(btns, text="Add", command=save).pack(side="left", padx=6)
+        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side="left")
 
     def _open_review(self) -> None:
         try:
