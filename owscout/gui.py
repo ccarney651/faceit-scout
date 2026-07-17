@@ -437,6 +437,9 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.status.pack(side="left", padx=12)
 
         # Preview of the current slot's portrait.
+        # NB: width/height are CHARACTER units while the label shows text, but
+        # switch to PIXELS once it shows an image — so we clear them in _show_slot,
+        # otherwise the portrait would be clamped to a ~44x9px sliver.
         self.preview = tk.Label(self.win, text="(no capture yet)", width=44, height=9,
                                 relief="groove", bg="#111", fg="#888")
         self.preview.pack(**pad)
@@ -593,7 +596,9 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         if ok:
             data = self.base64.b64encode(buf.tobytes()).decode("ascii")
             self._imgref = self.app.tk.PhotoImage(data=data)
-            self.preview.configure(image=self._imgref, text="")
+            # width/height become pixel clamps once an image is shown — zero them
+            # so the label sizes to the full portrait instead of a 44x9 sliver.
+            self.preview.configure(image=self._imgref, text="", width=0, height=0)
         name = s.guess_name or "?"
         self.guess_lbl.configure(text=f"Looks like:  {name}   ({s.score:.2f})")
         self.hero_var.set(s.guess_name or "")
