@@ -12,6 +12,10 @@ echo   2. Open the replay, scrub so ONE hero shows in the spectator top-bar.
 echo   3. Press ENTER here to grab; confirm the guess (ENTER) or type the name.
 echo   4. Repeat for each hero. The tool grabs at your calibrated resolution.
 echo.
+echo   Tip: for a solo replay where one hero sits in one spot, run this with
+echo        --calibrate-slot to box that single portrait once and learn from
+echo        only that box (e.g.  Learn heroes.cmd --calibrate-slot).
+echo.
 "%OW%" --db owscout.sqlite3 --faceit-db faceit.sqlite3 refs learn %*
 echo.
 echo Verifying library...

@@ -409,6 +409,9 @@ class LearnContext(NamedTuple):
     score_fn: Any
     all_slots: list[tuple[str, int, Rect]]
     cv2: Any
+    # If a single-portrait learn ROI is calibrated, the learning loop reads just
+    # this one box (face-cropped) instead of scanning all ten HUD slots.
+    learn_roi: Optional[Rect] = None
 
 
 class LearnSlot(NamedTuple):
@@ -441,10 +444,12 @@ def prepare_learn(  # pragma: no cover - needs cv2/faceit
     all_slots = [(side, i, face_subrect(profile.slots[side][i]))
                  for side in (SIDE_LEFT, SIDE_RIGHT)
                  for i in range(profile.team_size)]
+    learn_box = db.get_learn_slot(profile.id)
     return LearnContext(
         profile=profile, pid=profile.id, heroes=heroes,
         names={h.guid: h.name for h in heroes},
-        score_fn=make_template_scorer(cv2), all_slots=all_slots, cv2=cv2)
+        score_fn=make_template_scorer(cv2), all_slots=all_slots, cv2=cv2,
+        learn_roi=face_subrect(learn_box) if learn_box else None)
 
 
 def rank_learn_slots(  # pragma: no cover - needs cv2
@@ -456,8 +461,8 @@ def rank_learn_slots(  # pragma: no cover - needs cv2
     from .match import reduce_candidates
     cand = reduce_candidates(db.get_refs(ctx.pid), state=None,
                              expected_role=None, banned_guids=set(), hero_roles={})
-    ranked: list[LearnSlot] = []
-    for side, i, roi in ctx.all_slots:
+
+    def score_roi(side: str, i: int, roi: Rect) -> LearnSlot:
         crop = _crop(frame, roi)
         best_ref, best = None, 0.0
         for rf in cand:
@@ -465,8 +470,14 @@ def rank_learn_slots(  # pragma: no cover - needs cv2
             if sc > best:
                 best, best_ref = sc, rf
         guid = best_ref.hero_guid if best_ref else None
-        ranked.append(LearnSlot(best, side, i, roi, crop, guid,
-                                ctx.names.get(guid) if guid else None))
+        return LearnSlot(best, side, i, roi, crop, guid,
+                         ctx.names.get(guid) if guid else None)
+
+    # Single-box mode: one calibrated portrait, no scanning.
+    if ctx.learn_roi is not None:
+        return [score_roi("learn", 0, ctx.learn_roi)]
+
+    ranked = [score_roi(side, i, roi) for side, i, roi in ctx.all_slots]
     ranked.sort(key=lambda s: s.score, reverse=True)
     return ranked
 
@@ -484,6 +495,37 @@ def save_learn_ref(  # pragma: no cover - needs cv2
                 image_path=str(path), phash=phash_image(crop), source="capture")
 
 
+def calibrate_learn_slot(  # pragma: no cover - needs cv2/game
+    db: Database, *, hud_variant: str = "default", frame: Any = None,
+) -> Rect:
+    """Drag ONE box around a single hero portrait cell (portrait + the name bar
+    below it, exactly like the main calibration boxes each slot) and store it as
+    the profile's learn ROI. ``refs learn`` then reads only this box. Pass an
+    already-grabbed ``frame`` to reuse it; otherwise a fresh frame is grabbed.
+    Returns the boxed cell rect."""
+    from . import capture
+
+    cv2 = _import_cv2()
+    if frame is None:
+        frame, w, h = capture.grab_frame()
+    else:
+        h, w = frame.shape[0], frame.shape[1]
+    profile = db.get_active_profile(w, h, hud_variant)
+    if profile is None:
+        raise CaptureError(
+            f"no calibrated profile for {w}x{h} '{hud_variant}' — calibrate first")
+    assert profile.id is not None
+    prompt = ("Drag a box around ONE hero portrait (include the name bar below), "
+              "then press ENTER")
+    x, y, bw, bh = cv2.selectROI(prompt, frame, showCrosshair=True, fromCenter=False)
+    cv2.destroyWindow(prompt)
+    rect = Rect(int(x), int(y), int(bw), int(bh))
+    if rect.is_empty:
+        raise CaptureError("nothing was boxed — drag a box before pressing ENTER")
+    db.set_learn_slot(profile.id, rect)
+    return rect
+
+
 def run_refs_learn(  # pragma: no cover - runtime-only path
     db: Database,
     faceit_db_path: str,
@@ -491,6 +533,7 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
     hud_variant: str,
     refs_dir: str | Path,
     state: str = "alive",
+    calibrate_slot: bool = False,
     dry_run: bool = False,
 ) -> int:
     """Live HUD-ref learning loop — the reliable way to seed the library.
@@ -502,8 +545,16 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
     hero from the existing (bootstrap) refs, and asks you to confirm. Each
     confirmed crop is stored as the hero's canonical ref, so a gallery guess is
     replaced by a same-source HUD ref that later matches at ~0.9 instead of ~0.5.
+
+    If a single-portrait learn ROI is calibrated (``calibrate_slot=True`` sets one
+    now), the loop reads only that one box instead of scanning all ten slots —
+    ideal for a solo custom-game replay where one hero sits in one spot.
     """
     from . import capture
+
+    if calibrate_slot:
+        print("Calibrate the single learn box: drag around ONE portrait, ENTER.")
+        calibrate_learn_slot(db, hud_variant=hud_variant)
 
     ctx = prepare_learn(db, faceit_db_path, hud_variant=hud_variant)
     profile, pid, heroes, names, cv2 = (
@@ -512,8 +563,9 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
     win = "owscout refs learn — is this the right hero?"
     written = 0
     confirmed: set[str] = set()  # distinct heroes upgraded to a HUD ref this session
+    mode = "single calibrated box" if ctx.learn_roi is not None else "scanning all 10 slots"
     print(f"LEARN HUD refs for profile #{profile.id} "
-          f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}').")
+          f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}') — {mode}.")
     print("  Show ONE hero in the spectator bar, then press ENTER to grab. "
           "Commands at the prompt: ENTER=accept guess, a name=correct it, "
           "n=next-best slot, s=skip, q=quit.\n")

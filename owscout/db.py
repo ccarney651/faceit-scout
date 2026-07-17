@@ -12,6 +12,7 @@ EXISTS``, matching faceit-sync's convention (SPEC §4, §12).
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -20,7 +21,15 @@ from typing import Iterator, Mapping, Optional, Sequence
 from .derive import ObsRow
 from .faceit import faceit_ro_uri
 from .integrity import VerifyCodesRow
-from .models import DEFAULT_DIVISION, CodeContext, CodeListing, Comp, HeroRef, RoiProfile
+from .models import (
+    DEFAULT_DIVISION,
+    CodeContext,
+    CodeListing,
+    Comp,
+    HeroRef,
+    Rect,
+    RoiProfile,
+)
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -168,6 +177,15 @@ CREATE TABLE IF NOT EXISTS code_status (
     status        TEXT NOT NULL CHECK(status IN ('unknown','captured','skipped','failed')),
     notes         TEXT
 );
+
+-- Optional single-portrait ROI used only by 'refs learn' (teaching HUD refs
+-- from a solo custom-game replay, where one hero sits in one box). Separate
+-- from the profile's 10 capture slots; one per profile.
+CREATE TABLE IF NOT EXISTS learn_slots (
+    profile_id INTEGER PRIMARY KEY REFERENCES roi_profiles(id),
+    rect_json  TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 # The known wipe that invalidated every stored S9 code (SPEC §2, §4). Seeded
@@ -285,6 +303,33 @@ class Database:
         profile.id = int(cur.lastrowid or 0)
         profile.created_at = now
         return profile.id
+
+    def set_learn_slot(self, profile_id: int, rect: Rect) -> None:
+        """Store (replace) the single-portrait ROI used by ``refs learn`` for a
+        profile. Independent of the profile's capture slots."""
+        with self.transaction() as c:
+            c.execute(
+                """INSERT INTO learn_slots (profile_id, rect_json, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(profile_id) DO UPDATE SET
+                       rect_json = excluded.rect_json,
+                       updated_at = excluded.updated_at""",
+                (profile_id, json.dumps(rect.as_list()), _utcnow()),
+            )
+
+    def clear_learn_slot(self, profile_id: int) -> None:
+        """Forget the single-portrait learn ROI, reverting ``refs learn`` to
+        scanning all ten slots."""
+        with self.transaction() as c:
+            c.execute("DELETE FROM learn_slots WHERE profile_id = ?", (profile_id,))
+
+    def get_learn_slot(self, profile_id: int) -> Optional[Rect]:
+        """The single-portrait learn ROI for a profile, or None if not set."""
+        row = self.conn.execute(
+            "SELECT rect_json FROM learn_slots WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()
+        return None if row is None else Rect.from_list(json.loads(row["rect_json"]))
 
     def get_active_profile(
         self, resolution_w: int, resolution_h: int, hud_variant: str = "default"

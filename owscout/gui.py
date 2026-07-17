@@ -406,6 +406,18 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
                        font=("Segoe UI", 9), fg="#222")
         lbl.pack(fill="x", **pad)
 
+        # Optional: calibrate ONE box so learning reads a single portrait only.
+        boxrow = ttk.Frame(self.win)
+        boxrow.pack(fill="x", **pad)
+        self.box_btn = ttk.Button(boxrow, text="🎯  Calibrate one portrait (optional)",
+                                  command=self._calibrate_slot)
+        self.box_btn.pack(side="left")
+        self.clear_btn = ttk.Button(boxrow, text="use all 10 slots",
+                                    command=self._clear_slot)
+        self.clear_btn.pack(side="left", padx=6)
+        self.mode_lbl = ttk.Label(boxrow, text="", foreground="#555")
+        self.mode_lbl.pack(side="left", padx=12)
+
         grabrow = ttk.Frame(self.win)
         grabrow.pack(fill="x", **pad)
         self.grab_btn = ttk.Button(grabrow, text="📷  Grab screen", command=self._grab)
@@ -468,21 +480,48 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
                 self.busy = False
         threading.Thread(target=worker, daemon=True).start()
 
-    def _init_ctx(self) -> None:
+    def _load_ctx(self) -> None:
+        """Build the learn context and refresh the UI. Runs synchronously on the
+        caller's (worker) thread, so callers already inside _work must call this
+        directly rather than wrapping it in another _work."""
         from .refs import prepare_learn
+        with Database(self.app.db_var.get()) as db:
+            ctx = prepare_learn(db, self.app.faceit_var.get(), hud_variant="default")
+        self.ctx = ctx
+        names = sorted(ctx.names.values())
+        res = f"{ctx.profile.resolution_w}x{ctx.profile.resolution_h}"
+        single = ctx.learn_roi is not None
+
+        def apply() -> None:
+            self.hero_box.configure(values=names)
+            self.mode_lbl.configure(
+                text="mode: single calibrated box" if single
+                else "mode: scanning all 10 slots")
+            self.status.configure(
+                text=f"ready · profile {res} · show a hero and click Grab")
+        self._post(apply)
+
+    def _init_ctx(self) -> None:
+        self._work(self._load_ctx)
+
+    def _calibrate_slot(self) -> None:
+        from .refs import calibrate_learn_slot
+        self._post(lambda: self.status.configure(
+            text="a box-drag window will open — drag around ONE portrait, press ENTER"))
 
         def go() -> None:
             with Database(self.app.db_var.get()) as db:
-                ctx = prepare_learn(db, self.app.faceit_var.get(), hud_variant="default")
-            self.ctx = ctx
-            names = sorted(ctx.names.values())
-            res = f"{ctx.profile.resolution_w}x{ctx.profile.resolution_h}"
+                calibrate_learn_slot(db, hud_variant="default")
+            self._post(lambda: self.status.configure(text="box saved — reloading…"))
+            self._load_ctx()  # already on a worker thread — call directly
+        self._work(go)
 
-            def apply() -> None:
-                self.hero_box.configure(values=names)
-                self.status.configure(
-                    text=f"ready · profile {res} · show a hero and click Grab")
-            self._post(apply)
+    def _clear_slot(self) -> None:
+        def go() -> None:
+            if self.ctx is not None:
+                with Database(self.app.db_var.get()) as db:
+                    db.clear_learn_slot(self.ctx.pid)
+            self._load_ctx()  # already on a worker thread — call directly
         self._work(go)
 
     # --- actions ------------------------------------------------------------

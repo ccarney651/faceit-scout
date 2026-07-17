@@ -162,6 +162,7 @@ def cmd_refs_learn(args: argparse.Namespace) -> int:
                 hud_variant=args.hud_variant,
                 refs_dir=refs_dir,
                 state=args.state,
+                calibrate_slot=args.calibrate_slot,
                 dry_run=args.dry_run,
             )
     except (CaptureError, FileNotFoundError) as exc:
@@ -597,6 +598,9 @@ def build_parser() -> argparse.ArgumentParser:
     rl.add_argument("--hud-variant", default="default", help="HUD variant to capture for")
     rl.add_argument("--state", default="alive", choices=REF_STATES,
                     help="visual state shown while learning (default: alive)")
+    rl.add_argument("--calibrate-slot", action="store_true",
+                    help="first drag ONE box around a single portrait, then learn from "
+                         "only that box (best for a solo custom-game replay)")
     rl.add_argument("--refs-dir", default=None,
                     help="where to store ref crops (default: refs/ next to the DB)")
     rl.add_argument("--dry-run", action="store_true", help="guess + preview but do not write")
