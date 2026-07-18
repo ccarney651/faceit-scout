@@ -3141,6 +3141,1620 @@
           ]
         }
       ]
+    },
+    {
+      "match_id": "1-e55d4eb9-b8a6-4978-b621-bf603332f205",
+      "game_no": 1,
+      "demo_code": "NSGWJS",
+      "map_guid": "0x080000000000066D",
+      "map_name": "Ilios",
+      "map_category": "Control",
+      "side_a_team_id": "3b9c000c-bfa1-44b3-bade-8519e3668731",
+      "side_a_team": "ELMT Sunrise",
+      "side_b_team_id": "d411380e-e9bb-416f-894c-e227efaf6c5f",
+      "side_b_team": "Young and Beautiful",
+      "winner_side": "a",
+      "captured_at": "2026-07-18T22:36:28Z",
+      "bans": [
+        "0x02E00000000001CA",
+        "0x02E0000000000516"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E0000000000003"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E0000000000003"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": "Lighthouse",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000007A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E0000000000362"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E0000000000362"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": "Lighthouse",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-e55d4eb9-b8a6-4978-b621-bf603332f205",
+      "game_no": 2,
+      "demo_code": "W5N756",
+      "map_guid": "0x0800000000000EB2",
+      "map_name": "Runasapi",
+      "map_category": "Push",
+      "side_a_team_id": "3b9c000c-bfa1-44b3-bade-8519e3668731",
+      "side_a_team": "ELMT Sunrise",
+      "side_b_team_id": "d411380e-e9bb-416f-894c-e227efaf6c5f",
+      "side_b_team": "Young and Beautiful",
+      "winner_side": "b",
+      "captured_at": "2026-07-18T22:40:23Z",
+      "bans": [
+        "0x02E00000000004E3",
+        "0x02E0000000000015"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000030A",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000001CA",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000001CA",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000030A",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000030A",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000030A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000030A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000002",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000030A"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-e55d4eb9-b8a6-4978-b621-bf603332f205",
+      "game_no": 3,
+      "demo_code": "YRJJ3K",
+      "map_guid": "0x0800000000000827",
+      "map_name": "Circuit Royal",
+      "map_category": "Escort",
+      "side_a_team_id": "d411380e-e9bb-416f-894c-e227efaf6c5f",
+      "side_a_team": "Young and Beautiful",
+      "side_b_team_id": "3b9c000c-bfa1-44b3-bade-8519e3668731",
+      "side_b_team": "ELMT Sunrise",
+      "winner_side": "a",
+      "captured_at": "2026-07-18T22:51:10Z",
+      "bans": [
+        "0x02E0000000000016",
+        "0x02E000000000023B"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000052C",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000052C",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000516",
+            "0x02E000000000052C",
+            "0x02E0000000000015",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000516",
+            "0x02E000000000052C",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 6,
+          "sub_map": null,
+          "round_no": 3,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000052C",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 7,
+          "sub_map": null,
+          "round_no": 3,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000052C",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 8,
+          "sub_map": null,
+          "round_no": 4,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000516",
+            "0x02E000000000052C",
+            "0x02E0000000000015",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000028D",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E0000000000008"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000028D",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000028D",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E0000000000029"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000030A",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000028D",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000030A",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 6,
+          "sub_map": null,
+          "round_no": 3,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000028D",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E0000000000206"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 7,
+          "sub_map": null,
+          "round_no": 3,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000028D",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 8,
+          "sub_map": null,
+          "round_no": 4,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000030A",
+            "0x02E0000000000231",
+            "0x02E0000000000365",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-e55d4eb9-b8a6-4978-b621-bf603332f205",
+      "game_no": 4,
+      "demo_code": "ED09SR",
+      "map_guid": "0x08000000000000D4",
+      "map_name": "King's Row",
+      "map_category": "Hybrid",
+      "side_a_team_id": "d411380e-e9bb-416f-894c-e227efaf6c5f",
+      "side_a_team": "Young and Beautiful",
+      "side_b_team_id": "3b9c000c-bfa1-44b3-bade-8519e3668731",
+      "side_b_team": "ELMT Sunrise",
+      "winner_side": "b",
+      "captured_at": "2026-07-18T22:53:19Z",
+      "bans": [
+        "0x02E000000000052C",
+        "0x02E000000000030A"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000002",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000008",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000516",
+            "0x02E0000000000003",
+            "0x02E0000000000015",
+            "0x02E0000000000231",
+            "0x02E0000000000068"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000516",
+            "0x02E0000000000003",
+            "0x02E0000000000015",
+            "0x02E0000000000231",
+            "0x02E0000000000068"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 6,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E0000000000068"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 7,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E0000000000068"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E000000000000A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 6,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E00000000000DD"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 7,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E0000000000042",
+            "0x02E000000000032B"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-e55d4eb9-b8a6-4978-b621-bf603332f205",
+      "game_no": 5,
+      "demo_code": "J5HCT5",
+      "map_guid": "0x0800000000000E13",
+      "map_name": "New Junk City",
+      "map_category": "Flashpoint",
+      "side_a_team_id": "3b9c000c-bfa1-44b3-bade-8519e3668731",
+      "side_a_team": "ELMT Sunrise",
+      "side_b_team_id": "d411380e-e9bb-416f-894c-e227efaf6c5f",
+      "side_b_team": "Young and Beautiful",
+      "winner_side": "a",
+      "captured_at": "2026-07-18T22:54:11Z",
+      "bans": [
+        "0x02E00000000000DD",
+        "0x02E0000000000068"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E00000000001EC",
+            "0x02E000000000052C"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E00000000001EC",
+            "0x02E0000000000472"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000028D"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E000000000052C",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000052C",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000052C",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000052C",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000023B"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-924f3362-ca0e-484d-89f3-7f28b947ad22",
+      "game_no": 1,
+      "demo_code": "ZG28M7",
+      "map_guid": "0x080000000000069E",
+      "map_name": "Oasis",
+      "map_category": "Control",
+      "side_a_team_id": "602d3c11-ccee-404d-858e-b03267c83d47",
+      "side_a_team": "Goud Guys",
+      "side_b_team_id": "444668eb-3722-42e6-8e1e-ed7e1134c522",
+      "side_b_team": "Vertex",
+      "winner_side": "b",
+      "captured_at": "2026-07-18T22:56:12Z",
+      "bans": [
+        "0x02E0000000000079",
+        "0x02E0000000000015"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": "University",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E0000000000016",
+            "0x02E000000000032A",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": "University",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000032A",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5,
+          "sub_map": "University",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 6,
+          "sub_map": "City Center",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 7,
+          "sub_map": "City Center",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000023B",
+            "0x02E0000000000003",
+            "0x02E00000000004E3",
+            "0x02E0000000000042"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000023B",
+            "0x02E0000000000008",
+            "0x02E0000000000365",
+            "0x02E0000000000042"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000516",
+            "0x02E000000000023B",
+            "0x02E0000000000008",
+            "0x02E0000000000365",
+            "0x02E00000000001EC"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": "University",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000030A",
+            "0x02E00000000004DD",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": "University",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000030A",
+            "0x02E00000000004DD",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5,
+          "sub_map": "University",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000030A",
+            "0x02E00000000004DD",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 6,
+          "sub_map": "City Center",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000030A",
+            "0x02E00000000004DD",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 7,
+          "sub_map": "City Center",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000030A",
+            "0x02E00000000004DD",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-924f3362-ca0e-484d-89f3-7f28b947ad22",
+      "game_no": 2,
+      "demo_code": "C8GB47",
+      "map_guid": "0x0800000000000D3E",
+      "map_name": "Suravasa",
+      "map_category": "Flashpoint",
+      "side_a_team_id": "444668eb-3722-42e6-8e1e-ed7e1134c522",
+      "side_a_team": "Vertex",
+      "side_b_team_id": "602d3c11-ccee-404d-858e-b03267c83d47",
+      "side_b_team": "Goud Guys",
+      "winner_side": "a",
+      "captured_at": "2026-07-18T22:57:04Z",
+      "bans": [
+        "0x02E000000000030A",
+        "0x02E0000000000003"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000028D",
+            "0x02E00000000000DD",
+            "0x02E00000000004E3",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000028D",
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E0000000000042"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000028D",
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E0000000000042"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000028D",
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E000000000032A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000052C",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000052C",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-924f3362-ca0e-484d-89f3-7f28b947ad22",
+      "game_no": 3,
+      "demo_code": "35NFCJ",
+      "map_guid": "0x08000000000000D4",
+      "map_name": "King's Row",
+      "map_category": "Hybrid",
+      "side_a_team_id": "444668eb-3722-42e6-8e1e-ed7e1134c522",
+      "side_a_team": "Vertex",
+      "side_b_team_id": "602d3c11-ccee-404d-858e-b03267c83d47",
+      "side_b_team": "Goud Guys",
+      "winner_side": "a",
+      "captured_at": "2026-07-18T22:57:42Z",
+      "bans": [
+        "0x02E0000000000362",
+        "0x02E000000000032A"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000003C3",
+            "0x02E00000000001EC"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000003C3",
+            "0x02E00000000001EC"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000004E3",
+            "0x02E00000000001EC"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000004E3",
+            "0x02E0000000000042"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000003C3",
+            "0x02E0000000000042"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000029",
+            "0x02E00000000003C3",
+            "0x02E00000000001EC"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000007A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000007A"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000052C",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000052C",
+            "0x02E000000000023B"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000052C",
+            "0x02E000000000023B"
+          ]
+        }
+      ]
     }
   ]
 }
