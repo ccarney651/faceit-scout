@@ -586,6 +586,7 @@ const TABS=[
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let VS_A=null, VS_B=null;   // team-vs-team selections (any team vs any team)
+let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
@@ -737,6 +738,92 @@ function renderVersus(){
   return wrap;
 }
 
+
+/* ================================= PREP SHEET (the night-before one-pager) */
+// Everything a team decides before a match, on one screen: what to ban, what
+// they'll ban, where the map draft goes, and what comp walks out of spawn.
+// Deliberately terse - the full scout page is one click away.
+function renderPrepBody(t){
+  const w=el(`<div></div>`);
+  const wins=t.results.filter(r=>r.won).length;
+  const oc=(DATA.owscout_comps||{})[t.team], sc=oc&&oc.scout;
+  w.appendChild(el(`<div class="card" style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">`+
+    `<span style="font-size:18px;font-weight:680">${esc(t.team)} - prep sheet</span>`+
+    `<span>${pill(`${wins}/${t.results.length} matches`,winVar(pctOf(wins,t.results.length)))} `+
+    `${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</span></div>`));
+
+  const grid=el(`<div class="grid cols-2" style="margin-top:10px;align-items:start"></div>`);
+
+  // What to take away from THEM: their most-relied-on heroes.
+  const banC=el(`<div class="card"></div>`);
+  banC.appendChild(el(`<p class="eyebrow">Ban candidates - what they rely on</p>`));
+  const pool=(sc&&sc.hero_pool||[]).slice(0,5);
+  if(pool.length){
+    pool.forEach(h=>banC.appendChild(el(`<div class="crow"><span>${heroChip(h.hero)}</span>`+
+      `<span class="rec">${Math.round((h.pick_rate||0)*100)}% of rounds</span></div>`)));
+  } else {
+    banC.appendChild(el(`<p class="note">No captured comps yet - see their bans below for hints.</p>`));
+  }
+  grid.appendChild(banC);
+
+  // What YOU will likely lose: their ban habits.
+  const theirC=el(`<div class="card"></div>`);
+  theirC.appendChild(el(`<p class="eyebrow">Expect them to ban</p>`));
+  rank(t.bans).slice(0,4).forEach(([h,n])=>theirC.appendChild(
+    el(`<div class="crow"><span>${heroChip(h)}</span><span class="rec">${n}x</span></div>`)));
+  if(t.firstBanGames){
+    theirC.appendChild(el(`<p class="eyebrow" style="margin-top:10px">Their first ban (drafting first)</p>`));
+    rank(t.firstBans).slice(0,2).forEach(([h,n])=>theirC.appendChild(
+      el(`<div class="crow"><span>${heroChip(h)}</span><span class="rec">${n}x</span></div>`)));
+  }
+  grid.appendChild(theirC);
+
+  // Map draft: what they'll bring, and where they're weak.
+  const pick=el(`<div class="card"></div>`);
+  pick.appendChild(el(`<p class="eyebrow">Expect them to pick</p>`));
+  Object.entries(t.mapStats).filter(([,v])=>v.picks>0)
+    .map(([m,v])=>({m,p:v.picks,wr:pctOf(v.wins,v.games)}))
+    .sort((a,b)=>b.p-a.p).slice(0,4)
+    .forEach(r=>pick.appendChild(el(`<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
+      `<span class="rec">${r.p}x · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
+  grid.appendChild(pick);
+
+  const weak=el(`<div class="card"></div>`);
+  weak.appendChild(el(`<p class="eyebrow">Target these maps - their worst</p>`));
+  const worst=Object.entries(t.mapStats).filter(([,v])=>v.games>=2)
+    .map(([m,v])=>({m,g:v.games,wr:pctOf(v.wins,v.games)}))
+    .sort((a,b)=>a.wr-b.wr).slice(0,4);
+  if(!worst.length) weak.appendChild(el(`<p class="note">Not enough games per map yet.</p>`));
+  worst.forEach(r=>weak.appendChild(el(`<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
+    `<span class="rec">${r.g} games · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
+  grid.appendChild(weak);
+  w.appendChild(grid);
+
+  // What walks out of spawn, and how bans move it.
+  if(sc){
+    const comps=(sc.overall||[]).slice(0,2);
+    if(comps.length){
+      w.appendChild(el(sectionH('Their comps',`<span class="note">${sc.games} map${sc.games===1?'':'s'} captured</span>`)));
+      const card=el(`<div class="card"></div>`);
+      comps.forEach(c=>card.appendChild(el(`<div class="crow"><span>${compRow(c.heroes)}</span>`+
+        `<span class="rec">${c.maps} map${c.maps===1?'':'s'} · ${c.wins}W-${c.losses}L</span></div>`)));
+      w.appendChild(card);
+    }
+    const br=(sc.ban_response||[]).slice(0,2);
+    if(br.length){
+      const card=el(`<div class="card" style="margin-top:10px"></div>`);
+      card.appendChild(el(`<p class="eyebrow">If a key hero is banned</p>`));
+      br.forEach(b=>{
+        const open=(b.opens||[])[0];
+        if(open) card.appendChild(el(`<div class="crow"><span><b>${esc(b.banned)}</b> banned &rarr; ${compRow(open.heroes)}</span>`+
+          `<span class="rec">${b.games} game${b.games===1?'':'s'}</span></div>`));
+      });
+      w.appendChild(card);
+    }
+  }
+  return w;
+}
+
 function renderScout(){
   const wrap=el(`<div></div>`);
   const bar=el(`<div class="card controls"></div>`);
@@ -747,10 +834,18 @@ function renderScout(){
   bar.appendChild(el(`<label>Recent matches</label>`));
   const holder=el(`<span style="display:inline-flex"></span>`);
   bar.appendChild(holder);
+  const prepBtn=el(`<button class="btn" type="button" style="margin-left:auto;padding:4px 12px"></button>`);
+  bar.appendChild(prepBtn);
   const body=el(`<div></div>`);
   wrap.append(bar,body);
 
-  function renderBody(){ body.innerHTML=''; body.appendChild(renderScoutBody(scoutData(SCOUT_TEAM, SCOUT_N))); }
+  function renderBody(){
+    prepBtn.textContent=SCOUT_PREP?'Full detail':'Prep sheet';
+    body.innerHTML='';
+    const data=scoutData(SCOUT_TEAM, SCOUT_N);
+    body.appendChild(SCOUT_PREP?renderPrepBody(data):renderScoutBody(data));
+  }
+  prepBtn.onclick=()=>{ SCOUT_PREP=!SCOUT_PREP; location.hash=hashFor('scout'); renderBody(); };
   function rebuild(){                       // per-team total → rebuild the control
     const total=Math.max(1,teamTotalMatches(SCOUT_TEAM));
     const smax=Math.max(15,total);          // let the window reach a full season
@@ -1272,7 +1367,7 @@ function renderMatches(){
 // The scout tab's hash carries the team, so a prep link pasted in Discord lands
 // a teammate directly on the right page: site/#scout=Redline
 function hashFor(id){
-  if(id==='scout'&&SCOUT_TEAM) return 'scout='+encodeURIComponent(SCOUT_TEAM);
+  if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
   if(id==='versus'&&VS_A&&VS_B) return 'vs='+encodeURIComponent(VS_A)+'~'+encodeURIComponent(VS_B);
   return id;
 }
@@ -1317,6 +1412,19 @@ function init(){
     }
     const tn=D().team_names||[];
     if(tn.includes(a)&&tn.includes(b)){ VS_A=a; VS_B=b; show('versus'); return; }
+  }
+  if(start.startsWith('prep=')||start.startsWith('scout=')){
+    SCOUT_PREP=start.startsWith('prep=');
+  }
+  if(start.startsWith('prep=')){
+    const team=start.slice(5);
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id; break;
+      }
+    }
+    if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
   }
   if(start.startsWith('scout=')){
     const team=start.slice(6);
