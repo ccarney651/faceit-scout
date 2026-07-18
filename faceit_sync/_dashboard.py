@@ -220,6 +220,7 @@ details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
 .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
   padding:1px 6px;border-radius:5px;background:var(--surface2);color:var(--faint)}
 .tag.warn{background:color-mix(in srgb,var(--mid) 20%,transparent);color:var(--mid)}
+.tag.ok{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
 .tag.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
 .wl{display:inline-flex;gap:3px}
 .wl b{width:16px;height:16px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;
@@ -312,6 +313,8 @@ const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
 ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
+// Games whose comps have been captured by owscout ("match_id:game_no").
+const CAPTURED=new Set(DATA.owscout_captured||[]);
 // Map lists everywhere read as a mode block at a time (all Control together, etc),
 // and within a mode the maps the league actually plays come first.
 const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
@@ -421,6 +424,7 @@ function matchCard(m){
       `<b>${esc(g.map)}</b> ${tag(g.map_category||'')} <span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>`+
       `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
       (g.was_restarted?tag('veto disrupted','warn'):'')+
+      (CAPTURED.has(m.id+':'+g.game_no)?tag('scouted','ok'):'')+
       `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
         (g.demo_code?rcChip(g.demo_code):'<span class="faint" style="font-size:11.5px">no replay</span>')+
         `<span class="faint rtog">▸ rosters</span></span></div>`));
@@ -529,7 +533,7 @@ function aggregate(matches,team){
           // choice, the opponent's is something done TO them.
           const by=b.team===team?s.them:(b.team?s.opp:null);
           if(by){ by.games++; if(won)by.wins++; } });
-        if(g.demo_code) a.replays.push({when:m.finished_at,opp:(m.f1===team?m.f2:m.f1),
+        if(g.demo_code) a.replays.push({when:m.finished_at,mid:m.id,opp:(m.f1===team?m.f2:m.f1),
           map:g.map,cat:g.map_category,gno:g.game_no,code:g.demo_code,won});
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
         if(mine){ inc(a.bans,mine.hero); if(mine.role)inc(a.banRoles,mine.role);
@@ -635,7 +639,8 @@ function renderScout(){
     holder.replaceChildren(makeRecency(total, SCOUT_N==null?smax:SCOUT_N, n=>{ SCOUT_N=n; renderBody(); }, smax));
     renderBody();
   }
-  sel.onchange=()=>{ SCOUT_TEAM=sel.value; SCOUT_N=null; rebuild(); };
+  sel.onchange=()=>{ SCOUT_TEAM=sel.value; SCOUT_N=null;
+    location.hash=hashFor('scout'); rebuild(); };
   rebuild(); return wrap;
 }
 
@@ -649,6 +654,30 @@ function renderScoutBody(t){
   head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   w.appendChild(head);
+
+  // Scouting coverage - the capture work-list. Every replay-coded game either
+  // has captured comps or is still to scout; the pending codes are click-to-copy
+  // chips, so "what do I scout next for this team" is answered right here.
+  if(t.replays.length){
+    const done=t.replays.filter(r=>CAPTURED.has(r.mid+':'+r.gno));
+    const todo=t.replays.filter(r=>!CAPTURED.has(r.mid+':'+r.gno))
+      .sort((a,b)=>(b.when||'').localeCompare(a.when||''));
+    const cov=el(`<div class="card" style="margin-top:10px"></div>`);
+    cov.appendChild(el(`<p class="eyebrow">Scouting coverage · ${done.length} of ${t.replays.length} replay games captured</p>`));
+    if(todo.length){
+      const row=el(`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>`);
+      row.appendChild(el(`<span class="note" style="margin:0">to scout:</span>`));
+      todo.slice(0,8).forEach(r=>{
+        const chip=el(`<span class="opt" style="cursor:default">${rcChip(r.code)}<span class="pp">${esc(r.map)} · ${dshort(r.when)}</span></span>`);
+        row.appendChild(chip);
+      });
+      if(todo.length>8) row.appendChild(el(`<span class="faint">+${todo.length-8} more</span>`));
+      cov.appendChild(row);
+    } else {
+      cov.appendChild(el(`<p class="note" style="margin:0">Fully scouted - every replay-coded game is captured.</p>`));
+    }
+    w.appendChild(cov);
+  }
 
   // ---- Scouting from captured replays (owscout) -------------------------
   // Three sections: what they play (Common comps + Hero pool), where they play
@@ -1116,15 +1145,19 @@ function renderMatches(){
 }
 
 /* ---------- shell ---------- */
+// The scout tab's hash carries the team, so a prep link pasted in Discord lands
+// a teammate directly on the right page: site/#scout=Redline
+function hashFor(id){ return id==='scout'&&SCOUT_TEAM?'scout='+encodeURIComponent(SCOUT_TEAM):id; }
 function show(id){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
   const c=document.getElementById('content'); c.innerHTML=''; c.appendChild(TABS.find(t=>t.id===id).render());
-  try{window.scrollTo(0,0)}catch(e){} if(location.hash!=='#'+id) location.hash=id;
+  try{window.scrollTo(0,0)}catch(e){}
+  const h=hashFor(id); if(location.hash!=='#'+h) location.hash=h;
 }
 function updateHeader(){
   const s=D().summary;
   document.getElementById('title').textContent=s.championship;
-  document.getElementById('subtitle').textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`;
+  document.getElementById('subtitle').textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`+(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
 }
 function setDivision(id){
   CURRENT_VIEW=id; recomputeDivision(); updateHeader();
@@ -1141,7 +1174,20 @@ function init(){
   updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
-  const start=(location.hash||'#overview').slice(1);
+  const start=decodeURIComponent((location.hash||'#overview').slice(1));
+  if(start.startsWith('scout=')){
+    const team=start.slice(6);
+    // Find the division that knows this team; a combined view would work too,
+    // but the single division is the page people mean when they share a link.
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id;
+        break;
+      }
+    }
+    if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
+  }
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 init();

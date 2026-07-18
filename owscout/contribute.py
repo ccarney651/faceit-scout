@@ -409,6 +409,9 @@ def merged_payload(
     for team, r in report.items():
         teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
     payload["contributors"] = sorted({str(c["contributor"]) for c in contributions})
+    # Which real games are covered - lets the site badge scouted games and show
+    # the "still to scout" queue per team, which is the capture work-list.
+    payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)
     payload["maps_merged"] = len(merged.maps)
     payload["views_ignored"] = len(merged.ignored)
     payload["maps_rejected"] = rejected

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import html
 import json
+from datetime import datetime, timezone
 import os
 import sqlite3
 from typing import Any, Optional, TextIO
@@ -417,11 +418,16 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     # commits it and the dashboard renders it on team Scout pages. Git-native sync,
     # no shared database.
     owscout_comps: dict[str, object] = {}
+    owscout_captured: list[str] = []
     oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
     if os.path.exists(oc_path):
         try:
             with open(oc_path, encoding="utf-8") as fh:
-                owscout_comps = json.load(fh).get("teams", {})
+                oc = json.load(fh)
+            owscout_comps = oc.get("teams", {})
+            # "match_id:game_no" keys of captured games - drives the scouted
+            # badges and each team's still-to-scout queue on the page.
+            owscout_captured = list(oc.get("captured_games", []))
         except (json.JSONDecodeError, OSError):
             owscout_comps = {}
 
@@ -432,6 +438,10 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         "roster": roster,
         "maps": list(maps.values()),
         "owscout_comps": owscout_comps,
+        "owscout_captured": owscout_captured,
+        # When this page was generated - so anyone can tell at a glance whether
+        # their contribution has landed yet.
+        "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         # Inlined hero portraits so comps read as icons, not five words. Empty
         # when the art isn't present; the page then falls back to text chips.
         "hero_icons": load_hero_icons(),
