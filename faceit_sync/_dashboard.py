@@ -244,6 +244,21 @@ details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
   font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .rosters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
 @media (max-width:640px){.rosters{grid-template-columns:1fr}}
+/* ---- mobile pass: prep links get opened from Discord on phones ---- */
+@media (max-width:640px){
+  main{padding:12px 10px 48px}               /* reclaim edge gutters */
+  .topbar-in{padding:10px 10px 0}
+  nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  nav button{white-space:nowrap;padding:9px 10px;font-size:13px}
+  .card{padding:10px}
+  .controls{flex-wrap:wrap;row-gap:8px}
+  .game-hd{flex-wrap:wrap;row-gap:4px}       /* map + score + code stack cleanly */
+  .game-hd>span[style*="margin-left:auto"]{margin-left:0!important;width:100%}
+  th,td{padding:6px 7px;font-size:12.5px}
+  .crow{gap:8px}
+  .crow .rec{font-size:11.5px}
+}
 .roster h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:650}
 .roster .pl{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:3px 0;
   border-top:1px solid var(--line);font-size:12.5px}
@@ -563,12 +578,14 @@ function aggregate(matches,team){
 const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
  {id:'scout',label:'Scout a team',render:renderScout},
+ {id:'versus',label:'Team vs team',render:renderVersus},
  {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
  {id:'matches',label:'Matches',render:renderMatches},
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
+let VS_A=null, VS_B=null;   // team-vs-team selections (any team vs any team)
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
@@ -624,6 +641,101 @@ function scoutData(team,lim){
 }
 
 const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team).length;
+
+
+/* =============================================== TEAM vs TEAM (matchup prep) */
+function renderVersus(){
+  const names=D().team_names;
+  if(names.length<2) return el(`<p class="note">Need at least two teams.</p>`);
+  if(!VS_A||!names.includes(VS_A)) VS_A=names[0];
+  if(!VS_B||!names.includes(VS_B)||VS_B===VS_A) VS_B=names.find(n=>n!==VS_A);
+
+  const wrap=el(`<div></div>`);
+  const bar=el(`<div class="card controls"></div>`);
+  const mkSel=(val)=>{ const sel=el(`<select style="min-width:170px"></select>`);
+    names.forEach(n=>sel.appendChild(el(`<option ${n===val?'selected':''}>${esc(n)}</option>`)));
+    return sel; };
+  const selA=mkSel(VS_A), selB=mkSel(VS_B);
+  const swap=el(`<button class="btn" type="button" style="padding:4px 10px">&harr;</button>`);
+  bar.append(selA, swap, selB);
+  const body=el(`<div></div>`);
+  wrap.append(bar, body);
+
+  function draw(){
+    location.hash=hashFor('versus');
+    body.innerHTML='';
+    const A=scoutData(VS_A,null), B=scoutData(VS_B,null);
+
+    // Head-to-head history first: the only DIRECT evidence in the matchup.
+    const h2h=MATCHES_RECENT.filter(m=>(m.f1===VS_A&&m.f2===VS_B)||(m.f1===VS_B&&m.f2===VS_A));
+    let wa=0, wb=0;
+    h2h.forEach(m=>{ const w=m.winner==='faction1'?m.f1:(m.winner==='faction2'?m.f2:null);
+      if(w===VS_A)wa++; else if(w===VS_B)wb++; });
+    body.appendChild(el(sectionH('Head to head',
+      h2h.length?`<span class="note">${esc(VS_A)} ${wa} - ${wb} ${esc(VS_B)} · ${h2h.length} match${h2h.length===1?'':'es'}</span>`
+                :`<span class="note">never played each other in this window</span>`)));
+    h2h.slice(0,4).forEach(m=>body.appendChild(matchCard(m)));
+
+    // The two teams side by side; collapses to one column on narrow screens.
+    const cols=el(`<div class="grid cols-2" style="margin-top:14px;align-items:start"></div>`);
+    [[A,VS_A],[B,VS_B]].forEach(([t,name])=>{
+      const c=el(`<div class="card"></div>`);
+      const wins=t.results.filter(r=>r.won).length;
+      c.appendChild(el(`<div style="font-size:16px;font-weight:680;margin-bottom:2px">${esc(name)}</div>`+
+        `<p class="note" style="margin:0 0 8px">${pill(`${wins}/${t.results.length} matches`,winVar(pctOf(wins,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</p>`));
+      c.appendChild(el(`<p class="eyebrow">Top bans</p>`));
+      c.appendChild(el(barList(rank(t.bans).slice(0,6).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
+      c.appendChild(el(`<p class="eyebrow" style="margin-top:12px">Most-picked maps</p>`));
+      const mp=Object.entries(t.mapStats).filter(([,v])=>v.picks>0)
+        .map(([m,v])=>({map:m,picks:v.picks,wr:pctOf(v.wins,v.games)}))
+        .sort((a,b)=>b.picks-a.picks).slice(0,5);
+      if(!mp.length) c.appendChild(el(`<p class="note">No picked maps in window.</p>`));
+      mp.forEach(r=>c.appendChild(el(`<div class="crow"><span>${esc(r.map)} <span class="faint">${esc(MAP_CAT[r.map]||'')}</span></span>`+
+        `<span class="rec">${r.picks}x picked · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
+      const oc=(DATA.owscout_comps||{})[name], sc=oc&&oc.scout;
+      if(sc&&(sc.overall||[]).length){
+        const top=sc.overall[0];
+        c.appendChild(el(`<p class="eyebrow" style="margin-top:12px">Captured comp (${sc.games} map${sc.games===1?'':'s'})</p>`));
+        c.appendChild(el(`<div class="crow"><span>${compRow(top.heroes)}</span>`+
+          `<span class="rec">${top.wins}W-${top.losses}L</span></div>`));
+      }
+      cols.appendChild(c);
+    });
+    body.appendChild(cols);
+
+    // The veto battleground: maps BOTH teams pick, with each side's win rate.
+    const contested=Object.keys(A.mapStats).filter(m=>
+      (A.mapStats[m]||{}).picks>0 && (B.mapStats[m]||{}).picks>0)
+      .map(m=>({map:m,cat:MAP_CAT[m]||'',
+        awr:pctOf(A.mapStats[m].wins,A.mapStats[m].games),
+        bwr:pctOf(B.mapStats[m].wins,B.mapStats[m].games)}))
+      .sort((a,b)=>mapCmp(a.map,b.map));
+    body.appendChild(el(sectionH('Contested maps',`<span class="note">maps both teams pick - the veto battleground</span>`)));
+    body.appendChild(contested.length?table(
+      [{k:'map',label:'Map'},
+       {k:'awr',label:esc(VS_A)+' win %',num:true,html:r=>pill(r.awr+'%',winVar(r.awr))},
+       {k:'bwr',label:esc(VS_B)+' win %',num:true,html:r=>pill(r.bwr+'%',winVar(r.bwr))}],
+      contested, byMode)
+      :el(`<p class="note">No overlap in picked maps.</p>`));
+
+    // Heroes BOTH teams ban often: gone either way, plan around their absence.
+    const topA=new Set(rank(A.bans).slice(0,8).map(([h])=>h));
+    const both=rank(B.bans).slice(0,8).map(([h])=>h).filter(h=>topA.has(h));
+    if(both.length){
+      body.appendChild(el(sectionH('Banned either way',`<span class="note">in both teams' top bans - plan around their absence</span>`)));
+      const rowEl=el(`<div class="card" style="display:flex;flex-wrap:wrap;gap:6px"></div>`);
+      both.forEach(h=>rowEl.appendChild(el(`<span class="opt" style="cursor:default">${heroChip(h)}</span>`)));
+      body.appendChild(rowEl);
+    }
+  }
+  selA.onchange=()=>{ VS_A=selA.value;
+    if(VS_B===VS_A){ VS_B=names.find(n=>n!==VS_A); selB.value=VS_B; } draw(); };
+  selB.onchange=()=>{ VS_B=selB.value;
+    if(VS_A===VS_B){ VS_A=names.find(n=>n!==VS_B); selA.value=VS_A; } draw(); };
+  swap.onclick=()=>{ [VS_A,VS_B]=[VS_B,VS_A]; selA.value=VS_A; selB.value=VS_B; draw(); };
+  draw();
+  return wrap;
+}
 
 function renderScout(){
   const wrap=el(`<div></div>`);
@@ -1159,7 +1271,11 @@ function renderMatches(){
 /* ---------- shell ---------- */
 // The scout tab's hash carries the team, so a prep link pasted in Discord lands
 // a teammate directly on the right page: site/#scout=Redline
-function hashFor(id){ return id==='scout'&&SCOUT_TEAM?'scout='+encodeURIComponent(SCOUT_TEAM):id; }
+function hashFor(id){
+  if(id==='scout'&&SCOUT_TEAM) return 'scout='+encodeURIComponent(SCOUT_TEAM);
+  if(id==='versus'&&VS_A&&VS_B) return 'vs='+encodeURIComponent(VS_A)+'~'+encodeURIComponent(VS_B);
+  return id;
+}
 function show(id){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
   const c=document.getElementById('content'); c.innerHTML=''; c.appendChild(TABS.find(t=>t.id===id).render());
@@ -1187,6 +1303,21 @@ function init(){
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
   const start=decodeURIComponent((location.hash||'#overview').slice(1));
+  if(start.startsWith('vs=')){
+    const parts=start.slice(3).split('~');
+    const a=parts[0], b=parts[1];
+    for(const v of VIEWS){
+      if(v.divisions.length===1){
+        const tn=DIVS[v.divisions[0]].team_names||[];
+        if(tn.includes(a)&&tn.includes(b)){
+          CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+          document.getElementById('division').value=v.id; break;
+        }
+      }
+    }
+    const tn=D().team_names||[];
+    if(tn.includes(a)&&tn.includes(b)){ VS_A=a; VS_B=b; show('versus'); return; }
+  }
   if(start.startsWith('scout=')){
     const team=start.slice(6);
     // Find the division that knows this team; a combined view would work too,
