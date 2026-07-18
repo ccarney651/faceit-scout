@@ -517,6 +517,13 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.mode_lbl = ttk.Label(boxrow, text="", foreground="#555")
         self.mode_lbl.pack(side="left", padx=12)
 
+        # Some heroes read poorly while DEAD; teach a dead-state ref for those.
+        # The matcher takes the best across states, so both are used automatically.
+        self.dead_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.win, variable=self.dead_var,
+                        text="this hero is DEAD (save as the dead-state ref)"
+                        ).pack(anchor="w", padx=12)
+
         grabrow = ttk.Frame(self.win)
         grabrow.pack(fill="x", **pad)
         self.grab_btn = ttk.Button(grabrow, text="📷  Grab screen", command=self._grab)
@@ -738,19 +745,21 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         crop = s.crop
         variant = variant_for_cell(s.cell, self.ctx.profile)
         team = "blue" if variant == "a" else "red"
+        state = "dead" if self.dead_var.get() else "alive"
 
         def go() -> None:
             with Database(self.app.db_var.get()) as db:
                 save_learn_ref(db, default_refs_dir(self.app.db_var.get()),
-                               pid=self.ctx.pid, hero=hero, crop=crop, variant=variant)
-            self.learned.add((hero.guid, variant))
+                               pid=self.ctx.pid, hero=hero, crop=crop, variant=variant,
+                               state=state)
+            self.learned.add((hero.guid, f"{variant}/{state}"))
 
             def apply() -> None:
                 self.progress.configure(
                     text=f"Learned this session: {len(self.learned)}  "
-                         f"(last: {hero.name} / {team})")
-                self.status.configure(text=f"saved {hero.name} ({team}) — show the next hero, then Grab.")
-                self.guess_lbl.configure(text=f"✓ saved {hero.name} ({team})")
+                         f"(last: {hero.name} / {team} / {state})")
+                self.status.configure(text=f"saved {hero.name} ({team}/{state}) — show the next hero, then Grab.")
+                self.guess_lbl.configure(text=f"✓ saved {hero.name} ({team}/{state})")
                 for b in (self.yes_btn, self.next_btn, self.saveas_btn):
                     b.configure(state="disabled")
             self._post(apply)
