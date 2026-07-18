@@ -40,11 +40,17 @@ jobs:
         run: |
           # Seed known teams from the committed match list (idempotent), then let
           # the keyless enumerator discover and ingest every finished league match
-          # across all divisions. Already-stored finished matches are skipped.
+          # across all divisions. Already-stored finished matches are skipped -
+          # EXCEPT recent ones still missing replay codes, which are re-fetched
+          # (--backfill-days, default 14): FACEIT publishes codes after a match
+          # ends, so a plain fetch would never pick them up.
           # A stray unreachable match must not block the daily dashboard update,
           # so fetch errors are tolerated; the export must still succeed.
           faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt || echo "seed: some matches errored (continuing)"
           faceit-sync --db faceit.sqlite3 fetch || echo "update: some matches errored (continuing)"
+          # docs/index.html is the LIVE SITE and this job is its only writer.
+          # Captured comps reach it through the committed owscout_comps.json,
+          # which export reads from the repo root.
           faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
 
       - name: Save database cache

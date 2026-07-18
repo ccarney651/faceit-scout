@@ -33,6 +33,41 @@ def _keys_summary(binds: dict[str, str]) -> str:
     return "  ".join(f"{binds[a].upper()} {label}" for a, label in _KEY_LABELS)
 
 
+# A faceit DB unsynced for longer than this is called out: the code list is then
+# missing whatever has been played since, which looks the same as "no new matches".
+# The CI syncs nightly, so a day without a local sync already means divergence.
+STALE_DB_HOURS = 24
+
+
+def _faceit_freshness(faceit_db_path: str) -> tuple[str, bool]:
+    """``(label, is_stale)`` describing how current the faceit DB is.
+
+    Reports when the DB was last SYNCED, not the newest match in it: a league with
+    no games for three days is fine, a tool that has not checked for three days is
+    not, and only the second one hides codes from you.
+    """
+    import sqlite3
+    from datetime import datetime, timezone
+    try:
+        with sqlite3.connect(f"file:{faceit_db_path}?mode=ro", uri=True) as conn:
+            synced = conn.execute("SELECT MAX(ran_at) FROM sync_log").fetchone()[0]
+            latest = conn.execute("SELECT MAX(finished_at) FROM matches").fetchone()[0]
+    except Exception as exc:  # noqa: BLE001 - a missing DB is a message, not a crash
+        return f"faceit DB unreadable ({exc})", True
+    if not synced:
+        return "faceit DB has never been synced - click Sync codes.", True
+    try:
+        delta = (datetime.now(timezone.utc)
+                 - datetime.fromisoformat(str(synced).replace("Z", "+00:00")))
+        hours = delta.total_seconds() / 3600
+    except ValueError:
+        return f"last synced {str(synced)[:10]}", False
+    when = (f"{hours:.0f}h ago" if hours < 48 else f"{hours / 24:.0f} days ago")
+    stale = hours >= STALE_DB_HOURS
+    return (f"last synced {when} - newest match {str(latest or '?')[:10]}"
+            + (" - sync to pick up newer codes" if stale else ""), stale)
+
+
 def _base_dir() -> str:
     """A stable folder for owscout's data, independent of where the app is
     launched from — so calibration and refs persist between sessions. Prefer
@@ -134,6 +169,12 @@ class _App:  # pragma: no cover - GUI runtime only
             row=4, column=2, columnspan=2, padx=2, pady=4, sticky="w")
         self.cap_btn = ttk.Button(cap, text="Start hotkey capture", command=self._capture)
         self.cap_btn.grid(row=5, column=1, padx=6, pady=6, sticky="w")
+        # Code freshness. A stale faceit DB silently hides every code published
+        # since the last sync, which looks identical to "no new matches".
+        self.freshness_lbl = ttk.Label(cap, text="", foreground="#555")
+        self.freshness_lbl.grid(row=6, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="w")
+        ttk.Button(cap, text="Sync codes from FACEIT", command=self._sync_faceit).grid(
+            row=6, column=3, padx=2, pady=(0, 6), sticky="e")
         cap.columnconfigure(1, weight=1)
 
         # --- 3. review + publish -------------------------------------------
@@ -369,7 +410,26 @@ class _App:  # pragma: no cover - GUI runtime only
             # Cached so the team filter is instant and needs no second query.
             self._code_rows = list(rows)
             self.q.put(self._apply_code_filter)
+            text, stale = _faceit_freshness(self.faceit_var.get())
+            self.q.put(lambda: self.freshness_lbl.configure(
+                text=text, foreground="#a60" if stale else "#555"))
         self._run(go, lock=False)
+
+    def _sync_faceit(self) -> None:
+        """Pull new matches + late-published replay codes into the faceit DB, so the
+        code list above matches what the site is working from."""
+        self._emit("sync: fetching new matches and back-filling replay codes …")
+
+        def go() -> None:
+            from faceit_sync.client import FaceitClient
+            from faceit_sync.db import Database as FaceitDb
+            from faceit_sync.sync import SyncEngine
+            with FaceitDb(self.faceit_var.get()) as fdb:
+                res = SyncEngine(FaceitClient(), fdb).run_all()
+            self._emit(f"sync: {res.inserted} new, {res.updated} updated, "
+                       f"{res.skipped} unchanged, {res.errors} error(s).")
+            self.q.put(self._refresh_codes)
+        self._run(go)
 
     def _apply_code_filter(self) -> None:
         """Rebuild the code list for the selected team (or all of them)."""
@@ -544,17 +604,21 @@ class _App:  # pragma: no cover - GUI runtime only
                 json.dump(payload, fh, indent=2)
             teams = len(payload["teams"])
             self._emit(f"publish: wrote owscout_comps.json ({teams} team(s)).")
-            # Rebuild the dashboard so the comps show up immediately.
+            # owscout_comps.json is THE published artifact: CI reads it from the
+            # repo root when it rebuilds docs/index.html (the live site) from its
+            # own synced database. dashboard.html is only a local preview - it is
+            # built from THIS machine's faceit DB and nothing serves it.
             try:
                 from faceit_sync.db import Database as FaceitDb
                 from faceit_sync.export import export_html
                 with FaceitDb(self.faceit_var.get()) as fdb, \
                         open("dashboard.html", "w", encoding="utf-8") as out:
                     n = export_html(fdb, out)
-                self._emit(f"publish: rebuilt dashboard.html ({n} division(s)). "
-                           "Commit + push to update the online site.")
+                self._emit(f"publish: local preview dashboard.html rebuilt ({n} division(s)).")
             except Exception as exc:  # noqa: BLE001
-                self._emit(f"publish: JSON written; dashboard rebuild skipped ({exc}).")
+                self._emit(f"publish: JSON written; local preview skipped ({exc}).")
+            self._emit("publish: commit + push owscout_comps.json to update the "
+                       "live site (CI rebuilds docs/index.html nightly).")
         self._run(go)
 
     def run(self) -> None:

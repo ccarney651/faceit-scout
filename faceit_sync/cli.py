@@ -14,7 +14,7 @@ from . import __version__
 from .client import FaceitClient
 from .db import Database
 from .export import export_csv, export_html, export_json, team_stats
-from .sync import EnumerationError, SyncEngine
+from .sync import DEFAULT_BACKFILL_DAYS, EnumerationError, SyncEngine
 
 log = logging.getLogger("faceit_sync")
 
@@ -54,7 +54,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     refs = _collect_match_refs(args)
     client = _build_client()
     with Database(_db_path(args)) as db:
-        engine = SyncEngine(client, db)
+        engine = SyncEngine(client, db, backfill_days=args.backfill_days)
         if refs:
             # Mass import (keyless): explicit match ids/URLs win over enumeration.
             result = engine.run_matches(
@@ -196,6 +196,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="one or more match ids or room URLs to mass-import (keyless)")
     f.add_argument("--matches-file", default=None,
                    help="file with one match id/URL per line (# comments allowed)")
+    f.add_argument("--backfill-days", type=int, default=DEFAULT_BACKFILL_DAYS,
+                   help="re-fetch stored FINISHED matches from the last N days that "
+                        "are still missing replay codes (codes are published after "
+                        "the match; 0 disables)")
     f.add_argument("--force-refresh", action="store_true",
                    help="re-fetch even matches already stored as FINISHED")
     f.add_argument("--dry-run", action="store_true", help="fetch and parse but do not write")

@@ -177,6 +177,26 @@ class Database:
 
     # --- idempotency helpers -------------------------------------------------
 
+    def matches_needing_backfill(self, since_days: int) -> set[str]:
+        """Stored FINISHED matches from the last ``since_days`` that still have a
+        game with no replay code.
+
+        FACEIT publishes replay codes AFTER a match finishes, sometimes hours or
+        days later. A plain fetch skips anything already stored FINISHED, so those
+        late codes never arrive and the match is permanently missing them. These
+        are the only stored matches worth re-fetching: older ones will never gain a
+        code, and complete ones have nothing to gain.
+        """
+        if since_days <= 0:
+            return set()
+        rows = self.conn.execute(
+            """SELECT DISTINCT m.id FROM matches m JOIN games g ON g.match_id = m.id
+               WHERE m.status = 'FINISHED' AND g.demo_code IS NULL
+                 AND m.finished_at >= datetime('now', ?)""",
+            (f"-{int(since_days)} days",),
+        ).fetchall()
+        return {str(r["id"]) for r in rows}
+
     def match_status(self, match_id: str) -> Optional[str]:
         row = self.conn.execute(
             "SELECT status FROM matches WHERE id = ?", (match_id,)

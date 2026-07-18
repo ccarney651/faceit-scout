@@ -587,10 +587,32 @@ class SyncResult:
         }
 
 
+# Replay codes appear after a match finishes, so recent FINISHED matches missing
+# codes are re-fetched despite being stored. Two weeks is well past the point where
+# a code will ever show up, and the set is small (matches missing codes only).
+DEFAULT_BACKFILL_DAYS = 14
+
+
 class SyncEngine:
-    def __init__(self, client: FaceitClient, db: Database) -> None:
+    def __init__(self, client: FaceitClient, db: Database,
+                 backfill_days: int = DEFAULT_BACKFILL_DAYS) -> None:
         self.client = client
         self.db = db
+        self.backfill_days = backfill_days
+        self._backfill: Optional[set[str]] = None
+
+    def _skip_stored(self, match_id: str, force_refresh: bool) -> bool:
+        """Whether an already-stored match can be skipped. A stored FINISHED match
+        is re-fetched when it is still missing replay codes and recent enough for
+        them to appear (see Database.matches_needing_backfill)."""
+        if force_refresh or self.db.match_status(match_id) != "FINISHED":
+            return False
+        if self._backfill is None:      # computed once per run, not per match
+            self._backfill = self.db.matches_needing_backfill(self.backfill_days)
+        if match_id in self._backfill:
+            log.info("re-fetch %s (stored FINISHED but missing replay codes)", match_id)
+            return False
+        return True
 
     def ingest_match(
         self,
@@ -601,7 +623,7 @@ class SyncEngine:
         dry_run: bool = False,
     ) -> str:
         """Ingest a single match. Returns 'inserted' | 'updated' | 'skipped'."""
-        if not force_refresh and self.db.match_status(match_id) == "FINISHED":
+        if self._skip_stored(match_id, force_refresh):
             log.info("skip %s (already stored FINISHED)", match_id)
             return "skipped"
 
@@ -687,7 +709,7 @@ class SyncEngine:
         self, mid: str, cid: str, result: "SyncResult", *,
         force_refresh: bool, dry_run: bool,
     ) -> None:
-        if not force_refresh and self.db.match_status(mid) == "FINISHED":
+        if self._skip_stored(mid, force_refresh):
             result.skipped += 1
             return
         try:
@@ -816,7 +838,7 @@ class SyncEngine:
 
         for match_id in dedupe_preserving_order(parsed):
             result.matches_seen += 1
-            if not force_refresh and self.db.match_status(match_id) == "FINISHED":
+            if self._skip_stored(match_id, force_refresh):
                 result.skipped += 1
                 continue
             try:
