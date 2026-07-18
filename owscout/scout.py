@@ -38,6 +38,10 @@ def scout_payload(db: Any, faceit_db_path: str) -> dict[str, Any]:
     return payload
 
 
+# Key for the per-map swap buckets; "|" cannot appear in a team or map name.
+_MAP_KEY = "|"
+
+
 def _enemy_at(enemy_obs: list[ObsDetail], ts: int) -> tuple[str, ...]:
     """The enemy lineup as of ``ts`` — their most recent observation at or before
     it (dedupe means the sides don't share timestamps)."""
@@ -51,8 +55,9 @@ def _enemy_at(enemy_obs: list[ObsDetail], ts: int) -> tuple[str, ...]:
 
 
 def aggregate_swaps(
-    details: Iterable[ObsDetail], roles: Roles, hero_names: dict[str, str]
-) -> dict[str, list[dict[str, Any]]]:
+    details: Iterable[ObsDetail], roles: Roles, hero_names: dict[str, str],
+    *, per_map: bool = False,
+) -> dict[str, Any]:
     """Per team, recurring mid-map swaps with what they were made against. For each
     (out, in, kind) swap: how often it happened and the enemy heroes present in at
     least half its occurrences (the trigger — e.g. answering a D.Va)."""
@@ -77,14 +82,16 @@ def aggregate_swaps(
             if not team:
                 continue
             snaps = [(o.hero_guids, _enemy_at(sides[opp], o.sample_ts_ms)) for o in own]
+            mp = own[0].map_name or "?"
             for ev in swap_events(snaps, roles):
                 key = (tuple(ev.out_heroes), tuple(ev.in_heroes), ev.kind)
-                slot = agg.setdefault(team, {}).setdefault(
+                bucket = _MAP_KEY.join((team, mp)) if per_map else team
+                slot = agg.setdefault(bucket, {}).setdefault(
                     key, {"count": 0, "vs": Counter()})
                 slot["count"] += 1
                 slot["vs"].update(ev.vs_enemy)
 
-    out: dict[str, list[dict[str, Any]]] = {}
+    out: dict[str, Any] = {}
     for team, swaps in agg.items():
         rows = []
         for (o, i, kind), v in sorted(swaps.items(), key=lambda kv: -kv[1]["count"]):
@@ -231,6 +238,7 @@ def team_scout(
     by_map: dict[str, dict[str, dict[str, dict[str, list[CompInstance]]]]] = {}
     pool: dict[str, dict[str, set[str]]] = {}     # team -> hero -> game keys
     team_games: dict[str, set[str]] = {}
+    team_rounds: dict[str, set[str]] = {}
     for (mi, side), obs in games.items():
         team = _team_of(obs[0])
         if not team:
@@ -243,9 +251,14 @@ def team_scout(
         overall.setdefault(team, []).append(
             CompInstance(first.hero_guids, won, game_key))
         team_games.setdefault(team, set()).add(game_key)
-        for d in obs:                              # hero pool: any hero, any moment
+        # Hero pool counts ROUNDS, not maps: a hero played every round of a map is
+        # a staple, one played for a single point is not, and counting maps hides
+        # that difference entirely.
+        for d in obs:
+            round_key = f"{game_key}:{d.round_no or 0}:{d.sub_map or ''}"
+            team_rounds.setdefault(team, set()).add(round_key)
             for g in d.hero_guids:
-                pool.setdefault(team, {}).setdefault(g, set()).add(game_key)
+                pool.setdefault(team, {}).setdefault(g, set()).add(round_key)
         # Per segment keep BOTH what they opened on and what they settled into —
         # the comp a team ends a point on is often the more useful intel.
         seg_first: dict[str, ObsDetail] = {}
@@ -262,6 +275,7 @@ def team_scout(
                 CompInstance(seg_last[key].hero_guids, won, game_key))
 
     swaps = aggregate_swaps(details, roles, hero_names)
+    swaps_by_map = aggregate_swaps(details, roles, hero_names, per_map=True)
     bans = ban_response(details, roles, hero_names)
     report: dict[str, dict[str, Any]] = {}
     teams = set(overall) | set(by_map)
@@ -280,18 +294,21 @@ def team_scout(
             }
             opens_only = {seg: v["open"] for seg, v in fams.items()}
             maps_out[mp] = {"segments": fams,
+                            "swaps": swaps_by_map.get(_MAP_KEY.join((team, mp)), []),
                             "narrative": narrate_map(team, mp, opens_only)}
         total = len(team_games.get(team, ()))
+        rounds_total = len(team_rounds.get(team, ()))
         hero_pool: list[dict[str, Any]] = [
-            {"hero": hero_names.get(g, g), "games": len(ks),
-             "pick_rate": round(len(ks) / total, 3) if total else 0.0}
+            {"hero": hero_names.get(g, g), "role": roles.get(g), "rounds": len(ks),
+             "pick_rate": round(len(ks) / rounds_total, 3) if rounds_total else 0.0}
             for g, ks in pool.get(team, {}).items()]
-        hero_pool.sort(key=lambda r: (-int(r["games"]), str(r["hero"])))
+        hero_pool.sort(key=lambda r: (-int(r["rounds"]), str(r["hero"])))
         report[team] = {
             "overall": [_family_dict(f, hero_names)
                         for f in cluster_comps(overall.get(team, []), roles)],
             "maps": maps_out,
             "games": total,
+            "rounds": rounds_total,
             "hero_pool": hero_pool,
             "swaps": swaps.get(team, []),
             "swap_narrative": narrate_swaps(team, swaps.get(team, [])),

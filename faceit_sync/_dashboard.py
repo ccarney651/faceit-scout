@@ -68,9 +68,11 @@ main{max-width:1060px;margin:0 auto;padding:20px 18px 72px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
 .grid{display:grid;gap:10px}
 .cols-2{grid-template-columns:1fr 1fr}
+.cols-3{grid-template-columns:1fr 1fr 1fr}
 .poolgrid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .cols-auto{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-@media (max-width:720px){.cols-2{grid-template-columns:1fr}}
+@media (max-width:720px){.cols-2,.cols-3{grid-template-columns:1fr}}
+@media (max-width:980px) and (min-width:721px){.cols-3{grid-template-columns:1fr 1fr}}
 .section-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
   margin:22px 2px 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 .section-h h2{margin:0;font-size:14.5px;font-weight:650}
@@ -172,9 +174,20 @@ details.mapblk>summary::-webkit-details-marker{display:none}
 details.mapblk>summary::after{content:'be';color:var(--muted);transition:transform .15s}
 details.mapblk[open]>summary::after{transform:rotate(180deg)}
 details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
-.mapbody{padding:2px 12px 10px}
+/* Two columns inside a map: openers on the left, the swaps seen there on the
+   right (the right half was dead space before). Collapses on narrow screens. */
+.mapbody{padding:2px 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:0 22px}
+.mapcol.swaps{border-left:1px solid var(--line);padding-left:20px}
+@media(max-width:820px){.mapbody{grid-template-columns:1fr}
+  .mapcol.swaps{border-left:none;padding-left:0;border-top:1px solid var(--line);margin-top:10px}}
 .seg{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);margin:10px 0 2px}
+/* A sub-map / phase separator is a heading; "then" is a note ON a row, so it must
+   not read as one - it is inline, lighter, and lower-case. */
+.then{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--faint);background:var(--surface2);border-radius:4px;padding:1px 5px;margin-right:6px}
+.swapline{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.arr{color:var(--faint)}
 .role-Tank{color:var(--tank)} .role-Damage{color:var(--damage)} .role-Support{color:var(--support)}
 .bg-Tank{background:var(--tank)} .bg-Damage{background:var(--damage)} .bg-Support{background:var(--support)}
 .pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:7px}
@@ -273,6 +286,16 @@ const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
 ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
+// Map lists everywhere read as a mode block at a time (all Control together, etc),
+// and within a mode the maps the league actually plays come first.
+const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
+const MAP_POP={};
+Object.values(DIVS).forEach(d=>d.matches.forEach(m=>m.games.forEach(g=>{
+  if(g.map) MAP_POP[g.map]=(MAP_POP[g.map]||0)+1; })));
+function modeRank(mp){ const i=MODE_ORDER.indexOf(MAP_CAT[mp]||''); return i<0?MODE_ORDER.length:i; }
+function mapCmp(a,b){ return modeRank(a)-modeRank(b) || (MAP_POP[b]||0)-(MAP_POP[a]||0)
+                          || a.localeCompare(b); }
+function sortMaps(names){ return names.slice().sort(mapCmp); }
 const roleVar = (r)=> ({Tank:'var(--tank)',Damage:'var(--damage)',Support:'var(--support)'}[r]||'var(--accent)');
 const winVar = (p)=> p>=58?'var(--good)': p>=42?'var(--mid)':'var(--bad)';
 
@@ -304,6 +327,22 @@ function roleRank(h){ const i=['Tank','Damage','Support'].indexOf(HERO_ROLE[h]);
 function byRole(heroes){ return heroes.slice().sort((a,b)=>
   roleRank(a)-roleRank(b) || String(a).localeCompare(b)); }
 function compRow(heroes){ return `<span class="comp">${byRole(heroes).map(h=>heroIcon(h)).join('')}</span>`; }
+// A comp change is only interesting in the heroes that moved - repeating the four
+// unchanged portraits buries the one that matters. null = no change at all.
+function compDelta(from,to){
+  const a=new Set(from), b=new Set(to);
+  const out=from.filter(h=>!b.has(h)), inn=to.filter(h=>!a.has(h));
+  return (out.length||inn.length)?{out,in:inn}:null;
+}
+function deltaHtml(d){ return `${compRow(d.out)}<span class="arr">&rarr;</span>${compRow(d.in)}`; }
+function swapLine(s){
+  const trig=(s.vs&&s.vs.length)
+    ? `<span class="faint">vs</span>${compRow(s.vs.slice(0,3))}<span class="arr">&rarr;</span>`
+    : '';
+  return `<div class="crow${s.count<=1?' thin':''}">`+
+    `<span class="swapline">${trig}${deltaHtml({out:s.out,in:s.in})}</span>`+
+    `<span class="rec">${s.count}x · ${s.kind==='core'?'comp change':'flex'}</span></div>`;
+}
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
 // Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
@@ -436,8 +475,13 @@ function aggregate(matches,team){
         // map win rate conditioned on a hero being banned out this map (by either team).
         const seenB=new Set();
         g.bans.forEach(b=>{ if(!b.hero||seenB.has(b.hero))return; seenB.add(b.hero);
-          const s=a.banHeroWin[b.hero]||(a.banHeroWin[b.hero]={games:0,wins:0,byThem:0,byOpp:0});
-          s.games++; if(won)s.wins++; if(b.team===team)s.byThem++; else if(b.team)s.byOpp++; });
+          const s=a.banHeroWin[b.hero]||(a.banHeroWin[b.hero]=
+            {games:0,wins:0,them:{games:0,wins:0},opp:{games:0,wins:0}});
+          s.games++; if(won)s.wins++;
+          // Who removed the hero changes what the number means: their own ban is a
+          // choice, the opponent's is something done TO them.
+          const by=b.team===team?s.them:(b.team?s.opp:null);
+          if(by){ by.games++; if(won)by.wins++; } });
         if(g.demo_code) a.replays.push({when:m.finished_at,opp:(m.f1===team?m.f2:m.f1),
           map:g.map,cat:g.map_category,gno:g.game_no,code:g.demo_code,won});
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
@@ -583,23 +627,34 @@ function renderScoutBody(t){
       w.appendChild(card);
     }
 
-    // 2. Hero pool - meaningful even when comp data is still one map.
-    const pool=(scout.hero_pool||[]).slice(0,14);
+    // 2. Hero pool, split by role - counted in ROUNDS, not maps: a hero played
+    // every round is a staple, one played for a single point is not, and counting
+    // maps flattens both to "1 map".
+    const pool=scout.hero_pool||[];
+    const nRounds=scout.rounds||0;
     if(pool.length){
-      w.appendChild(el(sectionH('Hero pool',`<span class="note">how often each hero appears</span>`)));
-      const card=el(`<div class="card"></div>`);
-      pool.forEach(h=>{
-        const pct=Math.round((h.pick_rate||0)*100);
-        card.appendChild(el(`<div class="crow"><span>${heroChip(h.hero)}</span>`+
-          `<span class="rec">${pct}% · ${h.games}/${nGames}</span></div>`));
+      w.appendChild(el(sectionH('Hero pool',
+        `<span class="note">rounds played · ${nRounds} round${nRounds===1?'':'s'} captured</span>`)));
+      const grid=el(`<div class="grid cols-3"></div>`);
+      ['Tank','Damage','Support'].forEach(role=>{
+        const rows=pool.filter(h=>(h.role||HERO_ROLE[h.hero])===role).slice(0,8);
+        const card=el(`<div class="card"></div>`);
+        card.appendChild(el(`<p class="eyebrow role-${role}">${role}</p>`));
+        if(!rows.length){ card.appendChild(el(`<p class="note">None captured.</p>`)); }
+        rows.forEach(h=>{
+          const pct=Math.round((h.pick_rate||0)*100);
+          card.appendChild(el(`<div class="crow"><span>${heroChip(h.hero)}</span>`+
+            `<span class="rec">${pct}% · ${h.rounds}/${nRounds}</span></div>`));
+        });
+        grid.appendChild(card);
       });
-      w.appendChild(card);
+      w.appendChild(grid);
     }
 
     // 3. Map scouting - collapsible per map; segments are attack/defend on
     // Escort+Hybrid, sub-maps on Control, one generic block otherwise.
     const maps=scout.maps||{};
-    const mapNames=Object.keys(maps).sort();
+    const mapNames=sortMaps(Object.keys(maps));
     if(mapNames.length){
       w.appendChild(el(sectionH('Map scouting',`<span class="note">click a map for captured detail</span>`)));
       mapNames.forEach(mp=>{
@@ -609,19 +664,28 @@ function renderScoutBody(t){
         const d=el(`<details class="mapblk"><summary><span>${esc(mp)} `+
           `<span class="faint">${esc(MAP_CAT[mp]||'')}</span></span>`+
           `<span class="rec">${mw}W-${ml}L</span></summary>`+
-          `<div class="mapbody"></div></details>`);
-        const body=d.querySelector('.mapbody');
+          `<div class="mapbody"><div class="mapcol opens"></div>`+
+          `<div class="mapcol swaps"></div></div></details>`);
+        const body=d.querySelector('.mapcol.opens');
         Object.keys(segs).forEach(seg=>{
           const both=segs[seg]||{};
           if(seg!=='all') body.appendChild(el(`<p class="seg">${esc(seg)}</p>`));
           (both.open||[]).slice(0,3).forEach(c=>body.appendChild(el(compLine(c))));
-          // Only show "settled" when they actually changed off the opener.
+          // Only show "settled" when they actually changed off the opener - and
+          // only the heroes that changed, since the rest is the row above it.
           const o=(both.open||[])[0], s=(both.settled||[])[0];
-          if(o&&s&&JSON.stringify(byRole(o.heroes))!==JSON.stringify(byRole(s.heroes))){
-            body.appendChild(el(`<p class="seg">settled into</p>`));
-            body.appendChild(el(compLine(s)));
+          const dl=o&&s?compDelta(o.heroes,s.heroes):null;
+          if(dl){
+            body.appendChild(el(`<div class="crow${thin(s.maps)}"><span class="swapline">`+
+              `<span class="then">then</span>${deltaHtml(dl)}</span>`+
+              `<span class="rec">${rec(s)}</span></div>`));
           }
         });
+        const sw=d.querySelector('.mapcol.swaps');
+        const mswaps=(entry.swaps||[]).slice(0,6);
+        sw.appendChild(el(`<p class="seg">swaps here</p>`));
+        if(mswaps.length){ mswaps.forEach(s=>sw.appendChild(el(swapLine(s)))); }
+        else { sw.appendChild(el(`<p class="note">No mid-map swaps captured.</p>`)); }
         w.appendChild(d);
       });
     }
@@ -631,15 +695,7 @@ function renderScoutBody(t){
     if(swaps.length){
       w.appendChild(el(sectionH('Common swaps',`<span class="note">what makes them change heroes</span>`)));
       const card=el(`<div class="card"></div>`);
-      swaps.forEach(s=>{
-        const trig=(s.vs&&s.vs.length)
-          ? `<span>vs ${s.vs.slice(0,3).map(h=>heroChip(h)).join('')}</span>`
-          : `<span class="faint">no clear trigger</span>`;
-        card.appendChild(el(`<div class="crow${thin(s.count)}">`+
-          `<span>${trig} <span class="faint">&rarr;</span> `+
-          `${compRow(s.out)} <span class="faint">&rarr;</span> ${compRow(s.in)}</span>`+
-          `<span class="rec">${s.count}x · ${s.kind==='core'?'comp change':'flex'}</span></div>`));
-      });
+      swaps.forEach(s=>card.appendChild(el(swapLine(s))));
       w.appendChild(card);
     }
 
@@ -669,7 +725,7 @@ function renderScoutBody(t){
   two.appendChild(banC);
   const mapC=el(`<div class="card"></div>`);
   mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
-  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wr:pctOf(v.wins,v.games)})).sort((a,b)=>b.games-a.games);
+  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
   mapC.appendChild(mrows.length?table(
     [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
      {k:'picks',label:'Picked',num:true},{k:'games',label:'Played',num:true},
@@ -680,10 +736,19 @@ function renderScoutBody(t){
 
   // Signature setups — maps THEY pick AND ban first on (a fully self-chosen draft).
   // A high win% on a repeated map+ban tells you it's a rehearsed strat to be ready for.
+  // Their captured opening comp on that map, when owscout has one: the map + first
+  // ban says what they chose, this says what they actually ran inside it.
+  const scoutMaps=(scout&&scout.maps)||{};
+  const openOn=mp=>{
+    const segs=(scoutMaps[mp]||{}).segments||{};
+    const best=Object.values(segs).map(b=>(b.open||[])[0]).filter(Boolean)
+      .sort((a,b)=>b.maps-a.maps)[0];
+    return best?`${compRow(best.heroes)}<span class="faint"> ${rec(best)}</span>`:'';
+  };
   const pfb=Object.entries(t.pickFirstBan).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',
-      games:v.games,wr:pctOf(v.wins,v.games),
+      games:v.games,wr:pctOf(v.wins,v.games),comp:openOn(m),
       ban:rank(v.bans).slice(0,2).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' ')}))
-    .sort((a,b)=>b.games-a.games||b.wr-a.wr);
+    .sort((a,b)=>mapCmp(a.map,b.map));
   const pfbG=pfb.reduce((s,r)=>s+r.games,0), pfbW=pfb.reduce((s,r)=>s+Math.round(r.wr*r.games/100),0);
   w.appendChild(el(sectionH('Signature setups',`<span class="note">maps they pick &amp; ban first on · self-chosen drafts</span>`)));
   if(pfb.length){
@@ -691,6 +756,7 @@ function renderScoutBody(t){
     w.appendChild(table(
       [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
        {k:'ban',label:'Their first ban',html:r=>r.ban},
+       {k:'comp',label:'What they run there',html:r=>r.comp||`<span class="faint">not captured</span>`},
        {k:'games',label:'Maps',num:true},
        {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], pfb));
   } else {
@@ -707,15 +773,23 @@ function renderScoutBody(t){
   }
 
   // Map win rate conditioned on a hero being banned out (by either team).
-  const bhw=Object.entries(t.banHeroWin).map(([h,v])=>({hero:h,role:HERO_ROLE[h]||'',
-      games:v.games,wr:pctOf(v.wins,v.games),wins:v.wins,byThem:v.byThem,byOpp:v.byOpp}))
-    .sort((a,b)=>b.games-a.games||b.wr-a.wr);
-  w.appendChild(el(sectionH('Win rate by banned hero',`<span class="note">map win % when this hero is banned out · either team</span>`)));
+  // One row per (hero, who banned it): banning a hero yourself and having it taken
+  // from you are different situations, and averaging them together hides both.
+  const bhw=[];
+  Object.entries(t.banHeroWin).forEach(([h,v])=>{
+    [['them',`${t.team} banned it`],['opp','Opponent banned it']].forEach(([k,label])=>{
+      const s=v[k]; if(!s.games) return;
+      bhw.push({hero:h,by:label,byk:k,games:s.games,wins:s.wins,wr:pctOf(s.wins,s.games),
+                tot:v.games});
+    });
+  });
+  bhw.sort((a,b)=>b.tot-a.tot||a.hero.localeCompare(b.hero)||a.byk.localeCompare(b.byk));
+  w.appendChild(el(sectionH('Win rate by banned hero',`<span class="note">map win % when this hero is banned out · split by who banned it</span>`)));
   if(bhw.length){
-    w.appendChild(el(`<p class="note" style="margin-top:0">How ${esc(t.team)} does on maps where a given hero is banned (removed for both teams). Low map counts are noisy — sort by <b>Maps</b> to find the reliable ones.</p>`));
+    w.appendChild(el(`<p class="note" style="margin-top:0">How ${esc(t.team)} does on maps where a given hero is banned (removed for both teams), split by whether they banned it or the opponent did. Low map counts are noisy — sort by <b>Maps</b> to find the reliable ones.</p>`));
     w.appendChild(table(
       [{k:'hero',label:'Banned hero',html:r=>heroChip(r.hero)},
-       {k:'by',label:'Banned by',html:r=>`<span class="faint">${r.byThem?`${r.byThem} them`:''}${r.byThem&&r.byOpp?' · ':''}${r.byOpp?`${r.byOpp} opp`:''}</span>`},
+       {k:'by',label:'Banned by',html:r=>`<span class="faint">${esc(r.by)}</span>`},
        {k:'games',label:'Maps',num:true},
        {k:'wins',label:'Won',num:true},
        {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], bhw));
@@ -733,9 +807,10 @@ function renderScoutBody(t){
      {k:'resp',label:`${esc(t.team)} replied with`,html:r=>r.resp}], cRows)
    :el(`<p class="note">No counter-bans in this window (needs the opponent to have banned first with both bans attributed).</p>`));
 
-  // Bans by map — split: on maps THEY picked, vs across all maps.
+  // Bans on maps they PICKED only. The all-maps version was dropped: on a map the
+  // opponent picked, the ban is a reaction, so it diluted the signal this shows.
   const banMapTable=(pm)=>{
-    const rows=Object.keys(pm).sort().map(mp=>({map:mp,cat:MAP_CAT[mp]||'',
+    const rows=sortMaps(Object.keys(pm)).map(mp=>({map:mp,cat:MAP_CAT[mp]||'',
       n:Object.values(pm[mp]).reduce((a,b)=>a+b,0),
       heroes:rank(pm[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}));
     return rows.length?table(
@@ -745,8 +820,6 @@ function renderScoutBody(t){
   };
   w.appendChild(el(sectionH('Bans on maps they pick',`<span class="note">what ${esc(t.team)} bans on maps they chose</span>`)));
   w.appendChild(banMapTable(t.perMapPick));
-  w.appendChild(el(sectionH('Bans by map (all maps)')));
-  w.appendChild(banMapTable(t.perMap));
   return w;
 }
 

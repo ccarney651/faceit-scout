@@ -71,3 +71,38 @@ def test_ban_response_shows_openings_when_hero_banned() -> None:
     assert len(rows) == 1
     assert rows[0]["banned"] == "MEI" and rows[0]["games"] == 2
     assert "ASHE" in rows[0]["opens"][0]["heroes"]
+
+
+def test_hero_pool_counts_rounds_not_maps() -> None:
+    """A hero played every round is a staple; one played for a single point is
+    not. Counting maps flattens both to '1 map' and loses that distinction."""
+    staple = ["ram", "soj", "mei", "luc", "kir"]
+    cameo = ["ram", "soj", "reaper", "luc", "kir"]   # reaper for one round only
+    details = [
+        _obs(1, "a", 0, staple, "control", "a", sub="Lighthouse", rnd=1, mn="Ilios"),
+        _obs(1, "a", 100, staple, "control", "a", sub="Ruins", rnd=2, mn="Ilios"),
+        _obs(1, "a", 200, cameo, "control", "a", sub="Well", rnd=3, mn="Ilios"),
+    ]
+    rep = team_scout(details, ROLES, NAMES)["Alpha"]
+    assert rep["rounds"] == 3
+    pool = {h["hero"]: h for h in rep["hero_pool"]}
+    assert pool["MEI"]["rounds"] == 2 and pool["REAPER"]["rounds"] == 1
+    assert pool["RAM"]["rounds"] == 3 and pool["RAM"]["pick_rate"] == 1.0
+    assert pool["RAM"]["role"] == "tank"          # drives the per-role split
+
+
+def test_swaps_are_reported_per_map() -> None:
+    """The map card shows the swaps seen on THAT map, so they must be bucketed by
+    map and not folded into the team-wide total."""
+    base = ["ram", "soj", "mei", "luc", "kir"]
+    swapped = ["ram", "soj", "reaper", "luc", "kir"]
+    details = [
+        _obs(1, "a", 0, base, "hybrid", "a"),                       # King's Row
+        _obs(1, "a", 100, swapped, "hybrid", "a"),                  # swap here
+        _obs(2, "a", 0, base, "control", "a", sub="Ruins", mn="Ilios"),
+    ]
+    maps = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]
+    kings = maps["King's Row"]["swaps"]
+    assert len(kings) == 1
+    assert kings[0]["out"] == ["MEI"] and kings[0]["in"] == ["REAPER"]
+    assert maps["Ilios"]["swaps"] == []
