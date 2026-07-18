@@ -31,7 +31,7 @@ from .faceit import (
     resolve_team_id,
     team_ids_for_map,
 )
-from .models import STATE_ALIVE, STATE_DEAD, HeroRef, Rect, RoiProfile
+from .models import STATE_ALIVE, HeroRef, Rect, RoiProfile
 
 log = logging.getLogger("owscout.match")
 
@@ -47,10 +47,6 @@ log = logging.getLogger("owscout.match")
 # 0.55 resolves both while rejecting wrong heroes and empty slots; observer refs,
 # as they accumulate, sit comfortably above it.
 DEFAULT_CONFIDENCE_FLOOR = 0.55
-
-# Mean-saturation below this routes the ROI to the 'dead' (desaturated) ref set
-# before matching (SPEC §8.3). Tunable; the gate is where you learn the value.
-DEFAULT_DEAD_SATURATION = 40.0
 
 # NOTE (operator-confirmed, 2026-07-15): the observer HUD slot order is NOT fixed
 # by role — it varies frame to frame. So we do NOT pre-assign an expected role by

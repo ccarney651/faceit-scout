@@ -524,7 +524,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 
     from .context import derive_code_context
     from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
-    from .match import crop_roi, face_subrect, make_template_scorer, match_frame, pad_rect
+    from .match import face_subrect, make_template_scorer, match_frame
 
     try:
         import keyboard

@@ -494,7 +494,7 @@ function makeRecency(total, currentN, onChange, sliderMax){
 /* ---------- aggregation over a set of matches ---------- */
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
-  const a={bans:{},banRoles:{},mapsPicked:{},perMap:{},perMapPick:{},counter:{},mapStats:{},
+  const a={bans:{},banRoles:{},mapsPicked:{},perMapPick:{},counter:{},mapStats:{},
            firstBans:{},firstBanGames:0,pickFirstBan:{},banHeroWin:{},games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
@@ -520,7 +520,6 @@ function aggregate(matches,team){
           map:g.map,cat:g.map_category,gno:g.game_no,code:g.demo_code,won});
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
         if(mine){ inc(a.bans,mine.hero); if(mine.role)inc(a.banRoles,mine.role);
-          (a.perMap[g.map]=a.perMap[g.map]||{}); inc(a.perMap[g.map],mine.hero);
           if(g.map_picked_by===team){ (a.perMapPick[g.map]=a.perMapPick[g.map]||{}); inc(a.perMapPick[g.map],mine.hero); }
           if(mine.order===1){ a.firstBanGames++; inc(a.firstBans,mine.hero); }
           // their pick + they ban first: a self-chosen setup — surfaces repeated strats.

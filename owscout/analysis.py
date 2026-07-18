@@ -26,9 +26,8 @@ from typing import Optional, Sequence
 Roles = dict[str, str]
 
 
-# Map categories with no attack/defend phase — a mirrored fight both ways.
-_MIRRORED_CATEGORIES = {"control", "flashpoint", "push"}
-# Categories that have an attacking and a defending team.
+# Categories that have an attacking and a defending team. Everything else
+# (Control/Flashpoint/Push) is a mirrored fight and therefore has no phase.
 _PHASED_CATEGORIES = {"escort", "hybrid", "assault"}
 
 
