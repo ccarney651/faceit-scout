@@ -8,7 +8,7 @@ import pytest
 from owscout.calibrate import build_profile
 from owscout.db import Database
 from owscout.errors import CaptureError
-from owscout.models import Anchor, Rect
+from owscout.models import Anchor, Rect, RoiProfile
 from owscout.refs import export_ref_bundle, import_ref_bundle
 
 
@@ -19,7 +19,7 @@ def db(tmp_path: Path) -> Iterator[Database]:
     database.close()
 
 
-def _profile(w: int = 2560, h: int = 1440):
+def _profile(w: int = 2560, h: int = 1440) -> RoiProfile:
     return build_profile(
         resolution_w=w, resolution_h=h, hud_variant="default", team_size=5,
         left_strip=Rect(100, 40, 500, 60), right_strip=Rect(1960, 40, 500, 60),
