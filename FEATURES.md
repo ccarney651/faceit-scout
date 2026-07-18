@@ -362,6 +362,17 @@ Contributions are self-describing: they carry any operator-added heroes they
 reference, so a build server merges with nothing but the FACEIT roster and the
 files themselves.
 
+## The curator override
+
+First-wins' honest cost is that quality tracks who was fastest: a bad first
+submission (wrong left team, stale calibration) locks a map. The escape hatch is
+`data/captures/overrides.json` — a committed list of `{match_id, game_no, prefer,
+reason}` entries that reassign one map to a named contributor's view. Because it
+is a committed file, using it is an auditable act only the repo owner can merge,
+not a hidden knob. An override naming a contributor with no view of that map
+falls back to first-wins rather than making the map vanish, and a malformed file
+degrades to first-wins rather than blocking the build.
+
 ---
 
 # Part 3 — The scouting page, section by section

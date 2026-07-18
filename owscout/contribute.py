@@ -156,7 +156,14 @@ def load_contribution(path: str | Path) -> dict[str, Any]:
     return data
 
 
-def merge_first_wins(contributions: Sequence[Mapping[str, Any]]) -> MergeResult:
+# Reserved filenames in the contributions directory that are NOT contributions.
+OVERRIDES_FILE = "overrides.json"
+
+
+def merge_first_wins(
+    contributions: Sequence[Mapping[str, Any]],
+    overrides: Optional[Mapping[MapKey, str]] = None,
+) -> MergeResult:
     """Combine contributions in PRIORITY ORDER (earliest submission first).
 
     Whoever submits a map first owns it. That contributor may update their own
@@ -164,13 +171,23 @@ def merge_first_wins(contributions: Sequence[Mapping[str, Any]]) -> MergeResult:
     away, which is the opposite of the intent. Anyone else's view of an already
     claimed map is ignored and recorded.
 
+    ``overrides`` is the curator's escape hatch for exactly the weakness of
+    first-wins: quality becomes a function of who was fastest, so a bad first
+    submission (wrong left team, stale calibration) locks a map. An override
+    reassigns one map to a named contributor's view. It lives in a committed
+    file, so using it is an auditable act, not a hidden knob — and if the named
+    contributor never supplied that map, ownership falls back to first-wins
+    rather than making the map disappear.
+
     Ordering is the caller's job precisely because it must not come from the
     files: a contributor supplies their own timestamps, and a clock can drift or
     be set deliberately. Use commit date or server receipt time.
     """
-    maps: dict[MapKey, dict[str, Any]] = {}
-    owner: dict[MapKey, str] = {}
-    ignored: list[tuple[str, MapKey]] = []
+    # Every contributor's latest view of every map (self-update folds in here),
+    # plus who arrived when. Ownership is decided AFTER collection, which is
+    # what lets an override fall back safely.
+    views: dict[MapKey, dict[str, dict[str, Any]]] = {}
+    arrival: dict[MapKey, list[str]] = {}
 
     for contrib in contributions:
         who = str(contrib["contributor"])
@@ -179,12 +196,41 @@ def merge_first_wins(contributions: Sequence[Mapping[str, Any]]) -> MergeResult:
                 log.warning("%s: map without a FACEIT identity, skipped", who)
                 continue
             key = MapKey(str(m["match_id"]), int(m["game_no"]))
-            claimed = owner.setdefault(key, who)
-            if claimed != who:
-                ignored.append((who, key))
-                continue
-            maps[key] = dict(m, contributor=who)   # own re-submission overwrites
+            views.setdefault(key, {})[who] = dict(m, contributor=who)
+            order = arrival.setdefault(key, [])
+            if who not in order:
+                order.append(who)
+
+    maps: dict[MapKey, dict[str, Any]] = {}
+    owner: dict[MapKey, str] = {}
+    ignored: list[tuple[str, MapKey]] = []
+    for key, by_who in views.items():
+        preferred = (overrides or {}).get(key)
+        if preferred is not None and preferred not in by_who:
+            log.warning("override for %s prefers %r, who has no view of it - "
+                        "falling back to first-wins", key, preferred)
+            preferred = None
+        winner = preferred or arrival[key][0]
+        owner[key] = winner
+        maps[key] = by_who[winner]
+        ignored.extend((who, key) for who in arrival[key] if who != winner)
     return MergeResult(maps=maps, owner=owner, ignored=ignored)
+
+
+def load_overrides(directory: str | Path) -> dict[MapKey, str]:
+    """The curator's committed override list, or {} when absent/unreadable. A
+    malformed overrides file must degrade to first-wins, not block the build."""
+    path = Path(directory) / OVERRIDES_FILE
+    if not path.is_file():
+        return {}
+    try:
+        with path.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        return {MapKey(str(o["match_id"]), int(o["game_no"])): str(o["prefer"])
+                for o in data.get("overrides", [])}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        log.warning("ignoring malformed %s: %s", path, exc)
+        return {}
 
 
 def to_obs_details(maps: Mapping[MapKey, Mapping[str, Any]]) -> list[ObsDetail]:
@@ -248,6 +294,7 @@ def to_obs_rows(
 def merged_payload(
     contributions: Sequence[Mapping[str, Any]],
     hero_roles: Mapping[str, str], hero_names: Mapping[str, str],
+    overrides: Optional[Mapping[MapKey, str]] = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
@@ -265,7 +312,7 @@ def merged_payload(
             if h.get("role"):
                 roles[guid] = str(h["role"])
 
-    merged = merge_first_wins(contributions)
+    merged = merge_first_wins(contributions, overrides=overrides)
     payload = dashboard_comps(to_obs_rows(merged.maps, roles, names))
     report = team_scout(to_obs_details(merged.maps), roles, names)
     teams = payload["teams"]
@@ -283,7 +330,9 @@ def contribution_files(directory: str | Path) -> list[Path]:
     submission order (which decides who owns a contested map) should order by
     commit date instead — see :func:`merge_first_wins`."""
     d = Path(directory)
-    return sorted(d.glob("*.json")) if d.is_dir() else []
+    if not d.is_dir():
+        return []
+    return sorted(p for p in d.glob("*.json") if p.name != OVERRIDES_FILE)
 
 
 def git_submission_order(paths: Iterable[Path]) -> list[Path]:

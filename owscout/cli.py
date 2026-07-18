@@ -441,10 +441,11 @@ def cmd_contribute_export(args: argparse.Namespace) -> int:
 def cmd_contribute_merge(args: argparse.Namespace) -> int:
     """Merge every contributor file into the published payload (first-wins)."""
     import json as _json
-    from .contribute import merged_payload, resolve_contributions
+    from .contribute import load_overrides, merged_payload, resolve_contributions
     from .faceit import connect_ro, hero_roles as load_roles, load_heroes
 
     contribs = resolve_contributions(args.dir, use_git_order=not args.name_order)
+    overrides = load_overrides(args.dir)
     if not contribs:
         print(f"no contribution files in {args.dir}", file=sys.stderr)
         return 2
@@ -453,10 +454,12 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
         names = {h.guid: h.name for h in load_heroes(fdb)}
     # No owscout DB needed: contributions declare their own custom heroes, so a
     # build server can merge with nothing but the faceit roster and the files.
-    payload = merged_payload(contribs, roles, names)
+    payload = merged_payload(contribs, roles, names, overrides=overrides)
     with open(args.out, "w", encoding="utf-8") as fh:
         _json.dump(payload, fh, indent=2)
     teams = cast("dict[str, object]", payload["teams"])
+    if overrides:
+        print(f"  {len(overrides)} curator override(s) in effect")
     print(f"merged {payload['maps_merged']} map(s) from "
           f"{len(payload['contributors'])} contributor(s) -> {args.out} "
           f"({len(teams)} team(s))")
