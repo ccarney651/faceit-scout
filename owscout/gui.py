@@ -422,13 +422,13 @@ class _App:  # pragma: no cover - GUI runtime only
         self._run(go)
 
     def _publish(self) -> None:
-        from .derive import dashboard_comps
+        from .scout import scout_payload
         import json
-        self._emit("publish: exporting captured comps …")
+        self._emit("publish: exporting captured comps + scouting report …")
 
         def go() -> None:
             with self._open_db() as db:
-                payload = dashboard_comps(db.resolved_observations())
+                payload = scout_payload(db, self.faceit_var.get())
             with open("owscout_comps.json", "w", encoding="utf-8") as fh:
                 json.dump(payload, fh, indent=2)
             teams = len(payload["teams"])

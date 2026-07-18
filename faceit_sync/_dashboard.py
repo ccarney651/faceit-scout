@@ -550,6 +550,28 @@ function renderScoutBody(t){
     }
   }
 
+  // Opening comps by map + segment (attack/defend, control sub-map) — what they
+  // start each map/point on, from the owscout scouting report.
+  const scout=oc&&oc.scout;
+  if(scout&&scout.maps&&Object.keys(scout.maps).length){
+    w.appendChild(el(sectionH('Opening comps by map',`<span class="note">what they start each map / point on · low n, directional</span>`)));
+    Object.keys(scout.maps).sort().forEach(mp=>{
+      const card=el(`<div class="card" style="margin-bottom:8px"></div>`);
+      card.appendChild(el(`<p class="eyebrow">${esc(mp)} <span class="faint">${esc(MAP_CAT[mp]||'')}</span></p>`));
+      const segs=scout.maps[mp];
+      Object.keys(segs).forEach(seg=>{
+        if(seg!=='all') card.appendChild(el(`<p class="note" style="margin:8px 0 2px">${esc(seg)}</p>`));
+        segs[seg].slice().sort((a,b)=>(b.maps-a.maps)||(b.win_rate-a.win_rate)).forEach(c=>{
+          const chips=c.heroes.map(h=>heroChip(h)).join(' ');
+          const rec=`${c.wins}W-${c.losses}L`;
+          card.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
+            `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${rec}</span></div>`));
+        });
+      });
+      w.appendChild(card);
+    });
+  }
+
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
   const banC=el(`<div class="card"></div>`);

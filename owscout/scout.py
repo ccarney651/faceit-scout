@@ -15,6 +15,29 @@ from .analysis import CompFamily, CompInstance, Roles, cluster_comps, phase_of
 from .models import ObsDetail
 
 
+def scout_payload(db: Any, faceit_db_path: str) -> dict[str, Any]:
+    """The full owscout_comps.json payload: the existing per-team comp summary
+    (derive.dashboard_comps) enriched with each team's scouting report under
+    ``teams[team]["scout"]``. Reads roles/names from faceit + custom heroes."""
+    from .derive import dashboard_comps
+    from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+
+    payload = dashboard_comps(db.resolved_observations())
+    with connect_ro(faceit_db_path) as fdb:
+        roles = load_roles(fdb)
+        names = {h.guid: h.name for h in load_heroes(fdb)}
+    for h in db.list_custom_heroes():
+        names[h.guid] = h.name
+        if h.role:
+            roles[h.guid] = h.role
+    report = team_scout(db.observation_details(), roles, names)
+    teams = payload["teams"]
+    assert isinstance(teams, dict)
+    for team, r in report.items():
+        teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
+    return payload
+
+
 def _segment(d: ObsDetail) -> Optional[str]:
     """The scouting segment for an observation: 'attack'/'defend' (Escort/Hybrid),
     else the control sub-map, else None (single-geometry map)."""
