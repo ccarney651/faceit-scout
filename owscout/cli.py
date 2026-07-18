@@ -337,6 +337,29 @@ def cmd_review(args: argparse.Namespace) -> int:
 
 def cmd_drafts(args: argparse.Namespace) -> int:
     with Database(_db_path(args)) as db:
+        if args.fix is not None:
+            map_id_s, side, wrong, right = args.fix
+            if side not in ("a", "b"):
+                print("error: SIDE must be 'a' or 'b'", file=sys.stderr)
+                return 2
+            from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+            with connect_ro(_faceit_db_path(args)) as fdb:
+                heroes = load_heroes(fdb) + db.list_custom_heroes()
+                roles = load_roles(fdb)
+            for h in db.list_custom_heroes():
+                if h.role:
+                    roles[h.guid] = h.role
+            by_name = {h.name.lower(): h.guid for h in heroes}
+            guid_to_name = {h.guid: h.name for h in heroes}
+            wg, rg = by_name.get(wrong.lower()), by_name.get(right.lower())
+            if not wg or not rg:
+                print(f"error: unknown hero {wrong!r} or {right!r}", file=sys.stderr)
+                return 2
+            n = db.correct_hero_in_map(int(map_id_s), side, wg, rg,
+                                       hero_roles=roles, hero_names=guid_to_name)
+            print(f"fixed {wrong} -> {right} on side {side} of map {map_id_s} "
+                  f"({n} observation(s)).")
+            return 0
         if args.finalize is not None:
             db.finalize_map(args.finalize)
             print(f"finalized map {args.finalize} - now included in exports.")
@@ -746,6 +769,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="finalize a draft (greenlight -> included in exports)")
     dr.add_argument("--discard", type=int, default=None, metavar="MAP_ID",
                     help="delete a draft map and its observations")
+    dr.add_argument("--fix", nargs=4, default=None,
+                    metavar=("MAP_ID", "SIDE", "WRONG", "RIGHT"),
+                    help="fix a misread: replace hero WRONG with RIGHT on SIDE (a/b) "
+                         "of MAP_ID (e.g. --fix 8 a Illari Mauga)")
     dr.set_defaults(func=cmd_drafts)
 
     her = sub.add_parser("heroes", help="add/list operator-added heroes (new OW2 releases)")

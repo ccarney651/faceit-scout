@@ -794,6 +794,47 @@ class Database:
                  r["sub_map"], r["round_no"], r["conf"]))
         return out
 
+    def correct_hero_in_map(
+        self, map_instance_id: int, side: str, wrong_guid: str, right_guid: str,
+        *, hero_roles: dict[str, str], hero_names: dict[str, str],
+    ) -> int:
+        """Fix a systematic misread: replace ``wrong_guid`` with ``right_guid`` in
+        every slot on ``side`` of this map, re-canonicalising each affected
+        observation's comp. Returns the number of observations changed. The whole
+        point of Review — one action fixes a hero the matcher got wrong."""
+        import json
+
+        from .comps import canonical_comp
+
+        changed = 0
+        with self.transaction() as c:
+            obs_ids = [int(r["id"]) for r in c.execute(
+                "SELECT id FROM comp_observations WHERE map_instance_id = ? AND side = ?",
+                (map_instance_id, side)).fetchall()]
+            for oid in obs_ids:
+                n = c.execute(
+                    "UPDATE comp_slots SET hero_guid = ? "
+                    "WHERE observation_id = ? AND hero_guid = ?",
+                    (right_guid, oid, wrong_guid)).rowcount
+                if not n:
+                    continue
+                changed += 1
+                guids = [s["hero_guid"] for s in c.execute(
+                    "SELECT hero_guid FROM comp_slots WHERE observation_id = ? "
+                    "ORDER BY slot_index", (oid,)).fetchall()]
+                if guids and all(g is not None for g in guids):
+                    comp = canonical_comp(guids, hero_roles, hero_names)
+                    c.execute(
+                        """INSERT INTO comps (comp_id, hero_guids_json, hero_names_sorted,
+                               tank_count, damage_count, support_count, team_size)
+                           VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(comp_id) DO NOTHING""",
+                        (comp.comp_id, json.dumps(comp.hero_guids), comp.hero_names_sorted,
+                         comp.tank_count, comp.damage_count, comp.support_count, comp.team_size))
+                    c.execute(
+                        "UPDATE comp_observations SET comp_id = ?, resolved = 1 WHERE id = ?",
+                        (comp.comp_id, oid))
+        return changed
+
     def finalize_map(self, map_instance_id: int) -> None:
         """Greenlight a reviewed map: mark it finalized (enters exports) and its
         code captured. Idempotent."""

@@ -770,9 +770,28 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
 
         self.win = tk.Toplevel(app.root)
         self.win.title("Review captured maps")
-        self.win.geometry("720x460")
+        self.win.geometry("760x560")
         self.win.transient(app.root)
         pad = {"padx": 10, "pady": 6}
+
+        # Load the hero roster (faceit + operator-added) for the correction pickers.
+        self.name_to_guid: dict[str, str] = {}
+        self.hero_roles: dict[str, str] = {}
+        self.hero_names: dict[str, str] = {}
+        try:
+            from .faceit import connect_ro, hero_roles as _load_roles, load_heroes
+            with self._db() as db:
+                customs = db.list_custom_heroes()
+                with connect_ro(self.app.faceit_var.get()) as fdb:
+                    heroes = load_heroes(fdb) + customs
+                    self.hero_roles = _load_roles(fdb)
+            for h in customs:
+                if h.role:
+                    self.hero_roles[h.guid] = h.role
+            self.name_to_guid = {h.name: h.guid for h in heroes}
+            self.hero_names = {h.guid: h.name for h in heroes}
+        except Exception as exc:  # noqa: BLE001
+            self.app._emit(f"review: couldn't load hero list for corrections ({exc}).")
 
         tk.Label(self.win, justify="left", anchor="w", fg="#222", font=("Segoe UI", 9),
                  text="Captured maps are DRAFTS. Check the comps, then Finalize to send "
@@ -791,6 +810,24 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
                               font=("Consolas", 10))
         self.detail.pack(side="left", fill="both", expand=True, padx=(10, 0))
 
+        # Fix a misread on the selected map — replaces a hero across a side.
+        hero_list = sorted(self.name_to_guid)
+        corr = ttk.LabelFrame(self.win, text="Fix a misread (selected map)")
+        corr.pack(fill="x", **pad)
+        ttk.Label(corr, text="Side").grid(row=0, column=0, padx=4, pady=4)
+        self.fix_side = tk.StringVar(value="a (left)")
+        ttk.Combobox(corr, textvariable=self.fix_side, values=["a (left)", "b (right)"],
+                     state="readonly", width=9).grid(row=0, column=1, padx=4)
+        ttk.Label(corr, text="wrong").grid(row=0, column=2, padx=4)
+        self.fix_wrong = tk.StringVar()
+        ttk.Combobox(corr, textvariable=self.fix_wrong, values=hero_list,
+                     width=16).grid(row=0, column=3, padx=4)
+        ttk.Label(corr, text="→ right").grid(row=0, column=4, padx=4)
+        self.fix_right = tk.StringVar()
+        ttk.Combobox(corr, textvariable=self.fix_right, values=hero_list,
+                     width=16).grid(row=0, column=5, padx=4)
+        ttk.Button(corr, text="Fix", command=self._fix_hero).grid(row=0, column=6, padx=6)
+
         btns = ttk.Frame(self.win)
         btns.pack(fill="x", **pad)
         ttk.Button(btns, text="↻ Refresh", command=self._refresh).pack(side="left")
@@ -799,6 +836,24 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         ttk.Button(btns, text="🗑 Discard draft", command=self._discard).pack(side="left")
 
         self._refresh()
+
+    def _fix_hero(self) -> None:
+        d = self._selected()
+        if d is None:
+            self._set_detail("Pick a draft map first.")
+            return
+        side = self.fix_side.get()[0]
+        wg = self.name_to_guid.get(self.fix_wrong.get().strip())
+        rg = self.name_to_guid.get(self.fix_right.get().strip())
+        if not wg or not rg:
+            self._set_detail("Pick both a wrong and a right hero from the lists.")
+            return
+        with self._db() as db:
+            n = db.correct_hero_in_map(d.id, side, wg, rg, hero_roles=self.hero_roles,
+                                       hero_names=self.hero_names)
+        self.app._emit(f"review: fixed {self.fix_wrong.get()} → {self.fix_right.get()} "
+                       f"on side {side} ({n} observation(s)).")
+        self._show_selected()
 
     def _db(self) -> Database:
         return Database(self.app.db_var.get())
