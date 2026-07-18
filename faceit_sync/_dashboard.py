@@ -411,7 +411,10 @@ function matchCard(m){
   const w1=m.winner==='faction1',w2=m.winner==='faction2';
   c.appendChild(el(`<div class="hd"><div class="teams"><span class="${w1?'win':'lose'}">${esc(m.f1||'?')}</span>`+
     `<span class="score">${esc(m.series)}</span><span class="${w2?'win':'lose'}">${esc(m.f2||'?')}</span></div>`+
-    `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
+    `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
+    // When it was played: a comp read from a 6-week-old match is weaker evidence
+    // than last week's, and nothing else on the card says how old it is.
+    `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
   m.games.filter(g=>g.map).forEach(g=>{
     const gEl=el(`<div class="game"></div>`);
     gEl.appendChild(el(`<div class="game-hd"><span class="gno">M${g.game_no}</span>`+
