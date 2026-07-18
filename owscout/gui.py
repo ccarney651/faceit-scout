@@ -239,6 +239,8 @@ class _App:  # pragma: no cover - GUI runtime only
             value=os.getenv("OWSCOUT_CONTRIBUTOR") or os.getenv("USERNAME") or "operator")
         ttk.Entry(pub, textvariable=self.contributor_var, width=14).grid(
             row=0, column=3, padx=(0, 6), pady=6, sticky="w")
+        ttk.Button(pub, text="Sync settings…", command=self._open_sync_settings).grid(
+            row=0, column=4, padx=(0, 6), pady=6, sticky="w")
         ttk.Label(pub, text="Captures are drafts until you review + finalize them; "
                             "only finalized maps are exported.",
                   foreground="#555").grid(row=1, column=0, columnspan=2, padx=6, sticky="w")
@@ -637,6 +639,52 @@ class _App:  # pragma: no cover - GUI runtime only
                 self._emit(f"export failed: {exc}")
         self._run(go)
 
+    def _sync_config(self) -> dict[str, str]:
+        """sync.repo / sync.token from app_settings ('' when unset)."""
+        try:
+            with self._open_db() as db:
+                got = db.get_settings("sync.")
+        except Exception:  # noqa: BLE001
+            got = {}
+        return {"repo": got.get("sync.repo", "ccarney651/faceit-scout"),
+                "token": got.get("sync.token", "")}
+
+    def _open_sync_settings(self) -> None:
+        """One-time setup that turns Publish into publish-AND-upload. The token
+        is a fine-grained GitHub PAT with Contents write on the site repo; it
+        lives in the local app_settings table, never in any shared file."""
+        import tkinter as tk
+        from tkinter import ttk
+        cfg = self._sync_config()
+        win = tk.Toplevel(self.root)
+        win.title("Sync settings")
+        win.transient(self.root)
+        ttk.Label(win, wraplength=460, justify="left", foreground="#555",
+                  text="With these set, 'Publish my captures' also UPLOADS your file "
+                       "to the site's repo - the site rebuilds itself within a couple "
+                       "of minutes. Ask the curator for an upload token (a GitHub "
+                       "fine-grained PAT with Contents write access to the repo)."
+                  ).grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="w")
+        repo_var = tk.StringVar(value=cfg["repo"])
+        tok_var = tk.StringVar(value=cfg["token"])
+        ttk.Label(win, text="Repo (owner/name)").grid(row=1, column=0, padx=10, pady=3, sticky="w")
+        ttk.Entry(win, textvariable=repo_var, width=36).grid(row=1, column=1, padx=10, pady=3, sticky="w")
+        ttk.Label(win, text="Upload token").grid(row=2, column=0, padx=10, pady=3, sticky="w")
+        ttk.Entry(win, textvariable=tok_var, width=36, show="*").grid(row=2, column=1, padx=10, pady=3, sticky="w")
+
+        def save() -> None:
+            with self._open_db() as db:
+                db.set_settings({"sync.repo": repo_var.get().strip(),
+                                 "sync.token": tok_var.get().strip()})
+            state = "ON" if tok_var.get().strip() else "OFF (no token)"
+            self._emit(f"sync settings saved - auto-upload {state}.")
+            win.destroy()
+
+        btns = ttk.Frame(win)
+        btns.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="w")
+        ttk.Button(btns, text="Save", command=save).pack(side="left")
+        ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="left", padx=8)
+
     def _load_keybinds(self) -> None:
         """Read the operator's keybinds (defaults if never changed) and show them."""
         from .capture import SETTING_PREFIX, resolve_keybinds
@@ -802,10 +850,28 @@ class _App:  # pragma: no cover - GUI runtime only
                 self._emit(f"publish: local preview dashboard.html rebuilt ({n} division(s)).")
             except Exception as exc:  # noqa: BLE001
                 self._emit(f"publish: JSON written; local preview skipped ({exc}).")
-            if getattr(sys, "frozen", False):
+            cfg = self._sync_config()
+            if cfg["token"]:
+                # Zero-friction path: upload straight into the site repo. The
+                # push trigger rebuilds the site off data/captures/ commits.
+                try:
+                    from .contribute import push_contribution
+                    with open(out, "rb") as fh:
+                        payload_bytes = fh.read()
+                    res = push_contribution(
+                        payload_bytes, repo=cfg["repo"], token=cfg["token"],
+                        path=f"{CONTRIB_DIR}/{who}.json")
+                    self._emit(f"publish: UPLOADED to {cfg['repo']} "
+                               f"({res['action']}) - the site rebuilds itself "
+                               "within a couple of minutes.")
+                except Exception as exc:  # noqa: BLE001 - the local file is safe
+                    self._emit(f"publish: upload failed - {exc}")
+                    self._emit(f"publish: your file is safe at {out}; fix Sync "
+                               "settings and press Publish again.")
+            elif getattr(sys, "frozen", False):
                 self._emit(f"publish: now SEND {out} to your curator (Discord/"
-                           "email) - they add it to the site and your maps go "
-                           "live on the next build.")
+                           "email), or ask them for an upload token and set it "
+                           "under Sync settings to make this automatic.")
             else:
                 self._emit(f"publish: commit + push {CONTRIB_DIR}/ to update the "
                            "live site (the build merges it into docs/index.html).")

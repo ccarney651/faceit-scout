@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: "0 22 * * *"      # daily at 22:00 UTC (10pm GMT)
   workflow_dispatch: {}         # lets you run it on demand from the Actions tab
+  push:
+    paths:
+      - "data/captures/**"      # a contribution upload rebuilds the site in ~2min
 
 permissions:
   contents: write               # allow committing the rebuilt dashboard

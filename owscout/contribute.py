@@ -422,6 +422,73 @@ def merged_payload(
     return payload
 
 
+def push_contribution(
+    content: bytes,
+    *,
+    repo: str,
+    token: str,
+    path: str,
+    branch: str = "main",
+    session: Any = None,
+) -> dict[str, str]:
+    """Upload one contributor file straight into the site's repo via the GitHub
+    Contents API - one HTTPS call, no git install on the contributing machine.
+
+    The repo IS the upload server: commits land in data/captures/, the site
+    workflow rebuilds on that path, and every downstream rule (first-wins by
+    commit date, FACEIT validation, curator overrides) applies to an API commit
+    exactly as it would to a hand-made one. Full git history stays the audit
+    trail, so a bad upload is a revert, never a loss.
+
+    Returns {"action": "created"|"updated", "commit": sha}. Raises RuntimeError
+    with a plain-language hint on the failures teammates will actually hit
+    (bad token, no access, wrong repo name).
+    """
+    if session is None:
+        import requests
+        session = requests.Session()
+    base = f"https://api.github.com/repos/{repo}/contents/{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "owscout-sync",
+    }
+    # Updating an existing file requires its current blob sha; absent file = create.
+    sha: Optional[str] = None
+    got = session.get(base, headers=headers, params={"ref": branch}, timeout=30)
+    if got.status_code == 200:
+        sha = got.json().get("sha")
+    elif got.status_code not in (404,):
+        _raise_push_error(got, repo)
+
+    import base64
+    body: dict[str, Any] = {
+        "message": f"contribution: {Path(path).stem}",
+        "content": base64.b64encode(content).decode("ascii"),
+        "branch": branch,
+    }
+    if sha:
+        body["sha"] = sha
+    put = session.put(base, headers=headers, json=body, timeout=30)
+    if put.status_code not in (200, 201):
+        _raise_push_error(put, repo)
+    out = put.json()
+    return {"action": "updated" if sha else "created",
+            "commit": str((out.get("commit") or {}).get("sha", ""))}
+
+
+def _raise_push_error(resp: Any, repo: str) -> None:
+    hints = {
+        401: "the sync token is wrong or expired - paste a fresh one in Sync settings",
+        403: "the token does not have Contents write access to " + repo,
+        404: f"repo {repo!r} not found, or the token cannot see it",
+        409: "the file changed mid-upload - press Publish again",
+    }
+    hint = hints.get(resp.status_code, "")
+    raise RuntimeError(
+        f"upload failed (HTTP {resp.status_code})" + (f": {hint}" if hint else ""))
+
+
 def contribution_files(directory: str | Path) -> list[Path]:
     """Contributor files in a stable, name-sorted order. Callers that need true
     submission order (which decides who owns a contested map) should order by

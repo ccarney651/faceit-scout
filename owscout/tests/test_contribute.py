@@ -176,3 +176,66 @@ def test_rejection_is_per_view_not_per_map() -> None:
                              known=_known())
     assert payload["maps_rejected"] == 1
     assert payload["maps_merged"] == 1                      # bob's view survived
+
+
+class _FakeResp:
+    def __init__(self, status: int, body: dict[str, Any] | None = None):
+        self.status_code = status
+        self._body: dict[str, Any] = body or {}
+
+    def json(self) -> dict[str, Any]:
+        return self._body
+
+
+class _FakeSession:
+    """Records the exact requests the client would send - no network."""
+
+    def __init__(self, get_status: int = 404, get_body: dict[str, Any] | None = None):
+        self.calls: list[tuple[Any, ...]] = []
+        self._get = _FakeResp(get_status, get_body)
+
+    def get(self, url: str, **kw: Any) -> _FakeResp:
+        self.calls.append(("GET", url, kw))
+        return self._get
+
+    def put(self, url: str, **kw: Any) -> _FakeResp:
+        self.calls.append(("PUT", url, kw))
+        return _FakeResp(201, {"commit": {"sha": "abc123"}})
+
+
+def test_push_creates_a_new_contribution_file() -> None:
+    from owscout.contribute import push_contribution
+    sess = _FakeSession(get_status=404)
+    out = push_contribution(b'{"format":1}', repo="o/r", token="tok",
+                            path="data/captures/alice.json", session=sess)
+    assert out == {"action": "created", "commit": "abc123"}
+    method, url, kw = sess.calls[-1]
+    assert method == "PUT" and url.endswith("data/captures/alice.json")
+    assert "sha" not in kw["json"]                      # create, not update
+    assert kw["headers"]["Authorization"] == "Bearer tok"
+
+
+def test_push_updates_with_the_existing_sha() -> None:
+    """Re-publishing must UPDATE the contributor's file (self-update is the
+    merge's improvement path), which the API only allows with the current sha."""
+    from owscout.contribute import push_contribution
+    sess = _FakeSession(get_status=200, get_body={"sha": "oldsha"})
+    out = push_contribution(b"x", repo="o/r", token="t",
+                            path="data/captures/alice.json", session=sess)
+    assert out["action"] == "updated"
+    assert sess.calls[-1][2]["json"]["sha"] == "oldsha"
+
+
+def test_push_failures_carry_a_plain_hint() -> None:
+    """Teammates will hit these, not read API docs: the message must say what to
+    actually do."""
+    import pytest
+    from owscout.contribute import push_contribution
+
+    class _Denied(_FakeSession):
+        def put(self, url: str, **kw: Any) -> _FakeResp:
+            return _FakeResp(401)
+
+    with pytest.raises(RuntimeError, match="token is wrong or expired"):
+        push_contribution(b"x", repo="o/r", token="bad",
+                          path="p.json", session=_Denied())

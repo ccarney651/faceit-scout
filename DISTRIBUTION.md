@@ -24,13 +24,32 @@ relearn its own portraits via **Learn heroes**.
 
 ## Getting their scouting onto the site
 
-6. **Publish my captures** (with their name in the "as" box) writes
-   `data\captures\<name>.json` next to the exe, and the log says where.
-7. They send that file to the curator (Discord/email — it's small).
-8. The curator drops it into the repo's `data/captures/`, commits, pushes.
-   The next site build merges it: first submission of a map wins, duplicates
-   are kept but ignored, and every map is validated against FACEIT's records —
-   fabricated games, wrong teams, or wrong codes are rejected loudly.
+6. One-time: the curator sends them an **upload token**, and they paste it under
+   **Sync settings…** (next to Publish). Repo stays the default.
+7. From then on, **Publish my captures** uploads their file straight into the
+   site's repo, and **the site rebuilds itself within a couple of minutes** —
+   no git, no file relay, nothing else to do.
+8. Every upload is still validated at build time: first submission of a map
+   wins, duplicates are kept but ignored, and maps are checked against FACEIT's
+   records — fabricated games, wrong teams, or wrong codes are rejected loudly.
+   Every upload is a git commit, so anything bad is a one-click revert.
+
+Without a token, Publish still writes `data\captures\<name>.json` next to the
+exe and the log says to send it to the curator - the manual fallback keeps
+working.
+
+### Curator: issuing an upload token
+
+GitHub -> Settings -> Developer settings -> **Fine-grained personal access
+tokens** -> Generate new token:
+- **Repository access:** Only select repositories -> the site repo
+- **Permissions:** Contents -> **Read and write** (nothing else)
+- Set an expiry you're comfortable with; revoke any time from the same page.
+
+One shared token for a trusted team is fine to start (blast radius: this one
+repo's files, all recoverable from git history). Per-teammate tokens need each
+of them to be a repo collaborator - do that when the group grows past people
+you'd hand your keyboard to.
 
 ## Rebuilding the exe (curator only)
 

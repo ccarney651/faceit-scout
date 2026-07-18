@@ -438,6 +438,32 @@ def cmd_contribute_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_contribute_push(args: argparse.Namespace) -> int:
+    """Export this machine's captures AND upload them to the site repo."""
+    import json as _json
+    from .contribute import CONTRIB_DIR, build_contribution, push_contribution
+
+    with Database(_db_path(args)) as db:
+        settings = db.get_settings("sync.")
+        data = build_contribution(db, contributor=args.contributor,
+                                  tool_version=__version__)
+    token = args.token or os.getenv("OWSCOUT_SYNC_TOKEN") or settings.get("sync.token", "")
+    repo = args.repo or settings.get("sync.repo", "ccarney651/faceit-scout")
+    if not token:
+        print("error: no upload token (use --token, $OWSCOUT_SYNC_TOKEN, or the "
+              "GUI's Sync settings)", file=sys.stderr)
+        return 2
+    if not data["maps"]:
+        print("nothing to upload - finalize maps in Review first.")
+        return 0
+    body = _json.dumps(data, indent=2).encode("utf-8")
+    res = push_contribution(body, repo=repo, token=token,
+                            path=f"{CONTRIB_DIR}/{args.contributor}.json")
+    print(f"uploaded {len(data['maps'])} map(s) to {repo} ({res['action']}). "
+          "The site rebuilds itself within a couple of minutes.")
+    return 0
+
+
 def cmd_contribute_merge(args: argparse.Namespace) -> int:
     """Merge every contributor file into the published payload (first-wins)."""
     import json as _json
@@ -1063,6 +1089,11 @@ def build_parser() -> argparse.ArgumentParser:
     ce.add_argument("--include-drafts", action="store_true",
                     help="also share un-reviewed maps (not recommended)")
     ce.set_defaults(func=cmd_contribute_export)
+    cp = consub.add_parser("push", help="export AND upload this machine's captures to the site")
+    cp.add_argument("contributor", help="your contributor name")
+    cp.add_argument("--repo", default=None, help="owner/name (default: sync settings)")
+    cp.add_argument("--token", default=None, help="GitHub token (default: sync settings / env)")
+    cp.set_defaults(func=cmd_contribute_push)
     cm = consub.add_parser("merge", help="merge all contributor files into the payload")
     cm.add_argument("--dir", default=CONTRIB_DIR, help="contributions directory")
     cm.add_argument("--out", default="owscout_comps.json", help="payload to write")

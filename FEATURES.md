@@ -350,9 +350,14 @@ cleanly and are re-derived by whatever the analysis does today.
 
 ```
 owscout gui            # calibrate, learn portraits, capture, review, finalize
-Publish my captures    # writes data/captures/<you>.json
-git commit + push      # (or open a PR) - this is what reaches the site
+Publish my captures    # writes data/captures/<you>.json AND, with a sync token
+                       # configured, uploads it straight to the site repo -
+                       # which rebuilds itself on any data/captures/ push
 ```
+
+The upload is one GitHub Contents-API call (`contribute push` on the CLI): the
+repo is the server, an upload is a commit, and the audit trail is git history.
+Without a token, the file relay / commit-and-push path still works.
 
 The build merges every contributor file and rebuilds the page. Only **finalized**
 maps are exported: the review gate is what keeps unvetted data out of a shared
