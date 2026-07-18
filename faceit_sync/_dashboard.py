@@ -107,6 +107,12 @@ thead th.sorted{color:var(--fg)}
 thead th .sar{margin-left:4px;font-size:8px;color:var(--accent);vertical-align:middle}
 th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
 tbody tr:hover{background:var(--surface2)}
+/* Mode separator inside a map table: a visible break, not just a repeated tag. */
+tbody tr.grp td{padding:14px 11px 5px;border-bottom:1px solid var(--line);
+  font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);background:var(--surface2)}
+tbody tr.grp:first-child td{padding-top:6px}
+tbody tr.grp:hover{background:var(--surface2)}
 .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
 .scroll table{font-size:13.5px}
 
@@ -182,6 +188,10 @@ details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
   .mapcol.swaps{border-left:none;padding-left:0;border-top:1px solid var(--line);margin-top:10px}}
 .seg{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);margin:10px 0 2px}
+/* Mode heading over a run of map blocks - the same break the tables get. */
+.modeh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.modeh:first-of-type{margin-top:8px}
 /* A sub-map / phase separator is a heading; "then" is a note ON a row, so it must
    not read as one - it is inline, lighter, and lower-case. */
 .then{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
@@ -420,20 +430,38 @@ function barList(items){
 }
 
 // sortable table. cols:[{k,label,num?,html?}]
-function table(cols,rows){
+// `group` (optional): row -> group name. In the table's natural order the rows are
+// broken into labelled blocks — a map list reads as one mode at a time, not as 13
+// undifferentiated rows. Sorting by a column drops the grouping, since comparing
+// across every map is the whole point of clicking a header.
+function table(cols,rows,group){
   const head=`<tr>`+cols.map((c,i)=>`<th class="${c.num?'num':''}" data-i="${i}">${esc(c.label)}<span class="sar"></span></th>`).join('')+`</tr>`;
-  const body=(rs)=>rs.map(r=>`<tr>`+cols.map(c=>`<td class="${c.num?'num':''}">${c.html?c.html(r):esc(r[c.k])}</td>`).join('')+`</tr>`).join('');
-  const box=el(`<div class="scroll"><table><thead>${head}</thead><tbody>${body(rows)}</tbody></table></div>`);
+  // `tag` labels the row inline; used only once the grouping headers are gone, so
+  // a sorted map table still tells you which mode each map is.
+  const tr=(r,tag)=>`<tr>`+cols.map((c,i)=>`<td class="${c.num?'num':''}">`+
+    `${c.html?c.html(r):esc(r[c.k])}`+
+    `${i===0&&tag?` <span class="faint">${esc(tag)}</span>`:''}</td>`).join('')+`</tr>`;
+  const body=(rs,grp)=>{
+    if(!grp) return rs.map(r=>tr(r,group?group(r):null)).join('');
+    let last=null;
+    return rs.map(r=>{
+      const g=grp(r), h=g===last?'':`<tr class="grp"><td colspan="${cols.length}">${esc(g)}</td></tr>`;
+      last=g; return h+tr(r,null);
+    }).join('');
+  };
+  const box=el(`<div class="scroll"><table><thead>${head}</thead><tbody>${body(rows,group)}</tbody></table></div>`);
   const asc={};
   box.querySelectorAll('th').forEach(th=>th.onclick=()=>{
     const i=+th.dataset.i,c=cols[i];asc[i]=!asc[i];
     const s=[...rows].sort((a,b)=>{let x=a[c.k],y=b[c.k];if(c.num){x=+x||0;y=+y||0;return asc[i]?x-y:y-x;}return asc[i]?String(x).localeCompare(String(y)):String(y).localeCompare(String(x));});
     box.querySelectorAll('th').forEach(t=>{t.classList.remove('sorted');t.querySelector('.sar').textContent='';});
     th.classList.add('sorted'); th.querySelector('.sar').textContent = asc[i]?'▲':'▼';
-    box.querySelector('tbody').innerHTML=body(s);
+    box.querySelector('tbody').innerHTML=body(s,null);
   });
   return box;
 }
+// The mode of a row's map — the grouping key for every map table.
+const byMode=r=>MAP_CAT[r.map]||r.cat||'Other';
 
 function sectionH(title,right=''){ return `<div class="section-h"><h2>${esc(title)}</h2>${right}</div>`; }
 
@@ -657,12 +685,15 @@ function renderScoutBody(t){
     const mapNames=sortMaps(Object.keys(maps));
     if(mapNames.length){
       w.appendChild(el(sectionH('Map scouting',`<span class="note">click a map for captured detail</span>`)));
+      let lastMode=null;
       mapNames.forEach(mp=>{
+        // One mode at a time, with a heading where the mode changes.
+        const mode=MAP_CAT[mp]||'Other';
+        if(mode!==lastMode){ lastMode=mode; w.appendChild(el(`<p class="modeh">${esc(mode)}</p>`)); }
         const entry=maps[mp]||{}, segs=entry.segments||{};
         let mw=0, ml=0;
         Object.values(segs).forEach(b=>(b.open||[]).forEach(c=>{mw+=c.wins; ml+=c.losses;}));
-        const d=el(`<details class="mapblk"><summary><span>${esc(mp)} `+
-          `<span class="faint">${esc(MAP_CAT[mp]||'')}</span></span>`+
+        const d=el(`<details class="mapblk"><summary><span>${esc(mp)}</span>`+
           `<span class="rec">${mw}W-${ml}L</span></summary>`+
           `<div class="mapbody"><div class="mapcol opens"></div>`+
           `<div class="mapcol swaps"></div></div></details>`);
@@ -727,9 +758,9 @@ function renderScoutBody(t){
   mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
   const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
   mapC.appendChild(mrows.length?table(
-    [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
+    [{k:'map',label:'Map'},
      {k:'picks',label:'Picked',num:true},{k:'games',label:'Played',num:true},
-     {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], mrows)
+     {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], mrows, byMode)
    :el(`<p class="note">No maps in window.</p>`));
   two.appendChild(mapC);
   w.appendChild(two);
@@ -754,11 +785,11 @@ function renderScoutBody(t){
   if(pfb.length){
     w.appendChild(el(`<p class="note" style="margin-top:0">On maps ${esc(t.team)} both picked and opened the ban on, they won <b>${pfbW}/${pfbG}</b> = <b>${pctOf(pfbW,pfbG)}%</b>. A repeated map with a strong win rate is likely a rehearsed strat.</p>`));
     w.appendChild(table(
-      [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
+      [{k:'map',label:'Map'},
        {k:'ban',label:'Their first ban',html:r=>r.ban},
        {k:'comp',label:'What they run there',html:r=>r.comp||`<span class="faint">not captured</span>`},
        {k:'games',label:'Maps',num:true},
-       {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], pfb));
+       {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], pfb, byMode));
   } else {
     w.appendChild(el(`<p class="note">No maps in this window where they both picked and banned first.</p>`));
   }
@@ -814,8 +845,9 @@ function renderScoutBody(t){
       n:Object.values(pm[mp]).reduce((a,b)=>a+b,0),
       heroes:rank(pm[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}));
     return rows.length?table(
-      [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
-       {k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes}], rows)
+      [{k:'map',label:'Map'},
+       {k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes}],
+      rows, byMode)
      :el(`<p class="note">No data in this window.</p>`);
   };
   w.appendChild(el(sectionH('Bans on maps they pick',`<span class="note">what ${esc(t.team)} bans on maps they chose</span>`)));
@@ -1018,9 +1050,10 @@ function renderMeta(){
   wrap.appendChild(el(sectionH('Attacking-first advantage',`<span class="note">Escort &amp; Hybrid only · all season</span>`)));
   wrap.appendChild(el(`<p class="note" style="margin-top:0">Mirrored modes (Control/Flashpoint/Push) excluded. Overall the first-attacking team won <b>${af.atk_first_wins}/${af.total_games}</b> = <b>${pctOf(af.atk_first_wins,af.total_games)}%</b>.</p>`));
   wrap.appendChild(table(
-    [{k:'name',label:'Map'},{k:'category',label:'Mode'},{k:'games',label:'Maps',num:true},
+    [{k:'name',label:'Map'},{k:'games',label:'Maps',num:true},
      {k:'wr',label:'Atk-first win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}],
-    af.by_map.map(m=>({...m,wr:pctOf(m.atk_first_wins,m.games)}))));
+    af.by_map.map(m=>({...m,map:m.name,wr:pctOf(m.atk_first_wins,m.games)}))
+      .sort((a,b)=>mapCmp(a.map,b.map)), byMode));
   return wrap;
 }
 
