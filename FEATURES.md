@@ -203,6 +203,14 @@ without any extra work from the operator.
 `heroes add` registers one under a namespaced `custom:` GUID that cannot collide
 with a FACEIT one.
 
+**Palette-mismatch diagnosis.** Refs are team-tint-specific (measured: no colour
+transform separates the tints), so a user running colorblind/custom UI team
+colours who imports a default-palette library scores ~0.2–0.5 against the 0.55
+floor — slots stay `??` with nothing saying why. Capture now watches per-side
+resolve rates and, when they fit that signature (one side blind while the other
+is healthy, or both blind), names the actual cause in the log and points at
+relearning — instead of letting it read as "the tool is broken".
+
 **Shareable library (`refs export` / `refs import`).** The distribution model is
 *curator learns once → ship the library → others only calibrate*. Export packs
 every stored ref (canonical portraits **and** harvested exemplars — the

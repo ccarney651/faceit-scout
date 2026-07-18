@@ -170,3 +170,30 @@ def test_resolve_player_matches_close_name() -> None:
 def test_resolve_player_below_threshold_is_none() -> None:
     roster = [("p1", "Neliozu"), ("p2", "TONASA")]
     assert resolve_player("zxqwv", roster) is None
+
+
+def test_palette_hint_names_the_dead_side() -> None:
+    """The colorblind-UI signature: one side blind, the other healthy. The
+    message must name the failing side and the actual cause - without it the
+    failure reads as 'the tool is broken', not 'the palette differs'."""
+    from owscout.capture import palette_mismatch_hint
+    hint = palette_mismatch_hint(1, 10, 9, 10, snapshots=2)
+    assert hint is not None and "LEFT" in hint and "color" in hint
+    hint = palette_mismatch_hint(9, 10, 1, 10, snapshots=2)
+    assert hint is not None and "RIGHT" in hint
+
+
+def test_palette_hint_both_sides_dead() -> None:
+    from owscout.capture import palette_mismatch_hint
+    hint = palette_mismatch_hint(1, 10, 2, 10, snapshots=3)
+    assert hint is not None and "either team" in hint
+
+
+def test_palette_hint_stays_quiet_when_healthy_or_early() -> None:
+    """A healthy capture, an ordinary mixed read, or a single bad frame (loading
+    screen, kill cam) must not trigger a scary diagnosis."""
+    from owscout.capture import palette_mismatch_hint
+    assert palette_mismatch_hint(9, 10, 10, 10, snapshots=5) is None
+    assert palette_mismatch_hint(6, 10, 5, 10, snapshots=5) is None   # meh, not dead
+    assert palette_mismatch_hint(0, 5, 5, 5, snapshots=1) is None     # one frame
+    assert palette_mismatch_hint(0, 0, 0, 0, snapshots=9) is None     # no slots

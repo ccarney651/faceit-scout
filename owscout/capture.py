@@ -447,6 +447,39 @@ def run_capture(  # pragma: no cover - runtime-only path
     return counts
 
 
+# ------------------------------------------------------- palette mismatch
+# The HUD tints portraits by team, and refs are tint-specific (measured: no
+# colour transform separates them - see the per-team-variant decision). So a
+# user running colorblind/custom UI team colours who imports a default-palette
+# library gets scores of ~0.2-0.5 against a 0.55 floor: slots stay '??' with
+# nothing saying why, which reads as "the tool is broken" rather than "the
+# palette differs". This heuristic names the actual cause at capture time.
+PALETTE_DEAD_RATE = 0.25     # a side resolving this rarely is effectively blind
+PALETTE_HEALTHY_RATE = 0.80  # while the other side works fine
+PALETTE_MIN_SNAPSHOTS = 2    # one bad frame (loading screen, kill cam) is noise
+
+
+def palette_mismatch_hint(
+    resolved_a: int, total_a: int, resolved_b: int, total_b: int, snapshots: int
+) -> Optional[str]:
+    """A one-line diagnosis when resolve rates match the custom-palette
+    signature, or None. Pure - fed with running totals across snapshots."""
+    if snapshots < PALETTE_MIN_SNAPSHOTS or not total_a or not total_b:
+        return None
+    ra, rb = resolved_a / total_a, resolved_b / total_b
+    if ra <= PALETTE_DEAD_RATE and rb <= PALETTE_DEAD_RATE:
+        return ("almost nothing is matching on either team. If this machine uses "
+                "colorblind/custom UI team colors, an imported library will not "
+                "match - relearn heroes here (Learn heroes), or recheck calibration.")
+    for side_rate, other_rate, label in ((ra, rb, "LEFT"), (rb, ra, "RIGHT")):
+        if side_rate <= PALETTE_DEAD_RATE and other_rate >= PALETTE_HEALTHY_RATE:
+            return (f"the {label} team consistently fails to match while the other "
+                    "side is fine. Custom UI team colors are the usual cause (the "
+                    f"library was learned on default blue/red) - relearn the {label} "
+                    "side's heroes, or recheck its calibration boxes.")
+    return None
+
+
 # ---------------------------------------------------------------- keybinds
 # The hooks do NOT suppress the keystroke (add_hotkey without suppress=True), so
 # whatever is bound here ALSO reaches Overwatch. That rules out anything the
@@ -646,6 +679,11 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     snaps = 0
     written = 0
     last_kept: Optional[tuple[Any, ...]] = None  # (comp a, comp b, round, sub) last KEPT
+    # Palette diagnosis: running resolve totals per side. Accumulated BEFORE the
+    # dedupe skip - an all-?? snapshot is deduped as "only unknowns", so counting
+    # after the skip would starve the hint for exactly the user it exists for.
+    pal = {"ra": 0, "ta": 0, "rb": 0, "tb": 0, "n": 0}
+    pal_shown = False
     written_ts: list[int] = []                   # sample_ts of each kept snapshot (undo)
     while not done_evt.is_set():
         if undo_evt.is_set():
@@ -678,6 +716,16 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                               crop_fn=_padded_crop, score_fn=score_fn)
             for side in (SIDE_LEFT, SIDE_RIGHT)
         }
+        pal["ra"] += sum(1 for m in matches_by_side[SIDE_LEFT] if m.resolved)
+        pal["ta"] += len(matches_by_side[SIDE_LEFT])
+        pal["rb"] += sum(1 for m in matches_by_side[SIDE_RIGHT] if m.resolved)
+        pal["tb"] += len(matches_by_side[SIDE_RIGHT])
+        pal["n"] += 1
+        if not pal_shown:
+            hint = palette_mismatch_hint(pal["ra"], pal["ta"], pal["rb"], pal["tb"], pal["n"])
+            if hint:
+                emit("  !! " + hint)
+                pal_shown = True
         # Skip a repeat: same round/sub-map, and the comps either identical or
         # differing ONLY by slots that dropped to unknown (a worse read of the same
         # moment is not new information). A new round/sub-map always keeps.
