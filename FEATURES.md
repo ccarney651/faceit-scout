@@ -18,8 +18,8 @@ database link and one JSON file.
 FACEIT API ──fetch──► faceit.sqlite3 ──export──► docs/index.html   (the live site)
                             │                          ▲
                        (read-only)                     │
-                            ▼                          │
-OW replay ──capture──► owscout.sqlite3 ──publish──► owscout_comps.json
+                            ▼                    (merged at build)
+OW replay ──capture──► owscout.sqlite3 ──publish──► data/captures/<you>.json
 ```
 
 Three facts about this diagram carry most of the operational risk:
@@ -30,9 +30,11 @@ Three facts about this diagram carry most of the operational risk:
 2. **`docs/index.html` is the live site and CI is its only writer.** A local
    `dashboard.html` is a preview built from *your* database — deliberately
    untracked, because a committed copy would silently disagree with the real page.
-3. **`owscout_comps.json` is the bridge and it is committed.** CI reads it from
-   the repo root at build time. Captured comps reach the site by committing that
-   file — not by committing a dashboard.
+3. **`data/captures/<contributor>.json` is the bridge.** Each contributor commits
+   their own file of raw observations; the build merges them all and derives the
+   report. `owscout_comps.json` is generated at build time and is NOT committed —
+   a stored report outlives the observations it came from and freezes the
+   analysis that produced it.
 
 ---
 
@@ -299,6 +301,55 @@ time); a **sync-freshness banner** turns amber when the faceit DB hasn't been
 synced for a day, because a stale database hides every code published since and
 looks identical to "no new matches"; and Publish states plainly that
 `owscout_comps.json` is the file to commit.
+
+---
+
+# Part 2.8 — Contributing scouting data
+
+The tool is built to take captures from many people, so the unit of contribution
+is the raw **observation**, not a finished report. Two summaries cannot be merged,
+and a summary is frozen against the analysis that made it; raw observations merge
+cleanly and are re-derived by whatever the analysis does today.
+
+## The workflow
+
+```
+owscout gui            # calibrate, learn portraits, capture, review, finalize
+Publish my captures    # writes data/captures/<you>.json
+git commit + push      # (or open a PR) - this is what reaches the site
+```
+
+The build merges every contributor file and rebuilds the page. Only **finalized**
+maps are exported: the review gate is what keeps unvetted data out of a shared
+dataset.
+
+## Identity, and why it is the load-bearing part
+
+`map_instances.id` is a local autoincrement, so Alice's map #20 and Bob's map #7
+can be the same real game with nothing in the row to say so. Merging on it
+double-counts — measured on real data, 8 maps became 9 and 16 rounds became 20,
+inflating every rate that divides by them. The exchange format therefore keys on
+FACEIT's `(match_id, game_no)`, which is identical on every machine, and **local
+ids never leave the machine**.
+
+This also gives the dataset a useful property against bad data: every contributed
+map names a real FACEIT match. Nobody can invent a game.
+
+## When two people scout the same map
+
+**First submission wins.** That contributor owns the map, and may update their own
+submission — otherwise re-scouting a map you fixed in Review would be discarded.
+Anyone else's view is *ignored but retained*: ignoring is reversible and rejecting
+is not, so a broken first submission can be replaced from data already in hand.
+
+Priority comes from the **commit that added the file**, never from timestamps
+inside it — a contributing machine controls its own clock. (This is why CI checks
+out with `fetch-depth: 0`; a shallow clone would make every file look equally old
+and fall back to alphabetical order.)
+
+Contributions are self-describing: they carry any operator-added heroes they
+reference, so a build server merges with nothing but the FACEIT roster and the
+files themselves.
 
 ---
 

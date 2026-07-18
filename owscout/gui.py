@@ -199,8 +199,15 @@ class _App:  # pragma: no cover - GUI runtime only
         pub.pack(fill="x", **pad)
         ttk.Button(pub, text="📋 Review captured maps…",
                    command=self._open_review).grid(row=0, column=0, padx=6, pady=6, sticky="w")
-        ttk.Button(pub, text="Export finalized comps → owscout_comps.json",
+        ttk.Button(pub, text="Publish my captures →",
                    command=self._publish).grid(row=0, column=1, padx=6, pady=6, sticky="w")
+        # Whose contribution this is. One file per contributor is what keeps two
+        # people publishing at once from overwriting each other.
+        ttk.Label(pub, text="as").grid(row=0, column=2, padx=(6, 2), pady=6, sticky="e")
+        self.contributor_var = tk.StringVar(
+            value=os.getenv("OWSCOUT_CONTRIBUTOR") or os.getenv("USERNAME") or "operator")
+        ttk.Entry(pub, textvariable=self.contributor_var, width=14).grid(
+            row=0, column=3, padx=(0, 6), pady=6, sticky="w")
         ttk.Label(pub, text="Captures are drafts until you review + finalize them; "
                             "only finalized maps are exported.",
                   foreground="#555").grid(row=1, column=0, columnspan=2, padx=6, sticky="w")
@@ -613,21 +620,47 @@ class _App:  # pragma: no cover - GUI runtime only
         self._run(go)
 
     def _publish(self) -> None:
-        from .scout import scout_payload
         import json
-        self._emit("publish: exporting captured comps + scouting report …")
+        import os
+        from . import __version__
+        from .contribute import CONTRIB_DIR, build_contribution
+        self._emit("publish: exporting your captures for the shared dataset …")
 
         def go() -> None:
+            # THE artifact is your contribution file: raw observations that the
+            # build merges with everyone else's. A finished report cannot be
+            # merged with anyone, so it is no longer what gets shared.
+            who = (self.contributor_var.get().strip()
+                   or os.getenv("OWSCOUT_CONTRIBUTOR") or "operator")
             with self._open_db() as db:
-                payload = scout_payload(db, self.faceit_var.get())
-            with open("owscout_comps.json", "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, indent=2)
-            teams = len(payload["teams"])
-            self._emit(f"publish: wrote owscout_comps.json ({teams} team(s)).")
-            # owscout_comps.json is THE published artifact: CI reads it from the
-            # repo root when it rebuilds docs/index.html (the live site) from its
-            # own synced database. dashboard.html is only a local preview - it is
-            # built from THIS machine's faceit DB and nothing serves it.
+                data = build_contribution(db, contributor=who,
+                                          tool_version=__version__)
+            out = os.path.join(CONTRIB_DIR, f"{who}.json")
+            os.makedirs(CONTRIB_DIR, exist_ok=True)
+            with open(out, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+            obs = sum(len(m["observations"]) for m in data["maps"])
+            self._emit(f"publish: wrote {out} - {len(data['maps'])} map(s), "
+                       f"{obs} observation(s) as '{who}'.")
+            if not data["maps"]:
+                self._emit("publish: nothing shared yet - maps must be FINALIZED "
+                           "in Review first.")
+            # A local preview still needs a merged payload; build one from every
+            # contribution present, exactly as the site does.
+            try:
+                from .contribute import merged_payload, resolve_contributions
+                from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+                with connect_ro(self.faceit_var.get()) as fdb:
+                    roles = load_roles(fdb)
+                    names = {h.guid: h.name for h in load_heroes(fdb)}
+                contribs = resolve_contributions(CONTRIB_DIR)
+                payload = merged_payload(contribs, roles, names)
+                with open("owscout_comps.json", "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, indent=2)
+                self._emit(f"publish: merged {payload['maps_merged']} map(s) from "
+                           f"{len(payload['contributors'])} contributor(s) for the preview.")
+            except Exception as exc:  # noqa: BLE001
+                self._emit(f"publish: preview merge skipped ({exc}).")
             try:
                 from faceit_sync.db import Database as FaceitDb
                 from faceit_sync.export import export_html
@@ -637,8 +670,8 @@ class _App:  # pragma: no cover - GUI runtime only
                 self._emit(f"publish: local preview dashboard.html rebuilt ({n} division(s)).")
             except Exception as exc:  # noqa: BLE001
                 self._emit(f"publish: JSON written; local preview skipped ({exc}).")
-            self._emit("publish: commit + push owscout_comps.json to update the "
-                       "live site (CI rebuilds docs/index.html nightly).")
+            self._emit(f"publish: commit + push {CONTRIB_DIR}/ to update the live "
+                       "site (the build merges it and rebuilds docs/index.html).")
         self._run(go)
 
     def run(self) -> None:
