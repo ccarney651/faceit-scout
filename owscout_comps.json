@@ -834,6 +834,3323 @@
         ],
         "ban_response": []
       }
+    },
+    "Redline": {
+      "maps_captured": 8,
+      "comps": [
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Sojourn",
+            "Vendetta",
+            "Zarya"
+          ],
+          "samples": 3,
+          "maps": 1,
+          "games": 1.0,
+          "wins": 1.0,
+          "win_rate": 1.0,
+          "wilson": 0.207
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mizuki",
+            "Sigma",
+            "Sojourn",
+            "Symmetra"
+          ],
+          "samples": 4,
+          "maps": 1,
+          "games": 0.44,
+          "wins": 0.44,
+          "win_rate": 1.0,
+          "wilson": 0.104
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Lucio",
+            "Sigma",
+            "Tracer"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.22,
+          "wins": 0.22,
+          "win_rate": 1.0,
+          "wilson": 0.055
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Lucio",
+            "Mei",
+            "Sigma"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.11,
+          "win_rate": 1.0,
+          "wilson": 0.028
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Mizuki",
+            "Sigma",
+            "Symmetra"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.11,
+          "win_rate": 1.0,
+          "wilson": 0.028
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Mei",
+            "Mizuki",
+            "Sigma"
+          ],
+          "samples": 2,
+          "maps": 2,
+          "games": 0.31,
+          "wins": 0.11,
+          "win_rate": 0.357,
+          "wilson": 0.01
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Shion",
+            "Vendetta"
+          ],
+          "samples": 4,
+          "maps": 2,
+          "games": 1.4,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Freja",
+            "Juno",
+            "Kiriko",
+            "Mei",
+            "Sigma"
+          ],
+          "samples": 4,
+          "maps": 1,
+          "games": 0.44,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Sojourn",
+            "Venture"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.5,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Freja",
+            "Juno",
+            "Kiriko",
+            "Pharah",
+            "Sigma"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.22,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Sojourn",
+            "Vendetta"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.67,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Mei",
+            "Sojourn"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Sojourn",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mauga",
+            "Shion",
+            "Vendetta",
+            "Wuyang"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mauga",
+            "Reaper",
+            "Shion",
+            "Wuyang"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Juno",
+            "Kiriko",
+            "Mauga",
+            "Reaper",
+            "Shion"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Juno",
+            "Kiriko",
+            "Mauga",
+            "Reaper"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mei",
+            "Shion",
+            "Sigma"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.2,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Mei",
+            "Shion"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.2,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "DVa",
+            "Freja",
+            "Juno",
+            "Kiriko",
+            "Pharah"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Freja",
+            "Juno",
+            "Kiriko",
+            "Sigma",
+            "Symmetra"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Freja",
+            "Jetpack Cat",
+            "Kiriko",
+            "Mei",
+            "Sigma"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Sojourn",
+            "Symmetra"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.33,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        }
+      ],
+      "by_sub_map": {
+        "City Center": [
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mauga",
+              "Shion",
+              "Vendetta"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ],
+        "Icebreaker": [
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mei",
+              "Shion",
+              "Sigma"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.5,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          },
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mauga",
+              "Mei",
+              "Shion"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.5,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ],
+        "Sublevel": [
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mauga",
+              "Shion",
+              "Vendetta"
+            ],
+            "samples": 2,
+            "maps": 1,
+            "games": 0.67,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          },
+          {
+            "heroes": [
+              "Cassidy",
+              "Kiriko",
+              "Mei",
+              "Mizuki",
+              "Sigma"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.33,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ],
+        "University": [
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mauga",
+              "Shion",
+              "Vendetta"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ]
+      },
+      "scout": {
+        "overall": [
+          {
+            "heroes": [
+              "Lucio",
+              "Kiriko",
+              "Mauga",
+              "Vendetta",
+              "Shion"
+            ],
+            "maps": 4,
+            "wins": 0,
+            "losses": 4,
+            "win_rate": 0.0,
+            "samples": 4,
+            "variants": 4
+          },
+          {
+            "heroes": [
+              "Lucio",
+              "Mei",
+              "Kiriko",
+              "Sigma",
+              "Shion"
+            ],
+            "maps": 1,
+            "wins": 0,
+            "losses": 1,
+            "win_rate": 0.0,
+            "samples": 1,
+            "variants": 1
+          },
+          {
+            "heroes": [
+              "Zarya",
+              "Lucio",
+              "Sojourn",
+              "Kiriko",
+              "Vendetta"
+            ],
+            "maps": 1,
+            "wins": 1,
+            "losses": 0,
+            "win_rate": 1.0,
+            "samples": 1,
+            "variants": 1
+          },
+          {
+            "heroes": [
+              "Pharah",
+              "Kiriko",
+              "Sigma",
+              "Freja",
+              "Juno"
+            ],
+            "maps": 1,
+            "wins": 0,
+            "losses": 1,
+            "win_rate": 0.0,
+            "samples": 1,
+            "variants": 1
+          },
+          {
+            "heroes": [
+              "Symmetra",
+              "Sojourn",
+              "Kiriko",
+              "Sigma",
+              "Mizuki"
+            ],
+            "maps": 1,
+            "wins": 1,
+            "losses": 0,
+            "win_rate": 1.0,
+            "samples": 1,
+            "variants": 1
+          }
+        ],
+        "maps": {
+          "Oasis": {
+            "segments": {
+              "University": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "City Center": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": []
+          },
+          "New Junk City": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Mei",
+                      "Sojourn",
+                      "Kiriko",
+                      "Mauga"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  },
+                  {
+                    "heroes": [
+                      "Zarya",
+                      "Lucio",
+                      "Sojourn",
+                      "Kiriko",
+                      "Vendetta"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Tracer",
+                      "Lucio",
+                      "Sojourn",
+                      "Kiriko",
+                      "Mauga"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  },
+                  {
+                    "heroes": [
+                      "Zarya",
+                      "Lucio",
+                      "Sojourn",
+                      "Kiriko",
+                      "Vendetta"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Mei"
+                ],
+                "in": [
+                  "Venture"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Venture"
+                ],
+                "in": [
+                  "Tracer"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "New Queen Street": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Kiriko",
+                      "Mauga",
+                      "Wuyang",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Reaper",
+                      "Cassidy",
+                      "Kiriko",
+                      "Mauga",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Vendetta"
+                ],
+                "in": [
+                  "Reaper"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Wuyang"
+                ],
+                "in": [
+                  "Juno"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Shion"
+                ],
+                "in": [
+                  "Cassidy"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Antarctica": {
+            "segments": {
+              "Icebreaker": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Mei",
+                      "Kiriko",
+                      "Mauga",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "Sublevel": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Cassidy",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Sigma"
+                ],
+                "in": [
+                  "Mauga"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Mei"
+                ],
+                "in": [
+                  "Vendetta"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Lucio",
+                  "Mauga",
+                  "Vendetta",
+                  "Shion"
+                ],
+                "in": [
+                  "Cassidy",
+                  "Mei",
+                  "Sigma",
+                  "Mizuki"
+                ],
+                "kind": "core",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Circuit Royal": {
+            "segments": {
+              "defend": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Pharah",
+                      "Kiriko",
+                      "Sigma",
+                      "Freja",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Freja",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "attack": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Symmetra",
+                      "Kiriko",
+                      "Sigma",
+                      "Freja",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Freja",
+                      "Jetpack Cat"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Sigma"
+                ],
+                "in": [
+                  "DVa"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Pharah",
+                  "DVa"
+                ],
+                "in": [
+                  "Symmetra",
+                  "Sigma"
+                ],
+                "kind": "core",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Symmetra"
+                ],
+                "in": [
+                  "Mei"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Juno"
+                ],
+                "in": [
+                  "Jetpack Cat"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Jetpack Cat"
+                ],
+                "in": [
+                  "Juno"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Hollywood": {
+            "segments": {
+              "attack": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Symmetra",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Symmetra",
+                      "Cassidy",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "defend": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Symmetra",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Cassidy",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Symmetra",
+                  "Sojourn",
+                  "Mizuki"
+                ],
+                "in": [
+                  "Tracer",
+                  "Cassidy",
+                  "Lucio"
+                ],
+                "kind": "core",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Tracer"
+                ],
+                "in": [
+                  "Mei"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Lucio"
+                ],
+                "in": [
+                  "Mizuki"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Mei"
+                ],
+                "in": [
+                  "Symmetra"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Runasapi": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Sojourn",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Symmetra",
+                      "Lucio",
+                      "Sojourn",
+                      "Kiriko",
+                      "Mauga"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Vendetta"
+                ],
+                "in": [
+                  "Symmetra"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          }
+        },
+        "games": 8,
+        "rounds": 16,
+        "hero_pool": [
+          {
+            "hero": "Kiriko",
+            "role": "Support",
+            "rounds": 16,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Sigma",
+            "role": "Tank",
+            "rounds": 10,
+            "pick_rate": 0.625
+          },
+          {
+            "hero": "Lucio",
+            "role": "Support",
+            "rounds": 8,
+            "pick_rate": 0.5
+          },
+          {
+            "hero": "Mei",
+            "role": "Damage",
+            "rounds": 8,
+            "pick_rate": 0.5
+          },
+          {
+            "hero": "Mauga",
+            "role": "Tank",
+            "rounds": 7,
+            "pick_rate": 0.438
+          },
+          {
+            "hero": "Vendetta",
+            "role": "Damage",
+            "rounds": 6,
+            "pick_rate": 0.375
+          },
+          {
+            "hero": "Cassidy",
+            "role": "Damage",
+            "rounds": 5,
+            "pick_rate": 0.312
+          },
+          {
+            "hero": "Juno",
+            "role": "Support",
+            "rounds": 5,
+            "pick_rate": 0.312
+          },
+          {
+            "hero": "Mizuki",
+            "role": "Support",
+            "rounds": 5,
+            "pick_rate": 0.312
+          },
+          {
+            "hero": "Shion",
+            "role": "Damage",
+            "rounds": 5,
+            "pick_rate": 0.312
+          },
+          {
+            "hero": "Sojourn",
+            "role": "Damage",
+            "rounds": 5,
+            "pick_rate": 0.312
+          },
+          {
+            "hero": "Symmetra",
+            "role": "Damage",
+            "rounds": 5,
+            "pick_rate": 0.312
+          },
+          {
+            "hero": "Freja",
+            "role": "Damage",
+            "rounds": 4,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Tracer",
+            "role": "Damage",
+            "rounds": 2,
+            "pick_rate": 0.125
+          },
+          {
+            "hero": "DVa",
+            "role": "Tank",
+            "rounds": 1,
+            "pick_rate": 0.062
+          },
+          {
+            "hero": "Jetpack Cat",
+            "role": "Support",
+            "rounds": 1,
+            "pick_rate": 0.062
+          },
+          {
+            "hero": "Pharah",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.062
+          },
+          {
+            "hero": "Reaper",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.062
+          },
+          {
+            "hero": "Venture",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.062
+          },
+          {
+            "hero": "Wuyang",
+            "role": "Support",
+            "rounds": 1,
+            "pick_rate": 0.062
+          },
+          {
+            "hero": "Zarya",
+            "role": "Tank",
+            "rounds": 1,
+            "pick_rate": 0.062
+          }
+        ],
+        "swaps": [
+          {
+            "out": [
+              "Mei"
+            ],
+            "in": [
+              "Venture"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Venture"
+            ],
+            "in": [
+              "Tracer"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Vendetta"
+            ],
+            "in": [
+              "Reaper"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Wuyang"
+            ],
+            "in": [
+              "Juno"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Shion"
+            ],
+            "in": [
+              "Cassidy"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Sigma"
+            ],
+            "in": [
+              "Mauga"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Mei"
+            ],
+            "in": [
+              "Vendetta"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Lucio",
+              "Mauga",
+              "Vendetta",
+              "Shion"
+            ],
+            "in": [
+              "Cassidy",
+              "Mei",
+              "Sigma",
+              "Mizuki"
+            ],
+            "kind": "core",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Sigma"
+            ],
+            "in": [
+              "DVa"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Pharah",
+              "DVa"
+            ],
+            "in": [
+              "Symmetra",
+              "Sigma"
+            ],
+            "kind": "core",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Symmetra"
+            ],
+            "in": [
+              "Mei"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Juno"
+            ],
+            "in": [
+              "Jetpack Cat"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Jetpack Cat"
+            ],
+            "in": [
+              "Juno"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Symmetra",
+              "Sojourn",
+              "Mizuki"
+            ],
+            "in": [
+              "Tracer",
+              "Cassidy",
+              "Lucio"
+            ],
+            "kind": "core",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Tracer"
+            ],
+            "in": [
+              "Mei"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Lucio"
+            ],
+            "in": [
+              "Mizuki"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Mei"
+            ],
+            "in": [
+              "Symmetra"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Vendetta"
+            ],
+            "in": [
+              "Symmetra"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          }
+        ],
+        "ban_response": [
+          {
+            "banned": "Jetpack Cat",
+            "games": 2,
+            "opens": [
+              {
+                "heroes": [
+                  "Lucio",
+                  "Kiriko",
+                  "Mauga",
+                  "Vendetta",
+                  "Shion"
+                ],
+                "maps": 1,
+                "wins": 0,
+                "losses": 1,
+                "win_rate": 0.0,
+                "samples": 1,
+                "variants": 1
+              },
+              {
+                "heroes": [
+                  "Lucio",
+                  "Mei",
+                  "Kiriko",
+                  "Sigma",
+                  "Shion"
+                ],
+                "maps": 1,
+                "wins": 0,
+                "losses": 1,
+                "win_rate": 0.0,
+                "samples": 1,
+                "variants": 1
+              }
+            ]
+          },
+          {
+            "banned": "Vendetta",
+            "games": 2,
+            "opens": [
+              {
+                "heroes": [
+                  "Lucio",
+                  "Mei",
+                  "Sojourn",
+                  "Kiriko",
+                  "Mauga"
+                ],
+                "maps": 1,
+                "wins": 0,
+                "losses": 1,
+                "win_rate": 0.0,
+                "samples": 1,
+                "variants": 1
+              },
+              {
+                "heroes": [
+                  "Symmetra",
+                  "Sojourn",
+                  "Kiriko",
+                  "Sigma",
+                  "Mizuki"
+                ],
+                "maps": 1,
+                "wins": 1,
+                "losses": 0,
+                "win_rate": 1.0,
+                "samples": 1,
+                "variants": 1
+              }
+            ]
+          },
+          {
+            "banned": "Hazard",
+            "games": 2,
+            "opens": [
+              {
+                "heroes": [
+                  "Lucio",
+                  "Mei",
+                  "Sojourn",
+                  "Kiriko",
+                  "Mauga"
+                ],
+                "maps": 1,
+                "wins": 0,
+                "losses": 1,
+                "win_rate": 0.0,
+                "samples": 1,
+                "variants": 1
+              },
+              {
+                "heroes": [
+                  "Symmetra",
+                  "Sojourn",
+                  "Kiriko",
+                  "Sigma",
+                  "Mizuki"
+                ],
+                "maps": 1,
+                "wins": 1,
+                "losses": 0,
+                "win_rate": 1.0,
+                "samples": 1,
+                "variants": 1
+              }
+            ]
+          },
+          {
+            "banned": "Sojourn",
+            "games": 2,
+            "opens": [
+              {
+                "heroes": [
+                  "Kiriko",
+                  "Mauga",
+                  "Wuyang",
+                  "Vendetta",
+                  "Shion"
+                ],
+                "maps": 1,
+                "wins": 0,
+                "losses": 1,
+                "win_rate": 0.0,
+                "samples": 1,
+                "variants": 1
+              },
+              {
+                "heroes": [
+                  "Lucio",
+                  "Mei",
+                  "Kiriko",
+                  "Sigma",
+                  "Shion"
+                ],
+                "maps": 1,
+                "wins": 0,
+                "losses": 1,
+                "win_rate": 0.0,
+                "samples": 1,
+                "variants": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "Team Peps": {
+      "maps_captured": 3,
+      "comps": [
+        {
+          "heroes": [
+            "Bastion",
+            "Jetpack Cat",
+            "Kiriko",
+            "Mauga",
+            "Shion"
+          ],
+          "samples": 4,
+          "maps": 1,
+          "games": 1.0,
+          "wins": 1.0,
+          "win_rate": 1.0,
+          "wilson": 0.207
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Mauga",
+            "Shion",
+            "Vendetta"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 1.0,
+          "wins": 1.0,
+          "win_rate": 1.0,
+          "wilson": 0.207
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Lucio",
+            "Reinhardt",
+            "Symmetra"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.25,
+          "win_rate": 1.0,
+          "wilson": 0.061
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Lucio",
+            "Reaper",
+            "Reinhardt"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.25,
+          "win_rate": 1.0,
+          "wilson": 0.061
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Lucio",
+            "Orisa",
+            "Reaper"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.25,
+          "win_rate": 1.0,
+          "wilson": 0.061
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Lucio",
+            "Orisa",
+            "Reaper",
+            "Sojourn"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.25,
+          "wins": 0.25,
+          "win_rate": 1.0,
+          "wilson": 0.061
+        }
+      ],
+      "by_sub_map": {
+        "City Center": [
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mauga",
+              "Shion",
+              "Vendetta"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 1.0,
+            "win_rate": 1.0,
+            "wilson": 0.207
+          }
+        ],
+        "University": [
+          {
+            "heroes": [
+              "Kiriko",
+              "Lucio",
+              "Mauga",
+              "Shion",
+              "Vendetta"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 1.0,
+            "win_rate": 1.0,
+            "wilson": 0.207
+          }
+        ]
+      },
+      "scout": {
+        "overall": [
+          {
+            "heroes": [
+              "Lucio",
+              "Kiriko",
+              "Mauga",
+              "Vendetta",
+              "Shion"
+            ],
+            "maps": 2,
+            "wins": 2,
+            "losses": 0,
+            "win_rate": 1.0,
+            "samples": 2,
+            "variants": 2
+          },
+          {
+            "heroes": [
+              "Reinhardt",
+              "Symmetra",
+              "Cassidy",
+              "Lucio",
+              "Kiriko"
+            ],
+            "maps": 1,
+            "wins": 1,
+            "losses": 0,
+            "win_rate": 1.0,
+            "samples": 1,
+            "variants": 1
+          }
+        ],
+        "maps": {
+          "Oasis": {
+            "segments": {
+              "University": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "City Center": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Kiriko",
+                      "Mauga",
+                      "Vendetta",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": []
+          },
+          "New Junk City": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Reinhardt",
+                      "Symmetra",
+                      "Cassidy",
+                      "Lucio",
+                      "Kiriko"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Reaper",
+                      "Lucio",
+                      "Orisa",
+                      "Sojourn",
+                      "Kiriko"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Symmetra"
+                ],
+                "in": [
+                  "Reaper"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Reinhardt"
+                ],
+                "in": [
+                  "Orisa"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Cassidy"
+                ],
+                "in": [
+                  "Sojourn"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "New Queen Street": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "Kiriko",
+                      "Mauga",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "Kiriko",
+                      "Mauga",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": []
+          }
+        },
+        "games": 3,
+        "rounds": 4,
+        "hero_pool": [
+          {
+            "hero": "Kiriko",
+            "role": "Support",
+            "rounds": 4,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Lucio",
+            "role": "Support",
+            "rounds": 3,
+            "pick_rate": 0.75
+          },
+          {
+            "hero": "Mauga",
+            "role": "Tank",
+            "rounds": 3,
+            "pick_rate": 0.75
+          },
+          {
+            "hero": "Shion",
+            "role": "Damage",
+            "rounds": 3,
+            "pick_rate": 0.75
+          },
+          {
+            "hero": "Vendetta",
+            "role": "Damage",
+            "rounds": 2,
+            "pick_rate": 0.5
+          },
+          {
+            "hero": "Bastion",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Cassidy",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Jetpack Cat",
+            "role": "Support",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Orisa",
+            "role": "Tank",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Reaper",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Reinhardt",
+            "role": "Tank",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Sojourn",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Symmetra",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.25
+          }
+        ],
+        "swaps": [
+          {
+            "out": [
+              "Symmetra"
+            ],
+            "in": [
+              "Reaper"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Reinhardt"
+            ],
+            "in": [
+              "Orisa"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Cassidy"
+            ],
+            "in": [
+              "Sojourn"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          }
+        ],
+        "ban_response": []
+      }
+    },
+    "Team Rats": {
+      "maps_captured": 5,
+      "comps": [
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Mei",
+            "Mizuki",
+            "Sigma"
+          ],
+          "samples": 4,
+          "maps": 1,
+          "games": 0.8,
+          "wins": 0.8,
+          "win_rate": 1.0,
+          "wilson": 0.172
+        },
+        {
+          "heroes": [
+            "Ashe",
+            "Juno",
+            "Kiriko",
+            "Mei",
+            "Sigma"
+          ],
+          "samples": 6,
+          "maps": 1,
+          "games": 0.67,
+          "wins": 0.67,
+          "win_rate": 1.0,
+          "wilson": 0.148
+        },
+        {
+          "heroes": [
+            "Juno",
+            "Kiriko",
+            "Reaper",
+            "Sigma",
+            "Sojourn"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.67,
+          "wins": 0.67,
+          "win_rate": 1.0,
+          "wilson": 0.148
+        },
+        {
+          "heroes": [
+            "Juno",
+            "Kiriko",
+            "Mei",
+            "Sigma",
+            "Sojourn"
+          ],
+          "samples": 2,
+          "maps": 2,
+          "games": 0.44,
+          "wins": 0.44,
+          "win_rate": 1.0,
+          "wilson": 0.104
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Juno",
+            "Mei",
+            "Mizuki",
+            "Sigma"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.2,
+          "wins": 0.2,
+          "win_rate": 1.0,
+          "wilson": 0.049
+        },
+        {
+          "heroes": [
+            "Juno",
+            "Kiriko",
+            "Shion",
+            "Sigma",
+            "Venture"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.11,
+          "win_rate": 1.0,
+          "wilson": 0.028
+        },
+        {
+          "heroes": [
+            "Juno",
+            "Kiriko",
+            "Mei",
+            "Sigma",
+            "Widowmaker"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.11,
+          "win_rate": 1.0,
+          "wilson": 0.028
+        },
+        {
+          "heroes": [
+            "Freja",
+            "Juno",
+            "Kiriko",
+            "Pharah",
+            "Sigma"
+          ],
+          "samples": 3,
+          "maps": 1,
+          "games": 0.33,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mizuki",
+            "Reaper",
+            "Sigma",
+            "Sojourn"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.33,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Kiriko",
+            "Lucio",
+            "Sigma",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.33,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Hazard",
+            "Kiriko",
+            "Lucio",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.33,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mei",
+            "Mizuki",
+            "Sigma",
+            "Sojourn"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mizuki",
+            "Pharah",
+            "Sigma",
+            "Sojourn"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Kiriko",
+            "Mizuki",
+            "Sigma",
+            "Sojourn",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Juno",
+            "Kiriko",
+            "Sigma",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Cassidy",
+            "Juno",
+            "Kiriko",
+            "Mei",
+            "Sigma"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Juno",
+            "Kiriko",
+            "Pharah",
+            "Sigma",
+            "Sojourn"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.11,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        }
+      ],
+      "by_sub_map": {
+        "Icebreaker": [
+          {
+            "heroes": [
+              "Cassidy",
+              "Kiriko",
+              "Mei",
+              "Mizuki",
+              "Sigma"
+            ],
+            "samples": 2,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 1.0,
+            "win_rate": 1.0,
+            "wilson": 0.207
+          }
+        ],
+        "Sublevel": [
+          {
+            "heroes": [
+              "Cassidy",
+              "Kiriko",
+              "Mei",
+              "Mizuki",
+              "Sigma"
+            ],
+            "samples": 2,
+            "maps": 1,
+            "games": 0.67,
+            "wins": 0.67,
+            "win_rate": 1.0,
+            "wilson": 0.148
+          },
+          {
+            "heroes": [
+              "Cassidy",
+              "Juno",
+              "Mei",
+              "Mizuki",
+              "Sigma"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.33,
+            "wins": 0.33,
+            "win_rate": 1.0,
+            "wilson": 0.08
+          }
+        ]
+      },
+      "scout": {
+        "overall": [
+          {
+            "heroes": [
+              "Mei",
+              "Sojourn",
+              "Kiriko",
+              "Sigma",
+              "Juno"
+            ],
+            "maps": 5,
+            "wins": 3,
+            "losses": 2,
+            "win_rate": 0.6,
+            "samples": 5,
+            "variants": 4
+          }
+        ],
+        "maps": {
+          "Antarctica": {
+            "segments": {
+              "Icebreaker": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Cassidy",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Cassidy",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "Sublevel": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Cassidy",
+                      "Mei",
+                      "Sigma",
+                      "Juno",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Cassidy",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Kiriko"
+                ],
+                "in": [
+                  "Juno"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Juno"
+                ],
+                "in": [
+                  "Kiriko"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "New Junk City": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Reaper",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Tracer",
+                      "Cassidy",
+                      "Lucio",
+                      "Kiriko",
+                      "Hazard"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Reaper",
+                  "Sojourn",
+                  "Mizuki"
+                ],
+                "in": [
+                  "Tracer",
+                  "Cassidy",
+                  "Lucio"
+                ],
+                "kind": "core",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Sigma"
+                ],
+                "in": [
+                  "Hazard"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Circuit Royal": {
+            "segments": {
+              "attack": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Widowmaker",
+                      "Mei",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "defend": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Ashe",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Ashe",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Sojourn"
+                ],
+                "in": [
+                  "Ashe"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Mei",
+                  "Ashe"
+                ],
+                "in": [
+                  "Venture",
+                  "Shion"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Venture",
+                  "Shion"
+                ],
+                "in": [
+                  "Mei",
+                  "Ashe"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Ashe"
+                ],
+                "in": [
+                  "Widowmaker"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Hollywood": {
+            "segments": {
+              "defend": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Mizuki"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Pharah",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "attack": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Pharah",
+                      "Kiriko",
+                      "Sigma",
+                      "Freja",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Pharah",
+                      "Kiriko",
+                      "Sigma",
+                      "Freja",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Mei"
+                ],
+                "in": [
+                  "Pharah"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Pharah"
+                ],
+                "in": [
+                  "Tracer"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Tracer",
+                  "Sojourn",
+                  "Mizuki"
+                ],
+                "in": [
+                  "Pharah",
+                  "Freja",
+                  "Juno"
+                ],
+                "kind": "core",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Pharah",
+                  "Freja"
+                ],
+                "in": [
+                  "Tracer",
+                  "Cassidy"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Tracer"
+                ],
+                "in": [
+                  "Mei"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Cassidy",
+                  "Mei"
+                ],
+                "in": [
+                  "Pharah",
+                  "Freja"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Freja"
+                ],
+                "in": [
+                  "Sojourn"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          },
+          "Runasapi": {
+            "segments": {
+              "all": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Mei",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Reaper",
+                      "Sojourn",
+                      "Kiriko",
+                      "Sigma",
+                      "Juno"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Mei"
+                ],
+                "in": [
+                  "Reaper"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ]
+          }
+        },
+        "games": 5,
+        "rounds": 12,
+        "hero_pool": [
+          {
+            "hero": "Kiriko",
+            "role": "Support",
+            "rounds": 12,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Sigma",
+            "role": "Tank",
+            "rounds": 12,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Juno",
+            "role": "Support",
+            "rounds": 9,
+            "pick_rate": 0.75
+          },
+          {
+            "hero": "Mei",
+            "role": "Damage",
+            "rounds": 9,
+            "pick_rate": 0.75
+          },
+          {
+            "hero": "Sojourn",
+            "role": "Damage",
+            "rounds": 5,
+            "pick_rate": 0.417
+          },
+          {
+            "hero": "Cassidy",
+            "role": "Damage",
+            "rounds": 4,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Mizuki",
+            "role": "Support",
+            "rounds": 4,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Pharah",
+            "role": "Damage",
+            "rounds": 4,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Ashe",
+            "role": "Damage",
+            "rounds": 3,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Tracer",
+            "role": "Damage",
+            "rounds": 3,
+            "pick_rate": 0.25
+          },
+          {
+            "hero": "Freja",
+            "role": "Damage",
+            "rounds": 2,
+            "pick_rate": 0.167
+          },
+          {
+            "hero": "Reaper",
+            "role": "Damage",
+            "rounds": 2,
+            "pick_rate": 0.167
+          },
+          {
+            "hero": "Hazard",
+            "role": "Tank",
+            "rounds": 1,
+            "pick_rate": 0.083
+          },
+          {
+            "hero": "Lucio",
+            "role": "Support",
+            "rounds": 1,
+            "pick_rate": 0.083
+          },
+          {
+            "hero": "Shion",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.083
+          },
+          {
+            "hero": "Venture",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.083
+          },
+          {
+            "hero": "Widowmaker",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.083
+          }
+        ],
+        "swaps": [
+          {
+            "out": [
+              "Kiriko"
+            ],
+            "in": [
+              "Juno"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Juno"
+            ],
+            "in": [
+              "Kiriko"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Reaper",
+              "Sojourn",
+              "Mizuki"
+            ],
+            "in": [
+              "Tracer",
+              "Cassidy",
+              "Lucio"
+            ],
+            "kind": "core",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Sigma"
+            ],
+            "in": [
+              "Hazard"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Sojourn"
+            ],
+            "in": [
+              "Ashe"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Mei",
+              "Ashe"
+            ],
+            "in": [
+              "Venture",
+              "Shion"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Venture",
+              "Shion"
+            ],
+            "in": [
+              "Mei",
+              "Ashe"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Ashe"
+            ],
+            "in": [
+              "Widowmaker"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Mei"
+            ],
+            "in": [
+              "Pharah"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Pharah"
+            ],
+            "in": [
+              "Tracer"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Tracer",
+              "Sojourn",
+              "Mizuki"
+            ],
+            "in": [
+              "Pharah",
+              "Freja",
+              "Juno"
+            ],
+            "kind": "core",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Pharah",
+              "Freja"
+            ],
+            "in": [
+              "Tracer",
+              "Cassidy"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Tracer"
+            ],
+            "in": [
+              "Mei"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Cassidy",
+              "Mei"
+            ],
+            "in": [
+              "Pharah",
+              "Freja"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Freja"
+            ],
+            "in": [
+              "Sojourn"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Mei"
+            ],
+            "in": [
+              "Reaper"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          }
+        ],
+        "ban_response": []
+      }
     }
   }
 }
