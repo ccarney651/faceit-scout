@@ -236,7 +236,8 @@ them.
 |---|---|
 | `F8` | Snapshot the comp |
 | `F7` | Next round / point captured |
-| `F6` | Cycle the control sub-map |
+| `Ctrl+1/2/3` | Pick the control sub-map directly (bare digits would also switch OW's spectator POV - the hooks don't suppress keystrokes) |
+| `F6` | Cycle the control sub-map (fallback) |
 | `F5` | Flip who is attacking |
 | `F9` | Undo the last action - snapshot **or** round marker (LIFO: snapshots taken after a marker come off first, so an undone round can never leave orphaned round tags in the data) |
 | `ESC` | Finish |

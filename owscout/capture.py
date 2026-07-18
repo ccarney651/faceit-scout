@@ -716,12 +716,23 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             left = [s for s in submaps if s not in used_subs]
             emit(f"  sub-map -> {nxt}" + (f"  (remaining: {', '.join(left)})" if left else ""))
         keyboard.add_hotkey(submap_hotkey, _cycle_sub)
+
+        # Direct selection: ctrl+1..ctrl+N picks a specific sub-map in one press.
+        # NOT bare number keys - those reach Overwatch too (hooks do not suppress)
+        # and switch the spectator POV, which is why the original number-key
+        # design was removed. Ctrl+digit is unbound in OW replays.
+        def _pick_sub(name: str) -> None:
+            cur_sub[0] = name
+            used_subs.add(name)
+            emit(f"  sub-map -> {name}")
+        for _i, _sm in enumerate(submaps, start=1):
+            keyboard.add_hotkey(f"ctrl+{_i}", lambda _sm=_sm: _pick_sub(_sm))
+        picks = "  ".join(f"ctrl+{i}={sm}" for i, sm in enumerate(submaps, start=1))
         # Deliberately NO auto-pick: the first sub-map varies per lobby, and a
         # silent default would tag every round-1 snapshot with a guess. The
         # snapshot path refuses to write until the operator declares it.
-        emit(f"  CONTROL MAP - press '{submap_hotkey}' to set the STARTING sub-map "
-             f"({', '.join(submaps)}) BEFORE snapshotting; "
-             f"'{round_hotkey}' then advances to the next one.")
+        emit(f"  CONTROL MAP - declare the STARTING sub-map BEFORE snapshotting:")
+        emit(f"    {picks}   (or '{submap_hotkey}' cycles)")
 
     # Attack/defend. Escort/Hybrid only: RED (side 'b') attacks round 1, and the
     # teams swap each round. From round 3 (both teams fully capped) the attacker is
@@ -811,7 +822,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             continue
         snap_evt.clear()
         if submaps and cur_sub[0] is None:
-            emit(f"  snapshot skipped - set the sub-map first ('{submap_hotkey}')")
+            emit("  snapshot skipped - set the sub-map first (ctrl+1/2/3, "
+                 f"or '{submap_hotkey}')")
             continue
         frame, w, h = grab_frame()
         if (w, h) != (profile.resolution_w, profile.resolution_h):
