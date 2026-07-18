@@ -355,9 +355,10 @@ def cmd_drafts(args: argparse.Namespace) -> int:
                   f"[{d.side_a or '?'} vs {d.side_b or '?'}]  {d.observations} obs")
             comps = db.map_side_comps(d.id)
             for side, label in (("a", d.side_a), ("b", d.side_b)):
-                for names, n, resolved in (comps.get(side) or []):
+                for names, n, resolved, sub in (comps.get(side) or []):
                     tag = "" if resolved else " [unresolved]"
-                    print(f"      {side} {label or '?':<16} x{n}: {names}{tag}")
+                    sub_tag = f"[{sub}] " if sub else ""
+                    print(f"      {side} {label or '?':<16} {sub_tag}x{n}: {names}{tag}")
         print("\nFinalize with:  owscout drafts --finalize <map_id>"
               "   |   discard:  owscout drafts --discard <map_id>")
     return 0

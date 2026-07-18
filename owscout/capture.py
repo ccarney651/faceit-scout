@@ -344,16 +344,16 @@ def run_capture(  # pragma: no cover - runtime-only path
     with connect_ro(faceit_db_path) as fdb:
         hero_roles = load_hero_roles(fdb)
         hero_names = {h.guid: h.name for h in load_heroes(fdb)}
-    for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
-        hero_names[_h.guid] = _h.name
-        if _h.role:
-            hero_roles[_h.guid] = _h.role
         if side_a_team is not None:
             tid = resolve_team_id(fdb, side_a_team)
             side_a_faction = "faction1" if tid == ctx.faction1_team_id else "faction2"
         else:
             log.warning("no --side-a-team given and OCR side assignment unavailable; "
                         "assuming side A (left) = %s", ctx.faction1_team_name)
+    for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
+        hero_names[_h.guid] = _h.name
+        if _h.role:
+            hero_roles[_h.guid] = _h.role
 
     height_width = _profile_and_refs(db, cv2, hud_variant)
     profile, refs = height_width
@@ -493,16 +493,16 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     with connect_ro(faceit_db_path) as fdb:
         hero_roles = load_hero_roles(fdb)
         hero_names = {h.guid: h.name for h in load_heroes(fdb)}
-    for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
-        hero_names[_h.guid] = _h.name
-        if _h.role:
-            hero_roles[_h.guid] = _h.role
         if side_a_team is not None:
             tid = resolve_team_id(fdb, side_a_team)
             side_a_faction = "faction1" if tid == ctx.faction1_team_id else "faction2"
         else:
             log.warning("no --side-a-team given; assuming side A (left) = %s",
                         ctx.faction1_team_name)
+    for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
+        hero_names[_h.guid] = _h.name
+        if _h.role:
+            hero_roles[_h.guid] = _h.role
 
     profile, refs = _profile_and_refs(db, cv2, hud_variant)
     banned = {b.hero_guid for b in ctx.bans}
@@ -520,6 +520,20 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
           f"{ctx.faction2_team_name}).")
     emit(f"  Jump to key moments in the replay, press '{hotkey}' to snapshot the comp. "
           f"Press 'esc' when done.")
+
+    # Control maps rotate between sub-maps with different geometry; let the operator
+    # tag the current sub-map with number keys so snapshots are attributed to it.
+    from .maps import submaps_for
+    submaps = submaps_for(ctx.map_name)
+    cur_sub: list[Optional[str]] = [None]
+    if submaps:
+        def _set_sub(name: str) -> None:
+            cur_sub[0] = name
+            emit(f"  sub-map -> {name}")
+        for _i, _name in enumerate(submaps, start=1):
+            keyboard.add_hotkey(str(_i), lambda n=_name: _set_sub(n))
+        picker = ", ".join(f"{i}={n}" for i, n in enumerate(submaps, start=1))
+        emit(f"  CONTROL MAP — press a number to tag the current sub-map: {picker}")
 
     snaps = 0
     written = 0
@@ -544,13 +558,14 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                                   crop_fn=crop_roi, score_fn=score_fn)
             if not dry_run and map_instance_id is not None:
                 if _persist_matches(db, map_instance_id, side, snaps, matches,
-                                    hero_roles, hero_names):
+                                    hero_roles, hero_names, sub_map=cur_sub[0]):
                     written += 1
             shown = "/".join((hero_names.get(m.hero_guid or "", "?")[:4] if m.resolved else "??")
                              for m in matches)
             line.append(f"{side}:{shown}")
         snaps += 1
-        emit(f"  snap {snaps}: " + "   ".join(line))
+        sub_tag = f"  [{cur_sub[0]}]" if cur_sub[0] else ""
+        emit(f"  snap {snaps}: " + "   ".join(line) + sub_tag)
 
     keyboard.clear_all_hotkeys()
     # Do NOT greenlight the code here — a capture is a DRAFT until the operator
@@ -564,6 +579,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 def _persist_matches(  # pragma: no cover
     db: "Any", map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],
+    sub_map: Optional[str] = None,
 ) -> bool:
     """Persist one frame's matches as a single observation (no smoothing). Returns
     True if the observation fully resolved."""
@@ -583,7 +599,7 @@ def _persist_matches(  # pragma: no cover
         map_instance_id=map_instance_id, side=side, sample_ts_ms=ts,
         comp_id=comp.comp_id if comp else None,
         min_slot_confidence=min((m.confidence for m in matches), default=0.0),
-        resolved=1 if resolved else 0, slots=slots, comp=comp,
+        resolved=1 if resolved else 0, slots=slots, comp=comp, sub_map=sub_map,
     )
     return resolved
 
