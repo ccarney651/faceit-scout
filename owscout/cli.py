@@ -468,6 +468,37 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_refs_export(args: argparse.Namespace) -> int:
+    from .refs import export_ref_bundle
+    try:
+        with Database(_db_path(args)) as db:
+            n = export_ref_bundle(db, args.out, hud_variant=args.hud_variant,
+                                  faceit_db_path=_faceit_db_path(args),
+                                  tool_version=__version__)
+    except (CaptureError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"wrote {args.out}: {n['exported']} ref(s)"
+          + (f", {n['skipped']} missing image(s) skipped" if n['skipped'] else "")
+          + ". Ship this file; the recipient calibrates, then `refs import` it.")
+    return 0
+
+
+def cmd_refs_import(args: argparse.Namespace) -> int:
+    from .refs import default_refs_dir, import_ref_bundle
+    refs_dir = args.refs_dir or default_refs_dir(_db_path(args))
+    try:
+        with Database(_db_path(args)) as db:
+            n = import_ref_bundle(db, args.bundle, refs_dir,
+                                  hud_variant=args.hud_variant)
+    except (CaptureError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"imported {n['added']} ref(s), {n['skipped']} already present.")
+    print("Run `owscout doctor` to confirm coverage, then capture normally.")
+    return 0
+
+
 def cmd_refs_coverage(args: argparse.Namespace) -> int:
     """Which references have actually been tested by live captures, and which have
     been quietly wrong. Confidence finds shaky refs; corrections find confidently
@@ -871,6 +902,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="where to store ref crops (default: refs/ next to the DB)")
     rl.add_argument("--dry-run", action="store_true", help="guess + preview but do not write")
     rl.set_defaults(func=cmd_refs_learn)
+
+    rx = rsub.add_parser("export", help="pack the learned hero library into a shareable zip")
+    rx.add_argument("--out", default="owscout_refs.zip")
+    rx.add_argument("--hud-variant", default="default")
+    rx.set_defaults(func=cmd_refs_export)
+    ri = rsub.add_parser("import", help="load a curator's hero library (calibrate first)")
+    ri.add_argument("bundle", help="path to an owscout_refs.zip")
+    ri.add_argument("--hud-variant", default="default")
+    ri.add_argument("--refs-dir", default=None, help="where imported images are stored")
+    ri.set_defaults(func=cmd_refs_import)
 
     rc = rsub.add_parser(
         "coverage",

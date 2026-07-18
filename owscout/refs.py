@@ -771,3 +771,139 @@ def _import_cv2() -> Any:  # pragma: no cover - runtime-only path
 
 def _crop(frame: Any, rect: Rect) -> Any:  # pragma: no cover
     return frame[rect.y : rect.y + rect.h, rect.x : rect.x + rect.w]
+
+# ---------------------------------------------------------------- ref bundles
+# The distribution model is "curator learns once -> ship the library -> others
+# only calibrate ROIs" (cross-resolution matching already works: the scorer
+# resizes a ref to the crop it is compared against). A bundle is one zip with a
+# manifest + the portrait images, so handing a teammate a working hero library
+# is a file transfer, not a two-hour learning session per person.
+BUNDLE_FORMAT = 1
+
+
+def export_ref_bundle(
+    db: Database, out_path: str | Path, *,
+    hud_variant: str = "default", faceit_db_path: Optional[str] = None,
+    tool_version: str = "0",
+) -> dict[str, int]:
+    """Write every stored ref for the active profile into a shareable zip.
+
+    Both sources are included: 'capture' refs are the canonical portraits and
+    'review' refs are the harvested exemplars — the accumulated accuracy work is
+    exactly what is worth shipping. Custom heroes referenced by any ref travel in
+    the manifest so the importing machine can register them (their guids are
+    derived deterministically from the name, so identity survives the trip).
+    """
+    import json
+    import zipfile
+
+    prof = db.latest_active_profile(hud_variant)
+    if prof is None or prof.id is None:
+        raise CaptureError("no active ROI profile - calibrate before exporting refs")
+    refs = db.get_refs(prof.id)
+    if not refs:
+        raise CaptureError("no refs stored for the active profile - nothing to export")
+
+    names: dict[str, str] = {}
+    if faceit_db_path:
+        try:
+            with connect_ro(faceit_db_path) as fdb:
+                names = {h.guid: h.name for h in load_heroes(fdb)}
+        except Exception:  # noqa: BLE001 - names are cosmetic in the manifest
+            pass
+    customs = {h.guid: {"name": h.name, "role": h.role} for h in db.list_custom_heroes()}
+    used = {r.hero_guid for r in refs}
+
+    entries = []
+    skipped = 0
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i, r in enumerate(refs):
+            src = Path(r.image_path)
+            if not src.is_file():
+                log.warning("ref image missing on disk, skipped: %s", src)
+                skipped += 1
+                continue
+            arc = f"refs/{i:04d}.png"
+            zf.write(src, arc)
+            entries.append({
+                "hero_guid": r.hero_guid,
+                "hero_name": names.get(r.hero_guid)
+                             or (customs.get(r.hero_guid) or {}).get("name"),
+                "state": r.state, "variant": r.variant, "source": r.source,
+                "phash": r.phash, "file": arc,
+            })
+        manifest = {
+            "format": BUNDLE_FORMAT,
+            "tool_version": tool_version,
+            "profile": {"resolution_w": prof.resolution_w,
+                        "resolution_h": prof.resolution_h,
+                        "hud_variant": prof.hud_variant,
+                        "team_size": prof.team_size},
+            "custom_heroes": {g: h for g, h in customs.items() if g in used},
+            "refs": entries,
+        }
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+    return {"exported": len(entries), "skipped": skipped}
+
+
+def import_ref_bundle(
+    db: Database, bundle_path: str | Path, refs_dir: str | Path, *,
+    hud_variant: str = "default",
+) -> dict[str, int]:
+    """Load a curator's ref bundle into THIS machine's library.
+
+    Requires a local calibration first: refs hang off a profile, and the whole
+    point of the split is that calibration is the only per-machine step. Import
+    is idempotent — a ref whose (hero, state, variant, phash) already exists for
+    the profile is skipped, so re-importing an updated bundle only adds what is
+    new. The stored phash is trusted rather than recomputed: the image bytes are
+    copied verbatim, so the hash is still of exactly what is on disk.
+    """
+    import json
+    import zipfile
+
+    prof = db.latest_active_profile(hud_variant)
+    if prof is None or prof.id is None:
+        raise CaptureError(
+            "no active ROI profile - calibrate first, then import the library")
+
+    with zipfile.ZipFile(bundle_path) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        if manifest.get("format") != BUNDLE_FORMAT:
+            raise CaptureError(
+                f"unsupported bundle format {manifest.get('format')!r} "
+                f"(this build reads {BUNDLE_FORMAT})")
+
+        for guid, h in (manifest.get("custom_heroes") or {}).items():
+            got = db.add_custom_hero(str(h["name"]), h.get("role"))
+            if got != guid:  # deterministic slugs should always agree
+                log.warning("custom hero %r imported as %s (bundle said %s)",
+                            h["name"], got, guid)
+
+        have = {(r.hero_guid, r.state, r.variant, r.phash)
+                for r in db.get_refs(prof.id)}
+        out_dir = Path(refs_dir) / str(prof.id) / "imported"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        added = skipped = 0
+        for e in manifest.get("refs", []):
+            key = (e["hero_guid"], e["state"], e["variant"], e["phash"])
+            if key in have:
+                skipped += 1
+                continue
+            dest = out_dir / f"{e['phash'][:16]}_{Path(e['file']).name}"
+            dest.write_bytes(zf.read(e["file"]))
+            db.save_ref(hero_guid=e["hero_guid"], profile_id=prof.id,
+                        state=e["state"], image_path=str(dest), phash=e["phash"],
+                        source=e["source"], variant=e["variant"])
+            have.add(key)
+            added += 1
+
+    src_res = manifest.get("profile") or {}
+    if (src_res.get("resolution_w"), src_res.get("resolution_h")) != (
+            prof.resolution_w, prof.resolution_h):
+        log.info("bundle was learned at %sx%s, this machine runs %dx%d - fine, "
+                 "matching rescales refs to the crop",
+                 src_res.get("resolution_w"), src_res.get("resolution_h"),
+                 prof.resolution_w, prof.resolution_h)
+    return {"added": added, "skipped": skipped}

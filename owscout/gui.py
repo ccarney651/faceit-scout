@@ -141,6 +141,13 @@ class _App:  # pragma: no cover - GUI runtime only
         self.learn_btn.grid(row=4, column=0, columnspan=2, padx=6, pady=(2, 8), sticky="w")
         ttk.Button(setup, text="➕ Add new hero",
                    command=self._add_hero).grid(row=4, column=2, padx=6, pady=(2, 8), sticky="w")
+        # The distribution path: a curator's whole learned library in one file, so
+        # a new user's setup is calibrate -> import -> capture, never a two-hour
+        # learning session per machine.
+        ttk.Button(setup, text="📦 Import hero library…",
+                   command=self._import_refs).grid(row=5, column=0, padx=6, pady=(0, 8), sticky="w")
+        ttk.Button(setup, text="Export my library…",
+                   command=self._export_refs).grid(row=5, column=1, padx=6, pady=(0, 8), sticky="w")
 
         # --- 2. capture -----------------------------------------------------
         cap = ttk.LabelFrame(self.root, text="2. Capture a replay (Master division)")
@@ -507,6 +514,49 @@ class _App:  # pragma: no cover - GUI runtime only
                                 variable=self.side_a_var).pack(side="left", padx=(0, 12))
         self.roster_lbl.configure(
             text=f"{t1 or '?'}:  {', '.join(p1) or '—'}\n{t2 or '?'}:  {', '.join(p2) or '—'}")
+
+    def _import_refs(self) -> None:
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title="Import hero library", filetypes=[("owscout ref bundle", "*.zip")])
+        if not path:
+            return
+
+        def go() -> None:
+            from .refs import default_refs_dir, import_ref_bundle
+            try:
+                with self._open_db() as db:
+                    n = import_ref_bundle(db, path,
+                                          default_refs_dir(self.db_var.get()))
+                self._emit(f"import: {n['added']} ref(s) added, "
+                           f"{n['skipped']} already present. Ready to capture.")
+            except Exception as exc:  # noqa: BLE001
+                self._emit(f"import failed: {exc}")
+            self.q.put(self._verify_refs)   # refresh the setup status line
+        self._run(go)
+
+    def _export_refs(self) -> None:
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            title="Export hero library", defaultextension=".zip",
+            initialfile="owscout_refs.zip",
+            filetypes=[("owscout ref bundle", "*.zip")])
+        if not path:
+            return
+
+        def go() -> None:
+            from . import __version__
+            from .refs import export_ref_bundle
+            try:
+                with self._open_db() as db:
+                    n = export_ref_bundle(db, path,
+                                          faceit_db_path=self.faceit_var.get(),
+                                          tool_version=__version__)
+                self._emit(f"export: wrote {path} ({n['exported']} ref(s)). "
+                           "Send this file to a teammate; they calibrate, then import it.")
+            except Exception as exc:  # noqa: BLE001
+                self._emit(f"export failed: {exc}")
+        self._run(go)
 
     def _load_keybinds(self) -> None:
         """Read the operator's keybinds (defaults if never changed) and show them."""

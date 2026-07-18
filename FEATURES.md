@@ -203,6 +203,17 @@ without any extra work from the operator.
 `heroes add` registers one under a namespaced `custom:` GUID that cannot collide
 with a FACEIT one.
 
+**Shareable library (`refs export` / `refs import`).** The distribution model is
+*curator learns once → ship the library → others only calibrate*. Export packs
+every stored ref (canonical portraits **and** harvested exemplars — the
+accumulated accuracy work is exactly what is worth shipping) plus any custom
+heroes into one zip (~0.8 MB for 104 refs). A new machine calibrates its own ROIs,
+imports the bundle, and is capture-ready — cross-resolution is fine because
+matching rescales a ref to the crop it is compared against. Import is idempotent
+(a ref already present by hero+state+variant+phash is skipped), and importing
+before calibrating fails with a pointer rather than half-importing. Also in the
+GUI: *Import hero library…* / *Export my library…*.
+
 ## 2.3 Capture
 
 Snapshot-driven, not continuous. The operator navigates the replay and presses a
@@ -434,6 +445,6 @@ presentation is built to keep that visible.
   of 104 hero+team refs). They are unvalidated rather than known-bad; `refs
   coverage` tracks this and it shrinks with every capture.
 - **Swap triggers lack baseline subtraction** (see §2.5).
-- **Distribution is single-operator.** No packaged `.exe`, and the reference
-  library isn't shareable, so a second user would have to learn all 52 heroes
-  themselves.
+- **No packaged `.exe` yet.** The reference library ships as a bundle now, so a
+  second user's setup is install Python → calibrate → import → capture; the
+  remaining friction is the "install Python" step.
