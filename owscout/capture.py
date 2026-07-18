@@ -552,6 +552,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 
     snaps = 0
     written = 0
+    last_sig: Optional[tuple[Any, ...]] = None  # (comp a, comp b, round, sub-map) of last kept
     while not done_evt.is_set():
         if not snap_evt.wait(timeout=0.15):
             continue
@@ -566,11 +567,25 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             dpath = _os.path.join(debug_dir, f"snap_{snaps + 1:02d}_{w}x{h}.png")
             cv2.imwrite(dpath, frame)
             emit(f"  saved debug frame {dpath}")
+        matches_by_side = {
+            side: match_frame(frame, side_slots[side], refs, hero_roles, banned,
+                              hero_names, confidence_floor=confidence_floor,
+                              crop_fn=crop_roi, score_fn=score_fn)
+            for side in (SIDE_LEFT, SIDE_RIGHT)
+        }
+        # Skip an unchanged repeat: same comps AND same round/sub-map as the last
+        # kept snapshot. Marking a new round (or sub-map) changes the signature, so
+        # an identical comp on a new round IS kept (two in a row allowed).
+        sig = (tuple(m.hero_guid for m in matches_by_side[SIDE_LEFT]),
+               tuple(m.hero_guid for m in matches_by_side[SIDE_RIGHT]),
+               cur_round[0], cur_sub[0])
+        if sig == last_sig:
+            emit("  (unchanged since last snapshot — skipped)")
+            continue
+        last_sig = sig
         line = []
         for side in (SIDE_LEFT, SIDE_RIGHT):
-            matches = match_frame(frame, side_slots[side], refs, hero_roles, banned,
-                                  hero_names, confidence_floor=confidence_floor,
-                                  crop_fn=crop_roi, score_fn=score_fn)
+            matches = matches_by_side[side]
             if not dry_run and map_instance_id is not None:
                 if _persist_matches(db, map_instance_id, side, snaps, matches,
                                     hero_roles, hero_names, sub_map=cur_sub[0],
