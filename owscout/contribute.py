@@ -412,6 +412,10 @@ def merged_payload(
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
     payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)
+    # Games on or before this date have DEAD replay codes: the site must not
+    # count them as scoutable (unless someone captured them before the wipe).
+    from .db import LATEST_KNOWN_WIPE
+    payload["code_wipe_date"] = LATEST_KNOWN_WIPE
     payload["maps_merged"] = len(merged.maps)
     payload["views_ignored"] = len(merged.ignored)
     payload["maps_rejected"] = rejected

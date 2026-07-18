@@ -419,6 +419,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     # no shared database.
     owscout_comps: dict[str, object] = {}
     owscout_captured: list[str] = []
+    owscout_wipe: object = None
     oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
     if os.path.exists(oc_path):
         try:
@@ -428,6 +429,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             # "match_id:game_no" keys of captured games - drives the scouted
             # badges and each team's still-to-scout queue on the page.
             owscout_captured = list(oc.get("captured_games", []))
+            owscout_wipe = oc.get("code_wipe_date")
         except (json.JSONDecodeError, OSError):
             owscout_comps = {}
 
@@ -439,6 +441,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         "maps": list(maps.values()),
         "owscout_comps": owscout_comps,
         "owscout_captured": owscout_captured,
+        "code_wipe": owscout_wipe,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

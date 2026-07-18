@@ -315,6 +315,10 @@ ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 // Games whose comps have been captured by owscout ("match_id:game_no").
 const CAPTURED=new Set(DATA.owscout_captured||[]);
+// OW wipes invalidate replay codes each patch: a game finished on or before this
+// date can never be replayed, so it is only "scoutable" if already captured.
+const CODE_WIPE=DATA.code_wipe||null;
+const codeDead=(when)=>!!(CODE_WIPE&&when&&String(when).slice(0,10)<=CODE_WIPE);
 // Map lists everywhere read as a mode block at a time (all Control together, etc),
 // and within a mode the maps the league actually plays come first.
 const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
@@ -426,7 +430,10 @@ function matchCard(m){
       (g.was_restarted?tag('veto disrupted','warn'):'')+
       (CAPTURED.has(m.id+':'+g.game_no)?tag('scouted','ok'):'')+
       `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
-        (g.demo_code?rcChip(g.demo_code):'<span class="faint" style="font-size:11.5px">no replay</span>')+
+        (g.demo_code?(codeDead(m.finished_at)&&!CAPTURED.has(m.id+':'+g.game_no)
+            ?'<span class="faint" style="font-size:11.5px">code wiped</span>'
+            :rcChip(g.demo_code))
+          :'<span class="faint" style="font-size:11.5px">no replay</span>')+
         `<span class="faint rtog">▸ rosters</span></span></div>`));
     gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
     const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
@@ -659,11 +666,16 @@ function renderScoutBody(t){
   // has captured comps or is still to scout; the pending codes are click-to-copy
   // chips, so "what do I scout next for this team" is answered right here.
   if(t.replays.length){
-    const done=t.replays.filter(r=>CAPTURED.has(r.mid+':'+r.gno));
-    const todo=t.replays.filter(r=>!CAPTURED.has(r.mid+':'+r.gno))
+    // A pre-wipe game is only in scope if someone captured it before the wipe;
+    // otherwise its code is dead and no amount of scouting can recover it.
+    const scoutable=t.replays.filter(r=>CAPTURED.has(r.mid+':'+r.gno)||!codeDead(r.when));
+    const lost=t.replays.length-scoutable.length;
+    const done=scoutable.filter(r=>CAPTURED.has(r.mid+':'+r.gno));
+    const todo=scoutable.filter(r=>!CAPTURED.has(r.mid+':'+r.gno))
       .sort((a,b)=>(b.when||'').localeCompare(a.when||''));
     const cov=el(`<div class="card" style="margin-top:10px"></div>`);
-    cov.appendChild(el(`<p class="eyebrow">Scouting coverage · ${done.length} of ${t.replays.length} replay games captured</p>`));
+    cov.appendChild(el(`<p class="eyebrow">Scouting coverage · ${done.length} of ${scoutable.length} scoutable games captured`+
+      (lost?` <span class="faint" style="text-transform:none;letter-spacing:0">· ${lost} lost to the ${esc(CODE_WIPE)} code wipe</span>`:'')+`</p>`));
     if(todo.length){
       const row=el(`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>`);
       row.appendChild(el(`<span class="note" style="margin:0">to scout:</span>`));

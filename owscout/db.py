@@ -238,6 +238,10 @@ CREATE TABLE IF NOT EXISTS hero_corrections (
 _SEED_WIPES = [
     ("2026-07-14", "observed", "invalidated all S9 regular season codes"),
 ]
+# The date the site and merge use without a database: a game finished on or
+# before this can never be replayed unless it was captured first. Update this
+# list when a new wipe is observed; everything downstream follows.
+LATEST_KNOWN_WIPE = max(w[0] for w in _SEED_WIPES)
 
 
 def _utcnow() -> str:
