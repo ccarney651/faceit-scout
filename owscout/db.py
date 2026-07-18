@@ -722,7 +722,7 @@ class Database:
         ``team_id`` restricts to observations of that team (either HUD side)."""
         sql = """
             SELECT o.comp_id, c.hero_names_sorted AS hero_names, o.map_instance_id, o.side,
-                   mi.map_guid,
+                   mi.map_guid, o.sub_map AS sub_map,
                    CASE o.side WHEN 'a' THEN mi.side_a_team_id ELSE mi.side_b_team_id END AS team_id,
                    CASE o.side WHEN 'a' THEN mi.side_a_label ELSE mi.side_b_label END AS team_name,
                    (mi.winner_side = o.side) AS won
@@ -743,7 +743,7 @@ class Database:
                 comp_id=str(r["comp_id"]), hero_names=str(r["hero_names"]),
                 map_instance_id=int(r["map_instance_id"]), side=str(r["side"]),
                 map_guid=r["map_guid"], team_id=r["team_id"], won=bool(r["won"]),
-                team_name=r["team_name"],
+                team_name=r["team_name"], sub_map=r["sub_map"],
             )
             for r in rows
         ]

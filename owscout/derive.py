@@ -92,6 +92,7 @@ class ObsRow:
     team_id: Optional[str]
     won: bool
     team_name: Optional[str] = None
+    sub_map: Optional[str] = None
 
 
 @dataclass
@@ -242,24 +243,35 @@ def dashboard_comps(rows: Iterable[ObsRow]) -> dict[str, object]:
     hand-off, no shared database."""
     from collections import defaultdict
 
+    def _comp_dict(c: "CompStat") -> dict[str, object]:
+        return {"heroes": [h.strip() for h in c.hero_names.split(",")],
+                "samples": c.samples, "maps": c.distinct_maps,
+                "games": round(c.games, 2), "wins": round(c.wins, 2),
+                "win_rate": round(c.win_rate, 3), "wilson": round(c.wilson, 3)}
+
     by_team: dict[str, list[ObsRow]] = defaultdict(list)
     for r in rows:
         if r.team_name:
             by_team[r.team_name].append(r)
     teams: dict[str, object] = {}
     for team, trows in by_team.items():
-        stats = aggregate_comps(trows)
         team_maps = len({(r.map_instance_id, r.side) for r in trows})
-        teams[team] = {
+        entry: dict[str, object] = {
             "maps_captured": team_maps,
-            "comps": [
-                {"heroes": [h.strip() for h in c.hero_names.split(",")],
-                 "samples": c.samples, "maps": c.distinct_maps,
-                 "games": round(c.games, 2), "wins": round(c.wins, 2),
-                 "win_rate": round(c.win_rate, 3), "wilson": round(c.wilson, 3)}
-                for c in stats
-            ],
+            "comps": [_comp_dict(c) for c in aggregate_comps(trows)],
         }
+        # Per-sub-map breakdown (control maps) — comps that favour specific
+        # geometry. Only sub-maps actually tagged appear.
+        subs: dict[str, list[ObsRow]] = defaultdict(list)
+        for r in trows:
+            if r.sub_map:
+                subs[r.sub_map].append(r)
+        if subs:
+            entry["by_sub_map"] = {
+                sub: [_comp_dict(c) for c in aggregate_comps(srows)]
+                for sub, srows in sorted(subs.items())
+            }
+        teams[team] = entry
     return {"teams": teams}
 
 
