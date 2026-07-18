@@ -90,6 +90,65 @@ def classify_transition(
 
 
 @dataclass(frozen=True)
+class CompInstance:
+    """One game's worth of a comp: the lineup a team ran on a map (usually the
+    opening comp), whether they won, and a key identifying the game for
+    distinct-map counting."""
+
+    heroes: tuple[str, ...]
+    won: bool
+    map_key: str
+
+
+@dataclass
+class CompFamily:
+    """A clustered comp family: a representative lineup plus every variation folded
+    into it, with win/loss aggregated over distinct games."""
+
+    heroes: list[str]                 # representative (most-common) lineup
+    samples: int
+    maps: int
+    wins: int
+    losses: int
+    win_rate: float
+    variants: list[tuple[str, ...]]   # distinct lineups in this family
+
+
+def cluster_comps(instances: Sequence[CompInstance], roles: Roles) -> list[CompFamily]:
+    """Group comp instances into families via :func:`same_comp` (>=4 shared, or 3
+    including the tank). Greedy: the most-frequent lineup anchors a family and
+    absorbs the lineups that match it. Families are sorted most-played first."""
+    from collections import Counter
+
+    # Canonicalise each lineup to a sorted tuple so order never splits a family.
+    norm: list[tuple[tuple[str, ...], bool, str]] = [
+        (tuple(sorted(i.heroes)), i.won, i.map_key) for i in instances
+    ]
+    freq = Counter(h for h, _, _ in norm)
+    order = [h for h, _ in freq.most_common()]
+    assigned: set[tuple[str, ...]] = set()
+    families: list[CompFamily] = []
+    for anchor in order:
+        if anchor in assigned:
+            continue
+        members = {anchor}
+        assigned.add(anchor)
+        for other in order:
+            if other not in assigned and same_comp(anchor, other, roles):
+                members.add(other)
+                assigned.add(other)
+        insts = [(h, won, mk) for (h, won, mk) in norm if h in members]
+        n = len(insts)
+        maps = len({mk for _, _, mk in insts})
+        wins = sum(1 for _, won, _ in insts if won)
+        families.append(CompFamily(
+            heroes=list(anchor), samples=n, maps=maps, wins=wins, losses=n - wins,
+            win_rate=(wins / n if n else 0.0), variants=sorted(members)))
+    families.sort(key=lambda f: (f.maps, f.samples), reverse=True)
+    return families
+
+
+@dataclass(frozen=True)
 class SwapEvent:
     """A reportable mid-map swap, with the enemy lineup it was made against."""
 

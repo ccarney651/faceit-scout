@@ -1,7 +1,9 @@
 """Comp identity + swap analysis (owscout.analysis)."""
 
 from owscout.analysis import (
+    CompInstance,
     classify_transition,
+    cluster_comps,
     phase_of,
     same_comp,
     swap_events,
@@ -90,3 +92,32 @@ def test_swap_events_tags_enemy_and_skips_no_change() -> None:
     ev = events[0]
     assert ev.kind == "core"
     assert "dva" in ev.vs_enemy
+
+
+# --- comp-family clustering --------------------------------------------------
+
+
+def test_cluster_comps_folds_flex_variants_into_one_family() -> None:
+    base = ("ram", "sojourn", "mei", "lucio", "kiriko")
+    flex = ("ram", "sojourn", "reaper", "lucio", "kiriko")  # 1 DPS swap -> same comp
+    other = ("dva", "reaper", "ashe", "bap", "kiriko")      # different comp
+    insts = [
+        CompInstance(base, True, "m1"),
+        CompInstance(flex, False, "m2"),
+        CompInstance(base, True, "m3"),
+        CompInstance(other, False, "m4"),
+    ]
+    fams = cluster_comps(insts, ROLES)
+    assert len(fams) == 2
+    top = fams[0]  # the ram family (3 games) sorts first
+    assert top.maps == 3 and top.samples == 3
+    assert top.wins == 2 and top.losses == 1
+    assert round(top.win_rate, 2) == 0.67
+    assert len(top.variants) == 2  # base + flex folded together
+
+
+def test_cluster_comps_separates_tank_change_without_4_shared() -> None:
+    a = ("ram", "sojourn", "mei", "lucio", "kiriko")
+    b = ("dva", "sojourn", "mei", "bap", "ana")   # tank + 2 supports differ -> different
+    fams = cluster_comps([CompInstance(a, True, "m1"), CompInstance(b, True, "m2")], ROLES)
+    assert len(fams) == 2
