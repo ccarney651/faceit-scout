@@ -138,7 +138,9 @@ def test_dashboard_comps_breaks_down_by_sub_map() -> None:
         ObsRow("B", "Ana, Rein", 2, "a", "m2", "t1", False, team_name="Alpha",
                sub_map="Ruins"),
     ]
-    alpha = dashboard_comps(rows)["teams"]["Alpha"]
+    teams = dashboard_comps(rows)["teams"]
+    assert isinstance(teams, dict)
+    alpha = teams["Alpha"]
     by_sub = alpha["by_sub_map"]
     assert set(by_sub) == {"Lighthouse", "Ruins"}
     assert by_sub["Lighthouse"][0]["heroes"] == ["Ana", "DVa"]
@@ -149,7 +151,9 @@ def test_dashboard_comps_breaks_down_by_sub_map() -> None:
 
 def test_dashboard_comps_no_sub_map_key_when_untagged() -> None:
     rows = [ObsRow("A", "Ana", 1, "a", "m", "t1", True, team_name="Alpha")]
-    assert "by_sub_map" not in dashboard_comps(rows)["teams"]["Alpha"]
+    teams = dashboard_comps(rows)["teams"]
+    assert isinstance(teams, dict)
+    assert "by_sub_map" not in teams["Alpha"]
 
 
 # --- modal comp --------------------------------------------------------------

@@ -456,6 +456,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     side_a_team: Optional[str] = None,
     hotkey: str = "f8",
     round_hotkey: str = "f7",
+    submap_hotkey: str = "f6",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
@@ -528,13 +529,16 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     submaps = submaps_for(ctx.map_name)
     cur_sub: list[Optional[str]] = [None]
     if submaps:
-        def _set_sub(name: str) -> None:
-            cur_sub[0] = name
-            emit(f"  sub-map -> {name}")
-        for _i, _name in enumerate(submaps, start=1):
-            keyboard.add_hotkey(str(_i), lambda n=_name: _set_sub(n))
-        picker = ", ".join(f"{i}={n}" for i, n in enumerate(submaps, start=1))
-        emit(f"  CONTROL MAP — press a number to tag the current sub-map: {picker}")
+        cycle = [None, *submaps]   # cycle through (none) then each sub-map
+        idx = [0]
+
+        def _cycle_sub() -> None:
+            idx[0] = (idx[0] + 1) % len(cycle)
+            cur_sub[0] = cycle[idx[0]]
+            emit(f"  sub-map -> {cur_sub[0] or '(none)'}")
+        keyboard.add_hotkey(submap_hotkey, _cycle_sub)
+        emit(f"  CONTROL MAP — press '{submap_hotkey}' to cycle sub-map: "
+             f"{' -> '.join(submaps)}")
 
     # Round marker: press round_hotkey at each round start / point capture so the
     # snapshots segment into rounds (see how comps change round to round).

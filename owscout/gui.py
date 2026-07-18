@@ -399,16 +399,26 @@ class _App:  # pragma: no cover - GUI runtime only
             return
         hotkey = self.hotkey_var.get().strip() or "f8"
         from .capture import run_hotkey_capture
-        self._emit(f"capture: {code} — press '{hotkey}' at key replay moments, 'esc' to finish.")
+        self._emit(f"capture: {code} — {hotkey.upper()} snapshot · F7 next round · "
+                   "F6 sub-map · ESC done. Watch the corner overlay (no need to alt-tab).")
         self.cap_btn.configure(state="disabled")
+        overlay = _CaptureOverlay(self, hotkey)
+
+        def emit(msg: str) -> None:
+            self._emit(msg)
+            self.q.put(lambda: overlay.update(msg))
 
         def go() -> None:
-            with self._open_db() as db:
-                run_hotkey_capture(db, self.faceit_var.get(), demo_code=code,
-                                   side_a_team=side_a, hotkey=hotkey,
-                                   require_division="master", emit=self._emit)
-            self._emit("capture: finished.")
-            self.q.put(self._refresh_codes)
+            try:
+                with self._open_db() as db:
+                    run_hotkey_capture(db, self.faceit_var.get(), demo_code=code,
+                                       side_a_team=side_a, hotkey=hotkey,
+                                       round_hotkey="f7", submap_hotkey="f6",
+                                       require_division="master", emit=emit)
+                self._emit("capture: finished (saved as a draft — review to finalize).")
+            finally:
+                self.q.put(overlay.close)
+                self.q.put(self._refresh_codes)
         self._run(go)
 
     def _publish(self) -> None:
@@ -863,6 +873,46 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
             db.discard_map(d.id)
         self.app._emit(f"review: discarded draft {d.demo_code or d.id}.")
         self._refresh()
+
+
+class _CaptureOverlay:  # pragma: no cover - GUI runtime only
+    """A small always-on-top overlay shown during capture, so the operator sees
+    what was captured (and the hotkey legend) without alt-tabbing out of OW. Works
+    when OW runs windowed/borderless (an exclusive-fullscreen game hides it)."""
+
+    def __init__(self, app: "_App", hotkey: str) -> None:
+        tk = app.tk
+        self.win = tk.Toplevel(app.root)
+        self.win.overrideredirect(True)               # no title bar / chrome
+        self.win.attributes("-topmost", True)
+        try:
+            self.win.attributes("-alpha", 0.88)
+        except Exception:  # noqa: BLE001 - alpha unsupported on some platforms
+            pass
+        self.win.configure(bg="#0a0a0a")
+        sw = self.win.winfo_screenwidth()
+        self.win.geometry(f"+{max(0, sw // 2 - 300)}+8")   # top-centre
+        legend = (f"{hotkey.upper()} snapshot   F7 next round   "
+                  f"F6 sub-map   ESC done")
+        tk.Label(self.win, text="● owscout capturing", bg="#0a0a0a", fg="#6cf",
+                 font=("Segoe UI", 10, "bold")).pack(padx=16, pady=(6, 0), anchor="w")
+        tk.Label(self.win, text=legend, bg="#0a0a0a", fg="#9aa",
+                 font=("Consolas", 9)).pack(padx=16, anchor="w")
+        self.status = tk.Label(self.win, text=f"ready — press {hotkey.upper()} at key moments",
+                               bg="#0a0a0a", fg="#fff", font=("Consolas", 11, "bold"),
+                               justify="left", anchor="w")
+        self.status.pack(padx=16, pady=(2, 8), anchor="w")
+
+    def update(self, msg: str) -> None:
+        m = msg.strip()
+        if m:
+            self.status.configure(text=m[:120])
+
+    def close(self) -> None:
+        try:
+            self.win.destroy()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def main() -> int:  # pragma: no cover
