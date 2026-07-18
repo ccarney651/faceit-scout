@@ -717,17 +717,21 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             emit(f"  sub-map -> {nxt}" + (f"  (remaining: {', '.join(left)})" if left else ""))
         keyboard.add_hotkey(submap_hotkey, _cycle_sub)
 
-        # Direct selection: ctrl+1..ctrl+N picks a specific sub-map in one press.
-        # NOT bare number keys - those reach Overwatch too (hooks do not suppress)
-        # and switch the spectator POV, which is why the original number-key
-        # design was removed. Ctrl+digit is unbound in OW replays.
+        # Direct selection: 1..N picks a specific sub-map in one press. The keys
+        # also switch OW's spectator POV (hooks do not suppress) - measured
+        # harmless, per the operator: the F-keys have been doing the same all
+        # along, and the top HUD bar the capture reads is constant across POVs.
+        # The real hazard with bare digits is that the hook is GLOBAL: typing a
+        # number anywhere (Discord, a browser) mid-capture also fires it, so the
+        # ctrl+N variants stay bound for anyone who alt-tabs a lot.
         def _pick_sub(name: str) -> None:
             cur_sub[0] = name
             used_subs.add(name)
             emit(f"  sub-map -> {name}")
         for _i, _sm in enumerate(submaps, start=1):
+            keyboard.add_hotkey(str(_i), lambda _sm=_sm: _pick_sub(_sm))
             keyboard.add_hotkey(f"ctrl+{_i}", lambda _sm=_sm: _pick_sub(_sm))
-        picks = "  ".join(f"ctrl+{i}={sm}" for i, sm in enumerate(submaps, start=1))
+        picks = "  ".join(f"{i}={sm}" for i, sm in enumerate(submaps, start=1))
         # Deliberately NO auto-pick: the first sub-map varies per lobby, and a
         # silent default would tag every round-1 snapshot with a guess. The
         # snapshot path refuses to write until the operator declares it.
@@ -822,8 +826,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             continue
         snap_evt.clear()
         if submaps and cur_sub[0] is None:
-            emit("  snapshot skipped - set the sub-map first (ctrl+1/2/3, "
-                 f"or '{submap_hotkey}')")
+            emit(f"  snapshot skipped - set the sub-map first (1/2/3, or '{submap_hotkey}')")
             continue
         frame, w, h = grab_frame()
         if (w, h) != (profile.resolution_w, profile.resolution_h):

@@ -660,10 +660,11 @@ class _App:  # pragma: no cover - GUI runtime only
         win.title("Capture keybinds")
         win.transient(self.root)
         ttk.Label(win, wraplength=430, justify="left", foreground="#555",
-                  text="These are global keys: the press still reaches Overwatch, so "
-                       "avoid anything the replay viewer uses (number keys switch "
-                       "player POV, space pauses). F-keys are unbound in OW, which is "
-                       "why they are the defaults. ESC always ends a capture."
+                  text="These are global keys: the press reaches Overwatch AND every "
+                       "other app. OW-side effects (POV switching) are harmless - the "
+                       "top bar the capture reads never changes - so the real rule is "
+                       "to avoid keys you might type elsewhere mid-capture. ESC always "
+                       "ends a capture."
                   ).grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="w")
         vars_: dict[str, tk.StringVar] = {}
         for i, (action, label, hint) in enumerate(KEYBIND_ACTIONS, start=1):
