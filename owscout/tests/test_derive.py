@@ -129,6 +129,29 @@ def test_dashboard_comps_skips_unnamed_team() -> None:
     assert dashboard_comps(rows) == {"teams": {}}
 
 
+def test_dashboard_comps_breaks_down_by_sub_map() -> None:
+    rows = [
+        ObsRow("A", "Ana, DVa", 1, "a", "m1", "t1", True, team_name="Alpha",
+               sub_map="Lighthouse"),
+        ObsRow("A", "Ana, DVa", 1, "a", "m1", "t1", True, team_name="Alpha",
+               sub_map="Lighthouse"),
+        ObsRow("B", "Ana, Rein", 2, "a", "m2", "t1", False, team_name="Alpha",
+               sub_map="Ruins"),
+    ]
+    alpha = dashboard_comps(rows)["teams"]["Alpha"]
+    by_sub = alpha["by_sub_map"]
+    assert set(by_sub) == {"Lighthouse", "Ruins"}
+    assert by_sub["Lighthouse"][0]["heroes"] == ["Ana", "DVa"]
+    assert by_sub["Ruins"][0]["heroes"] == ["Ana", "Rein"]
+    # Overall comps still present alongside the breakdown.
+    assert len(alpha["comps"]) == 2
+
+
+def test_dashboard_comps_no_sub_map_key_when_untagged() -> None:
+    rows = [ObsRow("A", "Ana", 1, "a", "m", "t1", True, team_name="Alpha")]
+    assert "by_sub_map" not in dashboard_comps(rows)["teams"]["Alpha"]
+
+
 # --- modal comp --------------------------------------------------------------
 
 

@@ -21,3 +21,4 @@ calibration/
 refs/
 screenshots/
 overwatch-hero-icons/
+*.sqlite3.bak-*
