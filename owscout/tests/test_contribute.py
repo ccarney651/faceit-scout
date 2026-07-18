@@ -1,5 +1,7 @@
 """The multi-contributor exchange format and the first-wins merge."""
 
+from typing import Any
+
 from owscout.contribute import (
     CONTRIB_FORMAT,
     MapKey,
@@ -8,7 +10,7 @@ from owscout.contribute import (
 )
 
 
-def _contrib(who: str, maps: list[tuple[str, int, list[str]]]) -> dict:
+def _contrib(who: str, maps: list[tuple[str, int, list[str]]]) -> dict[str, Any]:
     """A contribution claiming (match_id, game_no) with one observation each."""
     return {
         "format": CONTRIB_FORMAT, "contributor": who, "tool_version": "test",
