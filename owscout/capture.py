@@ -457,6 +457,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     hotkey: str = "f8",
     round_hotkey: str = "f7",
     submap_hotkey: str = "f6",
+    undo_hotkey: str = "f9",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
@@ -528,17 +529,21 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     from .maps import submaps_for
     submaps = submaps_for(ctx.map_name)
     cur_sub: list[Optional[str]] = [None]
+    used_subs: set[str] = set()   # sub-maps already played this map
     if submaps:
-        cycle = [None, *submaps]   # cycle through (none) then each sub-map
-        idx = [0]
-
         def _cycle_sub() -> None:
-            idx[0] = (idx[0] + 1) % len(cycle)
-            cur_sub[0] = cycle[idx[0]]
-            emit(f"  sub-map -> {cur_sub[0] or '(none)'}")
+            # Offer the sub-maps not yet played; fall back to all once exhausted.
+            pool = [s for s in submaps if s not in used_subs] or list(submaps)
+            nxt = pool[0] if cur_sub[0] not in pool else pool[
+                (pool.index(cur_sub[0]) + 1) % len(pool)]
+            cur_sub[0] = nxt
+            used_subs.add(nxt)
+            left = [s for s in submaps if s not in used_subs]
+            emit(f"  sub-map -> {nxt}" + (f"  (remaining: {', '.join(left)})" if left else ""))
         keyboard.add_hotkey(submap_hotkey, _cycle_sub)
-        emit(f"  CONTROL MAP — press '{submap_hotkey}' to cycle sub-map: "
-             f"{' -> '.join(submaps)}")
+        _cycle_sub()   # control maps start on a sub-map; operator can change it
+        emit(f"  CONTROL MAP — press '{submap_hotkey}' to pick the sub-map "
+             f"(of {', '.join(submaps)}); '{round_hotkey}' advances to the next one.")
 
     # Round marker: press round_hotkey at each round start / point capture so the
     # snapshots segment into rounds (see how comps change round to round).
@@ -547,13 +552,36 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     def _next_round() -> None:
         cur_round[0] += 1
         emit(f"  round -> {cur_round[0]}")
+        if submaps:
+            remaining = [s for s in submaps if s not in used_subs]
+            if remaining:
+                cur_sub[0] = remaining[0]
+                used_subs.add(remaining[0])
+                emit(f"  sub-map -> {cur_sub[0]}  ('{submap_hotkey}' to pick another)")
     keyboard.add_hotkey(round_hotkey, _next_round)
     emit(f"  Press '{round_hotkey}' at each new round / point capture (currently round 1).")
 
+    # Undo: drop the last written snapshot (both sides).
+    undo_evt = threading.Event()
+    keyboard.add_hotkey(undo_hotkey, undo_evt.set)
+    emit(f"  Press '{undo_hotkey}' to UNDO the last snapshot.")
+
     snaps = 0
     written = 0
-    last_sig: Optional[tuple[Any, ...]] = None  # (comp a, comp b, round, sub-map) of last kept
+    last_kept: Optional[tuple[Any, ...]] = None  # (comp a, comp b, round, sub) last KEPT
+    written_ts: list[int] = []                   # sample_ts of each kept snapshot (undo)
     while not done_evt.is_set():
+        if undo_evt.is_set():
+            undo_evt.clear()
+            if written_ts and not dry_run and map_instance_id is not None:
+                ts = written_ts.pop()
+                db.delete_observations_at(map_instance_id, ts)
+                snaps = max(0, snaps - 1)
+                last_kept = None      # so the same comp can be re-captured
+                emit(f"  UNDID the last snapshot ({snaps} kept)")
+            else:
+                emit("  nothing to undo")
+            continue
         if not snap_evt.wait(timeout=0.15):
             continue
         snap_evt.clear()
@@ -573,16 +601,19 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                               crop_fn=crop_roi, score_fn=score_fn)
             for side in (SIDE_LEFT, SIDE_RIGHT)
         }
-        # Skip an unchanged repeat: same comps AND same round/sub-map as the last
-        # kept snapshot. Marking a new round (or sub-map) changes the signature, so
-        # an identical comp on a new round IS kept (two in a row allowed).
-        sig = (tuple(m.hero_guid for m in matches_by_side[SIDE_LEFT]),
-               tuple(m.hero_guid for m in matches_by_side[SIDE_RIGHT]),
-               cur_round[0], cur_sub[0])
-        if sig == last_sig:
-            emit("  (unchanged since last snapshot — skipped)")
-            continue
-        last_sig = sig
+        # Skip a repeat: same round/sub-map, and the comps either identical or
+        # differing ONLY by slots that dropped to unknown (a worse read of the same
+        # moment is not new information). A new round/sub-map always keeps.
+        ga = tuple(m.hero_guid for m in matches_by_side[SIDE_LEFT])
+        gb = tuple(m.hero_guid for m in matches_by_side[SIDE_RIGHT])
+        if last_kept is not None:
+            la, lb, lr, ls = last_kept
+            if ((lr, ls) == (cur_round[0], cur_sub[0])
+                    and _only_lost_known(la, ga) and _only_lost_known(lb, gb)):
+                emit("  (unchanged / only unknowns — skipped)")
+                continue
+        last_kept = (ga, gb, cur_round[0], cur_sub[0])
+        written_ts.append(snaps)
         line = []
         for side in (SIDE_LEFT, SIDE_RIGHT):
             matches = matches_by_side[side]
@@ -605,6 +636,22 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     emit(f"done. {snaps} snapshot(s) captured as a DRAFT — review and finalize "
          "to include it in the scout data.")
     return {"snaps": snaps, "written": written}
+
+
+def _only_lost_known(prev: Sequence[Optional[str]], new: Sequence[Optional[str]]) -> bool:
+    """True when ``new`` differs from ``prev`` only by slots that dropped to unknown.
+
+    A snapshot that reads the same comp but with more '??' is a worse read of the
+    same moment, not new information — so it counts as a repeat. A slot changing to
+    a DIFFERENT hero, or resolving from '??' to a hero, is a real change.
+    """
+    if len(prev) != len(new):
+        return False
+    for p, n in zip(prev, new):
+        if p == n or n is None:
+            continue
+        return False
+    return True
 
 
 def _persist_matches(  # pragma: no cover

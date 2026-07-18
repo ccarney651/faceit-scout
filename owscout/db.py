@@ -868,6 +868,33 @@ class Database:
                       (map_instance_id,))
             c.execute("DELETE FROM map_instances WHERE id = ?", (map_instance_id,))
 
+    def delete_observations_at(self, map_instance_id: int, sample_ts_ms: int) -> int:
+        """Delete both sides' observations for one snapshot (undo). Returns rows removed."""
+        with self.transaction() as c:
+            ids = [int(r["id"]) for r in c.execute(
+                "SELECT id FROM comp_observations WHERE map_instance_id = ? "
+                "AND sample_ts_ms = ?", (map_instance_id, sample_ts_ms)).fetchall()]
+            if ids:
+                qs = ",".join("?" * len(ids))
+                c.execute(f"DELETE FROM comp_slots WHERE observation_id IN ({qs})", ids)
+                c.execute(f"DELETE FROM comp_observations WHERE id IN ({qs})", ids)
+        return len(ids)
+
+    def ref_variant_coverage(self, profile_id: int) -> dict[str, int]:
+        """Distinct heroes with a ref, per team variant ('a' blue / 'b' red)."""
+        rows = self.conn.execute(
+            "SELECT variant, COUNT(DISTINCT hero_guid) AS n FROM hero_refs "
+            "WHERE profile_id = ? GROUP BY variant", (profile_id,)).fetchall()
+        return {str(r["variant"]): int(r["n"]) for r in rows}
+
+    def map_status_counts(self) -> dict[str, int]:
+        """Counts of draft (captured, not finalized) vs finalized maps."""
+        draft = self.conn.execute(
+            "SELECT COUNT(*) FROM map_instances WHERE finalized_at IS NULL").fetchone()[0]
+        final = self.conn.execute(
+            "SELECT COUNT(*) FROM map_instances WHERE finalized_at IS NOT NULL").fetchone()[0]
+        return {"draft": int(draft), "finalized": int(final)}
+
     def observation_details(self, *, finalized_only: bool = True) -> list[ObsDetail]:
         """Every resolved observation with the context the scouting analysis needs
         (map/side/team/ts/round/sub-map/lineup), ordered by map then time then side

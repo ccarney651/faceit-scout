@@ -400,7 +400,7 @@ class _App:  # pragma: no cover - GUI runtime only
         hotkey = self.hotkey_var.get().strip() or "f8"
         from .capture import run_hotkey_capture
         self._emit(f"capture: {code} — {hotkey.upper()} snapshot · F7 next round · "
-                   "F6 sub-map · ESC done. Watch the corner overlay (no need to alt-tab).")
+                   "F6 sub-map · F9 undo · ESC done. Watch the corner overlay.")
         self.cap_btn.configure(state="disabled")
         overlay = _CaptureOverlay(self, hotkey)
 
@@ -949,8 +949,8 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         self.win.configure(bg="#0a0a0a")
         sw = self.win.winfo_screenwidth()
         self.win.geometry(f"+{max(0, sw // 2 - 300)}+8")   # top-centre
-        legend = (f"{hotkey.upper()} snapshot   F7 next round   "
-                  f"F6 sub-map   ESC done")
+        legend = (f"{hotkey.upper()} snapshot   F7 next round   F6 sub-map   "
+                  f"F9 undo   ESC done")
         tk.Label(self.win, text="● owscout capturing", bg="#0a0a0a", fg="#6cf",
                  font=("Segoe UI", 10, "bold")).pack(padx=16, pady=(6, 0), anchor="w")
         tk.Label(self.win, text=legend, bg="#0a0a0a", fg="#9aa",

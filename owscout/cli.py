@@ -391,6 +391,56 @@ def cmd_drafts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """One-glance health check: calibration, ref coverage per team, and drafts."""
+    ok = True
+
+    def line(mark: str, text: str) -> None:
+        print(f"  [{mark}] {text}")
+
+    with Database(_db_path(args)) as db:
+        # Hero roster (faceit + custom).
+        roster = 0
+        faceit_path = _faceit_db_path(args)
+        try:
+            from .faceit import connect_ro, load_heroes
+            with connect_ro(faceit_path) as fdb:
+                roster = len(load_heroes(fdb))
+            line("OK", f"faceit DB reachable - {roster} heroes in roster")
+        except Exception as exc:  # noqa: BLE001
+            ok = False
+            line("!!", f"faceit DB not reachable: {exc}")
+        customs = len(db.list_custom_heroes())
+        if customs:
+            line("OK", f"{customs} operator-added hero(es)")
+        total = roster + customs
+
+        prof = db.latest_active_profile(args.hud_variant)
+        if prof is None or prof.id is None:
+            ok = False
+            line("!!", "no calibration profile - run calibrate")
+        else:
+            line("OK", f"calibrated: profile #{prof.id} "
+                       f"{prof.resolution_w}x{prof.resolution_h} '{prof.hud_variant}'")
+            cov = db.ref_variant_coverage(prof.id)
+            for variant, team in (("a", "blue/left"), ("b", "red/right")):
+                have = cov.get(variant, 0)
+                mark = "OK" if total and have >= total else ".."
+                if not (total and have >= total):
+                    ok = False
+                line(mark, f"{team} refs: {have}/{total or '?'} heroes learned")
+            line("OK" if db.get_learn_slot(prof.id) else "..",
+                 "single-portrait learn box calibrated"
+                 if db.get_learn_slot(prof.id) else "no single learn box (scan mode)")
+
+        counts = db.map_status_counts()
+        line("..", f"{counts['draft']} draft map(s) awaiting review; "
+                   f"{counts['finalized']} finalized (in exports)")
+    print("\nreadiness: " + ("READY to capture." if ok else
+                             "setup incomplete - address [!!]/[..] above."))
+    return 0 if ok else 1
+
+
 def cmd_heroes_add(args: argparse.Namespace) -> int:
     with Database(_db_path(args)) as db:
         guid = db.add_custom_hero(args.name, args.role)
@@ -774,6 +824,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="fix a misread: replace hero WRONG with RIGHT on SIDE (a/b) "
                          "of MAP_ID (e.g. --fix 8 a Illari Mauga)")
     dr.set_defaults(func=cmd_drafts)
+
+    doc = sub.add_parser("doctor", help="health check: calibration, ref coverage, drafts")
+    doc.add_argument("--hud-variant", default="default", help="HUD variant to check")
+    doc.set_defaults(func=cmd_doctor)
 
     her = sub.add_parser("heroes", help="add/list operator-added heroes (new OW2 releases)")
     hsub = her.add_subparsers(dest="heroes_command", required=True)
