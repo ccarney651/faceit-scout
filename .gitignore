@@ -12,6 +12,12 @@ data/
 dist/
 build/
 
+# Local dashboard preview. The LIVE site is docs/index.html, built by CI from
+# its own synced database; this is built from whatever is on this machine, so
+# committing it would put a 3 MB artifact in the repo that can disagree with the
+# real page.
+dashboard.html
+
 # runtime
 auto-update.log
 *.log

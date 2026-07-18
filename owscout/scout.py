@@ -173,53 +173,6 @@ def _family_dict(f: CompFamily, names: dict[str, str]) -> dict[str, Any]:
     }
 
 
-_SEG_LEAD = {"attack": "When attacking", "defend": "When defending"}
-
-
-def narrate_map(team: str, map_name: str, segs: dict[str, Any]) -> str:
-    """A plain-language summary of how a team opens a map, per segment. This is
-    the wordier drill-down view; the team overview stays compact/structured."""
-    parts: list[str] = []
-    for seg, fams in segs.items():
-        if not fams:
-            continue
-        top = fams[0]
-        heroes = ", ".join(top["heroes"])
-        rec = f'{top["wins"]}W-{top["losses"]}L'
-        maps = top["maps"]
-        if seg in _SEG_LEAD:
-            lead = f'{_SEG_LEAD[seg]} {map_name}'
-        elif seg == "all":
-            lead = f'On {map_name}'
-        else:
-            lead = f'On {map_name} ({seg})'
-        s = (f'{lead}, {team} opens {heroes} '
-             f'({maps} map{"" if maps == 1 else "s"}, {rec}).')
-        if top.get("variants", 1) > 1:
-            s += f' They flex within it ({top["variants"]} lineups seen).'
-        if len(fams) > 1:
-            alt = fams[1]
-            s += f' Otherwise: {", ".join(alt["heroes"])} ({alt["maps"]}).'
-        parts.append(s)
-    return " ".join(parts)
-
-
-def narrate_swaps(team: str, swaps: list[dict[str, Any]]) -> str:
-    """A sentence on how a team adapts mid-map, and what they answer."""
-    if not swaps:
-        return ""
-    s = swaps[0]
-    out, inn = ", ".join(s["out"]), ", ".join(s["in"])
-    kind = "changes comp" if s["kind"] == "core" else "flexes"
-    # ASCII only: these strings reach the Windows console via the CLI, which is
-    # cp1252 and would crash on arrows/multiplication signs.
-    txt = (f'Mid-map {team} most often {kind}: {out} -> {inn} '
-           f'({s["count"]}x).')
-    if s.get("vs"):
-        txt += f' Usually against {", ".join(s["vs"][:3])}.'
-    return txt
-
-
 def team_scout(
     details: Iterable[ObsDetail], roles: Roles, hero_names: dict[str, str]
 ) -> dict[str, dict[str, Any]]:
@@ -281,7 +234,6 @@ def team_scout(
     teams = set(overall) | set(by_map)
     for team in teams:
         maps_out: dict[str, Any] = {}
-        opens_only: dict[str, list[dict[str, Any]]] = {}
         for mp, segs in by_map.get(team, {}).items():
             fams = {
                 seg: {
@@ -292,10 +244,8 @@ def team_scout(
                 }
                 for seg, both in segs.items()
             }
-            opens_only = {seg: v["open"] for seg, v in fams.items()}
             maps_out[mp] = {"segments": fams,
-                            "swaps": swaps_by_map.get(_MAP_KEY.join((team, mp)), []),
-                            "narrative": narrate_map(team, mp, opens_only)}
+                            "swaps": swaps_by_map.get(_MAP_KEY.join((team, mp)), [])}
         total = len(team_games.get(team, ()))
         rounds_total = len(team_rounds.get(team, ()))
         hero_pool: list[dict[str, Any]] = [
@@ -311,7 +261,6 @@ def team_scout(
             "rounds": rounds_total,
             "hero_pool": hero_pool,
             "swaps": swaps.get(team, []),
-            "swap_narrative": narrate_swaps(team, swaps.get(team, [])),
             "ban_response": bans.get(team, []),
         }
     return report

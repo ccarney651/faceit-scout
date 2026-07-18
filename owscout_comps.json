@@ -326,8 +326,7 @@
                 "count": 1,
                 "vs": []
               }
-            ],
-            "narrative": "On Ilios (Ruins), Wasp opens Bastion, DVa, Kiriko, Jetpack Cat, Shion (1 map, 1W-0L). On Ilios (Well), Wasp opens Bastion, DVa, Kiriko, Jetpack Cat, Shion (1 map, 1W-0L). On Ilios (Lighthouse), Wasp opens Bastion, DVa, Kiriko, Jetpack Cat, Shion (1 map, 1W-0L)."
+            ]
           }
         },
         "games": 1,
@@ -411,7 +410,6 @@
             "vs": []
           }
         ],
-        "swap_narrative": "Mid-map Wasp most often flexes: DVa -> Mauga (1x).",
         "ban_response": []
       }
     },
@@ -732,8 +730,7 @@
                 "count": 1,
                 "vs": []
               }
-            ],
-            "narrative": "On Ilios (Ruins), Dystopia opens Tracer, Lucio, Wrecking Ball, Kiriko, Freja (1 map, 0W-1L). On Ilios (Well), Dystopia opens Lucio, Wrecking Ball, Kiriko, Freja, Shion (1 map, 0W-1L). On Ilios (Lighthouse), Dystopia opens Bastion, Wrecking Ball, Echo, Kiriko, Jetpack Cat (1 map, 0W-1L)."
+            ]
           }
         },
         "games": 1,
@@ -835,7 +832,6 @@
             "vs": []
           }
         ],
-        "swap_narrative": "Mid-map Dystopia most often flexes: Tracer -> Shion (1x).",
         "ban_response": []
       }
     }
