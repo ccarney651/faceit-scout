@@ -25,6 +25,7 @@ from . import __version__
 from .calibrate import default_frame_dir, run_calibration
 from .capture import DEFAULT_WRITE_INTERVAL_MS, run_capture, run_hotkey_capture
 from .errors import CaptureError
+from .contribute import CONTRIB_DIR
 from .context import AmbiguousCode, CodeNotFound, derive_code_context, format_context
 from .derive import (
     DEFAULT_MIN_SAMPLES,
@@ -414,6 +415,61 @@ def _harvest(db: Database, args: argparse.Namespace, map_id: int, side: str,
             print("  (no stored crop to learn from - captured before crop storage)")
     except Exception as exc:  # noqa: BLE001
         print(f"  (could not harvest a ref: {exc})")
+
+
+def cmd_contribute_export(args: argparse.Namespace) -> int:
+    """Write this machine's captures in the shared exchange format."""
+    import json as _json
+    from .contribute import CONTRIB_DIR, build_contribution
+
+    out = args.out or os.path.join(CONTRIB_DIR, f"{args.contributor}.json")
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    with Database(_db_path(args)) as db:
+        data = build_contribution(db, contributor=args.contributor,
+                                  tool_version=__version__,
+                                  finalized_only=not args.include_drafts)
+    with open(out, "w", encoding="utf-8") as fh:
+        _json.dump(data, fh, indent=2)
+    obs = sum(len(m["observations"]) for m in data["maps"])
+    print(f"wrote {out}: {len(data['maps'])} map(s), {obs} observation(s), "
+          f"contributor '{args.contributor}'.")
+    if not data["maps"]:
+        print("  (nothing to share yet - captures must be FINALIZED in Review first)")
+    return 0
+
+
+def cmd_contribute_merge(args: argparse.Namespace) -> int:
+    """Merge every contributor file into the published payload (first-wins)."""
+    import json as _json
+    from .contribute import merged_payload, resolve_contributions
+    from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+
+    contribs = resolve_contributions(args.dir, use_git_order=not args.name_order)
+    if not contribs:
+        print(f"no contribution files in {args.dir}", file=sys.stderr)
+        return 2
+    with connect_ro(_faceit_db_path(args)) as fdb:
+        roles = load_roles(fdb)
+        names = {h.guid: h.name for h in load_heroes(fdb)}
+    with Database(_db_path(args)) as db:      # operator-added heroes, if any
+        for h in db.list_custom_heroes():
+            names[h.guid] = h.name
+            if h.role:
+                roles[h.guid] = h.role
+
+    payload = merged_payload(contribs, roles, names)
+    with open(args.out, "w", encoding="utf-8") as fh:
+        _json.dump(payload, fh, indent=2)
+    teams = cast("dict[str, object]", payload["teams"])
+    print(f"merged {payload['maps_merged']} map(s) from "
+          f"{len(payload['contributors'])} contributor(s) -> {args.out} "
+          f"({len(teams)} team(s))")
+    for c in payload["contributors"]:
+        print(f"    {c}")
+    if payload["views_ignored"]:
+        print(f"  {payload['views_ignored']} duplicate view(s) ignored "
+              "(first submission owns the map; the data is kept)")
+    return 0
 
 
 def cmd_refs_coverage(args: argparse.Namespace) -> int:
@@ -950,6 +1006,22 @@ def build_parser() -> argparse.ArgumentParser:
     ct.add_argument("--min-samples", type=int, default=10)
     ct.add_argument("--limit", type=int, default=25)
     ct.set_defaults(func=cmd_comps_top)
+
+    con = sub.add_parser(
+        "contribute", help="share captures / merge many contributors into one report")
+    consub = con.add_subparsers(dest="contribute_command", required=True)
+    ce = consub.add_parser("export", help="write this machine's captures for sharing")
+    ce.add_argument("contributor", help="your contributor name (becomes the filename)")
+    ce.add_argument("--out", default=None, help="output path (default: data/captures/<name>.json)")
+    ce.add_argument("--include-drafts", action="store_true",
+                    help="also share un-reviewed maps (not recommended)")
+    ce.set_defaults(func=cmd_contribute_export)
+    cm = consub.add_parser("merge", help="merge all contributor files into the payload")
+    cm.add_argument("--dir", default=CONTRIB_DIR, help="contributions directory")
+    cm.add_argument("--out", default="owscout_comps.json", help="payload to write")
+    cm.add_argument("--name-order", action="store_true",
+                    help="order by filename instead of git commit date (testing)")
+    cm.set_defaults(func=cmd_contribute_merge)
 
     gui = sub.add_parser("gui", help="launch the desktop app (clickable workflow)")
     gui.set_defaults(func=cmd_gui)
