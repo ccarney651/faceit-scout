@@ -441,7 +441,8 @@ def cmd_contribute_export(args: argparse.Namespace) -> int:
 def cmd_contribute_merge(args: argparse.Namespace) -> int:
     """Merge every contributor file into the published payload (first-wins)."""
     import json as _json
-    from .contribute import load_overrides, merged_payload, resolve_contributions
+    from .contribute import (known_games, load_overrides, merged_payload,
+                             resolve_contributions)
     from .faceit import connect_ro, hero_roles as load_roles, load_heroes
 
     contribs = resolve_contributions(args.dir, use_git_order=not args.name_order)
@@ -454,7 +455,10 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
         names = {h.guid: h.name for h in load_heroes(fdb)}
     # No owscout DB needed: contributions declare their own custom heroes, so a
     # build server can merge with nothing but the faceit roster and the files.
-    payload = merged_payload(contribs, roles, names, overrides=overrides)
+    # Validation against faceit.games is NOT optional here: this command is what
+    # CI runs, and it is the only gate between a contributor file and the site.
+    payload = merged_payload(contribs, roles, names, overrides=overrides,
+                             known=known_games(_faceit_db_path(args)))
     with open(args.out, "w", encoding="utf-8") as fh:
         _json.dump(payload, fh, indent=2)
     teams = cast("dict[str, object]", payload["teams"])
@@ -468,6 +472,9 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     if payload["views_ignored"]:
         print(f"  {payload['views_ignored']} duplicate view(s) ignored "
               "(first submission owns the map; the data is kept)")
+    if payload["maps_rejected"]:
+        print(f"  !! {payload['maps_rejected']} map(s) REJECTED - they name games "
+              "FACEIT has no record of, wrong teams, or wrong codes (see log)")
     return 0
 
 

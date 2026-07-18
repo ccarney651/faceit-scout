@@ -343,8 +343,13 @@ inflating every rate that divides by them. The exchange format therefore keys on
 FACEIT's `(match_id, game_no)`, which is identical on every machine, and **local
 ids never leave the machine**.
 
-This also gives the dataset a useful property against bad data: every contributed
-map names a real FACEIT match. Nobody can invent a game.
+This also gives the dataset an enforced property against bad data — enforced at
+merge time, not merely implied by the format: every contributed map must name a
+`(match_id, game_no)` FACEIT has a record of, any team name it carries must be
+one of the two teams FACEIT says played (the signature of scouting the wrong
+replay code), and its replay code must agree when FACEIT published one. Rejected
+views are dropped loudly, per view — one contributor's bad view of a real game
+never blocks another's good view of it.
 
 ## When two people scout the same map
 

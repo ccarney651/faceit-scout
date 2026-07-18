@@ -115,3 +115,64 @@ def test_malformed_overrides_degrade_to_first_wins(tmp_path: Path) -> None:
     from owscout.contribute import load_overrides
     (tmp_path / "overrides.json").write_text("{not json", encoding="utf-8")
     assert load_overrides(tmp_path) == {}
+
+
+def _known(mid: str = "m1", game: int = 1, teams: tuple[str, str] = ("Alpha", "Bravo"),
+           code: str | None = "CODE1") -> dict[MapKey, Any]:
+    from owscout.contribute import KnownGame
+    return {MapKey(mid, game): KnownGame(
+        teams=frozenset(t.lower() for t in teams), demo_code=code)}
+
+
+def test_invented_game_is_rejected() -> None:
+    """The advertised trust property, now actually enforced: a contributed map
+    must name a game FACEIT has a record of."""
+    from owscout.contribute import validate_maps
+    contrib = _contrib("alice", [("ghost-match", 1, ["ram"])])
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert cleaned["maps"] == []
+    assert "does not exist" in rejects[0][1]
+
+
+def test_wrong_team_name_is_rejected() -> None:
+    """The signature of scouting the WRONG replay code and attaching it to this
+    match - which would silently poison another team's report."""
+    from owscout.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    contrib["maps"][0]["side_a_team"] = "Imposters"
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert cleaned["maps"] == [] and "did not play" in rejects[0][1]
+
+
+def test_correct_map_passes_case_insensitively() -> None:
+    from owscout.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    contrib["maps"][0].update(side_a_team="ALPHA", side_b_team="bravo",
+                              demo_code="CODE1")
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert len(cleaned["maps"]) == 1 and rejects == []
+
+
+def test_code_mismatch_rejected_but_lenient_when_faceit_has_none() -> None:
+    """Some matches never get a published code, yet the operator may hold one -
+    that must pass. A code that CONTRADICTS a published one must not."""
+    from owscout.contribute import validate_maps
+    wrong = _contrib("alice", [("m1", 1, ["ram"])])
+    wrong["maps"][0]["demo_code"] = "OTHER9"
+    assert validate_maps(wrong, _known())[0]["maps"] == []
+    lenient = _contrib("alice", [("m1", 1, ["ram"])])
+    lenient["maps"][0]["demo_code"] = "OTHER9"
+    assert len(validate_maps(lenient, _known(code=None))[0]["maps"]) == 1
+
+
+def test_rejection_is_per_view_not_per_map() -> None:
+    """Alice's bad view of a REAL game must not block Bob's good view: validation
+    runs before ownership, so Bob still wins the map."""
+    from owscout.contribute import merged_payload
+    alice = _contrib("alice", [("m1", 1, ["ram", "soj"])])
+    alice["maps"][0]["side_a_team"] = "Imposters"          # bad view, real game
+    bob = _contrib("bob", [("m1", 1, ["ram", "mauga"])])
+    payload = merged_payload([alice, bob], {"ram": "tank"}, {"ram": "RAM"},
+                             known=_known())
+    assert payload["maps_rejected"] == 1
+    assert payload["maps_merged"] == 1                      # bob's view survived

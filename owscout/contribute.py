@@ -53,6 +53,13 @@ class MapKey(NamedTuple):
     game_no: int
 
 
+class KnownGame(NamedTuple):
+    """What FACEIT says about a real game: who played it, and its replay code."""
+
+    teams: frozenset[str]           # both team names, lowercased
+    demo_code: Optional[str]        # None when FACEIT never published one
+
+
 class MergeResult(NamedTuple):
     """``maps`` is the accepted view of each game; ``owner`` says who claimed it;
     ``ignored`` lists (contributor, key) for later views that were not used —
@@ -140,6 +147,76 @@ def build_contribution(
         "heroes": heroes,
         "maps": maps,
     }
+
+
+def known_games(faceit_db_path: str) -> dict[MapKey, KnownGame]:
+    """Every game FACEIT knows about, keyed the same way contributions are.
+
+    This is the enforcement of a promise the format only implied: a contributed
+    map names a real FACEIT game, so nobody can invent a match. Implied is not
+    enforced — without this table the merge trusted match_id blindly, and a
+    malformed or malicious file could put games that never happened on the site.
+    """
+    from .faceit import connect_ro
+
+    with connect_ro(faceit_db_path) as fdb:
+        rows = fdb.execute(
+            """SELECT g.match_id, g.game_no, g.demo_code,
+                      t1.name AS a, t2.name AS b
+               FROM games g
+               JOIN matches m ON m.id = g.match_id
+               LEFT JOIN teams t1 ON t1.id = m.faction1_team_id
+               LEFT JOIN teams t2 ON t2.id = m.faction2_team_id""",
+        ).fetchall()
+    return {
+        MapKey(str(r["match_id"]), int(r["game_no"])): KnownGame(
+            teams=frozenset(str(n).lower() for n in (r["a"], r["b"]) if n),
+            demo_code=r["demo_code"])
+        for r in rows
+    }
+
+
+def validate_maps(
+    contrib: Mapping[str, Any], known: Mapping[MapKey, KnownGame]
+) -> tuple[dict[str, Any], list[tuple[Optional[MapKey], str]]]:
+    """One contribution -> (cleaned copy, rejected maps with reasons).
+
+    Applied PER VIEW, before ownership: if Alice's view of a real game carries
+    the wrong team names and Bob's is right, Alice's view is dropped and Bob's
+    must still be able to win the map. Three checks:
+
+    * the game must exist in faceit.games — fabrication or corruption;
+    * any team name the contribution carries must be one of the two teams
+      FACEIT says played — the signature of scouting the WRONG replay code and
+      attaching it to this match, which would poison another team's report; and
+    * the replay code must agree when FACEIT published one (lenient when it
+      did not — some matches never get codes, yet the operator may have one).
+    """
+    who = str(contrib.get("contributor", "?"))
+    cleaned: list[dict[str, Any]] = []
+    rejects: list[tuple[Optional[MapKey], str]] = []
+    for m in contrib.get("maps", []):
+        if not m.get("match_id") or m.get("game_no") is None:
+            rejects.append((None, "no FACEIT identity"))
+            continue
+        key = MapKey(str(m["match_id"]), int(m["game_no"]))
+        game = known.get(key)
+        if game is None:
+            rejects.append((key, "game does not exist on FACEIT"))
+            continue
+        names = [str(m.get(f"side_{s}_team") or "").lower() for s in ("a", "b")]
+        bad = [n for n in names if n and n not in game.teams]
+        if bad:
+            rejects.append((key, f"team {bad[0]!r} did not play this game"))
+            continue
+        code = m.get("demo_code")
+        if code and game.demo_code and str(code) != str(game.demo_code):
+            rejects.append((key, f"replay code {code!r} does not match FACEIT's"))
+            continue
+        cleaned.append(m)
+    for rkey, why in rejects:
+        log.warning("rejected map from %s (%s): %s", who, rkey, why)
+    return dict(contrib, maps=cleaned), rejects
 
 
 def load_contribution(path: str | Path) -> dict[str, Any]:
@@ -295,11 +372,14 @@ def merged_payload(
     contributions: Sequence[Mapping[str, Any]],
     hero_roles: Mapping[str, str], hero_names: Mapping[str, str],
     overrides: Optional[Mapping[MapKey, str]] = None,
+    known: Optional[Mapping[MapKey, KnownGame]] = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
     Same shape the single-operator path produced, so the dashboard is unchanged —
-    only where the data comes from has changed."""
+    only where the data comes from has changed. When ``known`` is given, every
+    contributed map is validated against it first; rejected views never reach
+    the merge, and the count is reported in the payload."""
     from .derive import dashboard_comps
     from .scout import team_scout
 
@@ -312,6 +392,15 @@ def merged_payload(
             if h.get("role"):
                 roles[guid] = str(h["role"])
 
+    rejected = 0
+    if known is not None:
+        checked = []
+        for c in contributions:
+            cleaned, rejects = validate_maps(c, known)
+            rejected += len(rejects)
+            checked.append(cleaned)
+        contributions = checked
+
     merged = merge_first_wins(contributions, overrides=overrides)
     payload = dashboard_comps(to_obs_rows(merged.maps, roles, names))
     report = team_scout(to_obs_details(merged.maps), roles, names)
@@ -322,6 +411,7 @@ def merged_payload(
     payload["contributors"] = sorted({str(c["contributor"]) for c in contributions})
     payload["maps_merged"] = len(merged.maps)
     payload["views_ignored"] = len(merged.ignored)
+    payload["maps_rejected"] = rejected
     return payload
 
 
