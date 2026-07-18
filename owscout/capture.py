@@ -252,6 +252,93 @@ def _affinity(names: Sequence[str], roster: Sequence[str], scorer: Scorer) -> fl
     return sum(max((scorer(n, r) for r in roster), default=0.0) for n in names)
 
 
+# Auto side-detection thresholds, MEASURED on real frames (2026-07-18):
+# aligned dxcam frames lead direct-vs-swap by 360-400 with 5-6 strong names;
+# a garbage misaligned frame led by only 25 with 0 strong names - yet still
+# cleared the old margin of 1.0, i.e. the default margin would happily assign
+# sides from noise. Both gates below must pass before a side is trusted.
+AUTO_SIDE_MARGIN = 100.0
+STRONG_NAME_SCORE = 75.0
+MIN_STRONG_NAMES = 3
+
+
+def confident_left_faction(
+    left_names: Sequence[str],
+    right_names: Sequence[str],
+    faction1_names: Sequence[str],
+    faction2_names: Sequence[str],
+    *,
+    scorer: Scorer = _difflib_ratio,
+) -> Optional[str]:
+    """assign_sides, but strict enough to act on WITHOUT a human check.
+
+    Two gates: the winning orientation must lead by AUTO_SIDE_MARGIN, and at
+    least MIN_STRONG_NAMES OCR'd names must individually match their roster
+    well - so five garbled reads can never add up to a confident answer.
+    Battletags differing from FACEIT nicknames is fine (measured: one player
+    read WHITEBEARD against a roster with no such nickname and the verdict was
+    still correct) because only the two-roster CONTRAST has to win, not every
+    name."""
+    direct = _affinity(left_names, faction1_names, scorer) + _affinity(right_names, faction2_names, scorer)
+    swap = _affinity(left_names, faction2_names, scorer) + _affinity(right_names, faction1_names, scorer)
+    if direct >= swap:
+        got, lead = "faction1", direct - swap
+        rosters = (faction1_names, faction2_names)
+    else:
+        got, lead = "faction2", swap - direct
+        rosters = (faction2_names, faction1_names)
+    if lead < AUTO_SIDE_MARGIN:
+        return None
+    strong = sum(
+        1 for names, roster in zip((left_names, right_names), rosters)
+        for n in names
+        if n and max((scorer(n, r) for r in roster), default=0.0) >= STRONG_NAME_SCORE
+    )
+    return got if strong >= MIN_STRONG_NAMES else None
+
+
+def read_hud_names(frame: Frame, slots: Mapping[str, Sequence[Any]]) -> dict[str, list[str]]:  # pragma: no cover - needs winsdk + a frame
+    """OCR the player-name bars under each portrait via Windows' built-in OCR
+    (no external install). The name bar sits at ~50-90% of the calibrated cell
+    height; text is ~10px so it is upscaled 4x first. Returns {'a': [...], 'b':
+    [...]} with '' for unreadable slots - the caller's thresholds handle noise."""
+    import asyncio
+
+    import cv2
+    import winsdk.windows.graphics.imaging as imaging
+    import winsdk.windows.media.ocr as w_ocr
+    import winsdk.windows.storage.streams as streams
+
+    async def _ocr(img: Any) -> str:
+        rgba = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+        h, w = rgba.shape[:2]
+        bmp = imaging.SoftwareBitmap(imaging.BitmapPixelFormat.BGRA8, w, h,
+                                     imaging.BitmapAlphaMode.PREMULTIPLIED)
+        buf = streams.Buffer(w * h * 4)
+        buf.length = w * h * 4
+        with memoryview(buf) as mv:
+            mv[:] = rgba.tobytes()
+        bmp.copy_from_buffer(buf)  # type: ignore[arg-type]
+        eng = w_ocr.OcrEngine.try_create_from_user_profile_languages()
+        assert eng is not None, "no OCR language pack installed"
+        res = await eng.recognize_async(bmp)
+        return " ".join(line.text for line in res.lines or [])
+
+    async def _all() -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for side in (SIDE_LEFT, SIDE_RIGHT):
+            names = []
+            for r in slots[side]:
+                y0, y1 = r.y + int(r.h * 0.48), r.y + int(r.h * 0.90)
+                crop = frame[y0:y1, max(0, r.x - 6):r.x + r.w + 6]
+                big = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+                names.append((await _ocr(big)).strip())
+            out[side] = names
+        return out
+
+    return asyncio.run(_all())
+
+
 def assign_sides(
     left_names: Sequence[str],
     right_names: Sequence[str],
@@ -584,9 +671,10 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         if side_a_team is not None:
             tid = resolve_team_id(fdb, side_a_team)
             side_a_faction = "faction1" if tid == ctx.faction1_team_id else "faction2"
-        else:
-            log.warning("no --side-a-team given; assuming side A (left) = %s",
-                        ctx.faction1_team_name)
+    # No explicit left team: detect it from the HUD name bars on the first
+    # snapshot instead of assuming faction1 (which silently mirrored every
+    # side-dependent stat when the guess was wrong).
+    auto_side = side_a_team is None
     for _h in db.list_custom_heroes():  # include operator-added (live-game) heroes
         hero_names[_h.guid] = _h.name
         if _h.role:
@@ -595,7 +683,9 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     profile, refs = _profile_and_refs(db, cv2, hud_variant)
     banned = {b.hero_guid for b in ctx.bans}
     map_instance_id: Optional[int] = None
-    if not dry_run:
+    if not dry_run and not auto_side:
+        # In auto mode the map instance is created only after the first
+        # confident name read - never under a guessed side.
         map_instance_id = db.upsert_map_instance_from_context(
             ctx, side_a_faction, profile_id=profile.id, map_verified=None)
     score_fn = make_template_scorer(cv2)
@@ -716,6 +806,26 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                               crop_fn=_padded_crop, score_fn=score_fn)
             for side in (SIDE_LEFT, SIDE_RIGHT)
         }
+        if auto_side:
+            f1 = [p.nickname or "" for p in ctx.players if p.faction == "faction1"]
+            f2 = [p.nickname or "" for p in ctx.players if p.faction == "faction2"]
+            try:
+                reads = read_hud_names(frame, profile.slots)
+                got = confident_left_faction(reads[SIDE_LEFT], reads[SIDE_RIGHT], f1, f2)
+            except Exception as exc:  # noqa: BLE001 - OCR failure must not kill capture
+                emit(f"  name detection unavailable ({exc}) - restart and pick the left team")
+                got = None
+            if got is None:
+                emit("  couldn't identify the teams from names - snapshot skipped. "
+                     "Try again on a clear view (spawn), or restart with a manual Left team.")
+                continue
+            side_a_faction = got
+            left = ctx.faction1_team_name if got == "faction1" else ctx.faction2_team_name
+            emit(f"  auto-detected LEFT team = {left}")
+            if not dry_run:
+                map_instance_id = db.upsert_map_instance_from_context(
+                    ctx, side_a_faction, profile_id=profile.id, map_verified=None)
+            auto_side = False
         pal["ra"] += sum(1 for m in matches_by_side[SIDE_LEFT] if m.resolved)
         pal["ta"] += len(matches_by_side[SIDE_LEFT])
         pal["rb"] += sum(1 for m in matches_by_side[SIDE_RIGHT] if m.resolved)

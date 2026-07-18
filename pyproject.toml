@@ -29,6 +29,7 @@ capture = [
     "opencv-python>=4.9",
     "numpy>=1.26",
     "keyboard>=0.13",
+    "winsdk>=1.0",   # Windows built-in OCR for auto side-detection
 ]
 
 [project.scripts]

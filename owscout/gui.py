@@ -555,6 +555,12 @@ class _App:  # pragma: no cover - GUI runtime only
         for w in self.team_frame.winfo_children():
             w.destroy()
         self.side_a_var.set("")  # force a fresh choice per map
+        # Auto is the default: capture reads the player-name bars on the first
+        # snapshot and works out which team is left (verified on real frames -
+        # correct even when a battletag differs completely from the faceit
+        # nickname). The manual radios remain as the override.
+        ttk.Radiobutton(self.team_frame, text="Auto-detect (from names)", value="",
+                        variable=self.side_a_var).pack(side="left", padx=(0, 12))
         for name in (t1, t2):
             if name:
                 ttk.Radiobutton(self.team_frame, text=name, value=name,
@@ -712,10 +718,7 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit("pick a code first (click ↻ to load Master codes).")
             return
         code = raw.split()[0]
-        side_a = self.side_a_var.get().strip() or None
-        if side_a is None:
-            self._emit("pick the LEFT team first (click its name under 'Left team').")
-            return
+        side_a = self.side_a_var.get().strip() or None   # None = auto-detect
         binds = self._keybinds
         from .capture import run_hotkey_capture
         self._emit(f"capture: {code} — {_keys_summary(binds)} · ESC done. Watch the overlay.")

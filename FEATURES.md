@@ -254,6 +254,19 @@ a snapshot differing *only* by slots degrading to `??` is also dropped (a worse
 read is not new information), while a round or sub-map change lets an identical
 comp through (the same comp on a new point is a real observation).
 
+**Auto side-detection.** Picking which team is on the left of the HUD used to
+be a manual, error-prone step — get it wrong and every side-dependent stat is
+mirrored. Capture now reads the player-name bars under the portraits with
+Windows' built-in OCR (no external install) on the first snapshot and matches
+them against the two FACEIT rosters. Measured on real frames: correct on 3/3,
+**including a player whose battletag (WHITEBEARD) shares nothing with any FACEIT
+nickname** — only the two-roster contrast has to win, not every name, so
+battletags are not required data. Two strict gates (orientation lead ≥100 and
+≥3 individually-strong name matches) exist because a garbage frame cleared the
+naive margin — noise must be refused, never guessed. Auto is the GUI default;
+the manual pick remains as the override, and in auto mode nothing is written
+until a confident read happens.
+
 **Round, sub-map and phase tagging.** Control maps start on a sub-map; `F6` picks
 from the not-yet-played ones and advancing a round auto-selects the next unplayed
 one. Attack/defend is derived for Escort/Hybrid — red attacks round 1, teams flip
