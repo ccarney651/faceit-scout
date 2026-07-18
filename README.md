@@ -25,10 +25,13 @@ It is built to run 2–3× per week against in-progress seasons:
 - **Idempotent** — re-running never duplicates rows. Matches already stored as
   `FINISHED` are skipped (and not even re-fetched) unless `--force-refresh` is
   given, because veto, results and stats never change once a match ends.
-  **Replay codes are the exception**: FACEIT publishes them *after* the match, so
-  a recent finished match that is still missing codes is re-fetched anyway
-  (`--backfill-days`, default 14). Without that, a code published an hour after
-  ingest would never arrive.
+  **Replay codes are a partial exception.** A code absent at ingest would never
+  arrive under a pure skip, so two narrow cases are re-fetched: a match with a
+  *partial* gap (some games have codes, some do not) within `--backfill-days`
+  (default 14), and any match ingested in the last 12 hours. Matches with no code
+  on *any* game are left alone — measured across 676 matches, that state is
+  permanent (replays were never published for them), and re-fetching them
+  recovered nothing.
 - **Honest about missing data** — where a value genuinely isn't available it is
   stored as `NULL`, never zero-filled or guessed. See **[Data quality](#data-quality)**.
 

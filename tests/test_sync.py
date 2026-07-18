@@ -1,4 +1,10 @@
-"""Replay-code backfill: re-fetching stored matches whose codes arrived late."""
+"""Replay-code backfill: which stored matches are worth re-fetching.
+
+The rule is narrow on purpose. Measured on 676 real matches, a missing replay
+code is almost always permanent — replays were never published for that match —
+so re-fetching every code-less match cost 44 API calls per run and recovered
+nothing. Only a partial gap or a just-ingested match can still gain a code.
+"""
 
 from __future__ import annotations
 
@@ -9,39 +15,56 @@ from faceit_sync.sync import SyncEngine
 from conftest import make_client
 
 
-def _match(db: Database, mid: str, age_days: int, code: Optional[str]) -> None:
+def _match(db: Database, mid: str, age: str, codes: list[Optional[str]]) -> None:
+    """Store a FINISHED match ``age`` ago (a SQLite modifier like '-2 days') whose
+    games carry ``codes`` — None for a game with no replay code."""
     db.conn.execute("INSERT OR IGNORE INTO championships (id) VALUES ('c1')")
     db.conn.execute(
         "INSERT INTO matches (id, championship_id, status, finished_at, fetched_at) "
-        "VALUES (?, 'c1', 'FINISHED', datetime('now', ?), datetime('now'))",
-        (mid, f"-{age_days} days"))
-    db.conn.execute(
-        "INSERT INTO games (match_id, game_no, demo_code) VALUES (?, 1, ?)", (mid, code))
+        "VALUES (?, 'c1', 'FINISHED', datetime('now', ?), datetime('now'))", (mid, age))
+    for i, code in enumerate(codes, start=1):
+        db.conn.execute(
+            "INSERT INTO games (match_id, game_no, demo_code) VALUES (?, ?, ?)",
+            (mid, i, code))
     db.conn.commit()
 
 
-def test_recent_match_missing_codes_is_refetched(db: Database) -> None:
-    """The bug this guards: FACEIT publishes replay codes AFTER a match finishes,
-    but a plain fetch skips anything stored FINISHED - so those codes never
-    arrived and the match stayed permanently un-capturable."""
-    _match(db, "m1", age_days=2, code=None)
-    assert db.matches_needing_backfill(14) == {"m1"}
+def test_partial_gap_is_refetched(db: Database) -> None:
+    """Some games have codes and some do not: the only shape consistent with a
+    publish that has not finished landing, so it is worth another look."""
+    _match(db, "partial", "-2 days", ["ABC123", None, "DEF456"])
+    assert db.matches_needing_backfill(14) == {"partial"}
 
 
-def test_complete_or_old_matches_are_not_refetched(db: Database) -> None:
-    """Each re-fetch costs an API call, so only matches that can still gain a code
-    qualify: not the complete ones, not ones too old for a code to appear."""
-    _match(db, "done", age_days=2, code="ABC123")
-    _match(db, "old", age_days=90, code=None)
+def test_wholly_codeless_match_is_left_alone(db: Database) -> None:
+    """The expensive mistake this guards. A match with no code on ANY game never
+    had replays published; re-fetching it forever recovers nothing. 39 of the 44
+    candidates under the old rule were this case."""
+    _match(db, "never", "-2 days", [None, None, None])
     assert db.matches_needing_backfill(14) == set()
-    assert db.matches_needing_backfill(0) == set()      # 0 disables the window
 
 
-def test_skip_stored_lets_a_backfill_candidate_through(db: Database) -> None:
-    """_skip_stored is what all three fetch paths consult: a candidate must not be
-    skipped, and a complete stored match must still be."""
-    _match(db, "need", age_days=1, code=None)
-    _match(db, "have", age_days=1, code="ABC123")
+def test_wholly_codeless_but_just_ingested_gets_a_grace_period(db: Database) -> None:
+    """A match stored moments after it ended may genuinely not have its codes up
+    yet, so brand-new matches are re-checked even with nothing to compare against."""
+    _match(db, "fresh", "-1 hours", [None, None])
+    assert db.matches_needing_backfill(14, fresh_hours=12) == {"fresh"}
+    # ...but the grace period expires rather than running forever.
+    assert db.matches_needing_backfill(14, fresh_hours=0) == set()
+
+
+def test_complete_and_out_of_window_matches_are_left_alone(db: Database) -> None:
+    _match(db, "done", "-2 days", ["ABC123", "DEF456"])
+    _match(db, "old", "-90 days", ["ABC123", None])   # partial, but far too old
+    assert db.matches_needing_backfill(14) == set()
+    assert db.matches_needing_backfill(0) == set()    # 0 disables backfill entirely
+
+
+def test_skip_stored_consults_the_backfill_set(db: Database) -> None:
+    """_skip_stored is what all three fetch paths call: a candidate must get
+    through, and a settled match must still be skipped."""
+    _match(db, "partial", "-1 days", ["ABC123", None])
+    _match(db, "done", "-1 days", ["ABC123", "DEF456"])
     engine = SyncEngine(make_client()[0], db)
-    assert engine._skip_stored("need", force_refresh=False) is False
-    assert engine._skip_stored("have", force_refresh=False) is True
+    assert engine._skip_stored("partial", force_refresh=False) is False
+    assert engine._skip_stored("done", force_refresh=False) is True

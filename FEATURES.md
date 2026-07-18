@@ -52,12 +52,21 @@ division from scratch.
 identifiers (`match_id`, `(match_id, game_no)`), so re-running is free and a
 half-finished run leaves no partial state.
 
-**Replay-code backfill.** FACEIT publishes replay codes *after* a match ends,
-sometimes days later, but a plain fetch skips anything already stored `FINISHED`.
-That meant late codes never arrived and the match stayed permanently
-un-capturable. A stored match is now re-fetched when it is **recent** *and*
-**still missing a code** — both conditions, so cost stays proportional to the real
-gap rather than re-fetching everything. `--backfill-days`, default 14.
+**Replay-code backfill.** A plain fetch skips anything already stored
+`FINISHED`, so a code absent at ingest could never arrive. The obvious fix — re-fetch
+any recent match missing a code — turned out to be wrong, and measuring it is
+worth recording:
+
+> Across 676 real matches, **87 had no code on any game and only 4 had a partial
+> gap**. Re-fetching all 44 recent candidates recovered **zero** codes. Missing
+> codes are an all-or-nothing property of a match, not a publishing delay: replays
+> were simply never published for those matches, which tracks with the division
+> (17.8% of EMEA Master games lack codes vs 1.1% of NA Master).
+
+So only two cases are re-fetched: a **partial gap** (some games have codes, some
+do not — the one signature consistent with an incomplete publish) within
+`--backfill-days`, and any match **ingested in the last 12 hours**, which may
+genuinely not have its codes up yet. That is ~5 matches per run instead of 44.
 
 **Restart handling.** FACEIT's demo-URL bug produces duplicate game shells when a
 map is restarted. `was_restarted` marks them and integrity reporting clusters
