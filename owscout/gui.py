@@ -1035,8 +1035,22 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         with self._db() as db:
             n = db.correct_hero_in_map(d.id, side, wg, rg, hero_roles=self.hero_roles,
                                        hero_names=self.hero_names)
+            # Close the loop: the crop the matcher got wrong is a confirmed
+            # portrait of the RIGHT hero, so teach it rather than discard it.
+            learned = None
+            try:
+                from .refs import default_refs_dir, harvest_correction
+                prof = db.latest_active_profile("default")
+                if prof is not None and prof.id is not None:
+                    learned = harvest_correction(
+                        db, default_refs_dir(self.app.db_var.get()),
+                        map_instance_id=d.id, side=side, right_guid=rg,
+                        hero_name=self.fix_right.get().strip(), profile_id=prof.id)
+            except Exception as exc:  # noqa: BLE001 - never mask the correction
+                self.app._emit(f"review: (ref harvest skipped: {exc})")
         self.app._emit(f"review: fixed {self.fix_wrong.get()} → {self.fix_right.get()} "
-                       f"on side {side} ({n} observation(s)).")
+                       f"on side {side} ({n} observation(s))."
+                       + (" Learned a new reference from it." if learned else ""))
         self._show_selected()
 
     def _db(self) -> Database:

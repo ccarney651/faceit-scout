@@ -359,6 +359,7 @@ def cmd_drafts(args: argparse.Namespace) -> int:
                                        hero_roles=roles, hero_names=guid_to_name)
             print(f"fixed {wrong} -> {right} on side {side} of map {map_id_s} "
                   f"({n} observation(s)).")
+            _harvest(db, args, int(map_id_s), side, rg, guid_to_name.get(rg, right))
             return 0
         if args.finalize is not None:
             db.finalize_map(args.finalize)
@@ -388,6 +389,69 @@ def cmd_drafts(args: argparse.Namespace) -> int:
                     print(f"      {side} {label or '?':<16} {pre}x{n}: {names}{tag}")
         print("\nFinalize with:  owscout drafts --finalize <map_id>"
               "   |   discard:  owscout drafts --discard <map_id>")
+    return 0
+
+
+def _harvest(db: Database, args: argparse.Namespace, map_id: int, side: str,
+             right_guid: str, hero_name: str) -> None:
+    """Feed a correction back into the ref library. Best-effort: a failure here
+    must never make the operator think the correction itself did not apply."""
+    try:
+        from .refs import default_refs_dir, harvest_correction
+        prof = db.latest_active_profile(getattr(args, "hud_variant", "default"))
+        if prof is None or prof.id is None:
+            return
+        # `drafts` carries neither --refs-dir nor --hud-variant, so both are
+        # looked up defensively rather than assumed onto the namespace.
+        path = harvest_correction(
+            db, getattr(args, "refs_dir", None) or default_refs_dir(_db_path(args)),
+            map_instance_id=map_id, side=side, right_guid=right_guid,
+            hero_name=hero_name, profile_id=prof.id)
+        if path:
+            print(f"  learned a new {hero_name} reference from this fix.")
+        else:
+            print("  (no stored crop to learn from - captured before crop storage)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  (could not harvest a ref: {exc})")
+
+
+def cmd_refs_coverage(args: argparse.Namespace) -> int:
+    """Which references have actually been tested by live captures, and which have
+    been quietly wrong. Confidence finds shaky refs; corrections find confidently
+    WRONG ones, which is the more dangerous kind."""
+    with Database(_db_path(args)) as db:
+        rows = db.hero_coverage(_faceit_db_path(args))
+        unseen = db.unseen_heroes(_faceit_db_path(args))
+
+    if not rows:
+        print("no captures yet - coverage builds up as you capture maps.")
+        return 0
+
+    shown = rows if args.all else rows[:args.limit]
+    print(f"{'hero':<22} {'team':<6} {'n':>4} {'worst':>7} {'mean':>7}  fixes")
+    print("  " + "-" * 58)
+    for r in shown:
+        team = "blue" if r.variant == "a" else "red"
+        # A correction means the matcher was confidently wrong - flag it loudly,
+        # since a high mean confidence would otherwise make it look healthy.
+        flag = "  <-- corrected" if r.corrections else ""
+        print(f"  {r.hero_name:<22} {team:<6} {r.samples:>4} "
+              f"{r.min_confidence:>7.3f} {r.avg_confidence:>7.3f}  "
+              f"{r.corrections:>5}{flag}")
+    if not args.all and len(rows) > len(shown):
+        print(f"  ... {len(rows) - len(shown)} more (use --all)")
+
+    seen_pairs = {(r.hero_guid, r.variant) for r in rows}
+    print("")
+    print(f"  tested: {len(seen_pairs)} hero+team refs across "
+          f"{sum(r.samples for r in rows)} slots")
+    if unseen:
+        print(f"  NEVER seen in a capture: {len(unseen)} hero+team refs")
+        for guid, name, variant in unseen[:12]:
+            print(f"    {name} ({'blue' if variant == 'a' else 'red'})")
+        if len(unseen) > 12:
+            print(f"    ... and {len(unseen) - 12} more")
+        print("  These are unvalidated - they may be fine, or silently wrong.")
     return 0
 
 
@@ -436,6 +500,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         counts = db.map_status_counts()
         line("..", f"{counts['draft']} draft map(s) awaiting review; "
                    f"{counts['finalized']} finalized (in exports)")
+
+        # Learned refs are not the same as VALIDATED refs. A full library reads as
+        # healthy above while most of it has never faced a live frame, so say so.
+        try:
+            seen = db.hero_coverage(faceit_path)
+            unseen = db.unseen_heroes(faceit_path)
+            if seen:
+                weak = [c for c in seen if c.min_confidence < 0.70 or c.corrections]
+                line("OK" if not weak else "..",
+                     f"validated against live frames: {len(seen)} hero+team refs"
+                     + (f"; {len(weak)} weak (see `owscout refs coverage`)" if weak else ""))
+            if unseen:
+                line("..", f"{len(unseen)} hero+team refs never seen in a capture "
+                           "- unvalidated, not necessarily wrong")
+        except Exception as exc:  # noqa: BLE001 - coverage is advisory, never fatal
+            line("..", f"coverage unavailable ({exc})")
     print("\nreadiness: " + ("READY to capture." if ok else
                              "setup incomplete - address [!!]/[..] above."))
     return 0 if ok else 1
@@ -738,6 +818,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="where to store ref crops (default: refs/ next to the DB)")
     rl.add_argument("--dry-run", action="store_true", help="guess + preview but do not write")
     rl.set_defaults(func=cmd_refs_learn)
+
+    rc = rsub.add_parser(
+        "coverage",
+        help="how each ref has performed against real frames (find the weak ones)")
+    rc.add_argument("--limit", type=int, default=20,
+                    help="how many of the weakest to show (default: 20)")
+    rc.add_argument("--all", action="store_true", help="show every hero, not just the weakest")
+    rc.set_defaults(func=cmd_refs_coverage)
 
     rv = rsub.add_parser("verify", help="report missing refs and near-duplicate portraits")
     rv.add_argument("--hud-variant", default="default", help="HUD variant to verify")

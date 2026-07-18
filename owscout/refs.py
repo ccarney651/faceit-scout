@@ -510,6 +510,48 @@ def save_learn_ref(  # pragma: no cover - needs cv2
                 variant=variant)
 
 
+def harvest_correction(  # pragma: no cover - needs cv2
+    db: Database, refs_dir: str | Path, *, map_instance_id: int, side: str,
+    right_guid: str, hero_name: str, profile_id: int,
+) -> Optional[str]:
+    """Turn a Review correction into a reference portrait.
+
+    Without this the loop is open: the operator tells the tool it was wrong, the
+    correct pixels are discarded, and the same misread happens on the next map.
+    The crop stored at capture IS a confirmed HUD portrait of that hero on that
+    team, which is exactly what the library wants.
+
+    Stored as a ``review`` ref, not ``capture``: review refs are ADDITIVE, so a
+    harvested exemplar joins the canonical portrait instead of replacing it, and
+    matching already takes the best score across all of a hero's refs. A bad
+    harvest can therefore only add a weak alternative, never destroy the good one.
+
+    Returns the stored path, or None when there was no crop to harvest (captures
+    made before crop storage existed).
+    """
+    import cv2
+
+    paths = db.harvest_candidates(map_instance_id, side, right_guid)
+    if not paths:
+        return None
+    src = paths[0]                      # worst-confidence appearance = most useful
+    crop = cv2.imread(src)
+    if crop is None:
+        log.warning("harvest: could not read crop %s", src)
+        return None
+    variant = "a" if side == "a" else "b"
+    safe = "".join(ch if ch.isalnum() else "_" for ch in hero_name).strip("_") or right_guid
+    out = Path(refs_dir) / str(profile_id) / "harvested"
+    out.mkdir(parents=True, exist_ok=True)
+    dest = out / f"{safe}_{variant}_m{map_instance_id}.png"
+    cv2.imwrite(str(dest), crop)
+    db.save_ref(hero_guid=right_guid, profile_id=profile_id, state=STATE_ALIVE,
+                image_path=str(dest), phash=phash_image(crop), source="review",
+                variant=variant)
+    log.info("harvested a %s ref for %s from map %d", variant, hero_name, map_instance_id)
+    return str(dest)
+
+
 def calibrate_learn_slot(  # pragma: no cover - needs cv2/game
     db: Database, *, hud_variant: str = "default", frame: Any = None,
 ) -> Rect:

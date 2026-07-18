@@ -511,6 +511,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
     debug_dir: Optional[str] = None,
+    crops_dir: Optional[str] = None,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Snapshot capture: instead of a continuous loop, the operator navigates the
@@ -525,6 +526,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     from .context import derive_code_context
     from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
     from .match import face_subrect, make_template_scorer, match_frame
+
+    crops_dir = crops_dir or default_crops_dir(getattr(db, "path", "owscout.sqlite3"))
 
     try:
         import keyboard
@@ -692,9 +695,15 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         for side in (SIDE_LEFT, SIDE_RIGHT):
             matches = matches_by_side[side]
             if not dry_run and map_instance_id is not None:
+                # Keep the exact pixels the matcher judged, so a correction in
+                # Review can be promoted straight into the ref library.
+                crops = save_slot_crops(
+                    cv2, frame, side_slots[side], crops_dir,
+                    map_instance_id=map_instance_id, side=side, ts=snaps)
                 if _persist_matches(db, map_instance_id, side, snaps, matches,
                                     hero_roles, hero_names, sub_map=cur_sub[0],
-                                    round_no=cur_round[0], phase=_phase_for(side)):
+                                    round_no=cur_round[0], phase=_phase_for(side),
+                                    crop_paths=crops):
                     written += 1
             shown = "/".join((hero_names.get(m.hero_guid or "", "?")[:4] if m.resolved else "??")
                              for m in matches)
@@ -735,11 +744,43 @@ def _only_lost_known(prev: Sequence[Optional[str]], new: Sequence[Optional[str]]
     return True
 
 
+def default_crops_dir(db_path: str) -> str:
+    """Where per-slot capture crops live: a ``crops/`` dir next to the owscout DB."""
+    from pathlib import Path
+    return str(Path(db_path).resolve().parent / "crops")
+
+
+def save_slot_crops(  # pragma: no cover - needs cv2
+    cv2: Any, frame: Frame, rects: Sequence[Any], crops_dir: str,
+    *, map_instance_id: int, side: str, ts: int,
+) -> list[Optional[str]]:
+    """Write each slot's portrait crop to disk and return the paths.
+
+    This is what makes a Review correction worth something: without the actual
+    pixels the matcher saw, being told "that was Mauga, not Ramattra" teaches the
+    library nothing. ~5 KB per slot, so a full map costs about a megabyte.
+    """
+    import os
+    out = os.path.join(crops_dir, str(map_instance_id))
+    os.makedirs(out, exist_ok=True)
+    paths: list[Optional[str]] = []
+    for i, rect in enumerate(rects):
+        try:
+            crop = frame[rect.y:rect.y + rect.h, rect.x:rect.x + rect.w]
+            path = os.path.join(out, f"{side}_{ts}_{i}.png")
+            cv2.imwrite(path, crop)
+            paths.append(path)
+        except Exception as exc:  # noqa: BLE001 - a crop failure must not lose the capture
+            log.warning("could not save crop for %s slot %d: %s", side, i, exc)
+            paths.append(None)
+    return paths
+
+
 def _persist_matches(  # pragma: no cover
     db: "Any", map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],
     sub_map: Optional[str] = None, round_no: Optional[int] = None,
-    phase: Optional[str] = None,
+    phase: Optional[str] = None, crop_paths: Sequence[Optional[str]] = (),
 ) -> bool:
     """Persist one frame's matches as a single observation (no smoothing). Returns
     True if the observation fully resolved."""
@@ -752,7 +793,8 @@ def _persist_matches(  # pragma: no cover
     slots = [
         {"slot_index": i, "hero_guid": m.hero_guid, "confidence": m.confidence,
          "is_dead": 1 if m.state == "dead" else 0, "expected_role": None,
-         "ingame_name_raw": None, "player_id": None}
+         "ingame_name_raw": None, "player_id": None,
+         "crop_path": crop_paths[i] if i < len(crop_paths) else None}
         for i, m in enumerate(matches)
     ]
     db.upsert_comp_observation(

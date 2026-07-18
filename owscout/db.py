@@ -23,6 +23,7 @@ from .faceit import faceit_ro_uri
 from .integrity import VerifyCodesRow
 from .models import (
     DEFAULT_DIVISION,
+    HeroCoverage,
     CodeContext,
     CodeListing,
     Comp,
@@ -147,6 +148,7 @@ CREATE TABLE IF NOT EXISTS comp_slots (
     expected_role  TEXT,
     ingame_name_raw TEXT,
     player_id      TEXT,                     -- resolved via player_aliases
+    crop_path      TEXT,                     -- the actual portrait crop, for ref-harvest
     PRIMARY KEY(observation_id, slot_index)
 );
 
@@ -214,6 +216,20 @@ CREATE TABLE IF NOT EXISTS app_settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+-- Every hero fix made in Review. A correction is the ground truth the matcher got
+-- wrong, and it is the only signal that distinguishes a CONFIDENTLY wrong ref from
+-- a merely uncertain one -- confidence alone cannot, because a bad ref that
+-- matches the wrong hero scores high. Feeds the coverage report and ref-harvest.
+CREATE TABLE IF NOT EXISTS hero_corrections (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    map_instance_id INTEGER NOT NULL REFERENCES map_instances(id),
+    side            TEXT NOT NULL CHECK(side IN ('a','b')),
+    wrong_guid      TEXT,                  -- what the matcher said (NULL = unresolved)
+    right_guid      TEXT NOT NULL,         -- what the operator says it really was
+    observations    INTEGER NOT NULL,      -- how many observations the fix touched
+    corrected_at    TEXT NOT NULL
 );
 """
 
@@ -296,6 +312,13 @@ class Database:
                 self.conn.commit()
             if "phase" not in cols:
                 self.conn.execute("ALTER TABLE comp_observations ADD COLUMN phase TEXT")
+                self.conn.commit()
+        if "comp_slots" in tables:
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(comp_slots)")}
+            if "crop_path" not in cols:
+                # Pre-existing slots keep NULL: their crops were never saved, so
+                # they simply cannot be harvested. New captures can.
+                self.conn.execute("ALTER TABLE comp_slots ADD COLUMN crop_path TEXT")
                 self.conn.commit()
 
     # --- read-only ATTACH of the faceit DB (SPEC §3) -------------------------
@@ -871,7 +894,96 @@ class Database:
                     c.execute(
                         "UPDATE comp_observations SET comp_id = ?, resolved = 1 WHERE id = ?",
                         (comp.comp_id, oid))
+            if changed:
+                # Log the ground truth. Confidence alone cannot tell a confidently
+                # WRONG ref from an uncertain one; an operator correction can.
+                c.execute(
+                    """INSERT INTO hero_corrections (map_instance_id, side, wrong_guid,
+                           right_guid, observations, corrected_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (map_instance_id, side, wrong_guid, right_guid, changed, _utcnow()))
         return changed
+
+    def harvest_candidates(
+        self, map_instance_id: int, side: str, right_guid: str, *, limit: int = 3
+    ) -> list[str]:
+        """Crop paths for slots now labelled ``right_guid`` on this map side, worst
+        confidence first.
+
+        A correction is the one moment the tool has a *verified* label for a real
+        HUD crop. The worst-scoring ones are the most valuable: they are precisely
+        the appearances the current reference failed on, so learning from them
+        targets the actual weakness rather than re-teaching an easy case."""
+        rows = self.conn.execute(
+            """SELECT s.crop_path AS p FROM comp_slots s
+               JOIN comp_observations o ON o.id = s.observation_id
+               WHERE o.map_instance_id = ? AND o.side = ? AND s.hero_guid = ?
+                 AND s.crop_path IS NOT NULL
+               ORDER BY s.confidence LIMIT ?""",
+            (map_instance_id, side, right_guid, limit),
+        ).fetchall()
+        return [str(r["p"]) for r in rows]
+
+    def hero_coverage(self, faceit_db_path: str) -> list[HeroCoverage]:
+        """Per hero and team variant, how the matcher has actually performed against
+        live frames: sample count, worst and mean confidence, and how often the
+        operator had to correct it.
+
+        Only ~10 of 52 heroes were ever checked against real frames by hand; the
+        rest were assumed fine. Every capture now feeds this, so weak refs surface
+        as a ranked list rather than a guess. Sort by min_confidence to find the
+        refs worth re-learning; a hero with CORRECTIONS is worse than a hero with
+        low confidence, because it was confidently wrong."""
+        self.attach_faceit(faceit_db_path)
+        names = {h.guid: h.name for h in self.list_custom_heroes()}
+        rows = self.conn.execute(
+            """SELECT s.hero_guid AS guid, o.side AS variant,
+                      COUNT(*) AS samples,
+                      MIN(s.confidence) AS lo, AVG(s.confidence) AS avg,
+                      MAX(mi.captured_at) AS last_seen,
+                      (SELECT COUNT(*) FROM hero_corrections hc
+                        WHERE hc.right_guid = s.hero_guid AND hc.side = o.side) AS fixes,
+                      (SELECT h.name FROM faceit.heroes h WHERE h.guid = s.hero_guid) AS name
+               FROM comp_slots s
+               JOIN comp_observations o ON o.id = s.observation_id
+               JOIN map_instances mi ON mi.id = o.map_instance_id
+               WHERE s.hero_guid IS NOT NULL AND s.confidence IS NOT NULL
+               GROUP BY s.hero_guid, o.side
+               ORDER BY lo""",
+        ).fetchall()
+        return [
+            HeroCoverage(
+                hero_guid=str(r["guid"]),
+                hero_name=str(r["name"] or names.get(str(r["guid"])) or r["guid"]),
+                variant=str(r["variant"]),
+                samples=int(r["samples"]),
+                min_confidence=float(r["lo"]),
+                avg_confidence=float(r["avg"]),
+                corrections=int(r["fixes"]),
+                last_seen=r["last_seen"],
+            )
+            for r in rows
+        ]
+
+    def unseen_heroes(self, faceit_db_path: str) -> list[tuple[str, str, str]]:
+        """``(hero_guid, name, variant)`` for every hero+variant that HAS a stored
+        reference but has never been matched in a real capture — the untested part
+        of the library, which is the part most likely to be wrong."""
+        self.attach_faceit(faceit_db_path)
+        rows = self.conn.execute(
+            """SELECT r.hero_guid AS guid, r.variant AS variant,
+                      (SELECT h.name FROM faceit.heroes h WHERE h.guid = r.hero_guid) AS name
+               FROM hero_refs r
+               WHERE r.source = 'capture' AND NOT EXISTS (
+                     SELECT 1 FROM comp_slots s
+                     JOIN comp_observations o ON o.id = s.observation_id
+                     WHERE s.hero_guid = r.hero_guid AND o.side = r.variant)
+               GROUP BY r.hero_guid, r.variant
+               ORDER BY name, variant""",
+        ).fetchall()
+        custom = {h.guid: h.name for h in self.list_custom_heroes()}
+        return [(str(r["guid"]), str(r["name"] or custom.get(str(r["guid"])) or r["guid"]),
+                 str(r["variant"])) for r in rows]
 
     def finalize_map(self, map_instance_id: int) -> None:
         """Greenlight a reviewed map: mark it finalized (enters exports) and its
@@ -1197,10 +1309,11 @@ class Database:
             c.execute("DELETE FROM comp_slots WHERE observation_id = ?", (obs_id,))
             c.executemany(
                 """INSERT INTO comp_slots (observation_id, slot_index, hero_guid,
-                       confidence, is_dead, expected_role, ingame_name_raw, player_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       confidence, is_dead, expected_role, ingame_name_raw, player_id,
+                       crop_path)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [(obs_id, s["slot_index"], s.get("hero_guid"), s.get("confidence"),
                   s.get("is_dead"), s.get("expected_role"), s.get("ingame_name_raw"),
-                  s.get("player_id")) for s in slots],
+                  s.get("player_id"), s.get("crop_path")) for s in slots],
             )
         return obs_id

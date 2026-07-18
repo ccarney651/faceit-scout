@@ -179,6 +179,24 @@ alignment before blaming the reference library.*
 hash. It caught a real bug: a "Wrecking Ball" blue reference that was byte-identical
 to Torbjörn's.
 
+**`refs coverage` — learned is not the same as validated.** A full library reads as
+healthy while most of it has never faced a live frame. This ranks every hero+team
+reference by how it has actually performed in captures (samples, worst and mean
+confidence, corrections) and lists the ones never seen at all. Corrections matter
+more than low confidence: a reference that is *confidently wrong* scores high and
+would otherwise look healthy. `doctor` shows the summary line.
+
+**Ref-harvest — corrections feed back into the library.** Every slot's portrait
+crop is stored at capture (~5 KB each, about a megabyte per map). When the operator
+fixes a misread in Review, the crop the matcher judged is a *confirmed* portrait of
+the right hero on that team, so it is promoted into the library instead of being
+discarded — the lowest-confidence appearance first, since that is the one the
+current reference actually failed on. Harvested exemplars are stored as `review`
+refs, which are **additive**: matching already takes the best score across all of a
+hero's refs, so a bad harvest can only add a weak alternative, never destroy the
+canonical portrait. The loop closes: every correction makes the next capture better
+without any extra work from the operator.
+
 **Custom heroes.** OW2 ships new heroes faster than FACEIT's roster updates, so
 `heroes add` registers one under a namespaced `custom:` GUID that cannot collide
 with a FACEIT one.
@@ -361,11 +379,9 @@ presentation is built to keep that visible.
 - **Map-name verification is stubbed** — the OCR hook returns `None`, so map
   mismatch reads "not checked". It is unclear whether the map name is reliably on
   the observer HUD at all.
-- **~42 of 52 heroes have never been checked against a live frame.** They rest on
-  Review's low-confidence flags rather than measurement.
-- **Corrections don't feed back into the library.** Fixing a misread in Review
-  discards the correct crop; storing slot crops at capture would turn every
-  correction into a new reference.
+- **Most of the library has never been checked against a live frame** (currently 88
+  of 104 hero+team refs). They are unvalidated rather than known-bad; `refs
+  coverage` tracks this and it shrinks with every capture.
 - **Swap triggers lack baseline subtraction** (see §2.5).
 - **Distribution is single-operator.** No packaged `.exe`, and the reference
   library isn't shareable, so a second user would have to learn all 52 heroes

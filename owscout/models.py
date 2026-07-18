@@ -38,6 +38,23 @@ class ObsDetail(NamedTuple):
     bans: tuple[str, ...] = ()   # banned hero guids on this map
 
 
+class HeroCoverage(NamedTuple):
+    """How a hero has actually performed against live frames, per team variant.
+
+    Reference quality is only ever measured on heroes that have been *seen*; the
+    rest are assumed good. This turns every capture into passive validation, so
+    the weak refs surface as a ranked list instead of being guessed at."""
+
+    hero_guid: str
+    hero_name: str
+    variant: str          # 'a' = left/blue, 'b' = right/red
+    samples: int
+    min_confidence: float
+    avg_confidence: float
+    corrections: int      # times the operator had to fix this hero in Review
+    last_seen: str | None
+
+
 class DraftMap(NamedTuple):
     """A captured-but-not-finalized map awaiting operator review. Nothing reaches
     the scout export until the operator finalizes it (the greenlight step)."""
