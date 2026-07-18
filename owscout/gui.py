@@ -71,6 +71,20 @@ def _faceit_freshness(faceit_db_path: str) -> tuple[str, bool]:
             + (" - sync to pick up newer codes" if stale else ""), stale)
 
 
+def _bundled(name: str) -> Optional[str]:
+    """Path to a resource shipped INSIDE the app, or None if absent.
+
+    Frozen: PyInstaller extracts datas into sys._MEIPASS. Dev: the repo root.
+    Distinct from _base_dir on purpose - bundled resources are read-only inputs
+    baked in at build time; _base_dir is where the user's own data lives.
+    """
+    root = getattr(sys, "_MEIPASS", None) if getattr(sys, "frozen", False) else         str(Path(__file__).resolve().parent.parent)
+    if not root:
+        return None
+    p = Path(root) / name
+    return str(p) if p.is_file() else None
+
+
 def _base_dir() -> str:
     """A stable folder for owscout's data, independent of where the app is
     launched from — so calibration and refs persist between sessions. Prefer
@@ -245,6 +259,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self.root.after(80, self._drain)
         self._load_keybinds()
         self._refresh_codes()
+        self._maybe_import_bundled_refs()
         self._verify_refs()
 
     # --- infra --------------------------------------------------------------
@@ -327,6 +342,8 @@ class _App:  # pragma: no cover - GUI runtime only
                                 frame_dir=default_frame_dir(self.db_var.get()))
             self._emit("calibrate: saved. You can close the calibrate window now.")
             self.q.put(self._verify_refs)
+            # A fresh calibration + a bundled library = pre-trained immediately.
+            self.q.put(self._maybe_import_bundled_refs)
         self._run(go)
 
     def _load_sheet(self) -> None:
@@ -469,7 +486,27 @@ class _App:  # pragma: no cover - GUI runtime only
             from faceit_sync.db import Database as FaceitDb
             from faceit_sync.sync import SyncEngine
             with FaceitDb(self.faceit_var.get()) as fdb:
-                res = SyncEngine(FaceitClient(), fdb).run_all()
+                engine = SyncEngine(FaceitClient(), fdb)
+                # First run on a fresh machine: run_all() iterates championships
+                # ALREADY STORED, which on an empty database is none - the button
+                # would report "0 new" forever and the user would be stuck. Seed
+                # from the bundled match list first; transitive discovery does
+                # the rest (the same flow CI uses nightly).
+                empty = fdb.conn.execute(
+                    "SELECT COUNT(*) FROM championships").fetchone()[0] == 0
+                if empty:
+                    seeds = _bundled("matches.txt")
+                    if not seeds:
+                        self._emit("sync: empty database and no bundled seed list - "
+                                   "cannot bootstrap. Ask the curator for one.")
+                        return
+                    refs = [ln.strip() for ln in open(seeds, encoding="utf-8")
+                            if ln.strip() and not ln.startswith("#")]
+                    self._emit(f"sync: FIRST RUN - building the match database "
+                               f"from {len(refs)} seed matches. This one-time "
+                               "bootstrap takes a while; the log will keep moving.")
+                    engine.run_matches(refs)
+                res = engine.run_all()
             self._emit(f"sync: {res.inserted} new, {res.updated} updated, "
                        f"{res.skipped} unchanged, {res.errors} error(s).")
             self.q.put(self._refresh_codes)
@@ -524,6 +561,32 @@ class _App:  # pragma: no cover - GUI runtime only
                                 variable=self.side_a_var).pack(side="left", padx=(0, 12))
         self.roster_lbl.configure(
             text=f"{t1 or '?'}:  {', '.join(p1) or '—'}\n{t2 or '?'}:  {', '.join(p2) or '—'}")
+
+    def _maybe_import_bundled_refs(self) -> None:
+        """Make the exe PRE-TRAINED: if a calibration exists but the library is
+        empty, load the ref bundle baked into the app at build time. Runs at
+        startup and after Calibrate, so a new user's flow is calibrate ->
+        capture with no learning session and no separate download."""
+        bundle = _bundled("owscout_refs.zip")
+        if not bundle:
+            return
+
+        def go() -> None:
+            from .refs import default_refs_dir, import_ref_bundle
+            try:
+                with self._open_db() as db:
+                    prof = db.latest_active_profile("default")
+                    if prof is None or prof.id is None or db.get_refs(prof.id):
+                        return          # not calibrated yet, or already has refs
+                    n = import_ref_bundle(db, bundle,
+                                          default_refs_dir(self.db_var.get()))
+                if n["added"]:
+                    self._emit(f"setup: pre-trained hero library loaded "
+                               f"({n['added']} refs). Ready to capture.")
+                    self.q.put(self._verify_refs)
+            except Exception as exc:  # noqa: BLE001 - never block startup on this
+                self._emit(f"setup: bundled library not loaded ({exc})")
+        self._run(go, lock=False)
 
     def _import_refs(self) -> None:
         from tkinter import filedialog

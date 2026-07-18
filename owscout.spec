@@ -1,11 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 
+# Baked-in resources. hero_icons.json: the Publish preview's portraits.
+# matches.txt: the seed list that lets a FRESH machine bootstrap its match
+# database (run_all iterates stored championships - none, on a new install).
+# owscout_refs.zip: the curator's learned library, making the exe PRE-TRAINED -
+# export it right before building (`owscout refs export --out owscout_refs.zip`);
+# building without it just yields an un-trained exe.
+datas = [
+    ('faceit_sync/hero_icons.json', 'faceit_sync'),
+    ('matches.txt', '.'),
+]
+if os.path.exists('owscout_refs.zip'):
+    datas.append(('owscout_refs.zip', '.'))
+else:
+    print('WARNING: owscout_refs.zip not found - the exe will NOT be pre-trained')
 
 a = Analysis(
     ['owscout_app.py'],
     pathex=[],
     binaries=[],
-    datas=[('faceit_sync/hero_icons.json', 'faceit_sync')],
+    datas=datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
