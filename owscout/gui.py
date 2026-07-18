@@ -758,8 +758,13 @@ class _App:  # pragma: no cover - GUI runtime only
             with self._open_db() as db:
                 data = build_contribution(db, contributor=who,
                                           tool_version=__version__)
-            out = os.path.join(CONTRIB_DIR, f"{who}.json")
-            os.makedirs(CONTRIB_DIR, exist_ok=True)
+            # Anchored to _base_dir, never the process CWD: a double-clicked exe
+            # inherits whatever CWD Windows felt like, and a relative path would
+            # scatter contributions somewhere the user can neither find nor ship.
+            # Dev: repo root/data/captures (the committed dir). Exe: next to it.
+            contrib_dir = os.path.join(_base_dir(), *CONTRIB_DIR.split("/"))
+            out = os.path.join(contrib_dir, f"{who}.json")
+            os.makedirs(contrib_dir, exist_ok=True)
             with open(out, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, indent=2)
             obs = sum(len(m["observations"]) for m in data["maps"])
@@ -776,7 +781,7 @@ class _App:  # pragma: no cover - GUI runtime only
                 with connect_ro(self.faceit_var.get()) as fdb:
                     roles = load_roles(fdb)
                     names = {h.guid: h.name for h in load_heroes(fdb)}
-                contribs = resolve_contributions(CONTRIB_DIR)
+                contribs = resolve_contributions(contrib_dir)
                 payload = merged_payload(contribs, roles, names)
                 with open("owscout_comps.json", "w", encoding="utf-8") as fh:
                     json.dump(payload, fh, indent=2)
@@ -793,8 +798,13 @@ class _App:  # pragma: no cover - GUI runtime only
                 self._emit(f"publish: local preview dashboard.html rebuilt ({n} division(s)).")
             except Exception as exc:  # noqa: BLE001
                 self._emit(f"publish: JSON written; local preview skipped ({exc}).")
-            self._emit(f"publish: commit + push {CONTRIB_DIR}/ to update the live "
-                       "site (the build merges it and rebuilds docs/index.html).")
+            if getattr(sys, "frozen", False):
+                self._emit(f"publish: now SEND {out} to your curator (Discord/"
+                           "email) - they add it to the site and your maps go "
+                           "live on the next build.")
+            else:
+                self._emit(f"publish: commit + push {CONTRIB_DIR}/ to update the "
+                           "live site (the build merges it into docs/index.html).")
         self._run(go)
 
     def run(self) -> None:
