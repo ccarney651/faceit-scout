@@ -43,7 +43,7 @@ def test_hybrid_splits_attack_and_defend_segments() -> None:
         _obs(1, "b", 200, dfd, "hybrid", "b", rnd=2),
     ]
     rep = team_scout(details, ROLES, NAMES)
-    kings = rep["Bravo"]["maps"]["King's Row"]
+    kings = rep["Bravo"]["maps"]["King's Row"]["segments"]
     assert set(kings) == {"attack", "defend"}
     assert kings["attack"][0]["heroes"] == ["KIR", "LUC", "MEI", "RAM", "SOJ"]
 
@@ -54,7 +54,7 @@ def test_control_splits_by_sub_map() -> None:
         _obs(1, "a", 0, a, "control", "a", sub="Lighthouse", mn="Ilios"),
         _obs(1, "a", 100, a, "control", "a", sub="Ruins", mn="Ilios"),
     ]
-    ilios = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]["Ilios"]
+    ilios = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]["Ilios"]["segments"]
     assert set(ilios) == {"Lighthouse", "Ruins"}
 
 

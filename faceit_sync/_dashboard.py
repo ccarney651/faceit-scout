@@ -558,7 +558,9 @@ function renderScoutBody(t){
     Object.keys(scout.maps).sort().forEach(mp=>{
       const card=el(`<div class="card" style="margin-bottom:8px"></div>`);
       card.appendChild(el(`<p class="eyebrow">${esc(mp)} <span class="faint">${esc(MAP_CAT[mp]||'')}</span></p>`));
-      const segs=scout.maps[mp];
+      const entry=scout.maps[mp]||{};
+      const segs=entry.segments||{};
+      if(entry.narrative) card.appendChild(el(`<p class="note" style="margin:4px 0 8px">${esc(entry.narrative)}</p>`));
       Object.keys(segs).forEach(seg=>{
         if(seg!=='all') card.appendChild(el(`<p class="note" style="margin:8px 0 2px">${esc(seg)}</p>`));
         segs[seg].slice().sort((a,b)=>(b.maps-a.maps)||(b.win_rate-a.win_rate)).forEach(c=>{
@@ -577,6 +579,7 @@ function renderScoutBody(t){
   if(swaps.length){
     w.appendChild(el(sectionH('Mid-map swaps',`<span class="note">how they adapt in a map · low n, directional</span>`)));
     const card=el(`<div class="card"></div>`);
+    if(scout.swap_narrative) card.appendChild(el(`<p class="note" style="margin:2px 0 8px">${esc(scout.swap_narrative)}</p>`));
     swaps.slice(0,10).forEach(s=>{
       const outC=s.out.map(h=>heroChip(h)).join(' ');
       const inC=s.in.map(h=>heroChip(h)).join(' ');
