@@ -572,6 +572,22 @@ function renderScoutBody(t){
     });
   }
 
+  // Mid-map adaptations — recurring swaps and what they answer.
+  const swaps=(scout&&scout.swaps)||[];
+  if(swaps.length){
+    w.appendChild(el(sectionH('Mid-map swaps',`<span class="note">how they adapt in a map · low n, directional</span>`)));
+    const card=el(`<div class="card"></div>`);
+    swaps.slice(0,10).forEach(s=>{
+      const outC=s.out.map(h=>heroChip(h)).join(' ');
+      const inC=s.in.map(h=>heroChip(h)).join(' ');
+      const vs=s.vs&&s.vs.length?` <span class="faint">vs ${s.vs.map(h=>esc(h)).join(', ')}</span>`:'';
+      const kind=s.kind==='core'?'comp change':'flex';
+      card.appendChild(el(`<div class="poolrow"><span class="pm">${outC} → ${inC} <span class="faint">(${kind})</span>${vs}</span>`+
+        `<span class="pr faint">${s.count}×</span></div>`));
+    });
+    w.appendChild(card);
+  }
+
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
   const banC=el(`<div class="card"></div>`);
