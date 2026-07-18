@@ -532,6 +532,22 @@ function renderScoutBody(t){
         `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${rec}</span></div>`));
     });
     w.appendChild(card);
+    // Per-sub-map breakdown (control maps) — comps differ by point geometry.
+    const subs=oc.by_sub_map?Object.keys(oc.by_sub_map).sort():[];
+    if(subs.length){
+      const sc=el(`<div class="card" style="margin-top:8px"></div>`);
+      sc.appendChild(el(`<p class="eyebrow">By sub-map <span class="note">control-map geometry</span></p>`));
+      subs.forEach(sub=>{
+        sc.appendChild(el(`<p class="note" style="margin:8px 0 2px">${esc(sub)}</p>`));
+        oc.by_sub_map[sub].slice().sort((a,b)=>(b.wilson-a.wilson)||(b.maps-a.maps)).forEach(c=>{
+          const chips=c.heroes.map(h=>heroChip(h)).join(' ');
+          const rec=`${Math.round(c.wins)}W-${Math.round(c.games-c.wins)}L`;
+          sc.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
+            `<span class="pr faint">${rec}</span></div>`));
+        });
+      });
+      w.appendChild(sc);
+    }
   }
 
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
