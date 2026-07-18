@@ -451,12 +451,8 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     with connect_ro(_faceit_db_path(args)) as fdb:
         roles = load_roles(fdb)
         names = {h.guid: h.name for h in load_heroes(fdb)}
-    with Database(_db_path(args)) as db:      # operator-added heroes, if any
-        for h in db.list_custom_heroes():
-            names[h.guid] = h.name
-            if h.role:
-                roles[h.guid] = h.role
-
+    # No owscout DB needed: contributions declare their own custom heroes, so a
+    # build server can merge with nothing but the faceit roster and the files.
     payload = merged_payload(contribs, roles, names)
     with open(args.out, "w", encoding="utf-8") as fh:
         _json.dump(payload, fh, indent=2)

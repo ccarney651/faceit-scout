@@ -18,6 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: which contributor owns a contested map is decided by
+          # the commit that ADDED their file, and a shallow clone cannot see it
+          # (every file would look equally old and silently fall back to name
+          # order). See git_submission_order in owscout/contribute.py.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -49,9 +55,19 @@ jobs:
           # so fetch errors are tolerated; the export must still succeed.
           faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt || echo "seed: some matches errored (continuing)"
           faceit-sync --db faceit.sqlite3 fetch || echo "update: some matches errored (continuing)"
+          # Scouting data arrives as RAW OBSERVATIONS, one file per contributor
+          # under data/captures/. Merge them here rather than committing a derived
+          # payload: the report is then always computed by the current analysis,
+          # so improvements apply retroactively to every past contribution.
+          # First-wins on a contested map, ordered by commit date (a contributor
+          # cannot vote on their own priority) - see owscout/contribute.py.
+          if [ -n "$(ls -A data/captures/*.json 2>/dev/null)" ]; then
+            owscout --faceit-db faceit.sqlite3 contribute merge --dir data/captures --out owscout_comps.json
+          else
+            echo "no contributions yet - dashboard will build without captured comps"
+          fi
           # docs/index.html is the LIVE SITE and this job is its only writer.
-          # Captured comps reach it through the committed owscout_comps.json,
-          # which export reads from the repo root.
+          # export reads owscout_comps.json from the repo root.
           faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
 
       - name: Save database cache

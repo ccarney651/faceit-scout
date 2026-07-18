@@ -125,10 +125,19 @@ def build_contribution(
             ],
         })
 
+    # Operator-added heroes travel WITH the contribution. OW2 ships heroes faster
+    # than FACEIT's roster updates, so a contributor can legitimately reference a
+    # guid the merging side has never heard of; without this it would render as a
+    # raw 'custom:...' string in someone else's report.
+    used = {g for m in maps for o in m["observations"] for g in o["heroes"]}
+    heroes = {h.guid: {"name": h.name, "role": h.role}
+              for h in db.list_custom_heroes() if h.guid in used}
+
     return {
         "format": CONTRIB_FORMAT,
         "contributor": contributor,
         "tool_version": tool_version,
+        "heroes": heroes,
         "maps": maps,
     }
 
@@ -247,10 +256,18 @@ def merged_payload(
     from .derive import dashboard_comps
     from .scout import team_scout
 
+    # Fold in any custom heroes the contributors declared, so the merging side
+    # needs nothing beyond the faceit roster and the files themselves.
+    roles, names = dict(hero_roles), dict(hero_names)
+    for c in contributions:
+        for guid, h in (c.get("heroes") or {}).items():
+            names[guid] = str(h.get("name") or guid)
+            if h.get("role"):
+                roles[guid] = str(h["role"])
+
     merged = merge_first_wins(contributions)
-    payload = dashboard_comps(to_obs_rows(merged.maps, hero_roles, hero_names))
-    report = team_scout(to_obs_details(merged.maps),
-                        dict(hero_roles), dict(hero_names))
+    payload = dashboard_comps(to_obs_rows(merged.maps, roles, names))
+    report = team_scout(to_obs_details(merged.maps), roles, names)
     teams = payload["teams"]
     assert isinstance(teams, dict)
     for team, r in report.items():

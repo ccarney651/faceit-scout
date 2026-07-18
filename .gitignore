@@ -8,9 +8,19 @@ venv/
 .env
 *.sqlite3
 *.sqlite3-journal
-data/
+# The docker-compose volume lives here and stays ignored, but contributor
+# scouting files MUST be tracked - they are the input the site is built from.
+# (A plain `data/` exclusion cannot be undone for a child path, hence data/*.)
+data/*
+!data/captures/
+!data/captures/*.json
 dist/
 build/
+
+# Derived at build time by `owscout contribute merge` from data/captures/.
+# Committing it would let a stale report outlive the observations it came from,
+# and freeze the analysis that produced it.
+owscout_comps.json
 
 # Local dashboard preview. The LIVE site is docs/index.html, built by CI from
 # its own synced database; this is built from whatever is on this machine, so
