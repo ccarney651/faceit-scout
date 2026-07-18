@@ -1,4 +1,19 @@
-# faceit-sync
+# faceit-scout
+
+Two packages that feed one scouting dashboard:
+
+- **`faceit_sync`** — incremental, idempotent ingest of **FACEIT League
+  (Overwatch 2)** championship data into a local **SQLite** database, exported as
+  a self-contained HTML dashboard.
+- **`owscout`** — reads hero compositions off the observer HUD of in-client
+  replays and turns them into per-team composition scouting on the same page.
+
+**→ [FEATURES.md](FEATURES.md) documents every feature in both packages and how
+each one works.** The rest of this file covers `faceit_sync` ingest specifically.
+
+---
+
+## faceit_sync
 
 Incremental, idempotent ingest of **FACEIT League (Overwatch 2)** championship
 data into a local **SQLite** database.
@@ -9,8 +24,11 @@ It is built to run 2–3× per week against in-progress seasons:
   list) and only fetches what it needs.
 - **Idempotent** — re-running never duplicates rows. Matches already stored as
   `FINISHED` are skipped (and not even re-fetched) unless `--force-refresh` is
-  given, because finished matches are immutable: veto, results and stats never
-  change.
+  given, because veto, results and stats never change once a match ends.
+  **Replay codes are the exception**: FACEIT publishes them *after* the match, so
+  a recent finished match that is still missing codes is re-fetched anyway
+  (`--backfill-days`, default 14). Without that, a code published an hour after
+  ingest would never arrive.
 - **Honest about missing data** — where a value genuinely isn't available it is
   stored as `NULL`, never zero-filled or guessed. See **[Data quality](#data-quality)**.
 
