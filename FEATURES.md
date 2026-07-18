@@ -238,7 +238,7 @@ them.
 | `F7` | Next round / point captured |
 | `F6` | Cycle the control sub-map |
 | `F5` | Flip who is attacking |
-| `F9` | Undo the last snapshot |
+| `F9` | Undo the last action - snapshot **or** round marker (LIFO: snapshots taken after a marker come off first, so an undone round can never leave orphaned round tags in the data) |
 | `ESC` | Finish |
 
 The hooks **do not suppress the keypress**, so anything bound also reaches
@@ -267,9 +267,11 @@ naive margin — noise must be refused, never guessed. Auto is the GUI default;
 the manual pick remains as the override, and in auto mode nothing is written
 until a confident read happens.
 
-**Round, sub-map and phase tagging.** Control maps start on a sub-map; `F6` picks
-from the not-yet-played ones and advancing a round auto-selects the next unplayed
-one. Attack/defend is derived for Escort/Hybrid — red attacks round 1, teams flip
+**Round, sub-map and phase tagging.** On control maps the operator must declare
+the starting sub-map with `F6` before any snapshot is accepted — the first
+sub-map varies per lobby, and a silent default would tag every round-1 snapshot
+with a guess. After that, advancing a round auto-selects the next unplayed
+sub-map and `F6` cycles the remaining ones. Attack/defend is derived for Escort/Hybrid — red attacks round 1, teams flip
 each round — but from **round 3 the attacker is decided by time bank**, not parity,
 so the operator confirms with `F5` and the resolved phase is stored per
 observation. Analysis prefers the stored value and only falls back to the parity

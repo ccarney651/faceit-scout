@@ -716,9 +716,12 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             left = [s for s in submaps if s not in used_subs]
             emit(f"  sub-map -> {nxt}" + (f"  (remaining: {', '.join(left)})" if left else ""))
         keyboard.add_hotkey(submap_hotkey, _cycle_sub)
-        _cycle_sub()   # control maps start on a sub-map; operator can change it
-        emit(f"  CONTROL MAP — press '{submap_hotkey}' to pick the sub-map "
-             f"(of {', '.join(submaps)}); '{round_hotkey}' advances to the next one.")
+        # Deliberately NO auto-pick: the first sub-map varies per lobby, and a
+        # silent default would tag every round-1 snapshot with a guess. The
+        # snapshot path refuses to write until the operator declares it.
+        emit(f"  CONTROL MAP - press '{submap_hotkey}' to set the STARTING sub-map "
+             f"({', '.join(submaps)}) BEFORE snapshotting; "
+             f"'{round_hotkey}' then advances to the next one.")
 
     # Attack/defend. Escort/Hybrid only: RED (side 'b') attacks round 1, and the
     # teams swap each round. From round 3 (both teams fully capped) the attacker is
@@ -743,8 +746,11 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     # Round marker: press round_hotkey at each round start / point capture so the
     # snapshots segment into rounds (see how comps change round to round).
     cur_round = [1]
+    # ("snap", ts) | ("round", prev_round, prev_sub, prev_used_subs, prev_attacker)
+    history: list[tuple[Any, ...]] = []
 
     def _next_round() -> None:
+        history.append(("round", cur_round[0], cur_sub[0], set(used_subs), attacker[0]))
         cur_round[0] += 1
         emit(f"  round -> {cur_round[0]}")
         if phased:
@@ -761,10 +767,10 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     keyboard.add_hotkey(round_hotkey, _next_round)
     emit(f"  Press '{round_hotkey}' at each new round / point capture (currently round 1).")
 
-    # Undo: drop the last written snapshot (both sides).
+    # Undo: reverts the LAST ACTION - a written snapshot or a round marker.
     undo_evt = threading.Event()
     keyboard.add_hotkey(undo_hotkey, undo_evt.set)
-    emit(f"  Press '{undo_hotkey}' to UNDO the last snapshot.")
+    emit(f"  Press '{undo_hotkey}' to UNDO the last snapshot or round marker.")
 
     snaps = 0
     written = 0
@@ -778,8 +784,22 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     while not done_evt.is_set():
         if undo_evt.is_set():
             undo_evt.clear()
-            if written_ts and not dry_run and map_instance_id is not None:
-                ts = written_ts.pop()
+            top = history[-1] if history else None
+            if top and top[0] == "round":
+                # Restore the exact pre-marker state, attacker included (the
+                # marker flipped it). Sub-map bookkeeping reverts too, so the
+                # auto-advance offers the same pool it would have.
+                history.pop()
+                _, cur_round[0], cur_sub[0], prev_used, attacker[0] = top
+                used_subs.clear(); used_subs.update(prev_used)
+                last_kept = None
+                emit(f"  UNDID the round marker - back to round {cur_round[0]}"
+                     + (f" ({cur_sub[0]})" if cur_sub[0] else ""))
+            elif top and top[0] == "snap" and not dry_run and map_instance_id is not None:
+                history.pop()
+                ts = top[1]
+                if ts in written_ts:
+                    written_ts.remove(ts)
                 db.delete_observations_at(map_instance_id, ts)
                 snaps = max(0, snaps - 1)
                 last_kept = None      # so the same comp can be re-captured
@@ -790,6 +810,9 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         if not snap_evt.wait(timeout=0.15):
             continue
         snap_evt.clear()
+        if submaps and cur_sub[0] is None:
+            emit(f"  snapshot skipped - set the sub-map first ('{submap_hotkey}')")
+            continue
         frame, w, h = grab_frame()
         if (w, h) != (profile.resolution_w, profile.resolution_h):
             emit(f"  resolution {w}x{h} != profile — skipped")
@@ -849,6 +872,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                 continue
         last_kept = (ga, gb, cur_round[0], cur_sub[0])
         written_ts.append(snaps)
+        history.append(("snap", snaps))
         line = []
         for side in (SIDE_LEFT, SIDE_RIGHT):
             matches = matches_by_side[side]
