@@ -614,12 +614,14 @@ class Database:
         uncaptured: bool = False,
         include_wiped: bool = False,
         division: Optional[str] = DEFAULT_DIVISION,
+        region: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[CodeListing]:
         """Capturable codes joined faceit games→matches→teams, with a captured
         flag (does a map_instance exist) and wipe status. Filters out codes whose
         game pre-dates the latest wipe by default (SPEC §2, §7), and restricts to
-        one skill division (default Master). Newest first."""
+        one skill division (default Master) and optionally one region. Newest
+        first."""
         self.attach_faceit(faceit_db_path)
         wipe = self.latest_wipe_date()
         sql = """
@@ -640,6 +642,11 @@ class Database:
         if division is not None:
             sql += " AND ch.name LIKE ?"
             params.append(f"%{division}%")
+        if region is not None:
+            # Whole-word match: a bare '%NA%' would also hit any championship whose
+            # name merely contains those letters.
+            sql += " AND (' ' || ch.name || ' ') LIKE ?"
+            params.append(f"% {region} %")
         if team is not None:
             sql += " AND (t1.name = ? COLLATE NOCASE OR t2.name = ? COLLATE NOCASE)"
             params += [team, team]

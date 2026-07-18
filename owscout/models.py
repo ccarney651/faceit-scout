@@ -80,6 +80,12 @@ SIDE_RIGHT = "b"
 # ("... Master Central ...", "... Expert Central ..."). owscout defaults to Master.
 DEFAULT_DIVISION = "master"
 
+# The league's regions, as they appear in championship names ("S9 EMEA Master
+# Central"). The championships table HAS a region column, but every row says
+# 'GLOBAL', so the name is the only real source. Matched as a whole word, since
+# a bare substring would be far too loose.
+REGIONS: tuple[str, ...] = ("EMEA", "NA")
+
 
 def division_of(championship_name: str | None) -> str | None:
     """The skill division a championship belongs to, from its name."""

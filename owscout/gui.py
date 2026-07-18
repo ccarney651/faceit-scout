@@ -19,10 +19,12 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from .db import Database
+from .models import REGIONS
 
 
 # Sentinel for "don't filter the code list by team".
 ALL_TEAMS = "(all teams)"
+ALL_REGIONS = "(all regions)"
 
 # The capture legend, built from whatever keys the operator has bound.
 _KEY_LABELS = (("snapshot", "snapshot"), ("round", "next round"), ("submap", "sub-map"),
@@ -97,8 +99,13 @@ class _App:  # pragma: no cover - GUI runtime only
 
         self.root = tk.Tk()
         self.root.title("owscout — OW2 comp scouting")
-        self.root.geometry("760x620")
-        self.root.minsize(640, 520)
+        # The panels above the Log have grown (keybinds, sync status, region
+        # filter) and pack() will happily crush the Log to a few pixels rather
+        # than overflow. Size the window to fit them, but never taller than the
+        # screen it has to live on.
+        wanted_h = min(860, self.root.winfo_screenheight() - 80)
+        self.root.geometry(f"780x{wanted_h}")
+        self.root.minsize(640, 700)
 
         pad = {"padx": 10, "pady": 6}
         # --- paths ----------------------------------------------------------
@@ -140,11 +147,21 @@ class _App:  # pragma: no cover - GUI runtime only
         cap.pack(fill="x", **pad)
         # Team filter: scouting is done one opponent at a time, and 40 codes across
         # every Master team is a lot to read to find the four you care about.
-        ttk.Label(cap, text="Team").grid(row=0, column=0, padx=6, pady=4, sticky="w")
+        # Region and Team share one row: both narrow the same list, and a separate
+        # row for each pushed the Log frame off the bottom of the window.
+        ttk.Label(cap, text="Region").grid(row=0, column=0, padx=6, pady=4, sticky="w")
+        self.region_var = tk.StringVar(value=ALL_REGIONS)
+        region_box = ttk.Combobox(cap, textvariable=self.region_var, width=14,
+                                  state="readonly", values=[ALL_REGIONS, *REGIONS])
+        region_box.grid(row=0, column=1, padx=6, pady=4, sticky="w")
+        # Region changes WHICH codes are fetched, so it re-queries rather than
+        # filtering the cached rows (the team list depends on it).
+        region_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
+        ttk.Label(cap, text="Team").grid(row=0, column=2, padx=6, pady=4, sticky="e")
         self.team_filter_var = tk.StringVar(value=ALL_TEAMS)
         self.team_filter_box = ttk.Combobox(cap, textvariable=self.team_filter_var,
-                                            width=34, state="readonly")
-        self.team_filter_box.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+                                            width=22, state="readonly")
+        self.team_filter_box.grid(row=0, column=3, padx=6, pady=4, sticky="w")
         self.team_filter_box.bind("<<ComboboxSelected>>",
                                   lambda _e: self._apply_code_filter())
         ttk.Label(cap, text="Code").grid(row=1, column=0, padx=6, pady=4, sticky="w")
@@ -403,7 +420,10 @@ class _App:  # pragma: no cover - GUI runtime only
         def go() -> None:
             try:
                 with self._open_db() as db:
-                    rows = db.list_codes(self.faceit_var.get(), uncaptured=True, limit=40)
+                    region = self.region_var.get()
+                    rows = db.list_codes(
+                        self.faceit_var.get(), uncaptured=True, limit=40,
+                        region=None if region == ALL_REGIONS else region)
             except Exception as exc:  # noqa: BLE001
                 rows = []
                 self._emit(f"codes: {exc}")

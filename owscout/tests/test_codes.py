@@ -175,3 +175,30 @@ def test_resolve_slot_partial_stays_unresolved(db: Database) -> None:
     done = db.resolve_slot(oid, 0, "g-ram", hero_roles={}, hero_names={})
     assert done is False
     assert len(db.unresolved_observations()) == 1
+
+
+def test_list_codes_region_filter(db: Database, tmp_path: Path) -> None:
+    """Region lives in the championship NAME ('S9 EMEA Master Central'); the
+    championships.region column reads 'GLOBAL' for every row and is useless."""
+    fp = _faceit(tmp_path / "faceit.sqlite3")
+    with sqlite3.connect(fp) as c:      # put the fixture's two matches in two regions
+        c.execute("UPDATE championships SET name='S9 EMEA Master Central' WHERE id='cm'")
+        c.execute("UPDATE championships SET name='S9 NA Master Central' WHERE id='ce'")
+        c.execute("UPDATE matches SET championship_id='ce' WHERE id='OLD'")
+    # include_wiped: the fixture's NA match is deliberately pre-wipe.
+    emea = db.list_codes(fp, region="EMEA", division=None, include_wiped=True)
+    na = db.list_codes(fp, region="NA", division=None, include_wiped=True)
+    every = db.list_codes(fp, division=None, include_wiped=True)
+    assert {r.demo_code for r in emea} == {"NEW111", "NEW222"}
+    assert {r.demo_code for r in na} == {"OLD111"}
+    assert len(emea) + len(na) == len(every)
+
+
+def test_region_matches_whole_words_only(db: Database, tmp_path: Path) -> None:
+    """A bare '%NA%' substring would also match championships that merely contain
+    those letters, silently mixing regions into one list."""
+    fp = _faceit(tmp_path / "faceit.sqlite3")
+    with sqlite3.connect(fp) as c:
+        c.execute("UPDATE championships SET name='S9 EMEA Master Central'")
+    assert db.list_codes(fp, region="EM", division=None) == []
+    assert db.list_codes(fp, region="EMEA", division=None)

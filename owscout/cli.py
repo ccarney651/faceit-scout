@@ -37,7 +37,7 @@ from .derive import (
 from .integrity import verify_codes_report
 from .db import Database
 from .match import DEFAULT_CONFIDENCE_FLOOR, run_match
-from .models import DEFAULT_DIVISION, DEFAULT_TEAM_SIZE, REF_STATES, SIDE_LEFT
+from .models import DEFAULT_DIVISION, DEFAULT_TEAM_SIZE, REF_STATES, REGIONS, SIDE_LEFT
 from .refs import (
     DEFAULT_CLOSE_THRESHOLD,
     default_refs_dir,
@@ -253,6 +253,7 @@ def cmd_codes_list(args: argparse.Namespace) -> int:
             faceit_path, team=args.team, uncaptured=args.uncaptured,
             include_wiped=args.include_wiped,
             division=None if args.division == "all" else args.division,
+            region=getattr(args, "region", None),
             limit=args.limit,
         )
     if not rows:
@@ -878,6 +879,8 @@ def build_parser() -> argparse.ArgumentParser:
     codes = sub.add_parser("codes", help="list/mark demo codes and show wipe age")
     csub = codes.add_subparsers(dest="codes_command", required=True)
     cl = csub.add_parser("list", help="capturable codes (wipe-filtered, newest first)")
+    cl.add_argument("--region", choices=REGIONS, default=None,
+                    help="only this region's championships (default: all)")
     cl.add_argument("--team", default=None, help="only this team's codes")
     cl.add_argument("--uncaptured", action="store_true", help="only codes not yet captured")
     cl.add_argument("--include-wiped", action="store_true", help="include dead (pre-wipe) codes")
