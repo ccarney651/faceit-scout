@@ -81,3 +81,18 @@ def test_dashboard_javascript_is_syntactically_valid(tmp_path):
     proc = subprocess.run([node, "--check", str(script)],
                           capture_output=True, text=True)
     assert proc.returncode == 0, f"dashboard JS is invalid:\n{proc.stderr}"
+
+
+def test_hero_icon_cache_is_committed_and_usable() -> None:
+    """CI has no access to the 22 MB of source art, so the dashboard's portraits
+    come from this committed cache. If it goes missing the page still builds -
+    silently, with text chips instead of portraits - so assert it explicitly."""
+    from faceit_sync.hero_icons import ICON_CACHE, load_hero_icons
+
+    assert ICON_CACHE.is_file(), f"icon cache missing at {ICON_CACHE}"
+    icons = load_hero_icons()
+    assert len(icons) >= 40, f"only {len(icons)} icons cached"
+    assert all(v.startswith("data:image/") for v in icons.values())
+    # A few well-known slugs, incl. the punctuation-stripped ones.
+    for hero in ("dva", "wreckingball", "kiriko"):
+        assert hero in icons, f"{hero} missing from the icon cache"

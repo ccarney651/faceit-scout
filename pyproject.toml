@@ -39,6 +39,12 @@ owscout-app = "owscout.gui:main"
 [tool.setuptools.packages.find]
 include = ["faceit_sync*", "owscout*"]
 
+# The inlined hero portraits ship with the package: a build without them renders
+# a portrait-less dashboard, which is a silent visual regression rather than an
+# error. Regenerate with `python -m faceit_sync.hero_icons <asset-dir>`.
+[tool.setuptools.package-data]
+faceit_sync = ["hero_icons.json"]
+
 [tool.mypy]
 # Analysis targets 3.12 (the dev/CI interpreter, and what numpy's current stubs
 # require); runtime floor stays 3.11 via requires-python.
