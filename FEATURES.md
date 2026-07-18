@@ -456,6 +456,8 @@ presentation is built to keep that visible.
   of 104 hero+team refs). They are unvalidated rather than known-bad; `refs
   coverage` tracks this and it shrinks with every capture.
 - **Swap triggers lack baseline subtraction** (see §2.5).
-- **No packaged `.exe` yet.** The reference library ships as a bundle now, so a
-  second user's setup is install Python → calibrate → import → capture; the
-  remaining friction is the "install Python" step.
+- **The `.exe` exists but has only been smoke-tested.** `pyinstaller owscout.spec`
+  builds a standalone ~76 MB `dist/owscout.exe`; it launches, keeps its data next
+  to the exe, and bundles every dependency — but a full capture session from the
+  frozen build (dxcam grab, hotkeys, calibration UI) hasn't been exercised yet.
+  A new user's setup: download the exe + ref bundle → calibrate → import → capture.

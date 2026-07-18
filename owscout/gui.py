@@ -13,6 +13,7 @@ freezes and no Tk call happens off-thread. Runtime-only — not unit-tested.
 from __future__ import annotations
 
 import os
+import sys
 import queue
 import threading
 from pathlib import Path
@@ -73,10 +74,19 @@ def _faceit_freshness(faceit_db_path: str) -> tuple[str, bool]:
 def _base_dir() -> str:
     """A stable folder for owscout's data, independent of where the app is
     launched from — so calibration and refs persist between sessions. Prefer
-    $OWSCOUT_HOME, else the repo dir (the parent of the owscout package)."""
+    $OWSCOUT_HOME; in a PyInstaller build, the folder the .exe sits in; else
+    the repo dir (the parent of the owscout package).
+
+    The frozen branch is load-bearing: under a onefile exe, ``__file__`` points
+    into PyInstaller's temp extraction dir, which is DELETED when the app exits.
+    Without it, every exe user's database, calibration and learned refs would
+    silently land in a temp folder and vanish on close.
+    """
     home = os.getenv("OWSCOUT_HOME")
     if home:
         return home
+    if getattr(sys, "frozen", False):          # PyInstaller
+        return str(Path(sys.executable).resolve().parent)
     return str(Path(__file__).resolve().parent.parent)
 
 
