@@ -1176,7 +1176,10 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         left = ttk.Frame(body)
         left.pack(side="left", fill="y")
         tk.Label(left, text="Draft maps").pack(anchor="w")
-        self.listbox = tk.Listbox(left, width=34, height=16, exportselection=False)
+        # extended = ctrl/shift multi-select, so a whole session's maps can be
+        # finalized in one action instead of one dialog round-trip each.
+        self.listbox = tk.Listbox(left, width=34, height=16, exportselection=False,
+                                  selectmode="extended")
         self.listbox.pack(fill="y", expand=True)
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._show_selected())
 
@@ -1205,8 +1208,10 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         btns = ttk.Frame(self.win)
         btns.pack(fill="x", **pad)
         ttk.Button(btns, text="↻ Refresh", command=self._refresh).pack(side="left")
-        ttk.Button(btns, text="✓ Finalize (send to scout data)",
+        ttk.Button(btns, text="✓ Finalize selected",
                    command=self._finalize).pack(side="left", padx=8)
+        ttk.Button(btns, text="✓✓ Finalize ALL",
+                   command=self._finalize_all).pack(side="left")
         ttk.Button(btns, text="🗑 Discard draft", command=self._discard).pack(side="left")
 
         self._refresh()
@@ -1260,6 +1265,52 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         sel = self.listbox.curselection()
         return self.drafts[sel[0]] if sel else None
 
+    def _selected_all(self) -> list[Any]:
+        return [self.drafts[i] for i in self.listbox.curselection()]
+
+    def _finalize_many(self, drafts: list[Any]) -> None:
+        """Bulk greenlight. The review gate stays honest: the confirm dialog
+        counts maps with low-confidence comps, so 'finalize all' cannot silently
+        wave through the ones that wanted an actual look."""
+        from tkinter import messagebox
+        if not drafts:
+            self._set_detail("Pick one or more draft maps first.")
+            return
+        flagged = 0
+        with self._db() as db:
+            for d in drafts:
+                try:
+                    comps = db.map_side_comps(d.id)
+                    # rows are (heroes, seen, resolved, sub_map, round_no, min_conf)
+                    if any(c[5] is not None and c[5] < 0.62
+                           for side in comps.values() for c in side):
+                        flagged += 1
+                except Exception:  # noqa: BLE001 - the count is advisory
+                    pass
+        names = ", ".join(str(d.demo_code or d.id) for d in drafts[:6])
+        if len(drafts) > 6:
+            names += f" +{len(drafts) - 6} more"
+        msg = (f"Finalize {len(drafts)} map(s) ({names})?\n\n"
+               "They enter the scout export on your next Publish.")
+        if flagged:
+            msg += (f"\n\nWARNING: {flagged} of them have LOW-CONFIDENCE comps "
+                    "- those deserve a look before greenlighting.")
+        if len(drafts) > 1 or flagged:
+            if not messagebox.askyesno("Finalize maps?", msg,
+                                       icon="warning" if flagged else "question",
+                                       default="no" if flagged else "yes",
+                                       parent=self.win):
+                return
+        with self._db() as db:
+            for d in drafts:
+                db.finalize_map(d.id)
+        self.app._emit(f"review: finalized {len(drafts)} map(s) - now in the scout export.")
+        self.app.q.put(self.app._refresh_codes)
+        self._refresh()
+
+    def _finalize_all(self) -> None:
+        self._finalize_many(list(self.drafts))
+
     def _set_detail(self, text: str) -> None:
         self.detail.configure(state="normal")
         self.detail.delete("1.0", "end")
@@ -1291,19 +1342,13 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         self._set_detail("\n".join(lines))
 
     def _finalize(self) -> None:
-        d = self._selected()
-        if d is None:
-            self._set_detail("Pick a draft map first.")
-            return
-        with self._db() as db:
-            db.finalize_map(d.id)
-        self.app._emit(f"review: finalized {d.demo_code or d.id} ({d.map_name}) — "
-                       "now in the scout export.")
-        self.app.q.put(self.app._refresh_codes)
-        self._refresh()
+        self._finalize_many(self._selected_all())
 
     def _discard(self) -> None:
         from tkinter import messagebox
+        if len(self.listbox.curselection()) > 1:
+            self._set_detail("Discard works on ONE map at a time - it deletes data.")
+            return
         d = self._selected()
         if d is None:
             self._set_detail("Pick a draft map first.")
