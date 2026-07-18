@@ -324,7 +324,7 @@ def run_capture(  # pragma: no cover - runtime-only path
     from .context import derive_code_context
     from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
     from .match import (
-        crop_roi, face_subrect, make_template_scorer, match_frame,
+        crop_roi, face_subrect, make_template_scorer, match_frame, pad_rect,
     )
 
     cv2, _np = _import_cv2_np_for_capture()
@@ -396,7 +396,7 @@ def run_capture(  # pragma: no cover - runtime-only path
                 matches = match_frame(
                     frame, side_slots[side], refs, hero_roles, banned, hero_names,
                     confidence_floor=confidence_floor,
-                    crop_fn=crop_roi, score_fn=score_fn,
+                    crop_fn=_padded_crop, score_fn=score_fn,
                 )
                 obs = session.observe(side, matches, game_ts)
                 if obs is None:
@@ -476,7 +476,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 
     from .context import derive_code_context
     from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
-    from .match import crop_roi, face_subrect, make_template_scorer, match_frame
+    from .match import crop_roi, face_subrect, make_template_scorer, match_frame, pad_rect
 
     try:
         import keyboard
@@ -624,7 +624,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         matches_by_side = {
             side: match_frame(frame, side_slots[side], refs, hero_roles, banned,
                               hero_names, confidence_floor=confidence_floor,
-                              crop_fn=crop_roi, score_fn=score_fn)
+                              crop_fn=_padded_crop, score_fn=score_fn)
             for side in (SIDE_LEFT, SIDE_RIGHT)
         }
         # Skip a repeat: same round/sub-map, and the comps either identical or
@@ -662,6 +662,13 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     emit(f"done. {snaps} snapshot(s) captured as a DRAFT — review and finalize "
          "to include it in the scout data.")
     return {"snaps": snaps, "written": written}
+
+
+def _padded_crop(frame: Frame, rect: Any) -> Any:
+    """Crop a ROI with a small margin so the matcher can slide the ref inside it
+    (see match.MATCH_PAD_PX). Matching only — refs are learned from the tight ROI."""
+    from .match import crop_roi as _crop, pad_rect as _pad
+    return _crop(frame, _pad(rect))
 
 
 def _only_lost_known(prev: Sequence[Optional[str]], new: Sequence[Optional[str]]) -> bool:
