@@ -489,6 +489,12 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
                        font=("Segoe UI", 9), fg="#222")
         lbl.pack(fill="x", **pad)
 
+        # Big banner showing which team the current grab will be saved to, so the
+        # operator can't accidentally overwrite the wrong team's refs.
+        self.team_banner = tk.Label(self.win, text="", font=("Segoe UI", 12, "bold"),
+                                    fg="#fff")
+        self.team_banner.pack(fill="x", padx=12)
+
         # Optional: calibrate ONE box so learning reads a single portrait only.
         boxrow = ttk.Frame(self.win)
         boxrow.pack(fill="x", **pad)
@@ -645,10 +651,16 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self._work(go)
 
     def _show_slot(self) -> None:
+        from .refs import variant_for_cell
         if not self.ranked:
             self.status.configure(text="nothing found — try Grab again.")
             return
         s = self.ranked[self.cursor]
+        # Banner: which team this grab will save to (left half = blue, right = red).
+        if variant_for_cell(s.cell, self.ctx.profile) == "a":
+            self.team_banner.configure(text="  LEARNING: BLUE team  (left side)  ", bg="#1c6dd0")
+        else:
+            self.team_banner.configure(text="  LEARNING: RED team  (right side)  ", bg="#c0392b")
         cv2 = self.ctx.cv2
         # Show the WHOLE portrait cell (recognizable), enlarged, with the matched
         # face region outlined in green — not just the tiny match patch.
