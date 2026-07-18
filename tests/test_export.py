@@ -53,3 +53,31 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert div["summary"]["matches"] == 1
     assert div["summary"]["dc_games"] == 1          # hazard A game present
     assert div["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy
+
+
+def test_dashboard_javascript_is_syntactically_valid(tmp_path):
+    """The dashboard renders its whole body in JS, so ONE syntax error (e.g. a
+    duplicate `const`) yields a completely blank page — which balanced-bracket
+    checks do not catch. Run the real parser over the generated script."""
+    import re
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to parse the dashboard JS")
+
+    from faceit_sync._dashboard import HTML_TEMPLATE
+
+    html = HTML_TEMPLATE.replace("__TITLE__", "t").replace(
+        "__DATA__", '{"divisions":{},"views":[],"heroes":[],"roster":{},'
+                    '"maps":[],"owscout_comps":{},"hero_icons":{}}')
+    js = re.search(r"<script>(.*)</script>", html, re.S)
+    assert js, "no <script> block found in the dashboard template"
+    script = tmp_path / "dash.js"
+    script.write_text(js.group(1), encoding="utf-8")
+    proc = subprocess.run([node, "--check", str(script)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, f"dashboard JS is invalid:\n{proc.stderr}"

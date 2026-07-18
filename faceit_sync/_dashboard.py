@@ -299,9 +299,10 @@ function heroIcon(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
   return src?`<img class="hicon r-${esc(r||'')}" src="${src}" alt="${esc(name)}" title="${esc(name)}">`
             :heroChip(name); }
 // Comps read best in role order: tank, damage, damage, support, support.
-const ROLE_ORDER={Tank:0,Damage:1,Support:2};
+// NB: ROLE_ORDER is declared further down (an array); don't redeclare it.
+function roleRank(h){ const i=['Tank','Damage','Support'].indexOf(HERO_ROLE[h]); return i<0?9:i; }
 function byRole(heroes){ return heroes.slice().sort((a,b)=>
-  (ROLE_ORDER[HERO_ROLE[a]]??9)-(ROLE_ORDER[HERO_ROLE[b]]??9) || String(a).localeCompare(b)); }
+  roleRank(a)-roleRank(b) || String(a).localeCompare(b)); }
 function compRow(heroes){ return `<span class="comp">${byRole(heroes).map(h=>heroIcon(h)).join('')}</span>`; }
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
