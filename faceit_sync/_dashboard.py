@@ -113,6 +113,22 @@ tbody tr.grp td{padding:14px 11px 5px;border-bottom:1px solid var(--line);
   color:var(--muted);background:var(--surface2)}
 tbody tr.grp:first-child td{padding-top:6px}
 tbody tr.grp:hover{background:var(--surface2)}
+/* Block table: several rows describe ONE subject (a hero, both ban cases). The
+   rows inside a block run together; only the block boundary gets a rule. */
+table.blocks td{border-bottom:none;padding-top:5px;padding-bottom:5px}
+table.blocks tr.blk td{border-top:1px solid var(--line);padding-top:11px}
+table.blocks tr.blk:first-child td{border-top:none}
+table.blocks thead th{cursor:default}
+table.blocks thead th:hover{color:var(--faint)}
+/* A long list that must not push the rest of the page down. Tall enough to show
+   a few entries, capped so the sections below stay reachable. */
+.scrollbox{max-height:min(60vh,560px);overflow-y:auto;overscroll-behavior:contain;
+  border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)}
+.scrollbox>*+*{margin-top:8px}
+.ctlrow{display:flex;gap:8px;align-items:center;margin:0 0 8px}
+.sortbtn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--fg);
+  background:var(--surface2);border:1px solid var(--line2);border-radius:8px;padding:4px 10px}
+.sortbtn:hover{border-color:var(--accent);color:var(--accent)}
 .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
 .scroll table{font-size:13.5px}
 
@@ -796,9 +812,13 @@ function renderScoutBody(t){
 
   // Matches — full match cards for this team (same view as searching them on the
   // Matches tab): per-map bans in draft order, replay codes inline, toggleable rosters.
-  w.appendChild(el(sectionH('Matches',`<span class="note">${t.matches.length} match${t.matches.length===1?'':'es'} · click a map for rosters · replay codes inline</span>`)));
+  // Kept in its own scrolling box: the match list grows without bound and pushed
+  // every analysis section below it off the screen.
+  w.appendChild(el(sectionH('Matches',`<span class="note">${t.matches.length} match${t.matches.length===1?'':'es'} · scrolls · click a map for rosters · replay codes inline</span>`)));
   if(t.matches.length){
-    t.matches.forEach(m=>w.appendChild(matchCard(m)));
+    const mbox=el(`<div class="scrollbox"></div>`);
+    t.matches.forEach(m=>mbox.appendChild(matchCard(m)));
+    w.appendChild(mbox);
   } else {
     w.appendChild(el(`<p class="note">No matches in this window.</p>`));
   }
@@ -806,24 +826,38 @@ function renderScoutBody(t){
   // Map win rate conditioned on a hero being banned out (by either team).
   // One row per (hero, who banned it): banning a hero yourself and having it taken
   // from you are different situations, and averaging them together hides both.
-  const bhw=[];
-  Object.entries(t.banHeroWin).forEach(([h,v])=>{
-    [['them',`${t.team} banned it`],['opp','Opponent banned it']].forEach(([k,label])=>{
-      const s=v[k]; if(!s.games) return;
-      bhw.push({hero:h,by:label,byk:k,games:s.games,wins:s.wins,wr:pctOf(s.wins,s.games),
-                tot:v.games});
-    });
-  });
-  bhw.sort((a,b)=>b.tot-a.tot||a.hero.localeCompare(b.hero)||a.byk.localeCompare(b.byk));
-  w.appendChild(el(sectionH('Win rate by banned hero',`<span class="note">map win % when this hero is banned out · split by who banned it</span>`)));
+  // One BLOCK per hero holding both cases, so the portrait is drawn once and the
+  // two numbers you are actually comparing sit directly above each other.
+  const bhw=Object.entries(t.banHeroWin).map(([h,v])=>({
+      hero:h, tot:v.games, wr:pctOf(v.wins,v.games),
+      rows:[['them',`${t.team} banned it`],['opp','Opponent banned it']]
+        .map(([k,label])=>({label,...v[k],wr:pctOf(v[k].wins,v[k].games)}))
+        .filter(r=>r.games)}))
+    .filter(b=>b.rows.length);
+  const bhwSort=el(`<button class="sortbtn" type="button">Win % high &rarr; low</button>`);
+  w.appendChild(el(sectionH('Win rate by banned hero',
+    `<span class="note">map win % when this hero is banned out · split by who banned it</span>`)));
   if(bhw.length){
-    w.appendChild(el(`<p class="note" style="margin-top:0">How ${esc(t.team)} does on maps where a given hero is banned (removed for both teams), split by whether they banned it or the opponent did. Low map counts are noisy — sort by <b>Maps</b> to find the reliable ones.</p>`));
-    w.appendChild(table(
-      [{k:'hero',label:'Banned hero',html:r=>heroChip(r.hero)},
-       {k:'by',label:'Banned by',html:r=>`<span class="faint">${esc(r.by)}</span>`},
-       {k:'games',label:'Maps',num:true},
-       {k:'wins',label:'Won',num:true},
-       {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], bhw));
+    w.appendChild(el(`<p class="note" style="margin-top:0">How ${esc(t.team)} does on maps where a given hero is banned (removed for both teams), split by whether they banned it or the opponent did. Low map counts are noisy — check <b>Maps</b> before trusting a row.</p>`));
+    const bar=el(`<div class="ctlrow"></div>`); bar.appendChild(bhwSort); w.appendChild(bar);
+    const box=el(`<div class="scroll"><table class="blocks"><thead><tr>`+
+      `<th>Banned hero</th><th>Banned by</th><th class="num">Maps</th>`+
+      `<th class="num">Won</th><th class="num">Win %</th></tr></thead><tbody></tbody></table></div>`);
+    let desc=true;
+    const draw=()=>{
+      const list=[...bhw].sort((a,b)=>(desc?b.wr-a.wr:a.wr-b.wr)||b.tot-a.tot
+                                       ||a.hero.localeCompare(b.hero));
+      box.querySelector('tbody').innerHTML=list.map(b=>b.rows.map((r,i)=>
+        `<tr class="${i===0?'blk':''}">`+
+        `<td>${i===0?heroChip(b.hero):''}</td>`+
+        `<td><span class="faint">${esc(r.label)}</span></td>`+
+        `<td class="num">${r.games}</td><td class="num">${r.wins}</td>`+
+        `<td class="num">${pill(r.wr+'%',winVar(r.wr))}</td></tr>`).join('')).join('');
+    };
+    bhwSort.onclick=()=>{ desc=!desc;
+      bhwSort.innerHTML=desc?'Win % high &rarr; low':'Win % low &rarr; high'; draw(); };
+    draw();
+    w.appendChild(box);
   } else {
     w.appendChild(el(`<p class="note">No bans in this window.</p>`));
   }
@@ -841,13 +875,16 @@ function renderScoutBody(t){
   // Bans on maps they PICKED only. The all-maps version was dropped: on a map the
   // opponent picked, the ban is a reaction, so it diluted the signal this shows.
   const banMapTable=(pm)=>{
-    const rows=sortMaps(Object.keys(pm)).map(mp=>({map:mp,cat:MAP_CAT[mp]||'',
+    // Ordered by ban count, not by mode: the top of this table is also the map
+    // they pick most often, which is the thing worth seeing first.
+    const rows=Object.keys(pm).map(mp=>({map:mp,cat:MAP_CAT[mp]||'',
       n:Object.values(pm[mp]).reduce((a,b)=>a+b,0),
-      heroes:rank(pm[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}));
+      heroes:rank(pm[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}))
+      .sort((a,b)=>b.n-a.n||mapCmp(a.map,b.map));
     return rows.length?table(
-      [{k:'map',label:'Map'},
+      [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
        {k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes}],
-      rows, byMode)
+      rows)
      :el(`<p class="note">No data in this window.</p>`);
   };
   w.appendChild(el(sectionH('Bans on maps they pick',`<span class="note">what ${esc(t.team)} bans on maps they chose</span>`)));

@@ -131,3 +131,17 @@ def test_resolved_observation_inserts_its_comp(db: Database) -> None:
     row = db.conn.execute("SELECT comp_id, resolved FROM comp_observations").fetchone()
     assert row["resolved"] == 1 and row["comp_id"] == comp.comp_id
     assert db.conn.execute("SELECT COUNT(*) FROM comps").fetchone()[0] == 1
+
+
+def test_settings_round_trip_and_upsert(db: Database) -> None:
+    """Keybinds must survive a restart, and re-saving must overwrite rather than
+    accumulate rows."""
+    db.set_settings({"keybind.snapshot": "f8", "keybind.undo": "f9"})
+    db.set_settings({"keybind.snapshot": "f10"})
+    assert db.get_settings("keybind.") == {"keybind.snapshot": "f10",
+                                           "keybind.undo": "f9"}
+
+
+def test_settings_prefix_filters(db: Database) -> None:
+    db.set_settings({"keybind.snapshot": "f8", "other.thing": "x"})
+    assert list(db.get_settings("keybind.")) == ["keybind.snapshot"]

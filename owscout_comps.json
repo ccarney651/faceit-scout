@@ -1,0 +1,843 @@
+{
+  "teams": {
+    "Wasp": {
+      "maps_captured": 1,
+      "comps": [
+        {
+          "heroes": [
+            "Bastion",
+            "DVa",
+            "Jetpack Cat",
+            "Kiriko",
+            "Shion"
+          ],
+          "samples": 4,
+          "maps": 1,
+          "games": 0.57,
+          "wins": 0.57,
+          "win_rate": 1.0,
+          "wilson": 0.129
+        },
+        {
+          "heroes": [
+            "Bastion",
+            "Jetpack Cat",
+            "Kiriko",
+            "Mauga",
+            "Shion"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.14,
+          "wins": 0.14,
+          "win_rate": 1.0,
+          "wilson": 0.036
+        },
+        {
+          "heroes": [
+            "Bastion",
+            "Jetpack Cat",
+            "Kiriko",
+            "Mauga",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.14,
+          "wins": 0.14,
+          "win_rate": 1.0,
+          "wilson": 0.036
+        },
+        {
+          "heroes": [
+            "Jetpack Cat",
+            "Kiriko",
+            "Mauga",
+            "Shion",
+            "Tracer"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.14,
+          "wins": 0.14,
+          "win_rate": 1.0,
+          "wilson": 0.036
+        }
+      ],
+      "by_sub_map": {
+        "Lighthouse": [
+          {
+            "heroes": [
+              "Bastion",
+              "DVa",
+              "Jetpack Cat",
+              "Kiriko",
+              "Shion"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.25,
+            "wins": 0.25,
+            "win_rate": 1.0,
+            "wilson": 0.061
+          },
+          {
+            "heroes": [
+              "Bastion",
+              "Jetpack Cat",
+              "Kiriko",
+              "Mauga",
+              "Shion"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.25,
+            "wins": 0.25,
+            "win_rate": 1.0,
+            "wilson": 0.061
+          },
+          {
+            "heroes": [
+              "Bastion",
+              "Jetpack Cat",
+              "Kiriko",
+              "Mauga",
+              "Tracer"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.25,
+            "wins": 0.25,
+            "win_rate": 1.0,
+            "wilson": 0.061
+          },
+          {
+            "heroes": [
+              "Jetpack Cat",
+              "Kiriko",
+              "Mauga",
+              "Shion",
+              "Tracer"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.25,
+            "wins": 0.25,
+            "win_rate": 1.0,
+            "wilson": 0.061
+          }
+        ],
+        "Ruins": [
+          {
+            "heroes": [
+              "Bastion",
+              "DVa",
+              "Jetpack Cat",
+              "Kiriko",
+              "Shion"
+            ],
+            "samples": 2,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 1.0,
+            "win_rate": 1.0,
+            "wilson": 0.207
+          }
+        ],
+        "Well": [
+          {
+            "heroes": [
+              "Bastion",
+              "DVa",
+              "Jetpack Cat",
+              "Kiriko",
+              "Shion"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 1.0,
+            "win_rate": 1.0,
+            "wilson": 0.207
+          }
+        ]
+      },
+      "scout": {
+        "overall": [
+          {
+            "heroes": [
+              "Bastion",
+              "DVa",
+              "Kiriko",
+              "Jetpack Cat",
+              "Shion"
+            ],
+            "maps": 1,
+            "wins": 1,
+            "losses": 0,
+            "win_rate": 1.0,
+            "samples": 1,
+            "variants": 1
+          }
+        ],
+        "maps": {
+          "Ilios": {
+            "segments": {
+              "Ruins": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "DVa",
+                      "Kiriko",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "DVa",
+                      "Kiriko",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "Well": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "DVa",
+                      "Kiriko",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "DVa",
+                      "Kiriko",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "Lighthouse": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "DVa",
+                      "Kiriko",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Tracer",
+                      "Kiriko",
+                      "Mauga",
+                      "Jetpack Cat",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "win_rate": 1.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "DVa"
+                ],
+                "in": [
+                  "Mauga"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Shion"
+                ],
+                "in": [
+                  "Tracer"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Bastion"
+                ],
+                "in": [
+                  "Shion"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ],
+            "narrative": "On Ilios (Ruins), Wasp opens Bastion, DVa, Kiriko, Jetpack Cat, Shion (1 map, 1W-0L). On Ilios (Well), Wasp opens Bastion, DVa, Kiriko, Jetpack Cat, Shion (1 map, 1W-0L). On Ilios (Lighthouse), Wasp opens Bastion, DVa, Kiriko, Jetpack Cat, Shion (1 map, 1W-0L)."
+          }
+        },
+        "games": 1,
+        "rounds": 3,
+        "hero_pool": [
+          {
+            "hero": "Bastion",
+            "role": "Damage",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "DVa",
+            "role": "Tank",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Jetpack Cat",
+            "role": "Support",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Kiriko",
+            "role": "Support",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Shion",
+            "role": "Damage",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Mauga",
+            "role": "Tank",
+            "rounds": 1,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Tracer",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.333
+          }
+        ],
+        "swaps": [
+          {
+            "out": [
+              "DVa"
+            ],
+            "in": [
+              "Mauga"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Shion"
+            ],
+            "in": [
+              "Tracer"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Bastion"
+            ],
+            "in": [
+              "Shion"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          }
+        ],
+        "swap_narrative": "Mid-map Wasp most often flexes: DVa -> Mauga (1x).",
+        "ban_response": []
+      }
+    },
+    "Dystopia": {
+      "maps_captured": 1,
+      "comps": [
+        {
+          "heroes": [
+            "Freja",
+            "Kiriko",
+            "Lucio",
+            "Shion",
+            "Wrecking Ball"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.29,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Bastion",
+            "Echo",
+            "Jetpack Cat",
+            "Kiriko",
+            "Wrecking Ball"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.29,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Echo",
+            "Freja",
+            "Kiriko",
+            "Lucio",
+            "Wrecking Ball"
+          ],
+          "samples": 2,
+          "maps": 1,
+          "games": 0.29,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        },
+        {
+          "heroes": [
+            "Freja",
+            "Kiriko",
+            "Lucio",
+            "Tracer",
+            "Wrecking Ball"
+          ],
+          "samples": 1,
+          "maps": 1,
+          "games": 0.14,
+          "wins": 0.0,
+          "win_rate": 0.0,
+          "wilson": 0.0
+        }
+      ],
+      "by_sub_map": {
+        "Lighthouse": [
+          {
+            "heroes": [
+              "Bastion",
+              "Echo",
+              "Jetpack Cat",
+              "Kiriko",
+              "Wrecking Ball"
+            ],
+            "samples": 2,
+            "maps": 1,
+            "games": 0.5,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          },
+          {
+            "heroes": [
+              "Echo",
+              "Freja",
+              "Kiriko",
+              "Lucio",
+              "Wrecking Ball"
+            ],
+            "samples": 2,
+            "maps": 1,
+            "games": 0.5,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ],
+        "Ruins": [
+          {
+            "heroes": [
+              "Freja",
+              "Kiriko",
+              "Lucio",
+              "Tracer",
+              "Wrecking Ball"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.5,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          },
+          {
+            "heroes": [
+              "Freja",
+              "Kiriko",
+              "Lucio",
+              "Shion",
+              "Wrecking Ball"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 0.5,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ],
+        "Well": [
+          {
+            "heroes": [
+              "Freja",
+              "Kiriko",
+              "Lucio",
+              "Shion",
+              "Wrecking Ball"
+            ],
+            "samples": 1,
+            "maps": 1,
+            "games": 1.0,
+            "wins": 0.0,
+            "win_rate": 0.0,
+            "wilson": 0.0
+          }
+        ]
+      },
+      "scout": {
+        "overall": [
+          {
+            "heroes": [
+              "Tracer",
+              "Lucio",
+              "Wrecking Ball",
+              "Kiriko",
+              "Freja"
+            ],
+            "maps": 1,
+            "wins": 0,
+            "losses": 1,
+            "win_rate": 0.0,
+            "samples": 1,
+            "variants": 1
+          }
+        ],
+        "maps": {
+          "Ilios": {
+            "segments": {
+              "Ruins": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Tracer",
+                      "Lucio",
+                      "Wrecking Ball",
+                      "Kiriko",
+                      "Freja"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Wrecking Ball",
+                      "Kiriko",
+                      "Freja",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "Well": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Wrecking Ball",
+                      "Kiriko",
+                      "Freja",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Wrecking Ball",
+                      "Kiriko",
+                      "Freja",
+                      "Shion"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              },
+              "Lighthouse": {
+                "open": [
+                  {
+                    "heroes": [
+                      "Bastion",
+                      "Wrecking Ball",
+                      "Echo",
+                      "Kiriko",
+                      "Jetpack Cat"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ],
+                "settled": [
+                  {
+                    "heroes": [
+                      "Lucio",
+                      "Wrecking Ball",
+                      "Echo",
+                      "Kiriko",
+                      "Freja"
+                    ],
+                    "maps": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "win_rate": 0.0,
+                    "samples": 1,
+                    "variants": 1
+                  }
+                ]
+              }
+            },
+            "swaps": [
+              {
+                "out": [
+                  "Tracer"
+                ],
+                "in": [
+                  "Shion"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Lucio",
+                  "Freja",
+                  "Shion"
+                ],
+                "in": [
+                  "Bastion",
+                  "Echo",
+                  "Jetpack Cat"
+                ],
+                "kind": "core",
+                "count": 1,
+                "vs": []
+              },
+              {
+                "out": [
+                  "Bastion",
+                  "Jetpack Cat"
+                ],
+                "in": [
+                  "Lucio",
+                  "Freja"
+                ],
+                "kind": "flex",
+                "count": 1,
+                "vs": []
+              }
+            ],
+            "narrative": "On Ilios (Ruins), Dystopia opens Tracer, Lucio, Wrecking Ball, Kiriko, Freja (1 map, 0W-1L). On Ilios (Well), Dystopia opens Lucio, Wrecking Ball, Kiriko, Freja, Shion (1 map, 0W-1L). On Ilios (Lighthouse), Dystopia opens Bastion, Wrecking Ball, Echo, Kiriko, Jetpack Cat (1 map, 0W-1L)."
+          }
+        },
+        "games": 1,
+        "rounds": 3,
+        "hero_pool": [
+          {
+            "hero": "Freja",
+            "role": "Damage",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Kiriko",
+            "role": "Support",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Lucio",
+            "role": "Support",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Wrecking Ball",
+            "role": "Tank",
+            "rounds": 3,
+            "pick_rate": 1.0
+          },
+          {
+            "hero": "Shion",
+            "role": "Damage",
+            "rounds": 2,
+            "pick_rate": 0.667
+          },
+          {
+            "hero": "Bastion",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Echo",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Jetpack Cat",
+            "role": "Support",
+            "rounds": 1,
+            "pick_rate": 0.333
+          },
+          {
+            "hero": "Tracer",
+            "role": "Damage",
+            "rounds": 1,
+            "pick_rate": 0.333
+          }
+        ],
+        "swaps": [
+          {
+            "out": [
+              "Tracer"
+            ],
+            "in": [
+              "Shion"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Lucio",
+              "Freja",
+              "Shion"
+            ],
+            "in": [
+              "Bastion",
+              "Echo",
+              "Jetpack Cat"
+            ],
+            "kind": "core",
+            "count": 1,
+            "vs": []
+          },
+          {
+            "out": [
+              "Bastion",
+              "Jetpack Cat"
+            ],
+            "in": [
+              "Lucio",
+              "Freja"
+            ],
+            "kind": "flex",
+            "count": 1,
+            "vs": []
+          }
+        ],
+        "swap_narrative": "Mid-map Dystopia most often flexes: Tracer -> Shion (1x).",
+        "ban_response": []
+      }
+    }
+  }
+}

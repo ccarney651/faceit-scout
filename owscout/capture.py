@@ -19,7 +19,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from .comps import comp_id_for
 from .errors import CaptureError
@@ -445,6 +445,54 @@ def run_capture(  # pragma: no cover - runtime-only path
             f"banned-hero hit rate {integ['banned_hits']}/{integ['resolved_slots']} "
             f"exceeds {BAN_HIT_FAIL_RATE:.0%} — ROI profile is stale, run `owscout calibrate`")
     return counts
+
+
+# ---------------------------------------------------------------- keybinds
+# The hooks do NOT suppress the keystroke (add_hotkey without suppress=True), so
+# whatever is bound here ALSO reaches Overwatch. That rules out anything the
+# replay viewer uses - number keys switch player POV, space pauses - and is why
+# the defaults are all F-keys, which OW leaves unbound.
+KEYBIND_ACTIONS: tuple[tuple[str, str, str], ...] = (
+    ("snapshot", "Snapshot the comp", "pressed constantly - the main one"),
+    ("round", "Next round / point captured", "also allows an identical comp through"),
+    ("submap", "Cycle the control sub-map", "control maps only"),
+    ("attack", "Flip who is attacking", "escort/hybrid, round 3+"),
+    ("undo", "Undo the last snapshot", "rare, deliberately across the F8/F9 gap"),
+)
+DEFAULT_KEYBINDS: dict[str, str] = {
+    "snapshot": "f8", "round": "f7", "submap": "f6", "attack": "f5", "undo": "f9",
+}
+SETTING_PREFIX = "keybind."
+
+
+def resolve_keybinds(stored: Mapping[str, str]) -> dict[str, str]:
+    """Merge stored ``keybind.<action>`` settings over the defaults. Unknown keys
+    and blanks are ignored, so a hand-edited settings row cannot leave an action
+    unbound."""
+    binds = dict(DEFAULT_KEYBINDS)
+    for key, value in stored.items():
+        action = key[len(SETTING_PREFIX):] if key.startswith(SETTING_PREFIX) else key
+        if action in binds and value.strip():
+            binds[action] = value.strip().lower()
+    return binds
+
+
+def keybind_conflicts(binds: Mapping[str, str]) -> list[str]:
+    """Human-readable problems with a keybind set: duplicates (one press would fire
+    two actions) and ESC, which always ends the capture."""
+    problems: list[str] = []
+    seen: dict[str, str] = {}
+    for action, key in binds.items():
+        k = key.strip().lower()
+        if not k:
+            problems.append(f"{action}: no key set")
+            continue
+        if k in ("esc", "escape"):
+            problems.append(f"{action}: ESC always ends the capture - pick another key")
+        if k in seen:
+            problems.append(f"{action} and {seen[k]} are both on '{k.upper()}'")
+        seen[k] = action
+    return problems
 
 
 def run_hotkey_capture(  # pragma: no cover - runtime-only path

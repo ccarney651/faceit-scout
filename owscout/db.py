@@ -206,6 +206,15 @@ CREATE TABLE IF NOT EXISTS custom_heroes (
     role     TEXT CHECK(role IN ('tank','damage','support') OR role IS NULL),
     added_at TEXT NOT NULL
 );
+
+-- Operator preferences that must survive a restart (keybinds today). Deliberately
+-- a plain key/value store: these are UI choices, not captured data, and giving
+-- each one a column would mean a migration per preference.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 # The known wipe that invalidated every stored S9 code (SPEC §2, §4). Seeded
@@ -406,6 +415,26 @@ class Database:
     def remove_custom_hero(self, guid: str) -> None:
         with self.transaction() as c:
             c.execute("DELETE FROM custom_heroes WHERE guid = ?", (guid,))
+
+    def get_settings(self, prefix: str = "") -> dict[str, str]:
+        """Stored operator preferences, optionally only those under ``prefix``."""
+        rows = self.conn.execute(
+            "SELECT key, value FROM app_settings WHERE key LIKE ? ORDER BY key",
+            (f"{prefix}%",),
+        ).fetchall()
+        return {str(r["key"]): str(r["value"]) for r in rows}
+
+    def set_settings(self, values: dict[str, str]) -> None:
+        """Upsert preferences. Written as one transaction so a keybind set is
+        never half-applied."""
+        with self.transaction() as c:
+            for k, v in values.items():
+                c.execute(
+                    """INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+                       ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                           updated_at=excluded.updated_at""",
+                    (k, v, _utcnow()),
+                )
 
     def get_learn_slot(self, profile_id: int) -> Optional[Rect]:
         """The single-portrait learn ROI for a profile, or None if not set."""

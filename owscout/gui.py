@@ -21,6 +21,18 @@ from typing import Any, Callable, Optional
 from .db import Database
 
 
+# Sentinel for "don't filter the code list by team".
+ALL_TEAMS = "(all teams)"
+
+# The capture legend, built from whatever keys the operator has bound.
+_KEY_LABELS = (("snapshot", "snapshot"), ("round", "next round"), ("submap", "sub-map"),
+               ("attack", "who-attacks"), ("undo", "undo"))
+
+
+def _keys_summary(binds: dict[str, str]) -> str:
+    return "  ".join(f"{binds[a].upper()} {label}" for a, label in _KEY_LABELS)
+
+
 def _base_dir() -> str:
     """A stable folder for owscout's data, independent of where the app is
     launched from — so calibration and refs persist between sessions. Prefer
@@ -91,26 +103,37 @@ class _App:  # pragma: no cover - GUI runtime only
         # --- 2. capture -----------------------------------------------------
         cap = ttk.LabelFrame(self.root, text="2. Capture a replay (Master division)")
         cap.pack(fill="x", **pad)
-        ttk.Label(cap, text="Code").grid(row=0, column=0, padx=6, pady=4, sticky="w")
+        # Team filter: scouting is done one opponent at a time, and 40 codes across
+        # every Master team is a lot to read to find the four you care about.
+        ttk.Label(cap, text="Team").grid(row=0, column=0, padx=6, pady=4, sticky="w")
+        self.team_filter_var = tk.StringVar(value=ALL_TEAMS)
+        self.team_filter_box = ttk.Combobox(cap, textvariable=self.team_filter_var,
+                                            width=34, state="readonly")
+        self.team_filter_box.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+        self.team_filter_box.bind("<<ComboboxSelected>>",
+                                  lambda _e: self._apply_code_filter())
+        ttk.Label(cap, text="Code").grid(row=1, column=0, padx=6, pady=4, sticky="w")
         self.code_var = tk.StringVar()
         self.code_box = ttk.Combobox(cap, textvariable=self.code_var, width=34, state="readonly")
-        self.code_box.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+        self.code_box.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
         self.code_box.bind("<<ComboboxSelected>>", lambda _e: self._on_code_selected())
-        ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=0, column=2, padx=2)
-        ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=0, column=3, padx=2)
+        ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=1, column=2, padx=2)
+        ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=1, column=3, padx=2)
         # Left team: pick by clicking whichever team is on the LEFT of the HUD.
-        ttk.Label(cap, text="Left team").grid(row=1, column=0, padx=6, pady=4, sticky="nw")
+        ttk.Label(cap, text="Left team").grid(row=2, column=0, padx=6, pady=4, sticky="nw")
         self.side_a_var = tk.StringVar()
         self.team_frame = ttk.Frame(cap)
-        self.team_frame.grid(row=1, column=1, columnspan=3, padx=6, pady=4, sticky="w")
+        self.team_frame.grid(row=2, column=1, columnspan=3, padx=6, pady=4, sticky="w")
         self.roster_lbl = ttk.Label(cap, text="(pick a code to see the teams)",
                                     foreground="#555", justify="left")
-        self.roster_lbl.grid(row=2, column=1, columnspan=3, padx=6, pady=2, sticky="w")
-        ttk.Label(cap, text="Hotkey").grid(row=3, column=0, padx=6, pady=4, sticky="w")
-        self.hotkey_var = tk.StringVar(value="f8")
-        ttk.Entry(cap, textvariable=self.hotkey_var, width=8).grid(row=3, column=1, padx=6, pady=4, sticky="w")
+        self.roster_lbl.grid(row=3, column=1, columnspan=3, padx=6, pady=2, sticky="w")
+        ttk.Label(cap, text="Keys").grid(row=4, column=0, padx=6, pady=4, sticky="w")
+        self.keys_lbl = ttk.Label(cap, text="", foreground="#555")
+        self.keys_lbl.grid(row=4, column=1, padx=6, pady=4, sticky="w")
+        ttk.Button(cap, text="Change keys…", command=self._open_keybinds).grid(
+            row=4, column=2, columnspan=2, padx=2, pady=4, sticky="w")
         self.cap_btn = ttk.Button(cap, text="Start hotkey capture", command=self._capture)
-        self.cap_btn.grid(row=4, column=1, padx=6, pady=6, sticky="w")
+        self.cap_btn.grid(row=5, column=1, padx=6, pady=6, sticky="w")
         cap.columnconfigure(1, weight=1)
 
         # --- 3. review + publish -------------------------------------------
@@ -135,7 +158,10 @@ class _App:  # pragma: no cover - GUI runtime only
         self.log.configure(yscrollcommand=sb.set)
 
         self._stop_capture: Optional[Callable[[], None]] = None
+        self._code_rows: list[Any] = []
+        self._keybinds: dict[str, str] = {}
         self.root.after(80, self._drain)
+        self._load_keybinds()
         self._refresh_codes()
         self._verify_refs()
 
@@ -337,15 +363,34 @@ class _App:  # pragma: no cover - GUI runtime only
             try:
                 with self._open_db() as db:
                     rows = db.list_codes(self.faceit_var.get(), uncaptured=True, limit=40)
-                items = [f"{r.demo_code}  {r.map_name}  {r.team_a} vs {r.team_b}" for r in rows]
             except Exception as exc:  # noqa: BLE001
-                items = []
+                rows = []
                 self._emit(f"codes: {exc}")
-            self.q.put(lambda: self.code_box.configure(values=items))
-            if items:
-                self.q.put(lambda: self.code_var.set(items[0]))
-                self.q.put(self._on_code_selected)
+            # Cached so the team filter is instant and needs no second query.
+            self._code_rows = list(rows)
+            self.q.put(self._apply_code_filter)
         self._run(go, lock=False)
+
+    def _apply_code_filter(self) -> None:
+        """Rebuild the code list for the selected team (or all of them)."""
+        rows = getattr(self, "_code_rows", [])
+        teams = sorted({t for r in rows for t in (r.team_a, r.team_b) if t})
+        self.team_filter_box.configure(values=[ALL_TEAMS, *teams])
+        want = self.team_filter_var.get()
+        if want != ALL_TEAMS and want not in teams:   # team dropped out of the window
+            want = ALL_TEAMS
+            self.team_filter_var.set(want)
+        keep = [r for r in rows if want == ALL_TEAMS or want in (r.team_a, r.team_b)]
+        items = [f"{r.demo_code}  {r.map_name}  {r.team_a} vs {r.team_b}" for r in keep]
+        self.code_box.configure(values=items)
+        if items:
+            self.code_var.set(items[0])
+            self._on_code_selected()
+        else:
+            self.code_var.set("")
+        n, tot = len(items), len(rows)
+        self._emit(f"codes: {n} shown" + (f" of {tot} (filtered to {want})"
+                                          if want != ALL_TEAMS else f" ({tot} uncaptured)"))
 
     def _on_code_selected(self) -> None:
         raw = self.code_var.get().strip()
@@ -376,6 +421,70 @@ class _App:  # pragma: no cover - GUI runtime only
         self.roster_lbl.configure(
             text=f"{t1 or '?'}:  {', '.join(p1) or '—'}\n{t2 or '?'}:  {', '.join(p2) or '—'}")
 
+    def _load_keybinds(self) -> None:
+        """Read the operator's keybinds (defaults if never changed) and show them."""
+        from .capture import SETTING_PREFIX, resolve_keybinds
+        try:
+            with self._open_db() as db:
+                stored = db.get_settings(SETTING_PREFIX)
+        except Exception:  # noqa: BLE001 - a DB hiccup must not block capture
+            stored = {}
+        self._keybinds = resolve_keybinds(stored)
+        self.keys_lbl.configure(text=_keys_summary(self._keybinds))
+
+    def _open_keybinds(self) -> None:
+        """Edit the capture keybinds. They are global hooks that do NOT swallow the
+        keypress, so anything bound here also reaches Overwatch — hence F-keys."""
+        import tkinter as tk
+        from tkinter import ttk
+
+        from .capture import KEYBIND_ACTIONS, SETTING_PREFIX, keybind_conflicts
+
+        win = tk.Toplevel(self.root)
+        win.title("Capture keybinds")
+        win.transient(self.root)
+        ttk.Label(win, wraplength=430, justify="left", foreground="#555",
+                  text="These are global keys: the press still reaches Overwatch, so "
+                       "avoid anything the replay viewer uses (number keys switch "
+                       "player POV, space pauses). F-keys are unbound in OW, which is "
+                       "why they are the defaults. ESC always ends a capture."
+                  ).grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="w")
+        vars_: dict[str, tk.StringVar] = {}
+        for i, (action, label, hint) in enumerate(KEYBIND_ACTIONS, start=1):
+            ttk.Label(win, text=f"{label}  ({hint})").grid(
+                row=i, column=0, padx=10, pady=3, sticky="w")
+            var = tk.StringVar(value=self._keybinds[action])
+            vars_[action] = var
+            ttk.Entry(win, textvariable=var, width=10).grid(
+                row=i, column=1, padx=10, pady=3, sticky="w")
+        status = ttk.Label(win, text="", foreground="#a00", wraplength=430, justify="left")
+        status.grid(row=98, column=0, columnspan=2, padx=10, pady=(4, 0), sticky="w")
+
+        def save() -> None:
+            binds = {a: v.get().strip().lower() for a, v in vars_.items()}
+            problems = keybind_conflicts(binds)
+            if problems:
+                status.configure(text="; ".join(problems))
+                return
+            with self._open_db() as db:
+                db.set_settings({f"{SETTING_PREFIX}{a}": k for a, k in binds.items()})
+            self._keybinds = binds
+            self.keys_lbl.configure(text=_keys_summary(binds))
+            self._emit(f"keybinds saved: {_keys_summary(binds)}")
+            win.destroy()
+
+        def restore() -> None:
+            from .capture import DEFAULT_KEYBINDS
+            for a, v in vars_.items():
+                v.set(DEFAULT_KEYBINDS[a])
+            status.configure(text="")
+
+        btns = ttk.Frame(win)
+        btns.grid(row=99, column=0, columnspan=2, padx=10, pady=10, sticky="w")
+        ttk.Button(btns, text="Save", command=save).pack(side="left")
+        ttk.Button(btns, text="Restore defaults", command=restore).pack(side="left", padx=8)
+        ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="left")
+
     def _copy_code(self) -> None:
         raw = self.code_var.get().strip()
         if not raw:
@@ -397,12 +506,11 @@ class _App:  # pragma: no cover - GUI runtime only
         if side_a is None:
             self._emit("pick the LEFT team first (click its name under 'Left team').")
             return
-        hotkey = self.hotkey_var.get().strip() or "f8"
+        binds = self._keybinds
         from .capture import run_hotkey_capture
-        self._emit(f"capture: {code} — {hotkey.upper()} snapshot · F7 next round · "
-                   "F6 sub-map · F9 undo · F5 who-attacks · ESC done. Watch the overlay.")
+        self._emit(f"capture: {code} — {_keys_summary(binds)} · ESC done. Watch the overlay.")
         self.cap_btn.configure(state="disabled")
-        overlay = _CaptureOverlay(self, hotkey)
+        overlay = _CaptureOverlay(self, binds)
 
         def emit(msg: str) -> None:
             self._emit(msg)
@@ -412,8 +520,11 @@ class _App:  # pragma: no cover - GUI runtime only
             try:
                 with self._open_db() as db:
                     run_hotkey_capture(db, self.faceit_var.get(), demo_code=code,
-                                       side_a_team=side_a, hotkey=hotkey,
-                                       round_hotkey="f7", submap_hotkey="f6",
+                                       side_a_team=side_a, hotkey=binds["snapshot"],
+                                       round_hotkey=binds["round"],
+                                       submap_hotkey=binds["submap"],
+                                       undo_hotkey=binds["undo"],
+                                       attack_toggle_hotkey=binds["attack"],
                                        require_division="master", emit=emit)
                 self._emit("capture: finished (saved as a draft — review to finalize).")
             finally:
@@ -946,7 +1057,7 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
     what was captured (and the hotkey legend) without alt-tabbing out of OW. Works
     when OW runs windowed/borderless (an exclusive-fullscreen game hides it)."""
 
-    def __init__(self, app: "_App", hotkey: str) -> None:
+    def __init__(self, app: "_App", binds: dict[str, str]) -> None:
         tk = app.tk
         self.win = tk.Toplevel(app.root)
         self.win.overrideredirect(True)               # no title bar / chrome
@@ -958,13 +1069,13 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         self.win.configure(bg="#0a0a0a")
         sw = self.win.winfo_screenwidth()
         self.win.geometry(f"+{max(0, sw // 2 - 300)}+8")   # top-centre
-        legend = (f"{hotkey.upper()} snapshot   F7 next round   F6 sub-map   "
-                  f"F9 undo   F5 who-attacks   ESC done")
+        legend = f"{_keys_summary(binds)}   ESC done"
         tk.Label(self.win, text="● owscout capturing", bg="#0a0a0a", fg="#6cf",
                  font=("Segoe UI", 10, "bold")).pack(padx=16, pady=(6, 0), anchor="w")
         tk.Label(self.win, text=legend, bg="#0a0a0a", fg="#9aa",
                  font=("Consolas", 9)).pack(padx=16, anchor="w")
-        self.status = tk.Label(self.win, text=f"ready — press {hotkey.upper()} at key moments",
+        self.status = tk.Label(self.win,
+                               text=f"ready — press {binds['snapshot'].upper()} at key moments",
                                bg="#0a0a0a", fg="#fff", font=("Consolas", 11, "bold"),
                                justify="left", anchor="w")
         self.status.pack(padx=16, pady=(2, 8), anchor="w")
