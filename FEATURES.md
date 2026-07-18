@@ -469,8 +469,9 @@ presentation is built to keep that visible.
   of 104 hero+team refs). They are unvalidated rather than known-bad; `refs
   coverage` tracks this and it shrinks with every capture.
 - **Swap triggers lack baseline subtraction** (see §2.5).
-- **The `.exe` exists but has only been smoke-tested.** `pyinstaller owscout.spec`
-  builds a standalone ~76 MB `dist/owscout.exe`; it launches, keeps its data next
-  to the exe, and bundles every dependency — but a full capture session from the
-  frozen build (dxcam grab, hotkeys, calibration UI) hasn't been exercised yet.
-  A new user's setup: download the exe + ref bundle → calibrate → import → capture.
+- ~~The `.exe` is untested~~ **Field-verified 2026-07-18.** The operator ran the
+  full first-run flow on the frozen build: calibration UI, pre-trained library
+  auto-load (104 refs), dxcam capture with global hotkeys, and the fresh-machine
+  bootstrap sync — all worked. A new user's setup: run the exe → calibrate →
+  capture (the library and seed list are baked in). Remaining friction is only
+  Windows SmartScreen on the unsigned binary (More info → Run anyway).
