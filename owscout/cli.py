@@ -355,8 +355,10 @@ def cmd_drafts(args: argparse.Namespace) -> int:
                   f"[{d.side_a or '?'} vs {d.side_b or '?'}]  {d.observations} obs")
             comps = db.map_side_comps(d.id)
             for side, label in (("a", d.side_a), ("b", d.side_b)):
-                for names, n, resolved, sub, rnd in (comps.get(side) or []):
+                for names, n, resolved, sub, rnd, conf in (comps.get(side) or []):
                     tag = "" if resolved else " [unresolved]"
+                    if conf is not None and conf < 0.62:
+                        tag += f" (!) low conf {conf:.2f}"
                     pre = " ".join(t for t in (f"R{rnd}" if rnd else "",
                                                f"[{sub}]" if sub else "") if t)
                     pre = (pre + " ") if pre else ""

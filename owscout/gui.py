@@ -836,8 +836,10 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
             rows = comps.get(side) or []
             if not rows:
                 lines.append("   (no comps)")
-            for names, n, resolved, sub, rnd in rows:
+            for names, n, resolved, sub, rnd, conf in rows:
                 flag = "" if resolved else "  [unresolved]"
+                if conf is not None and conf < 0.62:
+                    flag += f"  ⚠ low conf {conf:.2f}"
                 tags = " ".join(t for t in (f"R{rnd}" if rnd else "",
                                             f"[{sub}]" if sub else "") if t)
                 tags = (tags + " ") if tags else ""

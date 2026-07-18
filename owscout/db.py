@@ -771,13 +771,15 @@ class Database:
 
     def map_side_comps(
         self, map_instance_id: int
-    ) -> dict[str, list[tuple[str, int, bool, Optional[str], Optional[int]]]]:
+    ) -> dict[str, list[tuple[str, int, bool, Optional[str], Optional[int], Optional[float]]]]:
         """Per side ('a'/'b'), the distinct comps observed as
-        (hero_names, times_seen, resolved, sub_map, round_no), for review. Grouped
-        per round and sub-map so control-map rotations show separately."""
+        (hero_names, times_seen, resolved, sub_map, round_no, min_confidence), for
+        review. Grouped per round and sub-map; min_confidence is the weakest slot
+        confidence seen for that comp, so shaky captures can be flagged."""
         rows = self.conn.execute(
             """SELECT o.side, o.resolved AS resolved, o.sub_map AS sub_map,
-                      o.round_no AS round_no, c.hero_names_sorted AS names, COUNT(*) AS n
+                      o.round_no AS round_no, c.hero_names_sorted AS names, COUNT(*) AS n,
+                      MIN(o.min_slot_confidence) AS conf
                FROM comp_observations o
                LEFT JOIN comps c ON c.comp_id = o.comp_id
                WHERE o.map_instance_id = ?
@@ -785,11 +787,11 @@ class Database:
                ORDER BY o.side, o.round_no, o.sub_map, n DESC""",
             (map_instance_id,),
         ).fetchall()
-        out: dict[str, list[tuple[str, int, bool, Optional[str], Optional[int]]]] = {"a": [], "b": []}
+        out: dict[str, list[tuple[str, int, bool, Optional[str], Optional[int], Optional[float]]]] = {"a": [], "b": []}
         for r in rows:
             out.setdefault(str(r["side"]), []).append(
                 (r["names"] or "(unresolved)", int(r["n"]), bool(r["resolved"]),
-                 r["sub_map"], r["round_no"]))
+                 r["sub_map"], r["round_no"], r["conf"]))
         return out
 
     def finalize_map(self, map_instance_id: int) -> None:
