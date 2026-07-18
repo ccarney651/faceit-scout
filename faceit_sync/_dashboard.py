@@ -588,6 +588,22 @@ function renderScoutBody(t){
     w.appendChild(card);
   }
 
+  // Response to bans — how they open when a hero is banned.
+  const banresp=(scout&&scout.ban_response)||[];
+  if(banresp.length){
+    w.appendChild(el(sectionH('When a hero is banned',`<span class="note">how their opening comp shifts · low n, directional</span>`)));
+    const card=el(`<div class="card"></div>`);
+    banresp.slice(0,8).forEach(b=>{
+      card.appendChild(el(`<p class="eyebrow" style="margin:8px 0 2px">${heroChip(b.banned)} banned <span class="faint">(${b.games} game${b.games===1?'':'s'})</span></p>`));
+      (b.opens||[]).forEach(c=>{
+        const chips=c.heroes.map(h=>heroChip(h)).join(' ');
+        card.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
+          `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${c.wins}W-${c.losses}L</span></div>`));
+      });
+    });
+    w.appendChild(card);
+  }
+
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
   const banC=el(`<div class="card"></div>`);

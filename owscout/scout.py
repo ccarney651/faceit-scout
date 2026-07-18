@@ -100,6 +100,48 @@ def aggregate_swaps(
     return out
 
 
+def ban_response(
+    details: Iterable[ObsDetail], roles: Roles, hero_names: dict[str, str],
+    *, min_games: int = 2,
+) -> dict[str, list[dict[str, Any]]]:
+    """Per team, how they open when a given hero is banned. For each hero banned
+    in >= ``min_games`` of a team's games, the opening comp families they ran in
+    those games. Surfaces 'when Sojourn is banned they open Ashe'."""
+    # One opening instance per game, carrying that game's bans.
+    games: dict[tuple[int, str], list[ObsDetail]] = {}
+    for d in details:
+        games.setdefault((d.map_instance_id, d.side), []).append(d)
+
+    # team -> banned_guid -> list[CompInstance] (openings when that hero was banned)
+    by_ban: dict[str, dict[str, list[CompInstance]]] = {}
+    for (mi, side), obs in games.items():
+        team = _team_of(obs[0])
+        if not team:
+            continue
+        obs.sort(key=lambda d: d.sample_ts_ms)
+        first = obs[0]
+        inst = CompInstance(first.hero_guids, first.winner_side == side, f"{mi}:{side}")
+        for ban in set(first.bans):
+            by_ban.setdefault(team, {}).setdefault(ban, []).append(inst)
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for team, bans in by_ban.items():
+        rows: list[dict[str, Any]] = []
+        for ban_guid, insts in bans.items():
+            games_n = len({i.map_key for i in insts})
+            if games_n < min_games:
+                continue
+            rows.append({
+                "banned": hero_names.get(ban_guid, ban_guid),
+                "games": games_n,
+                "opens": [_family_dict(f, hero_names)
+                          for f in cluster_comps(insts, roles)][:3],
+            })
+        rows.sort(key=lambda r: int(r["games"]), reverse=True)
+        out[team] = rows
+    return out
+
+
 def _segment(d: ObsDetail) -> Optional[str]:
     """The scouting segment for an observation: 'attack'/'defend' (Escort/Hybrid),
     else the control sub-map, else None (single-geometry map)."""
@@ -158,6 +200,7 @@ def team_scout(
             slot.append(CompInstance(d.hero_guids, won, game_key))
 
     swaps = aggregate_swaps(details, roles, hero_names)
+    bans = ban_response(details, roles, hero_names)
     report: dict[str, dict[str, Any]] = {}
     teams = set(overall) | set(by_map)
     for team in teams:
@@ -173,5 +216,6 @@ def team_scout(
                         for f in cluster_comps(overall.get(team, []), roles)],
             "maps": maps_out,
             "swaps": swaps.get(team, []),
+            "ban_response": bans.get(team, []),
         }
     return report

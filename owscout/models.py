@@ -34,6 +34,7 @@ class ObsDetail(NamedTuple):
     side_a_team: str | None
     side_b_team: str | None
     winner_side: str | None
+    bans: tuple[str, ...] = ()   # banned hero guids on this map
 
 
 class DraftMap(NamedTuple):

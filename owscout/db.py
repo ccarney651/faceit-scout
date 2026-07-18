@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS map_instances (
     map_verified   INTEGER CHECK(map_verified IN (0,1)),   -- see SPEC §9
     captured_at    TEXT,
     finalized_at   TEXT,                     -- NULL => draft (excluded from exports)
+    bans_json      TEXT,                     -- banned hero guids for this map (JSON)
     -- Exactly one of (match_id AND game_no) or scrim_id is non-null.
     CHECK ((match_id IS NOT NULL AND game_no IS NOT NULL AND scrim_id IS NULL)
         OR (match_id IS NULL AND game_no IS NULL AND scrim_id IS NOT NULL)),
@@ -271,6 +272,9 @@ class Database:
             cols = {r[1] for r in self.conn.execute("PRAGMA table_info(map_instances)")}
             if "finalized_at" not in cols:
                 self.conn.execute("ALTER TABLE map_instances ADD COLUMN finalized_at TEXT")
+                self.conn.commit()
+            if "bans_json" not in cols:
+                self.conn.execute("ALTER TABLE map_instances ADD COLUMN bans_json TEXT")
                 self.conn.commit()
         if "comp_observations" in tables:
             cols = {r[1] for r in self.conn.execute("PRAGMA table_info(comp_observations)")}
@@ -872,7 +876,7 @@ class Database:
         sql = """
             SELECT o.map_instance_id, o.side, o.sample_ts_ms, o.sub_map, o.round_no,
                    c.hero_guids_json AS guids, mi.map_name, mi.map_category,
-                   mi.side_a_label, mi.side_b_label, mi.winner_side
+                   mi.side_a_label, mi.side_b_label, mi.winner_side, mi.bans_json
             FROM comp_observations o
             JOIN map_instances mi ON mi.id = o.map_instance_id
             JOIN comps c ON c.comp_id = o.comp_id
@@ -891,6 +895,7 @@ class Database:
                 map_name=r["map_name"], map_category=r["map_category"],
                 side_a_team=r["side_a_label"], side_b_team=r["side_b_label"],
                 winner_side=r["winner_side"],
+                bans=tuple(json.loads(r["bans_json"])) if r["bans_json"] else (),
             ))
         return out
 
@@ -1036,14 +1041,15 @@ class Database:
         side_b_label = ctx.faction2_team_name if a_is_f1 else ctx.faction1_team_name
         winner_side = _winner_side(ctx.winner_faction, side_a_faction)
 
+        bans_json = json.dumps([b.hero_guid for b in ctx.bans]) if ctx.bans else None
         with self.transaction() as c:
             c.execute(
                 """INSERT INTO map_instances (
                        source_type, match_id, game_no, demo_code,
                        map_guid, map_name, map_category,
                        side_a_team_id, side_a_label, side_b_team_id, side_b_label,
-                       winner_side, build_id, profile_id, map_verified, captured_at)
-                   VALUES ('faceit', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       winner_side, build_id, profile_id, map_verified, captured_at, bans_json)
+                   VALUES ('faceit', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(match_id, game_no) DO UPDATE SET
                        demo_code=excluded.demo_code, map_guid=excluded.map_guid,
                        map_name=excluded.map_name, map_category=excluded.map_category,
@@ -1051,10 +1057,11 @@ class Database:
                        side_b_team_id=excluded.side_b_team_id, side_b_label=excluded.side_b_label,
                        winner_side=excluded.winner_side, build_id=excluded.build_id,
                        profile_id=excluded.profile_id, map_verified=excluded.map_verified,
-                       captured_at=excluded.captured_at""",
+                       captured_at=excluded.captured_at, bans_json=excluded.bans_json""",
                 (ctx.match_id, ctx.game_no, ctx.demo_code, ctx.map_guid, ctx.map_name,
                  ctx.map_category, side_a_team_id, side_a_label, side_b_team_id,
-                 side_b_label, winner_side, build_id, profile_id, map_verified, _utcnow()),
+                 side_b_label, winner_side, build_id, profile_id, map_verified,
+                 _utcnow(), bans_json),
             )
         row = self.conn.execute(
             "SELECT id FROM map_instances WHERE match_id = ? AND game_no = ?",

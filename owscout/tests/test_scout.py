@@ -4,7 +4,8 @@ from owscout.models import ObsDetail
 from owscout.scout import team_scout
 
 ROLES = {"ram": "tank", "dva": "tank", "soj": "damage", "mei": "damage",
-         "reaper": "damage", "luc": "support", "kir": "support", "ana": "support"}
+         "reaper": "damage", "ashe": "damage", "luc": "support", "kir": "support",
+         "ana": "support"}
 NAMES = {g: g.upper() for g in ROLES}
 
 
@@ -55,3 +56,18 @@ def test_control_splits_by_sub_map() -> None:
     ]
     ilios = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]["Ilios"]
     assert set(ilios) == {"Lighthouse", "Ruins"}
+
+
+def test_ban_response_shows_openings_when_hero_banned() -> None:
+    from owscout.scout import ban_response
+    # Mei banned in 2 of Alpha's games; not in a 3rd. Threshold min_games=2.
+    d = [
+        _obs(1, "a", 0, ["ram", "soj", "ashe", "luc", "kir"], "hybrid", "a"),
+        _obs(2, "a", 0, ["ram", "ashe", "soj", "luc", "ana"], "hybrid", "a"),
+        _obs(3, "a", 0, ["ram", "soj", "mei", "luc", "kir"], "hybrid", "a"),
+    ]
+    d = [x._replace(bans=("mei",)) if x.map_instance_id in (1, 2) else x for x in d]
+    rows = ban_response(d, ROLES, NAMES)["Alpha"]
+    assert len(rows) == 1
+    assert rows[0]["banned"] == "MEI" and rows[0]["games"] == 2
+    assert "ASHE" in rows[0]["opens"][0]["heroes"]
