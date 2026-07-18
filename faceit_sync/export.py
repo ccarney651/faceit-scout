@@ -11,6 +11,7 @@ from typing import Any, Optional, TextIO
 
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
+from .hero_icons import load_hero_icons
 
 # On mirrored modes (Control, Flashpoint, Push) the sides are symmetric, so which
 # team "attacks first" is competitively meaningless. Attack-order only matters on
@@ -431,6 +432,9 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         "roster": roster,
         "maps": list(maps.values()),
         "owscout_comps": owscout_comps,
+        # Inlined hero portraits so comps read as icons, not five words. Empty
+        # when the art isn't present; the page then falls back to text chips.
+        "hero_icons": load_hero_icons(),
     }
     title = "FACEIT OW2 — League Scouting"
     payload = json.dumps(data).replace("</", "<\\/")

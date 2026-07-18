@@ -64,14 +64,15 @@ nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 main{max-width:1060px;margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
-.eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 8px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}
-.grid{display:grid;gap:14px}
+.eyebrow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
+.grid{display:grid;gap:10px}
 .cols-2{grid-template-columns:1fr 1fr}
 .poolgrid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .cols-auto{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 @media (max-width:720px){.cols-2{grid-template-columns:1fr}}
-.section-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:26px 2px 10px}
+.section-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin:22px 2px 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 .section-h h2{margin:0;font-size:14.5px;font-weight:650}
 .note{color:var(--muted);font-size:12.5px;margin:8px 2px 0}
 .tile .n{font-size:27px;font-weight:680;letter-spacing:-.02em}
@@ -148,6 +149,32 @@ tbody tr:hover{background:var(--surface2)}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
   border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
 .dot{width:7px;height:7px;border-radius:50%;flex:none}
+/* Hero portraits. A comp reads as five faces, not five words. The role colour
+   survives as a ring so role composition is still scannable at a glance. */
+.hicon{width:28px;height:28px;border-radius:7px;flex:none;display:inline-block;vertical-align:middle;
+  object-fit:cover;background:var(--surface2);box-shadow:0 0 0 1.5px var(--line2)}
+.hicon.r-Tank{box-shadow:0 0 0 1.5px var(--tank)}
+.hicon.r-Damage{box-shadow:0 0 0 1.5px var(--damage)}
+.hicon.r-Support{box-shadow:0 0 0 1.5px var(--support)}
+.hicon.sm{width:18px;height:18px;border-radius:5px;box-shadow:none;margin:-1px 1px -1px -3px}
+.chip.ico{padding-left:4px;gap:4px}
+.comp{display:inline-flex;align-items:center;gap:4px}
+.comp .hicon+.hicon{margin-left:0}
+/* A row of icons + a right-aligned record; the workhorse of the scouting page. */
+.crow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 2px}
+.crow+.crow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.crow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
+.crow.thin{opacity:.55}                      /* n=1: present, but visibly weak evidence */
+details.mapblk{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:8px}
+details.mapblk>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;
+  align-items:center;justify-content:space-between;gap:10px;font-weight:650}
+details.mapblk>summary::-webkit-details-marker{display:none}
+details.mapblk>summary::after{content:'be';color:var(--muted);transition:transform .15s}
+details.mapblk[open]>summary::after{transform:rotate(180deg)}
+details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
+.mapbody{padding:2px 12px 10px}
+.seg{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin:10px 0 2px}
 .role-Tank{color:var(--tank)} .role-Damage{color:var(--damage)} .role-Support{color:var(--support)}
 .bg-Tank{background:var(--tank)} .bg-Damage{background:var(--damage)} .bg-Support{background:var(--support)}
 .pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:7px}
@@ -262,7 +289,20 @@ const recent=(arr,lim)=> (lim && lim<arr.length)? arr.slice(0,lim) : arr;
 const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();return {from:w[0]||'',to:w[w.length-1]||''};};
 
 /* ---------- reusable renderers ---------- */
-function heroChip(name){ const r=HERO_ROLE[name]; return `<span class="chip"><span class="dot bg-${esc(r||'')}"></span>${esc(name)}</span>`; }
+const HERO_ICON=DATA.hero_icons||{};
+function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
+function heroChip(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
+  if(src) return `<span class="chip ico"><img class="hicon sm r-${esc(r||'')}" src="${src}" alt="">${esc(name)}</span>`;
+  return `<span class="chip"><span class="dot bg-${esc(r||'')}"></span>${esc(name)}</span>`; }
+// Icon-only, for dense comp rows where five portraits ARE the information.
+function heroIcon(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
+  return src?`<img class="hicon r-${esc(r||'')}" src="${src}" alt="${esc(name)}" title="${esc(name)}">`
+            :heroChip(name); }
+// Comps read best in role order: tank, damage, damage, support, support.
+const ROLE_ORDER={Tank:0,Damage:1,Support:2};
+function byRole(heroes){ return heroes.slice().sort((a,b)=>
+  (ROLE_ORDER[HERO_ROLE[a]]??9)-(ROLE_ORDER[HERO_ROLE[b]]??9) || String(a).localeCompare(b)); }
+function compRow(heroes){ return `<span class="comp">${byRole(heroes).map(h=>heroIcon(h)).join('')}</span>`; }
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
 // Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
@@ -519,93 +559,102 @@ function renderScoutBody(t){
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   w.appendChild(head);
 
-  // Captured comps (owscout) — the actual hero compositions this team ran, from
-  // replay capture. This is the data FACEIT never exposes; synced in from owscout.
+  // ---- Scouting from captured replays (owscout) -------------------------
+  // Three sections: what they play (Common comps + Hero pool), where they play
+  // it (Map scouting, collapsible), and how they react (Common swaps).
   const oc=(DATA.owscout_comps||{})[t.team];
-  if(oc && oc.comps && oc.comps.length){
-    w.appendChild(el(sectionH('Captured comps',`<span class="note">actual comps from replay capture · ${oc.maps_captured} map${oc.maps_captured===1?'':'s'} scouted · low n, directional</span>`)));
-    const card=el(`<div class="card"></div>`);
-    oc.comps.slice().sort((a,b)=>(b.wilson-a.wilson)||(b.maps-a.maps)).forEach(c=>{
-      const chips=c.heroes.map(h=>heroChip(h)).join(' ');
-      const rec=`${Math.round(c.wins)}W-${Math.round(c.games-c.wins)}L`;
-      card.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
-        `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${rec}</span></div>`));
-    });
-    w.appendChild(card);
-    // Per-sub-map breakdown (control maps) — comps differ by point geometry.
-    const subs=oc.by_sub_map?Object.keys(oc.by_sub_map).sort():[];
-    if(subs.length){
-      const sc=el(`<div class="card" style="margin-top:8px"></div>`);
-      sc.appendChild(el(`<p class="eyebrow">By sub-map <span class="note">control-map geometry</span></p>`));
-      subs.forEach(sub=>{
-        sc.appendChild(el(`<p class="note" style="margin:8px 0 2px">${esc(sub)}</p>`));
-        oc.by_sub_map[sub].slice().sort((a,b)=>(b.wilson-a.wilson)||(b.maps-a.maps)).forEach(c=>{
-          const chips=c.heroes.map(h=>heroChip(h)).join(' ');
-          const rec=`${Math.round(c.wins)}W-${Math.round(c.games-c.wins)}L`;
-          sc.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
-            `<span class="pr faint">${rec}</span></div>`));
-        });
+  const scout=oc&&oc.scout;
+  const nGames=(scout&&scout.games)||0;
+  // n=1 is an anecdote, not a pattern - show it, but visibly weaker.
+  const thin=n=>n<=1?' thin':'';
+  const rec=c=>`${c.maps} map${c.maps===1?'':'s'} · ${c.wins}W-${c.losses}L`;
+  const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
+                    `<span class="rec">${rec(c)}</span></div>`;
+
+  if(scout){
+    // 1. Common comps - the 3-5 they actually run most.
+    const top=(scout.overall||[]).slice(0,5);
+    if(top.length){
+      w.appendChild(el(sectionH('Common comps',
+        `<span class="note">most-played compositions · ${nGames} map${nGames===1?'':'s'} captured</span>`)));
+      const card=el(`<div class="card"></div>`);
+      top.forEach(c=>card.appendChild(el(compLine(c))));
+      w.appendChild(card);
+    }
+
+    // 2. Hero pool - meaningful even when comp data is still one map.
+    const pool=(scout.hero_pool||[]).slice(0,14);
+    if(pool.length){
+      w.appendChild(el(sectionH('Hero pool',`<span class="note">how often each hero appears</span>`)));
+      const card=el(`<div class="card"></div>`);
+      pool.forEach(h=>{
+        const pct=Math.round((h.pick_rate||0)*100);
+        card.appendChild(el(`<div class="crow"><span>${heroChip(h.hero)}</span>`+
+          `<span class="rec">${pct}% · ${h.games}/${nGames}</span></div>`));
       });
-      w.appendChild(sc);
+      w.appendChild(card);
+    }
+
+    // 3. Map scouting - collapsible per map; segments are attack/defend on
+    // Escort+Hybrid, sub-maps on Control, one generic block otherwise.
+    const maps=scout.maps||{};
+    const mapNames=Object.keys(maps).sort();
+    if(mapNames.length){
+      w.appendChild(el(sectionH('Map scouting',`<span class="note">click a map for captured detail</span>`)));
+      mapNames.forEach(mp=>{
+        const entry=maps[mp]||{}, segs=entry.segments||{};
+        let mw=0, ml=0;
+        Object.values(segs).forEach(b=>(b.open||[]).forEach(c=>{mw+=c.wins; ml+=c.losses;}));
+        const d=el(`<details class="mapblk"><summary><span>${esc(mp)} `+
+          `<span class="faint">${esc(MAP_CAT[mp]||'')}</span></span>`+
+          `<span class="rec">${mw}W-${ml}L</span></summary>`+
+          `<div class="mapbody"></div></details>`);
+        const body=d.querySelector('.mapbody');
+        Object.keys(segs).forEach(seg=>{
+          const both=segs[seg]||{};
+          if(seg!=='all') body.appendChild(el(`<p class="seg">${esc(seg)}</p>`));
+          (both.open||[]).slice(0,3).forEach(c=>body.appendChild(el(compLine(c))));
+          // Only show "settled" when they actually changed off the opener.
+          const o=(both.open||[])[0], s=(both.settled||[])[0];
+          if(o&&s&&JSON.stringify(byRole(o.heroes))!==JSON.stringify(byRole(s.heroes))){
+            body.appendChild(el(`<p class="seg">settled into</p>`));
+            body.appendChild(el(compLine(s)));
+          }
+        });
+        w.appendChild(d);
+      });
+    }
+
+    // 4. Common swaps - lead with the trigger: what makes them counter-swap.
+    const swaps=(scout.swaps||[]).slice(0,8);
+    if(swaps.length){
+      w.appendChild(el(sectionH('Common swaps',`<span class="note">what makes them change heroes</span>`)));
+      const card=el(`<div class="card"></div>`);
+      swaps.forEach(s=>{
+        const trig=(s.vs&&s.vs.length)
+          ? `<span>vs ${s.vs.slice(0,3).map(h=>heroChip(h)).join('')}</span>`
+          : `<span class="faint">no clear trigger</span>`;
+        card.appendChild(el(`<div class="crow${thin(s.count)}">`+
+          `<span>${trig} <span class="faint">&rarr;</span> `+
+          `${compRow(s.out)} <span class="faint">&rarr;</span> ${compRow(s.in)}</span>`+
+          `<span class="rec">${s.count}x · ${s.kind==='core'?'comp change':'flex'}</span></div>`));
+      });
+      w.appendChild(card);
+    }
+
+    // 5. Ban response - how their opener shifts when a hero is banned.
+    const banresp=(scout.ban_response||[]).slice(0,6);
+    if(banresp.length){
+      w.appendChild(el(sectionH('When a hero is banned',`<span class="note">how their opening comp shifts</span>`)));
+      const card=el(`<div class="card"></div>`);
+      banresp.forEach(b=>{
+        card.appendChild(el(`<p class="seg">${esc(b.banned)} banned · ${b.games} game${b.games===1?'':'s'}</p>`));
+        (b.opens||[]).slice(0,2).forEach(c=>card.appendChild(el(compLine(c))));
+      });
+      w.appendChild(card);
     }
   }
 
-  // Opening comps by map + segment (attack/defend, control sub-map) — what they
-  // start each map/point on, from the owscout scouting report.
-  const scout=oc&&oc.scout;
-  if(scout&&scout.maps&&Object.keys(scout.maps).length){
-    w.appendChild(el(sectionH('Opening comps by map',`<span class="note">what they start each map / point on · low n, directional</span>`)));
-    Object.keys(scout.maps).sort().forEach(mp=>{
-      const card=el(`<div class="card" style="margin-bottom:8px"></div>`);
-      card.appendChild(el(`<p class="eyebrow">${esc(mp)} <span class="faint">${esc(MAP_CAT[mp]||'')}</span></p>`));
-      const entry=scout.maps[mp]||{};
-      const segs=entry.segments||{};
-      if(entry.narrative) card.appendChild(el(`<p class="note" style="margin:4px 0 8px">${esc(entry.narrative)}</p>`));
-      Object.keys(segs).forEach(seg=>{
-        if(seg!=='all') card.appendChild(el(`<p class="note" style="margin:8px 0 2px">${esc(seg)}</p>`));
-        segs[seg].slice().sort((a,b)=>(b.maps-a.maps)||(b.win_rate-a.win_rate)).forEach(c=>{
-          const chips=c.heroes.map(h=>heroChip(h)).join(' ');
-          const rec=`${c.wins}W-${c.losses}L`;
-          card.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
-            `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${rec}</span></div>`));
-        });
-      });
-      w.appendChild(card);
-    });
-  }
-
-  // Mid-map adaptations — recurring swaps and what they answer.
-  const swaps=(scout&&scout.swaps)||[];
-  if(swaps.length){
-    w.appendChild(el(sectionH('Mid-map swaps',`<span class="note">how they adapt in a map · low n, directional</span>`)));
-    const card=el(`<div class="card"></div>`);
-    if(scout.swap_narrative) card.appendChild(el(`<p class="note" style="margin:2px 0 8px">${esc(scout.swap_narrative)}</p>`));
-    swaps.slice(0,10).forEach(s=>{
-      const outC=s.out.map(h=>heroChip(h)).join(' ');
-      const inC=s.in.map(h=>heroChip(h)).join(' ');
-      const vs=s.vs&&s.vs.length?` <span class="faint">vs ${s.vs.map(h=>esc(h)).join(', ')}</span>`:'';
-      const kind=s.kind==='core'?'comp change':'flex';
-      card.appendChild(el(`<div class="poolrow"><span class="pm">${outC} → ${inC} <span class="faint">(${kind})</span>${vs}</span>`+
-        `<span class="pr faint">${s.count}×</span></div>`));
-    });
-    w.appendChild(card);
-  }
-
-  // Response to bans — how they open when a hero is banned.
-  const banresp=(scout&&scout.ban_response)||[];
-  if(banresp.length){
-    w.appendChild(el(sectionH('When a hero is banned',`<span class="note">how their opening comp shifts · low n, directional</span>`)));
-    const card=el(`<div class="card"></div>`);
-    banresp.slice(0,8).forEach(b=>{
-      card.appendChild(el(`<p class="eyebrow" style="margin:8px 0 2px">${heroChip(b.banned)} banned <span class="faint">(${b.games} game${b.games===1?'':'s'})</span></p>`));
-      (b.opens||[]).forEach(c=>{
-        const chips=c.heroes.map(h=>heroChip(h)).join(' ');
-        card.appendChild(el(`<div class="poolrow"><span class="pm">${chips}</span>`+
-          `<span class="pr faint">${c.maps} map${c.maps===1?'':'s'} · ${c.wins}W-${c.losses}L</span></div>`));
-      });
-    });
-    w.appendChild(card);
-  }
 
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
