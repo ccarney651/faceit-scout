@@ -29,6 +29,7 @@ from .models import (
     DraftMap,
     FaceitHero,
     HeroRef,
+    ObsDetail,
     Rect,
     RoiProfile,
 )
@@ -862,6 +863,36 @@ class Database:
             c.execute("DELETE FROM comp_observations WHERE map_instance_id = ?",
                       (map_instance_id,))
             c.execute("DELETE FROM map_instances WHERE id = ?", (map_instance_id,))
+
+    def observation_details(self, *, finalized_only: bool = True) -> list[ObsDetail]:
+        """Every resolved observation with the context the scouting analysis needs
+        (map/side/team/ts/round/sub-map/lineup), ordered by map then time then side
+        so per-map timelines can be assembled. Finalized maps only by default."""
+        import json
+        sql = """
+            SELECT o.map_instance_id, o.side, o.sample_ts_ms, o.sub_map, o.round_no,
+                   c.hero_guids_json AS guids, mi.map_name, mi.map_category,
+                   mi.side_a_label, mi.side_b_label, mi.winner_side
+            FROM comp_observations o
+            JOIN map_instances mi ON mi.id = o.map_instance_id
+            JOIN comps c ON c.comp_id = o.comp_id
+            WHERE o.resolved = 1
+        """
+        if finalized_only:
+            sql += " AND mi.finalized_at IS NOT NULL"
+        sql += " ORDER BY o.map_instance_id, o.sample_ts_ms, o.side"
+        out: list[ObsDetail] = []
+        for r in self.conn.execute(sql).fetchall():
+            out.append(ObsDetail(
+                map_instance_id=int(r["map_instance_id"]), side=str(r["side"]),
+                sample_ts_ms=int(r["sample_ts_ms"]), sub_map=r["sub_map"],
+                round_no=r["round_no"],
+                hero_guids=tuple(json.loads(r["guids"])),
+                map_name=r["map_name"], map_category=r["map_category"],
+                side_a_team=r["side_a_label"], side_b_team=r["side_b_label"],
+                winner_side=r["winner_side"],
+            ))
+        return out
 
     def capture_coverage(self, faceit_db_path: str) -> tuple[int, int]:
         """(captured maps, total played maps) for the §10.3 bias disclosure."""

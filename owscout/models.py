@@ -19,6 +19,23 @@ from typing import NamedTuple
 DEFAULT_TEAM_SIZE = 5
 
 
+class ObsDetail(NamedTuple):
+    """A resolved observation flattened with the context the scouting analysis
+    needs: which map/side/team, when (ts + round + sub-map), and the lineup."""
+
+    map_instance_id: int
+    side: str
+    sample_ts_ms: int
+    sub_map: str | None
+    round_no: int | None
+    hero_guids: tuple[str, ...]
+    map_name: str | None
+    map_category: str | None
+    side_a_team: str | None
+    side_b_team: str | None
+    winner_side: str | None
+
+
 class DraftMap(NamedTuple):
     """A captured-but-not-finalized map awaiting operator review. Nothing reaches
     the scout export until the operator finalizes it (the greenlight step)."""
