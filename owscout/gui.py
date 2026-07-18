@@ -826,10 +826,12 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
             rows = comps.get(side) or []
             if not rows:
                 lines.append("   (no comps)")
-            for names, n, resolved, sub in rows:
+            for names, n, resolved, sub, rnd in rows:
                 flag = "" if resolved else "  [unresolved]"
-                sub_tag = f"[{sub}] " if sub else ""
-                lines.append(f"   {sub_tag}x{n}: {names}{flag}")
+                tags = " ".join(t for t in (f"R{rnd}" if rnd else "",
+                                            f"[{sub}]" if sub else "") if t)
+                tags = (tags + " ") if tags else ""
+                lines.append(f"   {tags}x{n}: {names}{flag}")
             lines.append("")
         self._set_detail("\n".join(lines))
 

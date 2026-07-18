@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS comp_observations (
     resolved        INTEGER NOT NULL CHECK(resolved IN (0,1)),
     frame_path      TEXT,
     sub_map         TEXT,                     -- control-map sub-map, e.g. 'Lighthouse'
+    round_no        INTEGER,                  -- operator-marked round/point number
     UNIQUE(map_instance_id, side, sample_ts_ms)
 );
 
@@ -274,6 +275,9 @@ class Database:
             cols = {r[1] for r in self.conn.execute("PRAGMA table_info(comp_observations)")}
             if "sub_map" not in cols:
                 self.conn.execute("ALTER TABLE comp_observations ADD COLUMN sub_map TEXT")
+                self.conn.commit()
+            if "round_no" not in cols:
+                self.conn.execute("ALTER TABLE comp_observations ADD COLUMN round_no INTEGER")
                 self.conn.commit()
 
     # --- read-only ATTACH of the faceit DB (SPEC §3) -------------------------
@@ -767,25 +771,25 @@ class Database:
 
     def map_side_comps(
         self, map_instance_id: int
-    ) -> dict[str, list[tuple[str, int, bool, Optional[str]]]]:
+    ) -> dict[str, list[tuple[str, int, bool, Optional[str], Optional[int]]]]:
         """Per side ('a'/'b'), the distinct comps observed as
-        (hero_names, times_seen, resolved, sub_map), most-seen first — for review.
-        Comps are grouped per sub-map so control-map rotations show separately."""
+        (hero_names, times_seen, resolved, sub_map, round_no), for review. Grouped
+        per round and sub-map so control-map rotations show separately."""
         rows = self.conn.execute(
             """SELECT o.side, o.resolved AS resolved, o.sub_map AS sub_map,
-                      c.hero_names_sorted AS names, COUNT(*) AS n
+                      o.round_no AS round_no, c.hero_names_sorted AS names, COUNT(*) AS n
                FROM comp_observations o
                LEFT JOIN comps c ON c.comp_id = o.comp_id
                WHERE o.map_instance_id = ?
-               GROUP BY o.side, o.sub_map, o.comp_id
-               ORDER BY o.side, o.sub_map, n DESC""",
+               GROUP BY o.side, o.round_no, o.sub_map, o.comp_id
+               ORDER BY o.side, o.round_no, o.sub_map, n DESC""",
             (map_instance_id,),
         ).fetchall()
-        out: dict[str, list[tuple[str, int, bool, Optional[str]]]] = {"a": [], "b": []}
+        out: dict[str, list[tuple[str, int, bool, Optional[str], Optional[int]]]] = {"a": [], "b": []}
         for r in rows:
             out.setdefault(str(r["side"]), []).append(
                 (r["names"] or "(unresolved)", int(r["n"]), bool(r["resolved"]),
-                 r["sub_map"]))
+                 r["sub_map"], r["round_no"]))
         return out
 
     def finalize_map(self, map_instance_id: int) -> None:
@@ -1011,6 +1015,7 @@ class Database:
         frame_path: Optional[str] = None,
         comp: Optional[Comp] = None,
         sub_map: Optional[str] = None,
+        round_no: Optional[int] = None,
     ) -> int:
         """Insert/replace one observation and its slots. Idempotent on
         (map_instance_id, side, sample_ts_ms) — re-capture UPDATEs (SPEC §12).
@@ -1030,15 +1035,15 @@ class Database:
             c.execute(
                 """INSERT INTO comp_observations (
                        map_instance_id, side, sample_ts_ms, comp_id,
-                       min_slot_confidence, resolved, frame_path, sub_map)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                       min_slot_confidence, resolved, frame_path, sub_map, round_no)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(map_instance_id, side, sample_ts_ms) DO UPDATE SET
                        comp_id=excluded.comp_id,
                        min_slot_confidence=excluded.min_slot_confidence,
                        resolved=excluded.resolved, frame_path=excluded.frame_path,
-                       sub_map=excluded.sub_map""",
+                       sub_map=excluded.sub_map, round_no=excluded.round_no""",
                 (map_instance_id, side, sample_ts_ms, comp_id,
-                 min_slot_confidence, resolved, frame_path, sub_map),
+                 min_slot_confidence, resolved, frame_path, sub_map, round_no),
             )
             obs_id = int(c.execute(
                 """SELECT id FROM comp_observations

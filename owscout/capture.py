@@ -455,6 +455,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     hud_variant: str = "default",
     side_a_team: Optional[str] = None,
     hotkey: str = "f8",
+    round_hotkey: str = "f7",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
@@ -535,6 +536,16 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         picker = ", ".join(f"{i}={n}" for i, n in enumerate(submaps, start=1))
         emit(f"  CONTROL MAP — press a number to tag the current sub-map: {picker}")
 
+    # Round marker: press round_hotkey at each round start / point capture so the
+    # snapshots segment into rounds (see how comps change round to round).
+    cur_round = [1]
+
+    def _next_round() -> None:
+        cur_round[0] += 1
+        emit(f"  round -> {cur_round[0]}")
+    keyboard.add_hotkey(round_hotkey, _next_round)
+    emit(f"  Press '{round_hotkey}' at each new round / point capture (currently round 1).")
+
     snaps = 0
     written = 0
     while not done_evt.is_set():
@@ -558,14 +569,15 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                                   crop_fn=crop_roi, score_fn=score_fn)
             if not dry_run and map_instance_id is not None:
                 if _persist_matches(db, map_instance_id, side, snaps, matches,
-                                    hero_roles, hero_names, sub_map=cur_sub[0]):
+                                    hero_roles, hero_names, sub_map=cur_sub[0],
+                                    round_no=cur_round[0]):
                     written += 1
             shown = "/".join((hero_names.get(m.hero_guid or "", "?")[:4] if m.resolved else "??")
                              for m in matches)
             line.append(f"{side}:{shown}")
         snaps += 1
         sub_tag = f"  [{cur_sub[0]}]" if cur_sub[0] else ""
-        emit(f"  snap {snaps}: " + "   ".join(line) + sub_tag)
+        emit(f"  snap {snaps} (R{cur_round[0]}): " + "   ".join(line) + sub_tag)
 
     keyboard.clear_all_hotkeys()
     # Do NOT greenlight the code here — a capture is a DRAFT until the operator
@@ -579,7 +591,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 def _persist_matches(  # pragma: no cover
     db: "Any", map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],
-    sub_map: Optional[str] = None,
+    sub_map: Optional[str] = None, round_no: Optional[int] = None,
 ) -> bool:
     """Persist one frame's matches as a single observation (no smoothing). Returns
     True if the observation fully resolved."""
@@ -600,6 +612,7 @@ def _persist_matches(  # pragma: no cover
         comp_id=comp.comp_id if comp else None,
         min_slot_confidence=min((m.confidence for m in matches), default=0.0),
         resolved=1 if resolved else 0, slots=slots, comp=comp, sub_map=sub_map,
+        round_no=round_no,
     )
     return resolved
 
