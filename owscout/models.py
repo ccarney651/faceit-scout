@@ -28,6 +28,7 @@ class ObsDetail(NamedTuple):
     sample_ts_ms: int
     sub_map: str | None
     round_no: int | None
+    phase: str | None
     hero_guids: tuple[str, ...]
     map_name: str | None
     map_category: str | None

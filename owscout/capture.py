@@ -458,6 +458,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     round_hotkey: str = "f7",
     submap_hotkey: str = "f6",
     undo_hotkey: str = "f9",
+    attack_toggle_hotkey: str = "f5",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
@@ -545,6 +546,26 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         emit(f"  CONTROL MAP — press '{submap_hotkey}' to pick the sub-map "
              f"(of {', '.join(submaps)}); '{round_hotkey}' advances to the next one.")
 
+    # Attack/defend. Escort/Hybrid only: RED (side 'b') attacks round 1, and the
+    # teams swap each round. From round 3 (both teams fully capped) the attacker is
+    # decided by time banks, not parity — so the operator confirms it there.
+    phased = (ctx.map_category or "").strip().lower() in ("escort", "hybrid", "assault")
+    attacker = ["b"]   # side currently attacking
+
+    def _phase_for(side: str) -> Optional[str]:
+        if not phased:
+            return None
+        return "attack" if side == attacker[0] else "defend"
+
+    def _toggle_attacker() -> None:
+        attacker[0] = "a" if attacker[0] == "b" else "b"
+        who = ctx.faction1_team_name if attacker[0] == "a" else ctx.faction2_team_name
+        emit(f"  attacking now: side {attacker[0]} ({who or '?'})")
+    if phased:
+        keyboard.add_hotkey(attack_toggle_hotkey, _toggle_attacker)
+        emit(f"  {ctx.map_category}: red (right) attacks round 1. "
+             f"Press '{attack_toggle_hotkey}' to correct who is attacking.")
+
     # Round marker: press round_hotkey at each round start / point capture so the
     # snapshots segment into rounds (see how comps change round to round).
     cur_round = [1]
@@ -552,6 +573,11 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     def _next_round() -> None:
         cur_round[0] += 1
         emit(f"  round -> {cur_round[0]}")
+        if phased:
+            _toggle_attacker()
+            if cur_round[0] >= 3 and cur_round[0] % 2 == 1:
+                emit(f"  ROUND {cur_round[0]}: who attacks is decided by time bank — "
+                     f"press '{attack_toggle_hotkey}' if it is the other team.")
         if submaps:
             remaining = [s for s in submaps if s not in used_subs]
             if remaining:
@@ -620,7 +646,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             if not dry_run and map_instance_id is not None:
                 if _persist_matches(db, map_instance_id, side, snaps, matches,
                                     hero_roles, hero_names, sub_map=cur_sub[0],
-                                    round_no=cur_round[0]):
+                                    round_no=cur_round[0], phase=_phase_for(side)):
                     written += 1
             shown = "/".join((hero_names.get(m.hero_guid or "", "?")[:4] if m.resolved else "??")
                              for m in matches)
@@ -658,6 +684,7 @@ def _persist_matches(  # pragma: no cover
     db: "Any", map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],
     sub_map: Optional[str] = None, round_no: Optional[int] = None,
+    phase: Optional[str] = None,
 ) -> bool:
     """Persist one frame's matches as a single observation (no smoothing). Returns
     True if the observation fully resolved."""
@@ -678,7 +705,7 @@ def _persist_matches(  # pragma: no cover
         comp_id=comp.comp_id if comp else None,
         min_slot_confidence=min((m.confidence for m in matches), default=0.0),
         resolved=1 if resolved else 0, slots=slots, comp=comp, sub_map=sub_map,
-        round_no=round_no,
+        round_no=round_no, phase=phase,
     )
     return resolved
 

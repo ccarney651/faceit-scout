@@ -144,8 +144,13 @@ def ban_response(
 
 def _segment(d: ObsDetail) -> Optional[str]:
     """The scouting segment for an observation: 'attack'/'defend' (Escort/Hybrid),
-    else the control sub-map, else None (single-geometry map)."""
-    return phase_of(d.map_category, d.side, d.round_no) or d.sub_map
+    else the control sub-map, else None (single-geometry map).
+
+    The phase RECORDED at capture wins — from round 3 the attacker is decided by
+    time banks, not round parity, so the operator confirms it live. phase_of is the
+    fallback for observations captured before phase was stored.
+    """
+    return d.phase or phase_of(d.map_category, d.side, d.round_no) or d.sub_map
 
 
 def _team_of(d: ObsDetail) -> Optional[str]:

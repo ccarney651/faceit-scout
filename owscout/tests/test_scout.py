@@ -10,9 +10,9 @@ NAMES = {g: g.upper() for g in ROLES}
 
 
 def _obs(mi: int, side: str, ts: int, guids: list[str], cat: str, winner: str, *,
-         sub: str | None = None, rnd: int | None = None,
+         sub: str | None = None, rnd: int | None = None, phase: str | None = None,
          mn: str = "King's Row") -> ObsDetail:
-    return ObsDetail(map_instance_id=mi, side=side, sample_ts_ms=ts, sub_map=sub,
+    return ObsDetail(map_instance_id=mi, side=side, sample_ts_ms=ts, sub_map=sub, phase=phase,
                      round_no=rnd, hero_guids=tuple(guids), map_name=mn,
                      map_category=cat, side_a_team="Alpha", side_b_team="Bravo",
                      winner_side=winner)

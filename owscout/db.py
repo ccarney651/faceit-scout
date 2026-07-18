@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS comp_observations (
     frame_path      TEXT,
     sub_map         TEXT,                     -- control-map sub-map, e.g. 'Lighthouse'
     round_no        INTEGER,                  -- operator-marked round/point number
+    phase           TEXT,                     -- 'attack'/'defend' as resolved at capture
     UNIQUE(map_instance_id, side, sample_ts_ms)
 );
 
@@ -283,6 +284,9 @@ class Database:
                 self.conn.commit()
             if "round_no" not in cols:
                 self.conn.execute("ALTER TABLE comp_observations ADD COLUMN round_no INTEGER")
+                self.conn.commit()
+            if "phase" not in cols:
+                self.conn.execute("ALTER TABLE comp_observations ADD COLUMN phase TEXT")
                 self.conn.commit()
 
     # --- read-only ATTACH of the faceit DB (SPEC §3) -------------------------
@@ -901,7 +905,7 @@ class Database:
         so per-map timelines can be assembled. Finalized maps only by default."""
         import json
         sql = """
-            SELECT o.map_instance_id, o.side, o.sample_ts_ms, o.sub_map, o.round_no,
+            SELECT o.map_instance_id, o.side, o.sample_ts_ms, o.sub_map, o.round_no, o.phase,
                    c.hero_guids_json AS guids, mi.map_name, mi.map_category,
                    mi.side_a_label, mi.side_b_label, mi.winner_side, mi.bans_json
             FROM comp_observations o
@@ -917,7 +921,7 @@ class Database:
             out.append(ObsDetail(
                 map_instance_id=int(r["map_instance_id"]), side=str(r["side"]),
                 sample_ts_ms=int(r["sample_ts_ms"]), sub_map=r["sub_map"],
-                round_no=r["round_no"],
+                round_no=r["round_no"], phase=r["phase"],
                 hero_guids=tuple(json.loads(r["guids"])),
                 map_name=r["map_name"], map_category=r["map_category"],
                 side_a_team=r["side_a_label"], side_b_team=r["side_b_label"],
@@ -1124,6 +1128,7 @@ class Database:
         comp: Optional[Comp] = None,
         sub_map: Optional[str] = None,
         round_no: Optional[int] = None,
+        phase: Optional[str] = None,
     ) -> int:
         """Insert/replace one observation and its slots. Idempotent on
         (map_instance_id, side, sample_ts_ms) — re-capture UPDATEs (SPEC §12).
@@ -1143,15 +1148,16 @@ class Database:
             c.execute(
                 """INSERT INTO comp_observations (
                        map_instance_id, side, sample_ts_ms, comp_id,
-                       min_slot_confidence, resolved, frame_path, sub_map, round_no)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       min_slot_confidence, resolved, frame_path, sub_map, round_no, phase)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(map_instance_id, side, sample_ts_ms) DO UPDATE SET
                        comp_id=excluded.comp_id,
                        min_slot_confidence=excluded.min_slot_confidence,
                        resolved=excluded.resolved, frame_path=excluded.frame_path,
-                       sub_map=excluded.sub_map, round_no=excluded.round_no""",
+                       sub_map=excluded.sub_map, round_no=excluded.round_no,
+                       phase=excluded.phase""",
                 (map_instance_id, side, sample_ts_ms, comp_id,
-                 min_slot_confidence, resolved, frame_path, sub_map, round_no),
+                 min_slot_confidence, resolved, frame_path, sub_map, round_no, phase),
             )
             obs_id = int(c.execute(
                 """SELECT id FROM comp_observations
