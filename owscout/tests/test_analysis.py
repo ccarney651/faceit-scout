@@ -2,6 +2,7 @@
 
 from owscout.analysis import (
     classify_transition,
+    phase_of,
     same_comp,
     swap_events,
     tank_of,
@@ -14,6 +15,26 @@ ROLES = {
     "sojourn": "damage", "mei": "damage", "reaper": "damage", "ashe": "damage",
     "lucio": "support", "kiriko": "support", "ana": "support", "bap": "support",
 }
+
+
+def test_phase_of_escort_hybrid_flips_by_round() -> None:
+    # Round 1: red (b) attacks, blue (a) defends.
+    assert phase_of("Escort", "b", 1) == "attack"
+    assert phase_of("Escort", "a", 1) == "defend"
+    assert phase_of("Hybrid", "b", 1) == "attack"
+    # Round 2: they flip.
+    assert phase_of("Hybrid", "b", 2) == "defend"
+    assert phase_of("Hybrid", "a", 2) == "attack"
+
+
+def test_phase_of_mirrored_maps_have_no_phase() -> None:
+    for cat in ("Control", "Flashpoint", "Push", "control", None, "", "Weird"):
+        assert phase_of(cat, "a", 1) is None
+        assert phase_of(cat, "b", 2) is None
+
+
+def test_phase_of_defaults_round_to_one() -> None:
+    assert phase_of("Escort", "b", None) == "attack"
 
 
 def test_tank_of() -> None:

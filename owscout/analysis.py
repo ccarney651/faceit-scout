@@ -26,6 +26,28 @@ from typing import Optional, Sequence
 Roles = dict[str, str]
 
 
+# Map categories with no attack/defend phase — a mirrored fight both ways.
+_MIRRORED_CATEGORIES = {"control", "flashpoint", "push"}
+# Categories that have an attacking and a defending team.
+_PHASED_CATEGORIES = {"escort", "hybrid", "assault"}
+
+
+def phase_of(
+    map_category: Optional[str], side: str, round_no: Optional[int]
+) -> Optional[str]:
+    """'attack' / 'defend' for one HUD side, or None when the map has no phase.
+
+    Operator rule: on Escort/Hybrid the RED team (right HUD side 'b') attacks
+    first and BLUE ('a') defends first, and they flip each round. Control /
+    Flashpoint / Push are mirrored (no phase). Unknown round defaults to 1."""
+    cat = (map_category or "").strip().lower()
+    if cat not in _PHASED_CATEGORIES:
+        return None
+    red_attacks = ((round_no or 1) % 2 == 1)   # red attacks on odd rounds
+    attack_side = "b" if red_attacks else "a"
+    return "attack" if side == attack_side else "defend"
+
+
 def tank_of(lineup: Sequence[str], roles: Roles) -> Optional[str]:
     """The tank in a lineup (first hero whose role is 'tank'), or None."""
     for h in lineup:
