@@ -331,6 +331,10 @@ const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
 ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
+// Competitive seats (Tank / Hitscan / Flex DPS / Main Support / Flex Support).
+// Unclassified heroes have no seat and fall back to base role everywhere.
+const HERO_SEAT={}; (DATA.heroes||[]).forEach(h=>{ if(h.subrole) HERO_SEAT[h.name]=h.subrole; });
+const SEATS=DATA.seat_order||['Tank','Hitscan','Flex DPS','Main Support','Flex Support'];
 // Games whose comps have been captured by owscout ("match_id:game_no").
 const CAPTURED=new Set(DATA.owscout_captured||[]);
 // OW wipes invalidate replay codes each patch: a game finished on or before this
@@ -375,8 +379,14 @@ function heroIcon(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
 // Comps read best in role order: tank, damage, damage, support, support.
 // NB: ROLE_ORDER is declared further down (an array); don't redeclare it.
 function roleRank(h){ const i=['Tank','Damage','Support'].indexOf(HERO_ROLE[h]); return i<0?9:i; }
+// Seat order makes a comp read as a LINEUP: Tank, Hitscan, Flex, MS, FS. An
+// unclassified hero slots after its base role's seats rather than being guessed.
+function seatRank(h){
+  const s=SEATS.indexOf(HERO_SEAT[h]); if(s>=0) return s*2;
+  return roleRank(h)*3+1;   // between the seats of its base role
+}
 function byRole(heroes){ return heroes.slice().sort((a,b)=>
-  roleRank(a)-roleRank(b) || String(a).localeCompare(b)); }
+  seatRank(a)-seatRank(b) || String(a).localeCompare(b)); }
 function compRow(heroes){ return `<span class="comp">${byRole(heroes).map(h=>heroIcon(h)).join('')}</span>`; }
 // A comp change is only interesting in the heroes that moved - repeating the four
 // unchanged portraits buries the one that matters. null = no change at all.
@@ -707,6 +717,27 @@ function renderVersus(){
       cols.appendChild(c);
     });
     body.appendChild(cols);
+
+    // Seat by seat: where the matchup is actually contested. Needs captured
+    // hero pools; a team without captures shows a gap, not a guess.
+    const poolOf=(name)=>{ const oc=(DATA.owscout_comps||{})[name];
+      return ((oc&&oc.scout&&oc.scout.hero_pool)||[]); };
+    const pa=poolOf(VS_A), pb=poolOf(VS_B);
+    if(pa.length||pb.length){
+      body.appendChild(el(sectionH('Seat by seat',`<span class="note">each team's captured pool per competitive seat</span>`)));
+      const seatCard=el(`<div class="card"></div>`);
+      SEATS.forEach(seat=>{
+        const pick=(pool)=>pool.filter(h=>(HERO_SEAT[h.hero]||'')===seat)
+          .sort((x,y)=>y.rounds-x.rounds).slice(0,3);
+        const A=pick(pa), B=pick(pb);
+        if(!A.length&&!B.length) return;
+        const row=el(`<div class="crow" style="align-items:flex-start"><span style="min-width:110px" class="seg">${esc(seat)}</span>`+
+          `<span style="flex:1">${A.map(h=>heroChip(h.hero)).join(' ')||'<span class="faint">no captures</span>'}</span>`+
+          `<span style="flex:1;text-align:right">${B.map(h=>heroChip(h.hero)).join(' ')||'<span class="faint">no captures</span>'}</span></div>`);
+        seatCard.appendChild(row);
+      });
+      body.appendChild(seatCard);
+    }
 
     // The veto battleground: maps BOTH teams pick, with each side's win rate.
     const contested=Object.keys(A.mapStats).filter(m=>
@@ -1273,8 +1304,9 @@ const ROLE_ORDER=['Tank','Damage','Support'];
 // Full-roster hero picker (grouped by role), excluding heroes already banned by this team.
 function heroSelect(current, illegal, onPick){
   const s=el(`<select class="herosel" style="min-width:148px;margin-left:4px"><option value="">+ any hero…</option></select>`);
-  const groups={}; ROSTER.forEach(h=>{ const r=h.role||'Other'; (groups[r]=groups[r]||[]).push(h.name); });
-  const order=[...ROLE_ORDER.filter(r=>groups[r]), ...Object.keys(groups).filter(r=>!ROLE_ORDER.includes(r)).sort()];
+  const groups={}; ROSTER.forEach(h=>{ const r=HERO_SEAT[h.name]||h.role||'Other'; (groups[r]=groups[r]||[]).push(h.name); });
+  const order=[...SEATS.filter(r=>groups[r]), ...ROLE_ORDER.filter(r=>groups[r]),
+               ...Object.keys(groups).filter(r=>!SEATS.includes(r)&&!ROLE_ORDER.includes(r)).sort()];
   order.forEach(r=>{ const og=el(`<optgroup label="${esc(r)}"></optgroup>`);
     groups[r].sort((a,b)=>a.localeCompare(b)).forEach(name=>{
       if(illegal.has(name)&&name!==current) return;

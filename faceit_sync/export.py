@@ -13,6 +13,7 @@ from typing import Any, Optional, TextIO
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
 from .hero_icons import load_hero_icons
+from .subroles import SEAT_ORDER, seat_of
 
 # On mirrored modes (Control, Flashpoint, Push) the sides are symmetric, so which
 # team "attacks first" is competitively meaningless. Attack-order only matters on
@@ -436,7 +437,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     data = {
         "divisions": divisions,
         "views": views,
-        "heroes": list(heroes.values()),
+        "heroes": [dict(h, subrole=seat_of(str(h.get("name") or ""))) for h in heroes.values()],
         "roster": roster,
         "maps": list(maps.values()),
         "owscout_comps": owscout_comps,
@@ -444,6 +445,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         "code_wipe": owscout_wipe,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.
+        "seat_order": list(SEAT_ORDER),
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         # Inlined hero portraits so comps read as icons, not five words. Empty
         # when the art isn't present; the page then falls back to text chips.
