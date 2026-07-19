@@ -122,7 +122,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self.busy = False
 
         self.root = tk.Tk()
-        self.root.title("owscout — OW2 comp scouting")
+        self.root.title("OW Scout — FACEIT League")
         # The panels above the Log have grown (keybinds, sync status, region
         # filter) and pack() will happily crush the Log to a few pixels rather
         # than overflow. Size the window to fit them, but never taller than the
@@ -1484,7 +1484,7 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         sw = self.win.winfo_screenwidth()
         self.win.geometry(f"+{max(0, sw // 2 - 300)}+8")   # top-centre
         legend = f"{_keys_summary(binds)}   ESC done"
-        tk.Label(self.win, text="● owscout capturing", bg="#0a0a0a", fg="#6cf",
+        tk.Label(self.win, text="● OW Scout capturing", bg="#0a0a0a", fg="#6cf",
                  font=("Segoe UI", 10, "bold")).pack(padx=16, pady=(6, 0), anchor="w")
         tk.Label(self.win, text=legend, bg="#0a0a0a", fg="#9aa",
                  font=("Consolas", 9)).pack(padx=16, anchor="w")

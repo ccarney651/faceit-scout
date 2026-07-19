@@ -1,6 +1,8 @@
-# faceit-scout
+# OW Scout
 
-Two packages that feed one scouting dashboard:
+OW2 composition scouting: a capture tool and a website, two lenses on
+one product (the FACEIT League lens today; a private scrim lens later).
+Two packages feed the dashboard:
 
 - **`faceit_sync`** — incremental, idempotent ingest of **FACEIT League
   (Overwatch 2)** championship data into a local **SQLite** database, exported as

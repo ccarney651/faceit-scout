@@ -16,7 +16,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__TITLE__ &mdash; scouting</title>
+<title>OW Scout &mdash; FACEIT League</title>
 <style>
 :root{
   --bg:#f5f7fa; --surface:#ffffff; --surface2:#eef1f6; --fg:#171a20; --muted:#5c6674;
@@ -52,6 +52,8 @@ body{margin:0;background:var(--bg);color:var(--fg);font-variant-numeric:tabular-
 .topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
 .topbar-in{max-width:1060px;margin:0 auto;padding:12px 18px 0}
+.prodname{display:block;font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--accent);margin-bottom:2px}
+.prodname span{color:var(--faint);font-weight:600;letter-spacing:.08em}
 .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .brand h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
 .brand .meta{color:var(--muted);font-size:12.5px}
@@ -274,7 +276,8 @@ details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
 </head>
 <body>
 <div class="topbar"><div class="topbar-in">
-  <div class="brand"><h1 id="title"></h1>
+  <div class="brand"><span class="prodname">OW SCOUT <span>FACEIT League</span></span>
+    <h1 id="title"></h1>
     <select id="division" class="hidden" aria-label="Division"></select>
     <span class="meta" id="subtitle"></span></div>
   <nav id="nav"></nav>

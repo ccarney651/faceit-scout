@@ -1,4 +1,4 @@
-# faceit-scout — complete feature reference
+# OW Scout — complete feature reference
 
 Two packages that feed one website.
 

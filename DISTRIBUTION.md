@@ -1,4 +1,4 @@
-# Giving owscout to a teammate
+# Giving OW Scout to anyone
 
 The whole tool is one file: `owscout.exe` (~77 MB). It carries the curator's
 learned hero library and the seed match list inside it — no Python, no separate
