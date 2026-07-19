@@ -37,12 +37,12 @@ SUBROLE: dict[str, str] = {
     "Reinhardt": TANK, "Roadhog": TANK, "Sigma": TANK, "Winston": TANK,
     "Wrecking Ball": TANK, "Zarya": TANK,
     # Hitscan seat.
-    "Ashe": HITSCAN, "Cassidy": HITSCAN, "Emre": HITSCAN, "Freja": HITSCAN,
+    "Ashe": HITSCAN, "Bastion": HITSCAN, "Cassidy": HITSCAN, "Emre": HITSCAN, "Freja": HITSCAN,
     "Shion": HITSCAN, "Sierra": HITSCAN, "Sojourn": HITSCAN,
     "Soldier 76": HITSCAN, "Sombra": HITSCAN, "Tracer": HITSCAN,
     "Widowmaker": HITSCAN,
     # Flex DPS seat.
-    "Anran": FLEX_DPS, "Bastion": FLEX_DPS, "Echo": FLEX_DPS,
+    "Anran": FLEX_DPS, "Echo": FLEX_DPS,
     "Genji": FLEX_DPS, "Hanzo": FLEX_DPS, "Junkrat": FLEX_DPS,
     "Mei": FLEX_DPS, "Pharah": FLEX_DPS, "Reaper": FLEX_DPS,
     "Symmetra": FLEX_DPS, "Torbjorn": FLEX_DPS, "Vendetta": FLEX_DPS,
@@ -62,7 +62,8 @@ SUBROLE: dict[str, str] = {
 # their primary in SUBROLE; Shion/Sierra picked hitscan-primary from pairing
 # evidence (they appear beside flex-seat heroes in most captured comps).
 DUAL: frozenset[str] = frozenset(
-    {"Tracer", "Sombra", "Hanzo", "Shion", "Sierra", "Juno"})
+    {"Tracer", "Sombra", "Hanzo", "Shion", "Sierra", "Juno",
+     "Reaper"})   # Reaper is cross-seat per the curator; flex-primary
 
 
 def seat_of(hero_name: str) -> str | None:
