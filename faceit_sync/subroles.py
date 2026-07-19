@@ -37,27 +37,32 @@ SUBROLE: dict[str, str] = {
     "Reinhardt": TANK, "Roadhog": TANK, "Sigma": TANK, "Winston": TANK,
     "Wrecking Ball": TANK, "Zarya": TANK,
     # Hitscan seat.
-    "Ashe": HITSCAN, "Cassidy": HITSCAN, "Sojourn": HITSCAN,
-    "Soldier 76": HITSCAN, "Tracer": HITSCAN, "Widowmaker": HITSCAN,
-    "Sombra": HITSCAN,
+    "Ashe": HITSCAN, "Cassidy": HITSCAN, "Emre": HITSCAN, "Freja": HITSCAN,
+    "Shion": HITSCAN, "Sierra": HITSCAN, "Sojourn": HITSCAN,
+    "Soldier 76": HITSCAN, "Sombra": HITSCAN, "Tracer": HITSCAN,
+    "Widowmaker": HITSCAN,
     # Flex DPS seat.
-    "Bastion": FLEX_DPS, "Echo": FLEX_DPS, "Genji": FLEX_DPS,
-    "Hanzo": FLEX_DPS, "Junkrat": FLEX_DPS, "Mei": FLEX_DPS,
-    "Pharah": FLEX_DPS, "Reaper": FLEX_DPS, "Symmetra": FLEX_DPS,
-    "Torbjorn": FLEX_DPS, "Venture": FLEX_DPS,
-    # Main support seat.
-    "Brigitte": MAIN_SUPPORT, "LifeWeaver": MAIN_SUPPORT, "Lucio": MAIN_SUPPORT,
-    "Mercy": MAIN_SUPPORT, "Moira": MAIN_SUPPORT,
-    # Flex support seat.
+    "Anran": FLEX_DPS, "Bastion": FLEX_DPS, "Echo": FLEX_DPS,
+    "Genji": FLEX_DPS, "Hanzo": FLEX_DPS, "Junkrat": FLEX_DPS,
+    "Mei": FLEX_DPS, "Pharah": FLEX_DPS, "Reaper": FLEX_DPS,
+    "Symmetra": FLEX_DPS, "Torbjorn": FLEX_DPS, "Vendetta": FLEX_DPS,
+    "Venture": FLEX_DPS,
+    # Main support seat. Juno is dual (MS/FS) - primary MS because in every
+    # captured comp she appears NEXT TO Kiriko, i.e. filling the MS seat.
+    "Brigitte": MAIN_SUPPORT, "Jetpack Cat": MAIN_SUPPORT, "Juno": MAIN_SUPPORT,
+    "LifeWeaver": MAIN_SUPPORT, "Lucio": MAIN_SUPPORT, "Mercy": MAIN_SUPPORT,
+    "Mizuki": MAIN_SUPPORT, "Wuyang": MAIN_SUPPORT,
+    # Flex support seat. Moira here per the curator (corrected from MS).
     "Ana": FLEX_SUPPORT, "Baptiste": FLEX_SUPPORT, "Illari": FLEX_SUPPORT,
-    "Kiriko": FLEX_SUPPORT, "Zenyatta": FLEX_SUPPORT,
-    # ---- awaiting curator classification (2026 heroes + genuine edge cases):
-    # Anran, Emre, Freja, Shion, Sierra, Vendetta (Damage)
-    # Jetpack Cat, Juno, Mizuki, Wuyang (Support)
+    "Kiriko": FLEX_SUPPORT, "Moira": FLEX_SUPPORT, "Zenyatta": FLEX_SUPPORT,
 }
 
 # Commonly played from both DPS seats; the dict above holds the primary.
-DUAL: frozenset[str] = frozenset({"Tracer", "Sombra", "Hanzo"})
+# Curator-confirmed seat assignments 2026-07-19. Dual-seat heroes below carry
+# their primary in SUBROLE; Shion/Sierra picked hitscan-primary from pairing
+# evidence (they appear beside flex-seat heroes in most captured comps).
+DUAL: frozenset[str] = frozenset(
+    {"Tracer", "Sombra", "Hanzo", "Shion", "Sierra", "Juno"})
 
 
 def seat_of(hero_name: str) -> str | None:
