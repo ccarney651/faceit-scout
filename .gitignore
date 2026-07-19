@@ -42,3 +42,9 @@ refs/
 screenshots/
 overwatch-hero-icons/
 *.sqlite3.bak-*
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example

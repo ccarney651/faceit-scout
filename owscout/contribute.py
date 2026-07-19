@@ -47,7 +47,7 @@ CONTRIB_DIR = "data/captures"
 
 # The deployed upload worker. Baked into builds so end users configure
 # NOTHING; empty until the curator deploys infra/upload-worker.
-DEFAULT_UPLOAD_ENDPOINT = ""
+DEFAULT_UPLOAD_ENDPOINT = "https://owscout-upload.owscout.workers.dev"
 
 
 class MapKey(NamedTuple):

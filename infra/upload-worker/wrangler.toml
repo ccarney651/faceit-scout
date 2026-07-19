@@ -9,7 +9,7 @@ REPO = "ccarney651/faceit-scout"
 # After `wrangler kv namespace create NAMES`, paste the id here:
 [[kv_namespaces]]
 binding = "NAMES"
-id = "REPLACE_WITH_KV_ID"
+id = "8230bf3bec1d424da7d07a6e7eb4cb19"
 
 # Secret (set with `wrangler secret put GITHUB_TOKEN`):
 #   fine-grained PAT, Contents read/write, the site repo only
