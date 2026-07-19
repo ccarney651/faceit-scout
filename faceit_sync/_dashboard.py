@@ -1147,6 +1147,60 @@ function renderScoutBody(t){
       w.appendChild(csCard);
     }
 
+
+    // 7. Ban planner - "what should we ban" as an answer, not homework. A ban's
+    // cost to them = how much they lean on the hero x how weak their same-seat
+    // backup is, cross-checked against what actually happened when it was
+    // banned before. Every component is SHOWN - the verdict is a summary of
+    // visible evidence, not a black-box score.
+    if(scout && (scout.hero_pool||[]).length){
+      const pool=scout.hero_pool;
+      const bySeat={};
+      pool.forEach(h=>{ const st=HERO_SEAT[h.hero]||h.role||'?';
+        (bySeat[st]=bySeat[st]||[]).push(h); });
+      Object.values(bySeat).forEach(a=>a.sort((x,y)=>y.rounds-x.rounds));
+      const brByHero={}; (scout.ban_response||[]).forEach(b=>brByHero[b.banned]=b);
+
+      const rows=pool.filter(h=>(h.pick_rate||0)>=0.25).map(h=>{
+        const seat=HERO_SEAT[h.hero]||h.role||'?';
+        const backup=(bySeat[seat]||[]).find(x=>x.hero!==h.hero)||null;
+        const br=brByHero[h.hero];
+        let banned=null;
+        if(br){
+          let w=0,l=0; (br.opens||[]).forEach(o=>{w+=o.wins;l+=o.losses;});
+          banned={games:br.games,w,l};
+        }
+        // Transparent verdict: they lean on it AND the same seat has no strong
+        // captured backup -> expensive. Backup nearly as played -> cheap.
+        const share=h.pick_rate||0, bshare=backup?(backup.pick_rate||0):0;
+        const verdict=(share>=0.6&&bshare<0.3)?['expensive','var(--good)']
+                     :(bshare>=share*0.7)?['cheap','var(--bad)']
+                     :['moderate','var(--mid)'];
+        return {h,seat,backup,banned,share,verdict};
+      }).sort((a,b)=>{
+        const rank=v=>v==='expensive'?0:v==='moderate'?1:2;
+        return rank(a.verdict[0])-rank(b.verdict[0])||b.share-a.share;
+      });
+
+      if(rows.length){
+        w.appendChild(el(sectionH('Ban planner',
+          `<span class="note">what a ban would cost them - lean + same-seat backup + history</span>`)));
+        const card=el(`<div class="card"></div>`);
+        rows.slice(0,8).forEach(({h,seat,backup,banned,share,verdict})=>{
+          const parts=[`${Math.round(share*100)}% of rounds`,
+                       `<span class="faint">${esc(seat)}</span>`];
+          parts.push(backup
+            ?`backup: ${heroIcon(backup.hero)} ${esc(backup.hero)} <span class="faint">${Math.round((backup.pick_rate||0)*100)}%</span>`
+            :`<b>no captured backup in seat</b>`);
+          if(banned) parts.push(`when banned: <b>${banned.w}W-${banned.l}L</b> <span class="faint">(${banned.games}g)</span>`);
+          card.appendChild(el(`<div class="crow"><span>${heroChip(h.hero)} <span class="faint">·</span> ${parts.join(' <span class="faint">·</span> ')}</span>`+
+            `<span class="rec">${pill('ban: '+verdict[0],verdict[1])}</span></div>`));
+        });
+        card.appendChild(el(`<p class="note" style="margin:8px 0 0">"expensive" = they lean on it and the seat has no practiced fallback. Verdicts summarise the shown numbers - check the components on thin data.</p>`));
+        w.appendChild(card);
+      }
+    }
+
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
   const banC=el(`<div class="card"></div>`);
