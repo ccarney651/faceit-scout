@@ -106,3 +106,23 @@ def test_swaps_are_reported_per_map() -> None:
     assert len(kings) == 1
     assert kings[0]["out"] == ["MEI"] and kings[0]["in"] == ["REAPER"]
     assert maps["Ilios"]["swaps"] == []
+
+
+def test_matchups_pair_opening_with_enemy_opening() -> None:
+    """Counter-scout needs each game's opening PAIRED with the enemy's - the
+    aggregates cannot answer 'what do they do against comps like ours'."""
+    mine = ["ram", "soj", "mei", "luc", "kir"]
+    theirs = ["dva", "reaper", "ashe", "ana", "kir"]
+    details = [
+        _obs(1, "a", 0, mine, "hybrid", "a"),
+        _obs(1, "b", 5, theirs, "hybrid", "a"),
+    ]
+    rep = team_scout(details, ROLES, NAMES)
+    mu = rep["Alpha"]["matchups"]
+    assert len(mu) == 1
+    assert mu[0]["open"] == [g.upper() for g in mine]
+    assert mu[0]["vs"] == [g.upper() for g in theirs]
+    assert mu[0]["won"] is True and mu[0]["map"] == "King's Row"
+    # and the enemy's entry mirrors it
+    bmu = rep["Bravo"]["matchups"][0]
+    assert bmu["vs"] == [g.upper() for g in mine] and bmu["won"] is False

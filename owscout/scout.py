@@ -192,6 +192,10 @@ def team_scout(
     pool: dict[str, dict[str, set[str]]] = {}     # team -> hero -> game keys
     team_games: dict[str, set[str]] = {}
     team_rounds: dict[str, set[str]] = {}
+    # Counter-scout raw material: each game's opening PAIRED with what the enemy
+    # opened. "How do they play against comps like ours" is unanswerable from
+    # aggregates - it needs the per-game pairing kept intact.
+    matchups: dict[str, list[dict[str, Any]]] = {}
     for (mi, side), obs in games.items():
         team = _team_of(obs[0])
         if not team:
@@ -203,6 +207,15 @@ def team_scout(
         mp = first.map_name or "?"
         overall.setdefault(team, []).append(
             CompInstance(first.hero_guids, won, game_key))
+        enemy_obs = sorted(
+            (e for e in games.get((mi, "b" if side == "a" else "a"), [])),
+            key=lambda e: e.sample_ts_ms)
+        enemy_open = enemy_obs[0].hero_guids if enemy_obs else ()
+        matchups.setdefault(team, []).append({
+            "open": [hero_names.get(g, g) for g in first.hero_guids],
+            "vs": [hero_names.get(g, g) for g in enemy_open],
+            "won": won, "map": mp,
+        })
         team_games.setdefault(team, set()).add(game_key)
         # Hero pool counts ROUNDS, not maps: a hero played every round of a map is
         # a staple, one played for a single point is not, and counting maps hides
@@ -260,6 +273,7 @@ def team_scout(
             "games": total,
             "rounds": rounds_total,
             "hero_pool": hero_pool,
+            "matchups": matchups.get(team, []),
             "swaps": swaps.get(team, []),
             "ban_response": bans.get(team, []),
         }

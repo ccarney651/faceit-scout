@@ -590,6 +590,7 @@ const TABS=[
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let VS_A=null, VS_B=null;   // team-vs-team selections (any team vs any team)
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
+const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
@@ -1012,6 +1013,90 @@ function renderScoutBody(t){
     }
   }
 
+
+
+    // 6. Counter-scout - the question every other section can't answer: given
+    // OUR planned comp, what has THIS team actually done against comps like it?
+    if(scout){
+      const mus=scout.matchups||[];
+      w.appendChild(el(sectionH('Counter-scout',
+        `<span class="note">pick your planned comp - see how they played against comps like it</span>`)));
+      const csCard=el(`<div class="card"></div>`);
+      const plan=PLANNED[t.team]=(PLANNED[t.team]||new Set());
+      const pickRow=el(`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>`);
+      const resBox=el(`<div style="margin-top:10px"></div>`);
+
+      // Heroes present in nearly every captured lineup carry no signal - with
+      // Kiriko in 100% of rounds, "they swapped vs Kiriko" is noise, and the
+      // scoring must ignore her rather than let her match everything.
+      const prevalence={};
+      mus.forEach(m=>new Set(m.vs).forEach(h=>prevalence[h]=(prevalence[h]||0)+1));
+      const ubiquitous=new Set(Object.entries(prevalence)
+        .filter(([,n])=>mus.length>=4&&n/mus.length>=0.9).map(([h])=>h));
+
+      const redraw=()=>{
+        pickRow.innerHTML='';
+        [...plan].sort((a,b)=>roleRank(a)-roleRank(b)||a.localeCompare(b)).forEach(h=>{
+          const chip=el(`<span class="opt">${heroChip(h)}<span class="pp">x</span></span>`);
+          chip.onclick=()=>{ plan.delete(h); redraw(); };
+          pickRow.appendChild(chip);
+        });
+        if(plan.size<5){
+          pickRow.appendChild(heroSelect('', new Set(plan), (name)=>{
+            if(name){ plan.add(name); redraw(); } }));
+        }
+        if(plan.size){
+          const clr=el(`<button class="sortbtn" type="button">clear</button>`);
+          clr.onclick=()=>{ plan.clear(); redraw(); };
+          pickRow.appendChild(clr);
+        }
+
+        resBox.innerHTML='';
+        if(!plan.size){
+          resBox.appendChild(el(`<p class="note">Pick the heroes you intend to run (partial comps work too).</p>`));
+          return;
+        }
+        const signal=[...plan].filter(h=>!ubiquitous.has(h));
+        if(signal.length<plan.size){
+          resBox.appendChild(el(`<p class="note">${[...plan].filter(h=>ubiquitous.has(h)).map(esc).join(', ')} ignored for matching - they appear in ~every captured game.</p>`));
+        }
+        // A. Their games against comps overlapping yours, with THEIR result.
+        // Thin data degrades gracefully: step the overlap requirement down until
+        // something matches, and SAY which tier is being shown - a weak match
+        // labelled as weak beats an empty section.
+        const scored=mus.map(m=>({m,ov:signal.filter(h=>m.vs.includes(h))}));
+        let need=Math.min(signal.length,3), sim=[];
+        for(; need>=1; need--){
+          sim=scored.filter(x=>x.ov.length>=need).sort((a,b)=>b.ov.length-a.ov.length);
+          if(sim.length) break;
+        }
+        const tier=need>=3?'':need===2?' · loose match (2 of your heroes)'
+                                      :' · weak match (1 of your heroes)';
+        resBox.appendChild(el(`<p class="eyebrow">Games vs comps like yours (${sim.length})${tier?`<span style="text-transform:none;letter-spacing:0;color:var(--mid)">${tier}</span>`:''}</p>`));
+        if(sim.length){
+          const wins=sim.filter(x=>x.m.won).length;
+          resBox.appendChild(el(`<p class="note" style="margin-top:0">They went <b>${wins}W-${sim.length-wins}L</b> in those games.</p>`));
+          sim.slice(0,6).forEach(({m,ov})=>{
+            resBox.appendChild(el(`<div class="crow"><span>${esc(m.map)}: opened ${compRow(m.open)} <span class="faint">vs ${ov.map(h=>heroIcon(h)).join('')}${ov.length<m.vs.length?'…':''}</span></span>`+
+              `<span class="rec">${m.won?'they won':'they lost'}</span></div>`));
+          });
+        } else {
+          resBox.appendChild(el(`<p class="note">No captured game where they faced any of those heroes yet.</p>`));
+        }
+
+        // B. Swaps they made when facing your planned heroes.
+        const sw=(scout.swaps||[]).map(x=>({x,ov:(x.vs||[]).filter(h=>signal.includes(h))}))
+          .filter(y=>y.ov.length)
+          .sort((a,b)=>b.ov.length-a.ov.length||b.x.count-a.x.count);
+        if(sw.length){
+          resBox.appendChild(el(`<p class="eyebrow" style="margin-top:10px">Swaps they made against those heroes</p>`));
+          sw.slice(0,5).forEach(({x})=>resBox.appendChild(el(swapLine(x))));
+        }
+      };
+      redraw();
+      csCard.append(pickRow,resBox);
+      w.appendChild(csCard);
+    }
 
   // Preferred bans + Map picks/win rates (the two most-used, side by side)
   const two=el(`<div class="grid cols-2" style="margin-top:16px"></div>`);
