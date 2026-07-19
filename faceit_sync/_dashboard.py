@@ -51,7 +51,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font-variant-numeric:tabular-
 /* ---- app shell ---- */
 .topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
-.topbar-in{max-width:1060px;margin:0 auto;padding:12px 18px 0}
+.topbar-in{max-width:min(1500px,96vw);margin:0 auto;padding:12px 18px 0}
 .prodname{display:block;font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--accent);margin-bottom:2px}
 .prodname span{color:var(--faint);font-weight:600;letter-spacing:.08em}
 .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -63,7 +63,7 @@ nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;b
 nav button:hover{color:var(--fg)}
 nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
 nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-main{max-width:1060px;margin:0 auto;padding:20px 18px 72px}
+main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
 .eyebrow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
@@ -195,7 +195,7 @@ details.mapblk{border:1px solid var(--line);border-radius:10px;background:var(--
 details.mapblk>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;
   align-items:center;justify-content:space-between;gap:10px;font-weight:650}
 details.mapblk>summary::-webkit-details-marker{display:none}
-details.mapblk>summary::after{content:'be';color:var(--muted);transition:transform .15s}
+details.mapblk>summary::after{content:'▾';color:var(--muted);transition:transform .15s}
 details.mapblk[open]>summary::after{transform:rotate(180deg)}
 details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
 /* Two columns inside a map: openers on the left, the swaps seen there on the
@@ -404,9 +404,11 @@ function compDelta(from,to){
   return (out.length||inn.length)?{out,in:inn}:null;
 }
 function deltaHtml(d){ return `${compRow(d.out)}<span class="arr">&rarr;</span>${compRow(d.in)}`; }
+let SWAP_NOISE=new Set();   // per-team: heroes in ~every enemy lineup (set by renderScoutBody)
 function swapLine(s){
-  const trig=(s.vs&&s.vs.length)
-    ? `<span class="faint">vs</span>${compRow(s.vs.slice(0,3))}<span class="arr">&rarr;</span>`
+  const vs=(s.vs||[]).filter(h=>!SWAP_NOISE.has(h));
+  const trig=vs.length
+    ? `<span class="faint">vs</span>${compRow(vs.slice(0,3))}<span class="arr">&rarr;</span>`
     : '';
   return `<div class="crow${s.count<=1?' thin':''}">`+
     `<span class="swapline">${trig}${deltaHtml({out:s.out,in:s.in})}</span>`+
@@ -799,10 +801,14 @@ function renderPrepBody(t){
   const w=el(`<div></div>`);
   const wins=t.results.filter(r=>r.won).length;
   const oc=(DATA.owscout_comps||{})[t.team], sc=oc&&oc.scout;
+  const ad=sc&&sc.adapt;
   w.appendChild(el(`<div class="card" style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">`+
     `<span style="font-size:18px;font-weight:680">${esc(t.team)} - prep sheet</span>`+
     `<span>${pill(`${wins}/${t.results.length} matches`,winVar(pctOf(wins,t.results.length)))} `+
-    `${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</span></div>`));
+    `${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</span>`+
+    (ad?`<span class="note" style="margin:0">${ad.swaps_per_map} swaps/map · ${ad.families} famil${ad.families===1?'y':'ies'}`+
+        (ad.loss_followups?` · changed comp after a loss ${ad.changed_after_loss}/${ad.loss_followups}`:'')+`</span>`:'')
+    +`</div>`));
 
   const grid=el(`<div class="grid cols-2" style="margin-top:10px;align-items:start"></div>`);
 
@@ -987,6 +993,14 @@ function renderScoutBody(t){
   const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
                     `<span class="rec">${rec(c)}</span></div>`;
 
+  // Ubiquitous heroes carry no trigger signal - computed once per team, used
+  // by every swap row this page renders.
+  SWAP_NOISE=new Set();
+  if(scout){
+    const mus=scout.matchups||[]; const prev={};
+    mus.forEach(m=>new Set(m.vs).forEach(h=>prev[h]=(prev[h]||0)+1));
+    if(mus.length>=4) Object.entries(prev).forEach(([h,n])=>{ if(n/mus.length>=0.9) SWAP_NOISE.add(h); });
+  }
   if(scout) w.appendChild(cluster('sc-run','What they run'));
   if(scout){
     // 1. Common comps - the 3-5 they actually run most.
@@ -1383,7 +1397,7 @@ function renderScoutBody(t){
   // ==== RECEIPTS ====
   w.appendChild(cluster('sc-receipts','Receipts'));
   {
-    const dv=drawer('Matches','full match cards · collapsed by default');
+    const dv=drawer('Match receipts','full cards, bans in draft order, replay codes');
   // Kept in its own scrolling box: the match list grows without bound and pushed
   // every analysis section below it off the screen.
       dv.body.appendChild(el(sectionH('Matches',`<span class="note">${t.matches.length} match${t.matches.length===1?'':'es'} · scrolls · click a map for rosters · replay codes inline</span>`)));
