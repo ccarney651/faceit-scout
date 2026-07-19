@@ -496,12 +496,15 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     with connect_ro(_faceit_db_path(args)) as fdb:
         roles = load_roles(fdb)
         names = {h.guid: h.name for h in load_heroes(fdb)}
+        pnames = {str(r["id"]): str(r["nickname"]) for r in fdb.execute(
+            "SELECT id, nickname FROM players WHERE nickname IS NOT NULL")}
     # No owscout DB needed: contributions declare their own custom heroes, so a
     # build server can merge with nothing but the faceit roster and the files.
     # Validation against faceit.games is NOT optional here: this command is what
     # CI runs, and it is the only gate between a contributor file and the site.
     payload = merged_payload(contribs, roles, names, overrides=overrides,
-                             known=known_games(_faceit_db_path(args)))
+                             known=known_games(_faceit_db_path(args)),
+                             player_names=pnames)
     with open(args.out, "w", encoding="utf-8") as fh:
         _json.dump(payload, fh, indent=2)
     teams = cast("dict[str, object]", payload["teams"])

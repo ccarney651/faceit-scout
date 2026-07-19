@@ -274,3 +274,40 @@ def test_endpoint_errors_surface_the_server_message() -> None:
     with pytest.raises(RuntimeError, match="already used from another install"):
         push_to_endpoint(b"{}", endpoint="https://up.example/", name="alice",
                          token="t" * 24, session=_Taken())
+
+
+def test_player_pools_from_slot_pairs() -> None:
+    """Player attribution rides as (hero, player) pairs straight from comp_slots
+    - the canonical comp is sorted, so zipping it with players would scramble
+    who played what."""
+    from owscout.contribute import MapKey, player_pools
+    maps = {MapKey("m1", 1): {
+        "side_a_team": "Alpha", "side_b_team": "Bravo",
+        "observations": [
+            {"side": "a", "ts": 0, "round_no": 1, "sub_map": None,
+             "heroes": ["ram", "soj"],
+             "pairs": [["ram", "p1"], ["soj", "p2"]]},
+            {"side": "a", "ts": 50, "round_no": 2, "sub_map": None,
+             "heroes": ["ram", "mei"],
+             "pairs": [["ram", "p1"], ["mei", None]]},   # unresolved slot
+        ],
+    }}
+    pools = player_pools(maps, {"p1": "Javi44", "p2": "BuFayez2"},
+                         {"ram": "RAM", "soj": "SOJ", "mei": "MEI"})
+    alpha = {p["player"]: p for p in pools["Alpha"]}
+    assert alpha["Javi44"]["rounds"] == 2
+    assert alpha["Javi44"]["heroes"][0] == {"hero": "RAM", "rounds": 2, "share": 1.0}
+    assert alpha["BuFayez2"]["rounds"] == 1
+    # the unresolved MEI slot attributed to nobody - never guessed
+    assert all(h["hero"] != "MEI" for p in pools["Alpha"] for h in p["heroes"])
+
+
+def test_observations_without_pairs_are_simply_absent() -> None:
+    """Captures made before OCR attribution have no pairs; they must not crash
+    or fabricate players."""
+    from owscout.contribute import MapKey, player_pools
+    maps = {MapKey("m1", 1): {
+        "side_a_team": "Alpha", "side_b_team": None,
+        "observations": [{"side": "a", "ts": 0, "heroes": ["ram"]}],
+    }}
+    assert player_pools(maps, {}, {}) == {}

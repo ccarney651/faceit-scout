@@ -795,6 +795,37 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     # after the skip would starve the hint for exactly the user it exists for.
     pal = {"ra": 0, "ta": 0, "rb": 0, "tb": 0, "n": 0}
     pal_shown = False
+    # Player attribution: resolved ONCE per map (HUD slot order is stable within
+    # a map) from one OCR pass, then attached to every observation. WHITEBEARD-
+    # style battletags won't resolve (fuzzy score below threshold) - those slots
+    # stay unattributed and the raw name is kept for later alias confirmation.
+    slot_players: dict[str, list[Optional[str]]] = {}
+    slot_raw: dict[str, list[str]] = {}
+
+    def _attribute_players(frame: Frame) -> None:
+        try:
+            reads = read_hud_names(frame, profile.slots)
+        except Exception as exc:  # noqa: BLE001 - attribution is best-effort
+            emit(f"  (player names unavailable: {exc})")
+            return
+        f1 = [(p.player_id, p.nickname or "") for p in ctx.players
+              if p.faction == "faction1" and p.player_id]
+        f2 = [(p.player_id, p.nickname or "") for p in ctx.players
+              if p.faction == "faction2" and p.player_id]
+        left_roster, right_roster = (f1, f2) if side_a_faction == "faction1" else (f2, f1)
+        hits = 0
+        for side, roster in ((SIDE_LEFT, left_roster), (SIDE_RIGHT, right_roster)):
+            ids: list[Optional[str]] = []
+            for raw in reads[side]:
+                pid = resolve_player(raw, roster) if raw else None
+                ids.append(pid)
+                if pid:
+                    hits += 1
+                    if not dry_run:
+                        db.upsert_player_alias(pid, raw)
+            slot_players[side] = ids
+            slot_raw[side] = list(reads[side])
+        emit(f"  players identified: {hits}/10 (unmatched slots stay anonymous)")
     written_ts: list[int] = []                   # sample_ts of each kept snapshot (undo)
     while not done_evt.is_set():
         if undo_evt.is_set():
@@ -886,6 +917,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                 emit("  (unchanged / only unknowns — skipped)")
                 continue
         last_kept = (ga, gb, cur_round[0], cur_sub[0])
+        if not slot_players:
+            _attribute_players(frame)
         written_ts.append(snaps)
         history.append(("snap", snaps))
         line = []
@@ -900,7 +933,9 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                 if _persist_matches(db, map_instance_id, side, snaps, matches,
                                     hero_roles, hero_names, sub_map=cur_sub[0],
                                     round_no=cur_round[0], phase=_phase_for(side),
-                                    crop_paths=crops):
+                                    crop_paths=crops,
+                                    players=slot_players.get(side, ()),
+                                    raw_names=slot_raw.get(side, ())):
                     written += 1
             shown = "/".join((hero_names.get(m.hero_guid or "", "?")[:4] if m.resolved else "??")
                              for m in matches)
@@ -978,6 +1013,7 @@ def _persist_matches(  # pragma: no cover
     hero_roles: dict[str, str], hero_names: dict[str, str],
     sub_map: Optional[str] = None, round_no: Optional[int] = None,
     phase: Optional[str] = None, crop_paths: Sequence[Optional[str]] = (),
+    players: Sequence[Optional[str]] = (), raw_names: Sequence[str] = (),
 ) -> bool:
     """Persist one frame's matches as a single observation (no smoothing). Returns
     True if the observation fully resolved."""
@@ -990,7 +1026,8 @@ def _persist_matches(  # pragma: no cover
     slots = [
         {"slot_index": i, "hero_guid": m.hero_guid, "confidence": m.confidence,
          "is_dead": 1 if m.state == "dead" else 0, "expected_role": None,
-         "ingame_name_raw": None, "player_id": None,
+         "ingame_name_raw": (raw_names[i] or None) if i < len(raw_names) else None,
+         "player_id": players[i] if i < len(players) else None,
          "crop_path": crop_paths[i] if i < len(crop_paths) else None}
         for i, m in enumerate(matches)
     ]

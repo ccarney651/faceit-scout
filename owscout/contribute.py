@@ -103,7 +103,7 @@ def build_contribution(
     maps: list[dict[str, Any]] = []
     for r in rows:
         obs = db.conn.execute(
-            """SELECT o.side, o.sample_ts_ms, o.sub_map, o.round_no, o.phase,
+            """SELECT o.id AS oid, o.side, o.sample_ts_ms, o.sub_map, o.round_no, o.phase,
                       (SELECT group_concat(s.hero_guid, ',') FROM comp_slots s
                         WHERE s.observation_id = o.id AND s.hero_guid IS NOT NULL
                         ORDER BY s.slot_index) AS guids
@@ -112,6 +112,19 @@ def build_contribution(
                ORDER BY o.side, o.sample_ts_ms""",
             (int(r["id"]),),
         ).fetchall()
+        # (hero, player) pairs come from comp_slots DIRECTLY: the canonical comp
+        # is sorted, so its order can never be zipped with slot players.
+        pair_rows = db.conn.execute(
+            """SELECT s.observation_id AS oid, s.hero_guid, s.player_id
+               FROM comp_slots s JOIN comp_observations o ON o.id = s.observation_id
+               WHERE o.map_instance_id = ? AND s.hero_guid IS NOT NULL
+               ORDER BY s.observation_id, s.slot_index""",
+            (int(r["id"]),),
+        ).fetchall()
+        pairs_by_obs: dict[int, list[list[Optional[str]]]] = {}
+        for pr in pair_rows:
+            pairs_by_obs.setdefault(int(pr["oid"]), []).append(
+                [pr["hero_guid"], pr["player_id"]])
         if not obs:
             continue
         maps.append({
@@ -131,7 +144,9 @@ def build_contribution(
                 {"side": str(o["side"]), "ts": int(o["sample_ts_ms"]),
                  "sub_map": o["sub_map"], "round_no": o["round_no"],
                  "phase": o["phase"],
-                 "heroes": [g for g in str(o["guids"]).split(",") if g]}
+                 "heroes": [g for g in str(o["guids"]).split(",") if g],
+                 # optional player attribution: [[hero_guid, player_id|null]...]
+                 "pairs": pairs_by_obs.get(int(o["oid"]), [])}
                 for o in obs
             ],
         })
@@ -377,6 +392,7 @@ def merged_payload(
     hero_roles: Mapping[str, str], hero_names: Mapping[str, str],
     overrides: Optional[Mapping[MapKey, str]] = None,
     known: Optional[Mapping[MapKey, KnownGame]] = None,
+    player_names: Optional[Mapping[str, str]] = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
@@ -410,7 +426,9 @@ def merged_payload(
     report = team_scout(to_obs_details(merged.maps), roles, names)
     teams = payload["teams"]
     assert isinstance(teams, dict)
+    pools = player_pools(merged.maps, player_names or {}, names)
     for team, r in report.items():
+        r["players"] = pools.get(team, [])
         teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
     payload["contributors"] = sorted({str(c["contributor"]) for c in contributions})
     # Which real games are covered - lets the site badge scouted games and show
@@ -520,6 +538,47 @@ def _raise_push_error(resp: Any, repo: str) -> None:
     hint = hints.get(resp.status_code, "")
     raise RuntimeError(
         f"upload failed (HTTP {resp.status_code})" + (f": {hint}" if hint else ""))
+
+
+def player_pools(
+    maps: Mapping[MapKey, Mapping[str, Any]],
+    player_names: Mapping[str, str], hero_names: Mapping[str, str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Per team, each attributed player's hero pool in ROUNDS (same unit as the
+    team pool). Only observations that carry (hero, player) pairs contribute;
+    captures made before OCR attribution simply do not appear."""
+    agg: dict[str, dict[str, dict[str, set[str]]]] = {}   # team->player->hero->rounds
+    seen_rounds: dict[tuple[str, str], set[str]] = {}     # (team, player) -> rounds
+    for key, m in maps.items():
+        for o in m.get("observations", []):
+            side = str(o.get("side"))
+            team = m.get(f"side_{side}_team")
+            if not team:
+                continue
+            rk = f"{key.match_id}:{key.game_no}:{side}:{o.get('round_no') or 0}:{o.get('sub_map') or ''}"
+            for pair in o.get("pairs", []):
+                if not pair or len(pair) != 2 or not pair[1]:
+                    continue
+                guid, pid = str(pair[0]), str(pair[1])
+                agg.setdefault(team, {}).setdefault(pid, {}).setdefault(guid, set()).add(rk)
+                seen_rounds.setdefault((team, pid), set()).add(rk)
+    out: dict[str, list[dict[str, Any]]] = {}
+    for team, players in agg.items():
+        rows = []
+        for pid, heroes in players.items():
+            total = len(seen_rounds[(team, pid)])
+            rows.append({
+                "player": player_names.get(pid, pid),
+                "rounds": total,
+                "heroes": sorted(
+                    ({"hero": hero_names.get(g, g), "rounds": len(rs),
+                      "share": round(len(rs) / total, 3) if total else 0.0}
+                     for g, rs in heroes.items()),
+                    key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))[:8],
+            })
+        rows.sort(key=lambda r: (-int(str(r["rounds"])), str(r["player"])))
+        out[team] = rows
+    return out
 
 
 def contribution_files(directory: str | Path) -> list[Path]:

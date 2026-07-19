@@ -443,6 +443,21 @@ class Database:
         with self.transaction() as c:
             c.execute("DELETE FROM custom_heroes WHERE guid = ?", (guid,))
 
+    def upsert_player_alias(self, player_id: str, ingame_name: str) -> None:
+        """Record that OCR saw ``ingame_name`` for this player. The alias table is
+        how battletags that differ from faceit nicknames (WHITEBEARD vs Maquade)
+        become known: unconfirmed rows accumulate here for later confirmation."""
+        now = _utcnow()
+        with self.transaction() as c:
+            c.execute(
+                """INSERT INTO player_aliases (player_id, ingame_name, first_seen_at,
+                       last_seen_at, confirmed)
+                   VALUES (?, ?, ?, ?, 0)
+                   ON CONFLICT(player_id, ingame_name)
+                   DO UPDATE SET last_seen_at = excluded.last_seen_at""",
+                (player_id, ingame_name.strip(), now, now),
+            )
+
     def get_settings(self, prefix: str = "") -> dict[str, str]:
         """Stored operator preferences, optionally only those under ``prefix``."""
         rows = self.conn.execute(

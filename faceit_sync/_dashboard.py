@@ -949,6 +949,24 @@ function renderScoutBody(t){
       w.appendChild(grid);
     }
 
+    // 2b. Player pools - who plays what, when captures carry OCR attribution.
+    // Absent for captures made before attribution existed; grows from here.
+    const ppools=scout.players||[];
+    if(ppools.length){
+      w.appendChild(el(sectionH('Player pools',
+        `<span class="note">read from the HUD name bars · unmatched battletags stay anonymous</span>`)));
+      const pgrid=el(`<div class="grid cols-3"></div>`);
+      ppools.forEach(p=>{
+        const card=el(`<div class="card"></div>`);
+        card.appendChild(el(`<p class="eyebrow">${esc(p.player)} <span class="note" style="text-transform:none;letter-spacing:0">${p.rounds} rounds seen</span></p>`));
+        p.heroes.slice(0,5).forEach(h=>card.appendChild(el(
+          `<div class="crow"><span>${heroChip(h.hero)}</span>`+
+          `<span class="rec">${Math.round((h.share||0)*100)}% · ${h.rounds}</span></div>`)));
+        pgrid.appendChild(card);
+      });
+      w.appendChild(pgrid);
+    }
+
     // 3. Map scouting - collapsible per map; segments are attack/defend on
     // Escort+Hybrid, sub-maps on Control, one generic block otherwise.
     const maps=scout.maps||{};
