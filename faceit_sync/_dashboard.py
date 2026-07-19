@@ -1236,8 +1236,9 @@ function renderScoutBody(t){
       }
     }
 
-  {
-    const dv=drawer('Ban evidence','preferred bans · banned-hero records · counter-bans · ban response');
+  // Preferred bans + Maps picks/win rate - the side-by-side pair, restored
+  // by operator request after the reorg had split it across the clusters.
+  const two=el(`<div class="grid cols-2" style="margin-top:16px;align-items:start"></div>`);
   const banC=el(`<div class="card"></div>`);
   banC.appendChild(el(`<p class="eyebrow">Preferred bans</p>`));
   banC.appendChild(el(barList(rank(t.bans).slice(0,12).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
@@ -1245,7 +1246,20 @@ function renderScoutBody(t){
     banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note">(when they draft first — ${t.firstBanGames} maps)</span></p>`));
     banC.appendChild(el(barList(rank(t.firstBans).slice(0,6).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
   }
-    dv.body.appendChild(banC);
+  two.appendChild(banC);
+  const mapC=el(`<div class="card"></div>`);
+  mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
+  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
+  mapC.appendChild(mrows.length?table(
+    [{k:'map',label:'Map'},
+     {k:'picks',label:'Picked',num:true},{k:'games',label:'Played',num:true},
+     {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], mrows, byMode)
+   :el(`<p class="note">No maps in window.</p>`));
+  two.appendChild(mapC);
+  w.appendChild(two);
+
+  {
+    const dv=drawer('Ban evidence','banned-hero records · counter-bans · ban response');
   // Map win rate conditioned on a hero being banned out (by either team).
   // One row per (hero, who banned it): banning a hero yourself and having it taken
   // from you are different situations, and averaging them together hides both.
@@ -1313,15 +1327,6 @@ function renderScoutBody(t){
 
   // ==== MAP DECISION ====
   w.appendChild(cluster('sc-map','Map decision'));
-  const mapC=el(`<div class="card"></div>`);
-  mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
-  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
-  mapC.appendChild(mrows.length?table(
-    [{k:'map',label:'Map'},
-     {k:'picks',label:'Picked',num:true},{k:'games',label:'Played',num:true},
-     {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], mrows, byMode)
-   :el(`<p class="note">No maps in window.</p>`));
-  w.appendChild(mapC);
   // Signature setups — maps THEY pick AND ban first on (a fully self-chosen draft).
   // A high win% on a repeated map+ban tells you it's a rehearsed strat to be ready for.
   // Their captured opening comp on that map, when owscout has one: the map + first
