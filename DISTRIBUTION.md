@@ -38,6 +38,24 @@ relearn its own portraits via **Learn heroes**.
 If the endpoint is unreachable, Publish still writes
 `data\captures\<name>.json` locally and says so - nothing is ever lost.
 
+## Troubleshooting
+
+**"Self-protection failed. Error code: 4" (or similar security errors) when
+calibrating or capturing.** Not an OW Scout error - security software reacting
+to an unsigned app doing screen capture. In order of likelihood:
+
+1. Move `owscout.exe` OUT of Downloads into its own folder (e.g. `C:\OWScout\`),
+   then right-click -> Properties -> tick **Unblock** if shown -> Apply.
+2. Add that folder to your antivirus exclusions (Kaspersky/ESET/Avast/360 all
+   have "self-protection" modules that produce exactly this message).
+3. If FACEIT Anti-Cheat is installed, exit it fully before scouting - kernel
+   anticheat and screen capture clash, and replays do not need AC.
+4. Run the exe as administrator once.
+5. Make sure Overwatch is windowed/borderless, not exclusive fullscreen.
+
+**Nothing matches / all slots read `??`** - see the log: if it names custom UI
+colours, that machine needs to relearn portraits (Learn heroes).
+
 ## Deploying the upload endpoint (curator, once)
 
 The endpoint is a Cloudflare Worker (free tier) in `infra/upload-worker/`:
