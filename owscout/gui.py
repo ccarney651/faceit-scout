@@ -640,14 +640,30 @@ class _App:  # pragma: no cover - GUI runtime only
         self._run(go)
 
     def _sync_config(self) -> dict[str, str]:
-        """sync.repo / sync.token from app_settings ('' when unset)."""
+        """Upload config. The endpoint default is baked into the build, so an
+        end user configures nothing; repo/token are the curator's direct path."""
+        from .contribute import DEFAULT_UPLOAD_ENDPOINT
         try:
             with self._open_db() as db:
                 got = db.get_settings("sync.")
         except Exception:  # noqa: BLE001
             got = {}
-        return {"repo": got.get("sync.repo", "ccarney651/faceit-scout"),
+        return {"endpoint": got.get("sync.endpoint", DEFAULT_UPLOAD_ENDPOINT),
+                "repo": got.get("sync.repo", "ccarney651/faceit-scout"),
                 "token": got.get("sync.token", "")}
+
+    def _identity_token(self) -> str:
+        """The install's auto-generated identity. Created silently on first use;
+        the user never sees it - it is what makes their chosen name THEIRS on
+        the open endpoint (first upload claims the name)."""
+        import secrets
+        with self._open_db() as db:
+            got = db.get_settings("sync.identity")
+            tok = got.get("sync.identity", "")
+            if not tok:
+                tok = secrets.token_hex(24)
+                db.set_settings({"sync.identity": tok})
+        return tok
 
     def _open_sync_settings(self) -> None:
         """One-time setup that turns Publish into publish-AND-upload. The token
@@ -659,25 +675,30 @@ class _App:  # pragma: no cover - GUI runtime only
         win = tk.Toplevel(self.root)
         win.title("Sync settings")
         win.transient(self.root)
-        ttk.Label(win, wraplength=460, justify="left", foreground="#555",
-                  text="With these set, 'Publish my captures' also UPLOADS your file "
-                       "to the site's repo - the site rebuilds itself within a couple "
-                       "of minutes. Ask the curator for an upload token (a GitHub "
-                       "fine-grained PAT with Contents write access to the repo)."
+        ttk.Label(win, wraplength=470, justify="left", foreground="#555",
+                  text="Publishing uploads to the open endpoint automatically - there "
+                       "is nothing to configure for normal use. Your chosen name is "
+                       "claimed by this install on first upload, so nobody else can "
+                       "overwrite your file. The fields below are overrides."
                   ).grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="w")
+        ep_var = tk.StringVar(value=cfg["endpoint"])
         repo_var = tk.StringVar(value=cfg["repo"])
         tok_var = tk.StringVar(value=cfg["token"])
-        ttk.Label(win, text="Repo (owner/name)").grid(row=1, column=0, padx=10, pady=3, sticky="w")
-        ttk.Entry(win, textvariable=repo_var, width=36).grid(row=1, column=1, padx=10, pady=3, sticky="w")
-        ttk.Label(win, text="Upload token").grid(row=2, column=0, padx=10, pady=3, sticky="w")
-        ttk.Entry(win, textvariable=tok_var, width=36, show="*").grid(row=2, column=1, padx=10, pady=3, sticky="w")
+        ttk.Label(win, text="Upload endpoint").grid(row=1, column=0, padx=10, pady=3, sticky="w")
+        ttk.Entry(win, textvariable=ep_var, width=42).grid(row=1, column=1, padx=10, pady=3, sticky="w")
+        ttk.Label(win, text="- curator-only direct path -", foreground="#888").grid(
+            row=2, column=0, columnspan=2, padx=10, pady=(8, 0), sticky="w")
+        ttk.Label(win, text="Repo (owner/name)").grid(row=3, column=0, padx=10, pady=3, sticky="w")
+        ttk.Entry(win, textvariable=repo_var, width=42).grid(row=3, column=1, padx=10, pady=3, sticky="w")
+        ttk.Label(win, text="GitHub token").grid(row=4, column=0, padx=10, pady=3, sticky="w")
+        ttk.Entry(win, textvariable=tok_var, width=42, show="*").grid(row=4, column=1, padx=10, pady=3, sticky="w")
 
         def save() -> None:
             with self._open_db() as db:
-                db.set_settings({"sync.repo": repo_var.get().strip(),
+                db.set_settings({"sync.endpoint": ep_var.get().strip(),
+                                 "sync.repo": repo_var.get().strip(),
                                  "sync.token": tok_var.get().strip()})
-            state = "ON" if tok_var.get().strip() else "OFF (no token)"
-            self._emit(f"sync settings saved - auto-upload {state}.")
+            self._emit("sync settings saved.")
             win.destroy()
 
         btns = ttk.Frame(win)
@@ -851,7 +872,21 @@ class _App:  # pragma: no cover - GUI runtime only
             except Exception as exc:  # noqa: BLE001
                 self._emit(f"publish: JSON written; local preview skipped ({exc}).")
             cfg = self._sync_config()
-            if cfg["token"]:
+            if cfg["endpoint"]:
+                try:
+                    from .contribute import push_to_endpoint
+                    with open(out, "rb") as fh:
+                        payload_bytes = fh.read()
+                    res = push_to_endpoint(payload_bytes, endpoint=cfg["endpoint"],
+                                           name=who.lower(),
+                                           token=self._identity_token())
+                    self._emit(f"publish: UPLOADED ({res.get('action')}, "
+                               f"{res.get('maps')} maps) - the site rebuilds "
+                               "itself within a couple of minutes.")
+                except Exception as exc:  # noqa: BLE001
+                    self._emit(f"publish: upload failed - {exc}")
+                    self._emit(f"publish: your file is safe at {out}.")
+            elif cfg["token"]:
                 # Zero-friction path: upload straight into the site repo. The
                 # push trigger rebuilds the site off data/captures/ commits.
                 try:

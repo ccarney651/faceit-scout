@@ -24,32 +24,36 @@ relearn its own portraits via **Learn heroes**.
 
 ## Getting their scouting onto the site
 
-6. One-time: the curator sends them an **upload token**, and they paste it under
-   **Sync settings…** (next to Publish). Repo stays the default.
-7. From then on, **Publish my captures** uploads their file straight into the
-   site's repo, and **the site rebuilds itself within a couple of minutes** —
-   no git, no file relay, nothing else to do.
-8. Every upload is still validated at build time: first submission of a map
+6. **Publish my captures** (with a display name in the "as" box) uploads their
+   file to the open endpoint - **the site rebuilds itself within a couple of
+   minutes.** Nothing to configure, nothing to be issued: the first upload
+   under a name claims it for that install, so nobody can overwrite anyone
+   else's file, yet no keys or accounts exist anywhere.
+7. Every upload is still validated at build time: first submission of a map
    wins, duplicates are kept but ignored, and maps are checked against FACEIT's
-   records — fabricated games, wrong teams, or wrong codes are rejected loudly.
-   Every upload is a git commit, so anything bad is a one-click revert.
+   records - fabricated games, wrong teams, or wrong codes are rejected loudly.
+   Every upload is a git commit, so anything bad is a one-click revert, and the
+   curator can block a name via the worker's DENYLIST.
 
-Without a token, Publish still writes `data\captures\<name>.json` next to the
-exe and the log says to send it to the curator - the manual fallback keeps
-working.
+If the endpoint is unreachable, Publish still writes
+`data\captures\<name>.json` locally and says so - nothing is ever lost.
 
-### Curator: issuing an upload token
+## Deploying the upload endpoint (curator, once)
 
-GitHub -> Settings -> Developer settings -> **Fine-grained personal access
-tokens** -> Generate new token:
-- **Repository access:** Only select repositories -> the site repo
-- **Permissions:** Contents -> **Read and write** (nothing else)
-- Set an expiry you're comfortable with; revoke any time from the same page.
+The endpoint is a Cloudflare Worker (free tier) in `infra/upload-worker/`:
 
-One shared token for a trusted team is fine to start (blast radius: this one
-repo's files, all recoverable from git history). Per-teammate tokens need each
-of them to be a repo collaborator - do that when the group grows past people
-you'd hand your keyboard to.
+```
+npm i -g wrangler
+cd infra/upload-worker
+wrangler login                       # opens the browser, one time
+wrangler kv namespace create NAMES   # paste the printed id into wrangler.toml
+wrangler secret put GITHUB_TOKEN     # fine-grained PAT: Contents RW, site repo only
+wrangler deploy                      # prints the endpoint URL
+```
+
+Then set `DEFAULT_UPLOAD_ENDPOINT` in `owscout/contribute.py` to that URL and
+rebuild the exe - end users inherit it and configure nothing. The GitHub token
+never leaves Cloudflare's secret store; contributors hold no credential at all.
 
 ## Rebuilding the exe (curator only)
 

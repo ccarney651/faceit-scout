@@ -350,14 +350,18 @@ cleanly and are re-derived by whatever the analysis does today.
 
 ```
 owscout gui            # calibrate, learn portraits, capture, review, finalize
-Publish my captures    # writes data/captures/<you>.json AND, with a sync token
-                       # configured, uploads it straight to the site repo -
-                       # which rebuilds itself on any data/captures/ push
+Publish my captures    # uploads to the OPEN endpoint under your chosen name -
+                       # the site rebuilds itself within a couple of minutes
 ```
 
-The upload is one GitHub Contents-API call (`contribute push` on the CLI): the
-repo is the server, an upload is a commit, and the audit trail is git history.
-Without a token, the file relay / commit-and-push path still works.
+Open access, zero setup: the tool generates an identity token silently on first
+publish, and the first install to upload under a display name claims it — so a
+stranger cannot overwrite your file, yet nobody is ever issued keys or needs an
+account. The endpoint (infra/upload-worker) holds the only GitHub credential as
+a server secret, forces the contributor identity from the claim (never from the
+file), caps size, rate-limits per name, and writes exactly one path per name.
+Build-time validation and git history remain the real gates. The curator's
+direct GitHub-token path and the manual file relay both still work as fallbacks.
 
 The build merges every contributor file and rebuilds the page. Only **finalized**
 maps are exported: the review gate is what keeps unvetted data out of a shared

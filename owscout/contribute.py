@@ -45,6 +45,10 @@ CONTRIB_FORMAT = 1
 
 CONTRIB_DIR = "data/captures"
 
+# The deployed upload worker. Baked into builds so end users configure
+# NOTHING; empty until the curator deploys infra/upload-worker.
+DEFAULT_UPLOAD_ENDPOINT = ""
+
 
 class MapKey(NamedTuple):
     """The identity of a real game, stable across every contributor's machine."""
@@ -420,6 +424,35 @@ def merged_payload(
     payload["views_ignored"] = len(merged.ignored)
     payload["maps_rejected"] = rejected
     return payload
+
+
+# --- open-access upload (the Worker endpoint) ---------------------------------
+# No keys, no accounts: the tool generates a random identity token on first
+# publish and the first install to upload under a display name CLAIMS it
+# server-side. A stranger cannot overwrite someone else's file, yet nobody is
+# ever issued anything. See infra/upload-worker/worker.js.
+
+
+def push_to_endpoint(
+    content: bytes, *, endpoint: str, name: str, token: str, session: Any = None
+) -> dict[str, Any]:
+    """POST a contribution to the open upload endpoint. The only credential is
+    the install's own auto-generated token; losing it means picking a new name,
+    never losing data (the old file stays, the curator can reassign)."""
+    if session is None:
+        import requests
+        session = requests.Session()
+    resp = session.post(endpoint, data=content, timeout=60,
+                        headers={"X-Owscout-Name": name,
+                                 "X-Owscout-Token": token,
+                                 "Content-Type": "application/json"})
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    if resp.status_code != 200:
+        raise RuntimeError(str(body.get("error") or f"upload failed (HTTP {resp.status_code})"))
+    return dict(body)
 
 
 def push_contribution(

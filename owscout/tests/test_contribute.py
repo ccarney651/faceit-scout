@@ -239,3 +239,38 @@ def test_push_failures_carry_a_plain_hint() -> None:
     with pytest.raises(RuntimeError, match="token is wrong or expired"):
         push_contribution(b"x", repo="o/r", token="bad",
                           path="p.json", session=_Denied())
+
+
+def test_endpoint_push_sends_name_and_token_headers() -> None:
+    """The open-access contract: identity travels in headers, the server forces
+    it into the file - the body's contributor field is never trusted."""
+    from owscout.contribute import push_to_endpoint
+
+    class _Ok(_FakeSession):
+        def post(self, url: str, **kw: Any) -> _FakeResp:
+            self.calls.append(("POST", url, kw))
+            return _FakeResp(200, {"action": "created", "maps": 3})
+
+    sess = _Ok()
+    out = push_to_endpoint(b"{}", endpoint="https://up.example/", name="alice",
+                           token="t" * 24, session=sess)
+    assert out["action"] == "created"
+    _, _, kw = sess.calls[-1]
+    assert kw["headers"]["X-Owscout-Name"] == "alice"
+    assert kw["headers"]["X-Owscout-Token"] == "t" * 24
+
+
+def test_endpoint_errors_surface_the_server_message() -> None:
+    """The worker's messages are written for humans ('name is already used from
+    another install') - the client must show them, not swallow them."""
+    import pytest
+    from owscout.contribute import push_to_endpoint
+
+    class _Taken(_FakeSession):
+        def post(self, url: str, **kw: Any) -> _FakeResp:
+            return _FakeResp(403, {"error": "the name 'alice' is already used "
+                                            "from another install"})
+
+    with pytest.raises(RuntimeError, match="already used from another install"):
+        push_to_endpoint(b"{}", endpoint="https://up.example/", name="alice",
+                         token="t" * 24, session=_Taken())

@@ -447,16 +447,33 @@ def cmd_contribute_push(args: argparse.Namespace) -> int:
         settings = db.get_settings("sync.")
         data = build_contribution(db, contributor=args.contributor,
                                   tool_version=__version__)
-    token = args.token or os.getenv("OWSCOUT_SYNC_TOKEN") or settings.get("sync.token", "")
-    repo = args.repo or settings.get("sync.repo", "ccarney651/faceit-scout")
-    if not token:
-        print("error: no upload token (use --token, $OWSCOUT_SYNC_TOKEN, or the "
-              "GUI's Sync settings)", file=sys.stderr)
-        return 2
     if not data["maps"]:
         print("nothing to upload - finalize maps in Review first.")
         return 0
     body = _json.dumps(data, indent=2).encode("utf-8")
+
+    from .contribute import DEFAULT_UPLOAD_ENDPOINT, push_to_endpoint
+    endpoint = (args.endpoint or settings.get("sync.endpoint", "")
+                or DEFAULT_UPLOAD_ENDPOINT)
+    if endpoint:
+        import secrets as _secrets
+        ident = settings.get("sync.identity", "")
+        if not ident:
+            ident = _secrets.token_hex(24)
+            with Database(_db_path(args)) as db:
+                db.set_settings({"sync.identity": ident})
+        res = push_to_endpoint(body, endpoint=endpoint,
+                               name=args.contributor.lower(), token=ident)
+        print(f"uploaded {res.get('maps')} map(s) ({res.get('action')}). "
+              "The site rebuilds itself within a couple of minutes.")
+        return 0
+
+    token = args.token or os.getenv("OWSCOUT_SYNC_TOKEN") or settings.get("sync.token", "")
+    repo = args.repo or settings.get("sync.repo", "ccarney651/faceit-scout")
+    if not token:
+        print("error: no endpoint configured and no GitHub token (curator path)",
+              file=sys.stderr)
+        return 2
     res = push_contribution(body, repo=repo, token=token,
                             path=f"{CONTRIB_DIR}/{args.contributor}.json")
     print(f"uploaded {len(data['maps'])} map(s) to {repo} ({res['action']}). "
@@ -1091,6 +1108,7 @@ def build_parser() -> argparse.ArgumentParser:
     ce.set_defaults(func=cmd_contribute_export)
     cp = consub.add_parser("push", help="export AND upload this machine's captures to the site")
     cp.add_argument("contributor", help="your contributor name")
+    cp.add_argument("--endpoint", default=None, help="upload endpoint URL override")
     cp.add_argument("--repo", default=None, help="owner/name (default: sync settings)")
     cp.add_argument("--token", default=None, help="GitHub token (default: sync settings / env)")
     cp.set_defaults(func=cmd_contribute_push)
