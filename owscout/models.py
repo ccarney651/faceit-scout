@@ -36,6 +36,10 @@ class ObsDetail(NamedTuple):
     side_b_team: str | None
     winner_side: str | None
     bans: tuple[str, ...] = ()   # banned hero guids on this map
+    # FACEIT identity - lets analysis see SERIES structure (game 2 follows
+    # game 1 of the same match), which per-map rows cannot express.
+    match_id: str | None = None
+    game_no: int | None = None
 
 
 class HeroCoverage(NamedTuple):

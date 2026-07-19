@@ -353,6 +353,7 @@ def to_obs_details(maps: Mapping[MapKey, Mapping[str, Any]]) -> list[ObsDetail]:
                 side_b_team=m.get("side_b_team"),
                 winner_side=m.get("winner_side"),
                 bans=tuple(m.get("bans") or ()),
+                match_id=key.match_id, game_no=key.game_no,
             ))
     return out
 

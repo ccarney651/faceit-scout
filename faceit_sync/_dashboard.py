@@ -712,7 +712,7 @@ function renderVersus(){
         const top=sc.overall[0];
         c.appendChild(el(`<p class="eyebrow" style="margin-top:12px">Captured comp (${sc.games} map${sc.games===1?'':'s'})</p>`));
         c.appendChild(el(`<div class="crow"><span>${compRow(top.heroes)}</span>`+
-          `<span class="rec">${top.wins}W-${top.losses}L</span></div>`));
+          `<span class="rec">${top.maps>=3?`${top.wins}W-${top.losses}L`:`${top.maps} map${top.maps===1?'':'s'}`}</span></div>`));
       }
       cols.appendChild(c);
     });
@@ -933,6 +933,22 @@ function renderScoutBody(t){
     w.appendChild(cov);
   }
 
+  // Adaptability - three numbers that say HOW this team behaves, which at
+  // small samples is more trustworthy than whether they won.
+  if(((DATA.owscout_comps||{})[t.team]||{}).scout){
+    const ad=(DATA.owscout_comps[t.team].scout||{}).adapt;
+    if(ad){
+      const bits=[`<b>${ad.swaps_per_map}</b> swaps/map`,
+                  `<b>${ad.families}</b> comp famil${ad.families===1?'y':'ies'}`];
+      if(ad.loss_followups>0){
+        bits.push(`after a lost map: changed comp <b>${ad.changed_after_loss} of ${ad.loss_followups}</b> times`);
+      }
+      w.appendChild(el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Adaptability</p>`+
+        `<p style="margin:0;font-size:13.5px">${bits.join(' <span class="faint">·</span> ')}`+
+        `<span class="faint" style="font-size:12px"> - rigid teams can be prepped against; flexible ones must be outplayed live</span></p></div>`));
+    }
+  }
+
   // ---- Scouting from captured replays (owscout) -------------------------
   // Three sections: what they play (Common comps + Hero pool), where they play
   // it (Map scouting, collapsible), and how they react (Common swaps).
@@ -941,7 +957,11 @@ function renderScoutBody(t){
   const nGames=(scout&&scout.games)||0;
   // n=1 is an anecdote, not a pattern - show it, but visibly weaker.
   const thin=n=>n<=1?' thin':'';
-  const rec=c=>`${c.maps} map${c.maps===1?'':'s'} · ${c.wins}W-${c.losses}L`;
+  // Below 3 maps a W-L is an anecdote that READS like a rate (Redline and
+  // Peps ran the identical comp 0-4 vs 2-0) - so thin rows show frequency
+  // only, and records appear once there is something behind them.
+  const rec=c=>c.maps>=3?`${c.maps} maps · ${c.wins}W-${c.losses}L`
+                        :`${c.maps} map${c.maps===1?'':'s'}`;
   const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
                     `<span class="rec">${rec(c)}</span></div>`;
 

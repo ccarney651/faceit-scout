@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Optional
 
-from .analysis import CompFamily, CompInstance, Roles, cluster_comps, phase_of
+from .analysis import (CompFamily, CompInstance, Roles, cluster_comps,
+                       phase_of, same_comp)
 from .models import ObsDetail
 
 
@@ -196,6 +197,9 @@ def team_scout(
     # opened. "How do they play against comps like ours" is unanswerable from
     # aggregates - it needs the per-game pairing kept intact.
     matchups: dict[str, list[dict[str, Any]]] = {}
+    # Adaptability raw material: per team, each game's opening WITH its series
+    # position, so "did they change after losing game 1" is answerable.
+    series: dict[str, list[tuple[str, int, bool, tuple[str, ...]]]] = {}
     for (mi, side), obs in games.items():
         team = _team_of(obs[0])
         if not team:
@@ -216,6 +220,9 @@ def team_scout(
             "vs": [hero_names.get(g, g) for g in enemy_open],
             "won": won, "map": mp,
         })
+        if first.match_id is not None and first.game_no is not None:
+            series.setdefault(team, []).append(
+                (first.match_id, first.game_no, won, first.hero_guids))
         team_games.setdefault(team, set()).add(game_key)
         # Hero pool counts ROUNDS, not maps: a hero played every round of a map is
         # a staple, one played for a single point is not, and counting maps hides
@@ -266,7 +273,24 @@ def team_scout(
              "pick_rate": round(len(ks) / rounds_total, 3) if rounds_total else 0.0}
             for g, ks in pool.get(team, {}).items()]
         hero_pool.sort(key=lambda r: (-int(r["rounds"]), str(r["hero"])))
+        # Adaptability: does losing change what they run next game? Consecutive
+        # games of the same match, compared with the comp-FAMILY relation (a
+        # one-hero flex is not "changing"; a different family is).
+        loss_next = changed = 0
+        games_seq = sorted(series.get(team, []))
+        for (m1, g1, won1, open1), (m2, g2, _w2, open2) in zip(games_seq, games_seq[1:]):
+            if m1 == m2 and g2 == g1 + 1 and not won1:
+                loss_next += 1
+                if not same_comp(open1, open2, roles):
+                    changed += 1
+        total_swaps = sum(int(sw["count"]) for sw in swaps.get(team, []))
         report[team] = {
+            "adapt": {
+                "swaps_per_map": round(total_swaps / total, 2) if total else 0.0,
+                "families": len(cluster_comps(overall.get(team, []), roles)),
+                "loss_followups": loss_next,
+                "changed_after_loss": changed,
+            },
             "overall": [_family_dict(f, hero_names)
                         for f in cluster_comps(overall.get(team, []), roles)],
             "maps": maps_out,

@@ -1074,6 +1074,7 @@ class Database:
         sql = """
             SELECT o.map_instance_id, o.side, o.sample_ts_ms, o.sub_map, o.round_no, o.phase,
                    c.hero_guids_json AS guids, mi.map_name, mi.map_category,
+                   mi.match_id AS fmatch, mi.game_no AS fgame,
                    mi.side_a_label, mi.side_b_label, mi.winner_side, mi.bans_json
             FROM comp_observations o
             JOIN map_instances mi ON mi.id = o.map_instance_id
@@ -1091,6 +1092,7 @@ class Database:
                 round_no=r["round_no"], phase=r["phase"],
                 hero_guids=tuple(json.loads(r["guids"])),
                 map_name=r["map_name"], map_category=r["map_category"],
+                match_id=r["fmatch"], game_no=r["fgame"],
                 side_a_team=r["side_a_label"], side_b_team=r["side_b_label"],
                 winner_side=r["winner_side"],
                 bans=tuple(json.loads(r["bans_json"])) if r["bans_json"] else (),

@@ -126,3 +126,34 @@ def test_matchups_pair_opening_with_enemy_opening() -> None:
     # and the enemy's entry mirrors it
     bmu = rep["Bravo"]["matchups"][0]
     assert bmu["vs"] == [g.upper() for g in mine] and bmu["won"] is False
+
+
+def test_adaptability_change_after_loss() -> None:
+    """Losing game 1 then opening game 2 with a DIFFERENT comp family counts as
+    adapting; a one-hero flex within the family does not."""
+    stubborn = ["ram", "soj", "mei", "luc", "kir"]
+    flexed = ["ram", "soj", "reaper", "luc", "kir"]     # same family (4 shared + tank)
+    newcomp = ["dva", "ashe", "reaper", "ana", "kir"]   # different family
+    details = [
+        _obs(1, "a", 0, stubborn, "control", "b", mn="Ilios"),      # lost g1
+        _obs(2, "a", 0, flexed, "hybrid", "b"),                     # lost g2, only flexed
+        _obs(3, "a", 0, newcomp, "escort", "a", mn="Dorado"),       # g3: real change
+    ]
+    # same match, sequential games
+    details = [d._replace(match_id="M1", game_no=i + 1) for i, d in enumerate(details)]
+    adapt = team_scout(details, ROLES, NAMES)["Alpha"]["adapt"]
+    assert adapt["loss_followups"] == 2          # g1->g2 and g2->g3 both follow losses
+    assert adapt["changed_after_loss"] == 1      # only g2->g3 changed family
+
+
+def test_adaptability_ignores_cross_match_sequences() -> None:
+    """Game 1 of a NEW match following a loss in another match is not a
+    'response' - only consecutive games of the same series count."""
+    a = ["ram", "soj", "mei", "luc", "kir"]
+    b = ["dva", "ashe", "reaper", "ana", "kir"]
+    details = [
+        _obs(1, "a", 0, a, "control", "b", mn="Ilios")._replace(match_id="M1", game_no=3),
+        _obs(2, "a", 0, b, "hybrid", "a")._replace(match_id="M2", game_no=1),
+    ]
+    adapt = team_scout(details, ROLES, NAMES)["Alpha"]["adapt"]
+    assert adapt["loss_followups"] == 0
