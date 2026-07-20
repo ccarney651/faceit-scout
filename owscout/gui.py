@@ -156,147 +156,204 @@ class _App:  # pragma: no cover - GUI runtime only
         # filter) and pack() will happily crush the Log to a few pixels rather
         # than overflow. Size the window to fit them, but never taller than the
         # screen it has to live on.
-        wanted_h = min(860, self.root.winfo_screenheight() - 80)
-        self.root.geometry(f"780x{wanted_h}")
-        self.root.minsize(640, 700)
+        wanted_h = min(760, self.root.winfo_screenheight() - 80)
+        self.root.geometry(f"820x{wanted_h}")
+        self.root.minsize(720, 560)
 
         pad = {"padx": 10, "pady": 6}
-        # --- paths ----------------------------------------------------------
-        paths = ttk.LabelFrame(self.root, text="Databases")
-        paths.pack(fill="x", **pad)
+        # Database file locations live at the bottom under "Advanced": a new user
+        # never needs to see or touch a file path. The vars are created up front
+        # because startup (code refresh, freshness) reads them.
         self.db_var = tk.StringVar(value=_default_db())
         self.faceit_var = tk.StringVar(value=_default_faceit())
-        for i, (lbl, var) in enumerate((("owscout DB", self.db_var),
-                                        ("faceit DB", self.faceit_var))):
-            ttk.Label(paths, text=lbl, width=11).grid(row=i, column=0, sticky="w", padx=6, pady=3)
-            ttk.Entry(paths, textvariable=var).grid(row=i, column=1, sticky="ew", padx=6, pady=3)
-        paths.columnconfigure(1, weight=1)
+
+        # A lightweight collapsible: a clickable header that shows/hides its body,
+        # so advanced controls and raw paths stay reachable without cluttering the
+        # first thing a new user sees.
+        def collapsible(parent: Any, title: str, *, start_open: bool = False) -> Any:
+            body = ttk.Frame(parent)
+            hdr = ttk.Label(parent, foreground="#06c", cursor="hand2")
+            st = {"open": start_open}
+
+            def render() -> None:
+                hdr.configure(text=("▾ " if st["open"] else "▸ ") + title)
+                if st["open"]:
+                    body.pack(fill="x", padx=(18, 4), pady=(0, 6))
+                else:
+                    body.pack_forget()
+
+            def toggle(_e: Any = None) -> None:
+                st["open"] = not st["open"]
+                render()
+
+            hdr.bind("<Button-1>", toggle)
+            hdr.pack(anchor="w", padx=8, pady=(4, 0))
+            render()
+            return body
 
         # --- 1. setup -------------------------------------------------------
-        setup = ttk.LabelFrame(self.root, text="1. One-time setup")
+        # A pre-trained build only needs ONE thing from a new user: calibrate the
+        # capture boxes to their screen. Everything else (library building,
+        # learning, import/export) is for curators and lives under Advanced.
+        setup = ttk.LabelFrame(self.root, text="Set up (once per computer)")
         setup.pack(fill="x", **pad)
-        ttk.Button(setup, text="Calibrate (drag ROI boxes)",
-                   command=self._calibrate).grid(row=0, column=0, padx=6, pady=6, sticky="w")
-        self.sheet_btn = ttk.Button(setup, text="Build hero library (load gallery)…",
+        srow = ttk.Frame(setup)
+        srow.pack(fill="x", padx=6, pady=6)
+        ttk.Button(srow, text="Calibrate to my screen",
+                   command=self._calibrate).pack(side="left")
+        self.setup_status = ttk.Label(srow, text="", foreground="#555")
+        self.setup_status.pack(side="left", padx=12)
+
+        adv = collapsible(setup, "Advanced hero tools", start_open=False)
+        r1 = ttk.Frame(adv)
+        r1.pack(fill="x", pady=2)
+        self.sheet_btn = ttk.Button(r1, text="Build hero library (load gallery)…",
                                     command=self._load_sheet)
-        self.sheet_btn.grid(row=0, column=1, padx=6, pady=6, sticky="w")
-        ttk.Button(setup, text="Check refs",
-                   command=self._verify_refs).grid(row=0, column=2, padx=6, pady=6, sticky="w")
-        self.setup_status = ttk.Label(setup, text="", foreground="#555")
-        self.setup_status.grid(row=1, column=0, columnspan=3, padx=6, sticky="w")
-        # Accuracy upgrade: teach the tool the real in-game HUD portraits.
-        ttk.Separator(setup, orient="horizontal").grid(
-            row=2, column=0, columnspan=3, sticky="ew", padx=6, pady=(8, 4))
-        ttk.Label(setup, text="Best accuracy — teach owscout your in-game portraits:",
-                  foreground="#333").grid(row=3, column=0, columnspan=3, padx=6, sticky="w")
-        self.learn_btn = ttk.Button(setup, text="⭐ Learn heroes from a replay…",
+        self.sheet_btn.pack(side="left", padx=(0, 6))
+        ttk.Button(r1, text="Check refs", command=self._verify_refs).pack(side="left", padx=6)
+        ttk.Label(adv, text="Teach owscout your in-game portraits for best accuracy:",
+                  foreground="#333").pack(anchor="w", pady=(6, 2))
+        r2 = ttk.Frame(adv)
+        r2.pack(fill="x", pady=2)
+        self.learn_btn = ttk.Button(r2, text="⭐ Learn heroes from a replay…",
                                     command=self._open_learn)
-        self.learn_btn.grid(row=4, column=0, columnspan=2, padx=6, pady=(2, 8), sticky="w")
-        ttk.Button(setup, text="➕ Add new hero",
-                   command=self._add_hero).grid(row=4, column=2, padx=6, pady=(2, 8), sticky="w")
-        # The distribution path: a curator's whole learned library in one file, so
-        # a new user's setup is calibrate -> import -> capture, never a two-hour
-        # learning session per machine.
-        ttk.Button(setup, text="📦 Import hero library…",
-                   command=self._import_refs).grid(row=5, column=0, padx=6, pady=(0, 8), sticky="w")
-        ttk.Button(setup, text="Export my library…",
-                   command=self._export_refs).grid(row=5, column=1, padx=6, pady=(0, 8), sticky="w")
+        self.learn_btn.pack(side="left", padx=(0, 6))
+        ttk.Button(r2, text="➕ Add new hero", command=self._add_hero).pack(side="left", padx=6)
+        r3 = ttk.Frame(adv)
+        r3.pack(fill="x", pady=2)
+        ttk.Button(r3, text="📦 Import hero library…",
+                   command=self._import_refs).pack(side="left", padx=(0, 6))
+        ttk.Button(r3, text="Export my library…",
+                   command=self._export_refs).pack(side="left", padx=6)
 
         # --- 2. capture -----------------------------------------------------
-        cap = ttk.LabelFrame(self.root, text="2. Capture a replay (Master division)")
+        # Laid out as stacked rows of nested frames (not one shared grid): an
+        # expanding widget in a shared grid column shoved the right-hand controls
+        # off-screen when the window widened. Here each row owns its packing, so
+        # controls stay put at any width.
+        cap = ttk.LabelFrame(self.root, text="Scout a replay (Master division)")
         cap.pack(fill="x", **pad)
-        # Team filter: scouting is done one opponent at a time, and 40 codes across
-        # every Master team is a lot to read to find the four you care about.
-        # Region and Team share one row: both narrow the same list, and a separate
-        # row for each pushed the Log frame off the bottom of the window.
-        ttk.Label(cap, text="Region").grid(row=0, column=0, padx=6, pady=4, sticky="w")
+
+        # Filters: pick one opponent at a time - 40 codes across every Master team
+        # is a lot to scan for the four you care about.
+        filt = ttk.Frame(cap)
+        filt.pack(fill="x", padx=6, pady=(6, 2))
+        ttk.Label(filt, text="Opponent").pack(side="left")
+        self.team_filter_var = tk.StringVar(value=ALL_TEAMS)
+        self.team_filter_box = ttk.Combobox(filt, textvariable=self.team_filter_var,
+                                            width=22, state="readonly")
+        self.team_filter_box.pack(side="left", padx=(4, 12))
+        self.team_filter_box.bind("<<ComboboxSelected>>",
+                                  lambda _e: self._apply_code_filter())
+        ttk.Label(filt, text="Region").pack(side="left")
         self.region_var = tk.StringVar(value=ALL_REGIONS)
-        region_box = ttk.Combobox(cap, textvariable=self.region_var, width=14,
+        region_box = ttk.Combobox(filt, textvariable=self.region_var, width=12,
                                   state="readonly", values=[ALL_REGIONS, *REGIONS])
-        region_box.grid(row=0, column=1, padx=6, pady=4, sticky="w")
+        region_box.pack(side="left", padx=(4, 12))
         # Region changes WHICH codes are fetched, so it re-queries rather than
         # filtering the cached rows (the team list depends on it).
         region_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
-        ttk.Label(cap, text="Team").grid(row=0, column=2, padx=6, pady=4, sticky="e")
-        self.team_filter_var = tk.StringVar(value=ALL_TEAMS)
-        self.team_filter_box = ttk.Combobox(cap, textvariable=self.team_filter_var,
-                                            width=22, state="readonly")
-        self.team_filter_box.grid(row=0, column=3, padx=6, pady=4, sticky="w")
-        self.team_filter_box.bind("<<ComboboxSelected>>",
-                                  lambda _e: self._apply_code_filter())
-        ttk.Label(cap, text="Code").grid(row=1, column=0, padx=6, pady=4, sticky="w")
-        self.code_var = tk.StringVar()
-        self.code_box = ttk.Combobox(cap, textvariable=self.code_var, width=34, state="readonly")
-        self.code_box.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
-        self.code_box.bind("<<ComboboxSelected>>", lambda _e: self._on_code_selected())
         self.hide_claimed = tk.BooleanVar(value=True)
-        ttk.Checkbutton(cap, text="hide already-scouted", variable=self.hide_claimed,
-                        command=self._apply_code_filter).grid(
-            row=1, column=2, columnspan=2, padx=6, sticky="w")
-        ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=2, column=2, padx=2)
-        ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=2, column=3, padx=2)
-        # Left team: pick by clicking whichever team is on the LEFT of the HUD.
-        ttk.Label(cap, text="Left team").grid(row=2, column=0, padx=6, pady=4, sticky="nw")
+        ttk.Checkbutton(filt, text="hide already-scouted", variable=self.hide_claimed,
+                        command=self._apply_code_filter).pack(side="left")
+
+        # Replay picker: the combobox takes all the slack; the buttons stay pinned.
+        crow = ttk.Frame(cap)
+        crow.pack(fill="x", padx=6, pady=2)
+        ttk.Label(crow, text="Replay").pack(side="left")
+        self.code_var = tk.StringVar()
+        self.code_box = ttk.Combobox(crow, textvariable=self.code_var, state="readonly")
+        self.code_box.pack(side="left", fill="x", expand=True, padx=(4, 6))
+        self.code_box.bind("<<ComboboxSelected>>", lambda _e: self._on_code_selected())
+        ttk.Button(crow, text="↻", width=3, command=self._refresh_codes).pack(side="left", padx=2)
+        ttk.Button(crow, text="Copy code", command=self._copy_code).pack(side="left", padx=2)
+
+        # Left team: click whichever team is on the LEFT of the HUD (or leave it to
+        # auto-detect).
+        lrow = ttk.Frame(cap)
+        lrow.pack(fill="x", padx=6, pady=2)
+        ttk.Label(lrow, text="Left team on the HUD").pack(side="left")
         self.side_a_var = tk.StringVar()
-        self.team_frame = ttk.Frame(cap)
-        self.team_frame.grid(row=2, column=1, columnspan=3, padx=6, pady=4, sticky="w")
-        self.roster_lbl = ttk.Label(cap, text="(pick a code to see the teams)",
+        self.team_frame = ttk.Frame(lrow)
+        self.team_frame.pack(side="left", padx=8)
+        self.roster_lbl = ttk.Label(cap, text="(pick a replay to see the teams)",
                                     foreground="#555", justify="left")
-        self.roster_lbl.grid(row=3, column=1, columnspan=3, padx=6, pady=2, sticky="w")
-        ttk.Label(cap, text="Keys").grid(row=4, column=0, padx=6, pady=4, sticky="w")
-        self.keys_lbl = ttk.Label(cap, text="", foreground="#555")
-        self.keys_lbl.grid(row=4, column=1, padx=6, pady=4, sticky="w")
-        ttk.Button(cap, text="Change keys…", command=self._open_keybinds).grid(
-            row=4, column=2, columnspan=2, padx=2, pady=4, sticky="w")
+        self.roster_lbl.pack(anchor="w", padx=(74, 6))
+
+        krow = ttk.Frame(cap)
+        krow.pack(fill="x", padx=6, pady=2)
+        ttk.Label(krow, text="Keys").pack(side="left")
+        self.keys_lbl = ttk.Label(krow, text="", foreground="#555")
+        self.keys_lbl.pack(side="left", padx=8)
+        ttk.Button(krow, text="Change keys…", command=self._open_keybinds).pack(side="right")
+
         self.cap_btn = ttk.Button(cap, text="Start hotkey capture", command=self._capture)
-        self.cap_btn.grid(row=5, column=1, padx=6, pady=6, sticky="w")
+        self.cap_btn.pack(anchor="w", padx=6, pady=(6, 4))
+
         # Code freshness. A stale faceit DB silently hides every code published
         # since the last sync, which looks identical to "no new matches".
-        self.freshness_lbl = ttk.Label(cap, text="", foreground="#555")
-        self.freshness_lbl.grid(row=6, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="w")
-        ttk.Button(cap, text="Sync codes from FACEIT", command=self._sync_faceit).grid(
-            row=6, column=3, padx=2, pady=(0, 6), sticky="e")
-        # First-run bootstrap is hundreds of rate-limited requests. Without a bar
-        # the window just sits there for minutes and reads as a hang, so this is
-        # shown for any long job and hidden the rest of the time.
-        self.progress = ttk.Progressbar(cap, mode="determinate", maximum=100)
-        self.progress.grid(row=7, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="ew")
-        self.progress_lbl = ttk.Label(cap, text="", foreground="#555")
-        self.progress_lbl.grid(row=7, column=3, padx=6, pady=(0, 6), sticky="w")
-        self.progress.grid_remove()
-        self.progress_lbl.grid_remove()
+        frow = ttk.Frame(cap)
+        frow.pack(fill="x", padx=6, pady=(0, 6))
+        self.freshness_lbl = ttk.Label(frow, text="", foreground="#555")
+        self.freshness_lbl.pack(side="left")
+        ttk.Button(frow, text="Sync codes from FACEIT",
+                   command=self._sync_faceit).pack(side="right")
+
+        # First-run bootstrap / download is a long job; without a bar the window
+        # reads as hung. The whole row is hidden until a long job runs.
+        self._progress_row = ttk.Frame(cap)
+        self.progress = ttk.Progressbar(self._progress_row, mode="determinate", maximum=100)
+        self.progress.pack(side="left", fill="x", expand=True)
+        self.progress_lbl = ttk.Label(self._progress_row, text="", foreground="#555")
+        self.progress_lbl.pack(side="left", padx=6)
         self._progress_started = 0.0
-        cap.columnconfigure(1, weight=1)
 
         # --- 3. review + publish -------------------------------------------
-        pub = ttk.LabelFrame(self.root, text="3. Review, then publish")
+        pub = ttk.LabelFrame(self.root, text="Review & publish")
         pub.pack(fill="x", **pad)
-        ttk.Button(pub, text="📋 Review captured maps…",
-                   command=self._open_review).grid(row=0, column=0, padx=6, pady=6, sticky="w")
-        ttk.Button(pub, text="Publish my captures →",
-                   command=self._publish).grid(row=0, column=1, padx=6, pady=6, sticky="w")
+        brow = ttk.Frame(pub)
+        brow.pack(fill="x", padx=6, pady=6)
+        ttk.Button(brow, text="📋 Review captured maps…",
+                   command=self._open_review).pack(side="left", padx=(0, 6))
+        ttk.Button(brow, text="Publish my captures →",
+                   command=self._publish).pack(side="left", padx=6)
         # Whose contribution this is. One file per contributor is what keeps two
         # people publishing at once from overwriting each other.
-        ttk.Label(pub, text="as").grid(row=0, column=2, padx=(6, 2), pady=6, sticky="e")
+        arow = ttk.Frame(pub)
+        arow.pack(fill="x", padx=6, pady=(0, 4))
+        ttk.Label(arow, text="Publish as").pack(side="left")
         self.contributor_var = tk.StringVar(
             value=os.getenv("OWSCOUT_CONTRIBUTOR") or os.getenv("USERNAME") or "operator")
-        ttk.Entry(pub, textvariable=self.contributor_var, width=14).grid(
-            row=0, column=3, padx=(0, 6), pady=6, sticky="w")
-        ttk.Button(pub, text="Sync settings…", command=self._open_sync_settings).grid(
-            row=0, column=4, padx=(0, 6), pady=6, sticky="w")
+        ttk.Entry(arow, textvariable=self.contributor_var, width=16).pack(side="left", padx=6)
+        ttk.Button(arow, text="Sync settings…",
+                   command=self._open_sync_settings).pack(side="left", padx=6)
         ttk.Label(pub, text="Captures are drafts until you review + finalize them; "
                             "only finalized maps are exported.",
-                  foreground="#555").grid(row=1, column=0, columnspan=2, padx=6, sticky="w")
+                  foreground="#555").pack(anchor="w", padx=6, pady=(0, 6))
 
-        # --- log ------------------------------------------------------------
-        logf = ttk.LabelFrame(self.root, text="Log")
+        # --- status + activity ---------------------------------------------
+        # One friendly status line is always visible; the full activity log is a
+        # lighter panel below it (not a black console) so it informs without
+        # alarming. Raw file paths sit under Advanced, collapsed.
+        self.status_lbl = ttk.Label(self.root, text="Ready.", anchor="w",
+                                    foreground="#222", font=("Segoe UI", 10, "bold"))
+        self.status_lbl.pack(fill="x", padx=14, pady=(2, 0))
+        logf = ttk.LabelFrame(self.root, text="Activity")
         logf.pack(fill="both", expand=True, **pad)
-        self.log = tk.Text(logf, height=10, wrap="word", state="disabled",
-                           bg="#111", fg="#ddd", font=("Consolas", 9))
+        self.log = tk.Text(logf, height=7, wrap="word", state="disabled",
+                           bg="#f6f6f6", fg="#333", font=("Consolas", 9),
+                           relief="flat", borderwidth=1, highlightthickness=0)
         self.log.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(logf, command=self.log.yview)
         sb.pack(side="right", fill="y")
         self.log.configure(yscrollcommand=sb.set)
+
+        dbwrap = collapsible(self.root, "Advanced: file locations")
+        for i, (lbl, var) in enumerate((("owscout DB", self.db_var),
+                                        ("faceit DB", self.faceit_var))):
+            ttk.Label(dbwrap, text=lbl, width=11).grid(row=i, column=0, sticky="w", padx=6, pady=3)
+            ttk.Entry(dbwrap, textvariable=var).grid(row=i, column=1, sticky="ew", padx=6, pady=3)
+        dbwrap.columnconfigure(1, weight=1)
 
         self._stop_capture: Optional[Callable[[], None]] = None
         self._code_rows: list[Any] = []
@@ -315,8 +372,13 @@ class _App:  # pragma: no cover - GUI runtime only
         self.q.put(lambda: self._write(msg))
 
     def _write(self, msg: str) -> None:
+        line = msg.rstrip()
+        # The status line mirrors the newest message so the important thing is
+        # visible at a glance without reading the whole activity panel.
+        if line and hasattr(self, "status_lbl"):
+            self.status_lbl.configure(text=line)
         self.log.configure(state="normal")
-        self.log.insert("end", msg.rstrip() + "\n")
+        self.log.insert("end", line + "\n")
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -535,8 +597,7 @@ class _App:  # pragma: no cover - GUI runtime only
         def show() -> None:
             self.progress.configure(value=0)
             self.progress_lbl.configure(text=label)
-            self.progress.grid()
-            self.progress_lbl.grid()
+            self._progress_row.pack(fill="x", padx=6, pady=(0, 6))
         self.q.put(show)
 
     def _progress_step(self, done: int, total: int) -> None:
@@ -563,8 +624,7 @@ class _App:  # pragma: no cover - GUI runtime only
 
     def _progress_end(self) -> None:
         def hide() -> None:
-            self.progress.grid_remove()
-            self.progress_lbl.grid_remove()
+            self._progress_row.pack_forget()
         self.q.put(hide)
 
     def _is_claimed(self, row: Any) -> bool:
