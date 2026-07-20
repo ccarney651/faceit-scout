@@ -11,6 +11,8 @@ on:
     - cron: "17 20 * * *"
     - cron: "17 21 * * *"
   workflow_dispatch: {}         # lets you run it on demand from the Actions tab
+  repository_dispatch:
+    types: [refresh]            # the site's "Refresh now" button, via the worker
   push:
     paths:
       - "data/captures/**"      # a contribution upload rebuilds the site in ~2min

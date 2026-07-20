@@ -27,10 +27,47 @@
 const NAME_RE = /^[a-z0-9_-]{2,24}$/;
 const MAX_BYTES = 5 * 1024 * 1024;
 const MIN_INTERVAL_MS = 30_000;
+const REFRESH_COOLDOWN_MS = 10 * 60_000;   // a site rebuild takes ~2 minutes
 const FORMAT = 1;
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (request.method === "OPTIONS") return json(204, {});   // CORS preflight
+
+    // /refresh - anyone may ask the site to pull new FACEIT matches NOW rather
+    // than waiting for the 9pm build. It fires a repository_dispatch (which the
+    // existing Contents-write token can do - no extra permission) and the
+    // workflow does the real work. Globally cooled down: a build takes ~2min,
+    // so more often than that is pure noise, and the cooldown is the whole
+    // abuse story for an open trigger.
+    if (url.pathname === "/refresh") {
+      if (request.method !== "POST") return json(405, { error: "POST to refresh" });
+      const last = Number((await env.NAMES.get("_refresh_at")) || 0);
+      const waitMs = REFRESH_COOLDOWN_MS - (Date.now() - last);
+      if (waitMs > 0) {
+        return json(429, {
+          error: `a refresh is already running or just ran - try again in ${Math.ceil(waitMs / 1000)}s`,
+          retry_after: Math.ceil(waitMs / 1000),
+        });
+      }
+      const res = await fetch(`https://api.github.com/repos/${env.REPO}/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "owscout-upload-worker",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ event_type: "refresh" }),
+      });
+      if (res.status !== 204) {
+        return json(502, { error: `could not start the refresh (HTTP ${res.status})` });
+      }
+      await env.NAMES.put("_refresh_at", String(Date.now()));
+      return json(200, { started: true });
+    }
+
     if (request.method !== "POST") {
       return json(405, { error: "POST a contribution with X-Owscout-Name and X-Owscout-Token" });
     }
@@ -113,6 +150,11 @@ async function sha256hex(s) {
 function json(status, obj) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      // The dashboard calls /refresh from the Pages origin.
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token",
+    },
   });
 }

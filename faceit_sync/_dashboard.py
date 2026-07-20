@@ -1653,7 +1653,30 @@ function show(id){
 function updateHeader(){
   const s=D().summary;
   document.getElementById('title').textContent=s.championship;
-  document.getElementById('subtitle').textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`+(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
+  const sub=document.getElementById('subtitle');
+  sub.textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`+(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
+  // On-demand refresh: the page is static, so the button asks the upload worker
+  // to start a rebuild - which pulls new FACEIT matches, re-merges every
+  // contribution and republishes. ~2 minutes, then reload.
+  if(DATA.refresh_endpoint && !document.getElementById('refreshbtn')){
+    const b=el(`<button class="sortbtn" id="refreshbtn" type="button" style="margin-left:10px">Fetch new matches</button>`);
+    b.onclick=async()=>{
+      b.disabled=true; const was=b.textContent; b.textContent='starting…';
+      try{
+        const r=await fetch(DATA.refresh_endpoint,{method:'POST'});
+        const j=await r.json().catch(()=>({}));
+        if(r.ok){
+          b.textContent='building - reload in ~2 min';
+        } else {
+          b.textContent=j.error||'could not start';
+          setTimeout(()=>{b.textContent=was;b.disabled=false;}, 6000);
+        }
+      }catch(e){
+        b.textContent='offline'; setTimeout(()=>{b.textContent=was;b.disabled=false;},6000);
+      }
+    };
+    sub.appendChild(b);
+  }
 }
 function setDivision(id){
   CURRENT_VIEW=id; recomputeDivision(); updateHeader();

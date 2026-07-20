@@ -38,9 +38,19 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
 
     assert count == 1
     assert doc.startswith("<!doctype html>")
-    # No external resource references (CSP/offline safe).
-    assert "http://" not in doc and "https://" not in doc
+    # No external resource LOADS: the page must render completely offline, with
+    # every asset inlined. Tested precisely rather than by banning the string
+    # "https://" outright, because the refresh button legitimately holds an
+    # endpoint URL - a user-initiated fetch, not a resource the page loads.
     assert "<script src" not in doc and "<link" not in doc
+    assert 'src="http' not in doc and "src='http" not in doc
+    assert "url(http" not in doc and "@import" not in doc
+    # ...and the only outbound URLs are the ones we intend.
+    urls = {u.rstrip('",;)') for u in re.findall(r"https?://[^\s\"'<>]+", doc)}
+    allowed_hosts = {"owscout-upload.owscout.workers.dev"}
+    external = {u for u in urls
+                if u.split("/")[2] not in allowed_hosts} if urls else set()
+    assert not external, f"unexpected external URLs in the dashboard: {external}"
 
     # Embedded data parses back to JSON and reflects the ingest.
     # (DATA is emitted on a single line, so match without DOTALL.)
