@@ -1478,9 +1478,16 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         self.listbox.pack(fill="y", expand=True)
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._show_selected())
 
-        self.detail = tk.Text(body, wrap="word", state="disabled", bg="#111", fg="#ddd",
-                              font=("Consolas", 10))
+        self.detail = tk.Text(body, wrap="word", state="disabled", bg="#f6f6f6", fg="#222",
+                              font=("Consolas", 10), relief="flat", borderwidth=1,
+                              highlightthickness=0, padx=8, pady=6)
         self.detail.pack(side="left", fill="both", expand=True, padx=(10, 0))
+        # Colour tags so a misread is impossible to miss in Review: the whole job
+        # here is spotting the comps the matcher wasn't sure about.
+        self.detail.tag_configure("hdr", font=("Segoe UI", 11, "bold"), foreground="#111")
+        self.detail.tag_configure("side", font=("Consolas", 10, "bold"), foreground="#0a7d3b")
+        self.detail.tag_configure("muted", foreground="#777")
+        self.detail.tag_configure("warn", foreground="#c0392b")
 
         # Fix a misread on the selected map — replaces a hero across a side.
         hero_list = sorted(self.name_to_guid)
@@ -1618,23 +1625,31 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
             return
         with self._db() as db:
             comps = db.map_side_comps(d.id)
-        lines = [f"{d.demo_code or '—'}  ·  {d.map_name or '?'}",
-                 f"LEFT (a): {d.side_a or '?'}    RIGHT (b): {d.side_b or '?'}", ""]
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+
+        def put(text: str, tag: str = "") -> None:
+            self.detail.insert("end", text + "\n", (tag,) if tag else ())
+
+        put(f"{d.demo_code or '—'}  ·  {d.map_name or '?'}", "hdr")
+        put(f"LEFT (a): {d.side_a or '?'}     RIGHT (b): {d.side_b or '?'}", "muted")
+        put("")
         for side, label in (("a", d.side_a), ("b", d.side_b)):
-            lines.append(f"— {label or side.upper()} —")
+            put(f"— {label or side.upper()} —", "side")
             rows = comps.get(side) or []
             if not rows:
-                lines.append("   (no comps)")
+                put("   (no comps)", "muted")
             for names, n, resolved, sub, rnd, conf in rows:
+                low = conf is not None and conf < 0.62
                 flag = "" if resolved else "  [unresolved]"
-                if conf is not None and conf < 0.62:
-                    flag += f"  ⚠ low conf {conf:.2f}"
+                if low:
+                    flag += f"  ! low confidence {conf:.2f}"
                 tags = " ".join(t for t in (f"R{rnd}" if rnd else "",
                                             f"[{sub}]" if sub else "") if t)
                 tags = (tags + " ") if tags else ""
-                lines.append(f"   {tags}x{n}: {names}{flag}")
-            lines.append("")
-        self._set_detail("\n".join(lines))
+                put(f"   {tags}x{n}: {names}{flag}", "warn" if (low or not resolved) else "")
+            put("")
+        self.detail.configure(state="disabled")
 
     def _finalize(self) -> None:
         self._finalize_many(self._selected_all())
