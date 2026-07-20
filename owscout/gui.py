@@ -424,13 +424,35 @@ class _App:  # pragma: no cover - GUI runtime only
 
     def _calibrate(self) -> None:
         from tkinter import messagebox
-        if not messagebox.askyesno(
-            "Recalibrate ROI boxes?",
-            "This starts a NEW calibration and DETACHES every hero you've learned "
-            "from the current profile — you'd have to learn them all again.\n\n"
-            "You only need this once, or after a HUD/resolution change. Continue?",
-            icon="warning", default="no", parent=self.root):
-            self._emit("calibrate: cancelled (your learned heroes are untouched).")
+        # First calibration or a redo? The redo warning (it detaches learned
+        # heroes) is alarming and simply wrong to show someone who has not learned
+        # any yet, so it only appears once a profile already exists.
+        already = False
+        try:
+            with self._open_db() as db:
+                already = db.latest_active_profile("default") is not None
+        except Exception:  # noqa: BLE001 - unknown -> treat as first run
+            already = False
+        if already:
+            ok = messagebox.askyesno(
+                "Re-calibrate to your screen?",
+                "You're already calibrated. Re-calibrating re-detects the capture "
+                "boxes and DETACHES every hero you've learned, so you'd re-learn "
+                "them. Only needed after a screen-resolution or HUD change.\n\n"
+                "Continue?",
+                icon="warning", default="no", parent=self.root)
+        else:
+            ok = messagebox.askyesno(
+                "Calibrate to your screen",
+                "This is the one-time setup: it teaches owscout where the hero "
+                "portraits sit on YOUR screen.\n\n"
+                "First, have Overwatch open on a replay with the row of 10 hero "
+                "portraits showing along the top. Then continue — it takes about a "
+                "minute.",
+                default="yes", parent=self.root)
+        if not ok:
+            self._emit("calibrate: cancelled" +
+                       (" (your learned heroes are untouched)." if already else "."))
             return
         from .calibrate import default_frame_dir, run_calibration
         for msg in (
