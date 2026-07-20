@@ -1661,37 +1661,120 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
 
 
 class _CaptureOverlay:  # pragma: no cover - GUI runtime only
-    """A small always-on-top overlay shown during capture, so the operator sees
-    what was captured (and the hotkey legend) without alt-tabbing out of OW. Works
-    when OW runs windowed/borderless (an exclusive-fullscreen game hides it)."""
+    """An always-on-top status panel shown during capture, so the operator always
+    knows WHERE THEY ARE (round, sub-map, snapshot count, who attacks) and what the
+    last snapshot read — without alt-tabbing out of OW. Works when OW runs
+    windowed/borderless (an exclusive-fullscreen game hides it).
+
+    The capture core only emits text; rather than change that tested code, the
+    panel keeps a little parsed state from the well-known message shapes and
+    degrades to just showing the latest line for anything it doesn't recognise.
+    """
+
+    BG = "#0b0e14"
+    CARD = "#141a24"
+    LINE = "#1e2836"
+    ACCENT = "#5cc8ff"
+    MUTED = "#8493a8"
+    OK = "#74e08c"
 
     def __init__(self, app: "_App", binds: dict[str, str]) -> None:
         tk = app.tk
+        self._tk = tk
         self.win = tk.Toplevel(app.root)
         self.win.overrideredirect(True)               # no title bar / chrome
         self.win.attributes("-topmost", True)
         try:
-            self.win.attributes("-alpha", 0.88)
+            self.win.attributes("-alpha", 0.94)
         except Exception:  # noqa: BLE001 - alpha unsupported on some platforms
             pass
-        self.win.configure(bg="#0a0a0a")
+        self.win.configure(bg=self.BG)
         sw = self.win.winfo_screenwidth()
-        self.win.geometry(f"+{max(0, sw // 2 - 300)}+8")   # top-centre
-        legend = f"{_keys_summary(binds)}   ESC done"
-        tk.Label(self.win, text="● OW Scout capturing", bg="#0a0a0a", fg="#6cf",
-                 font=("Segoe UI", 10, "bold")).pack(padx=16, pady=(6, 0), anchor="w")
-        tk.Label(self.win, text=legend, bg="#0a0a0a", fg="#9aa",
-                 font=("Consolas", 9)).pack(padx=16, anchor="w")
+        self.win.geometry(f"620x182+{max(0, sw // 2 - 310)}+8")   # top-centre
+
+        self._round = 1
+        self._submap = "—"
+        self._snaps = 0
+
+        # Header: title + match.
+        head = tk.Frame(self.win, bg=self.BG)
+        head.pack(fill="x", padx=16, pady=(8, 2))
+        tk.Label(head, text="● OW Scout — capturing", bg=self.BG, fg=self.ACCENT,
+                 font=("Segoe UI", 11, "bold")).pack(side="left")
+        self.match_lbl = tk.Label(head, text="", bg=self.BG, fg=self.MUTED,
+                                  font=("Segoe UI", 9))
+        self.match_lbl.pack(side="left", padx=10)
+
+        # State strip: three big stat cards you can read at a glance mid-replay.
+        strip = tk.Frame(self.win, bg=self.BG)
+        strip.pack(fill="x", padx=12, pady=4)
+        self._round_val = self._stat(strip, "ROUND", "1")
+        self._sub_val = self._stat(strip, "SUB-MAP", "—")
+        self._snap_val = self._stat(strip, "SNAPSHOTS", "0")
+
+        # Last action / comp read.
         self.status = tk.Label(self.win,
-                               text=f"ready — press {binds['snapshot'].upper()} at key moments",
-                               bg="#0a0a0a", fg="#fff", font=("Consolas", 11, "bold"),
-                               justify="left", anchor="w")
-        self.status.pack(padx=16, pady=(2, 8), anchor="w")
+                               text=f"Ready — press {binds['snapshot'].upper()} at each key moment",
+                               bg=self.BG, fg="#e6edf6", font=("Segoe UI", 11, "bold"),
+                               justify="left", anchor="w", wraplength=590)
+        self.status.pack(fill="x", padx=16, pady=(2, 4), anchor="w")
+
+        # Key legend, one clear row.
+        legend = "   ".join((
+            f"{binds['snapshot'].upper()} snapshot",
+            f"{binds['round'].upper()} round",
+            f"{binds['submap'].upper()} sub-map",
+            f"{binds['attack'].upper()} attacks",
+            f"{binds['undo'].upper()} undo",
+            "ESC done",
+        ))
+        tk.Label(self.win, text=legend, bg=self.BG, fg=self.MUTED,
+                 font=("Consolas", 9)).pack(fill="x", padx=16, pady=(0, 8), anchor="w")
+
+    def _stat(self, parent: Any, caption: str, value: str) -> Any:
+        tk = self._tk
+        cell = tk.Frame(parent, bg=self.CARD)
+        cell.pack(side="left", expand=True, fill="x", padx=4, ipady=4)
+        tk.Label(cell, text=caption, bg=self.CARD, fg=self.MUTED,
+                 font=("Segoe UI", 8, "bold")).pack(pady=(4, 0))
+        val = tk.Label(cell, text=value, bg=self.CARD, fg="#ffffff",
+                       font=("Segoe UI", 16, "bold"))
+        val.pack(pady=(0, 2))
+        return val
 
     def update(self, msg: str) -> None:
         m = msg.strip()
-        if m:
-            self.status.configure(text=m[:120])
+        if not m:
+            return
+        # Parse the well-known shapes to keep the state strip live. Unknown lines
+        # still show in the action line, so nothing is ever swallowed.
+        try:
+            if m.startswith("HOTKEY capture ready for ") and "(" in m:
+                mid = m[len("HOTKEY capture ready for "):]
+                mapname = mid.split(" (", 1)[0]
+                teams = mid.split("(", 1)[1].split(")", 1)[0]
+                self.match_lbl.configure(text=f"{mapname} · {teams}")
+            elif m.startswith("round -> "):
+                self._round = int(m[len("round -> "):].split()[0])
+                self._round_val.configure(text=str(self._round))
+            elif m.startswith("sub-map -> "):
+                self._submap = m[len("sub-map -> "):].split("  ")[0].strip()
+                self._sub_val.configure(text=self._submap or "—")
+            elif m.startswith("snap "):
+                # "snap 3 (R2): heroes..."
+                self._snaps = int(m.split()[1])
+                self._snap_val.configure(text=str(self._snaps))
+                if "(R" in m:
+                    self._round = int(m.split("(R", 1)[1].split(")", 1)[0])
+                    self._round_val.configure(text=str(self._round))
+                self.status.configure(text="✓ " + m, fg=self.OK)
+                return
+            elif m.startswith("UNDID"):
+                self.status.configure(text="↶ " + m, fg="#ffd479")
+                return
+        except Exception:  # noqa: BLE001 - a parse miss must never break capture
+            pass
+        self.status.configure(text=m, fg="#e6edf6")
 
     def close(self) -> None:
         try:
