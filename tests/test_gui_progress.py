@@ -2,7 +2,38 @@
 
 from __future__ import annotations
 
-from owscout.gui import _eta_text
+import os
+import sqlite3
+
+from owscout.gui import _eta_text, _faceit_is_empty
+
+
+def test_missing_faceit_db_reads_as_empty_without_creating_it(tmp_path) -> None:
+    """Fresh machine: the check decides bootstrap. It must say 'empty' AND not
+    create the file - a plain connect would, and an empty file then looks
+    'present' to the snapshot-vs-crawl decision downstream."""
+    missing = str(tmp_path / "faceit.sqlite3")
+    assert _faceit_is_empty(missing) is True
+    assert not os.path.exists(missing)
+
+
+def test_populated_faceit_db_is_not_empty(tmp_path) -> None:
+    p = str(tmp_path / "f.sqlite3")
+    con = sqlite3.connect(p)
+    con.execute("CREATE TABLE championships(id TEXT)")
+    con.execute("INSERT INTO championships(id) VALUES ('c1')")
+    con.commit()
+    con.close()
+    assert _faceit_is_empty(p) is False
+
+
+def test_file_with_no_championships_reads_as_empty(tmp_path) -> None:
+    p = str(tmp_path / "f.sqlite3")
+    con = sqlite3.connect(p)
+    con.execute("CREATE TABLE championships(id TEXT)")  # table but no rows
+    con.commit()
+    con.close()
+    assert _faceit_is_empty(p) is True
 
 
 def test_position_is_always_shown() -> None:

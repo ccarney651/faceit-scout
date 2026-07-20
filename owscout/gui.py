@@ -88,6 +88,18 @@ def _faceit_freshness(faceit_db_path: str) -> tuple[str, bool]:
             + (" - sync to pick up newer codes" if stale else ""), stale)
 
 
+def _faceit_is_empty(faceit_db_path: str) -> bool:
+    """True if this is a fresh machine: the faceit DB is missing or has no
+    championships yet. Read-only, so it never CREATES the file (a plain connect
+    would, and an empty file then looks 'present but empty' to everything else)."""
+    import sqlite3
+    try:
+        with sqlite3.connect(f"file:{faceit_db_path}?mode=ro", uri=True) as conn:
+            return conn.execute("SELECT COUNT(*) FROM championships").fetchone()[0] == 0
+    except Exception:  # noqa: BLE001 - missing file / no such table -> treat as empty
+        return True
+
+
 def _bundled(name: str) -> Optional[str]:
     """Path to a resource shipped INSIDE the app, or None if absent.
 
@@ -538,6 +550,17 @@ class _App:  # pragma: no cover - GUI runtime only
             self.progress_lbl.configure(text=text)
         self.q.put(paint)
 
+    def _download_progress(self, done: int, total: int) -> None:
+        pct = (done / total * 100) if total else 0
+        mb = done / 1024 / 1024
+        label = (f"{mb:.1f} of {total / 1024 / 1024:.1f} MB" if total
+                 else f"{mb:.1f} MB")
+
+        def paint() -> None:
+            self.progress.configure(value=pct)
+            self.progress_lbl.configure(text=label)
+        self.q.put(paint)
+
     def _progress_end(self) -> None:
         def hide() -> None:
             self.progress.grid_remove()
@@ -558,13 +581,39 @@ class _App:  # pragma: no cover - GUI runtime only
             from faceit_sync.client import FaceitClient
             from faceit_sync.db import Database as FaceitDb
             from faceit_sync.sync import SyncEngine
-            with FaceitDb(self.faceit_var.get()) as fdb:
+            from .contribute import fetch_faceit_snapshot
+            faceit_path = self.faceit_var.get()
+
+            # FIRST RUN, fast path: download the database the site already built
+            # last night instead of re-crawling ~2,100 rate-limited FACEIT calls
+            # (which is minutes of 429 backoffs). The download must happen BEFORE
+            # opening the DB - it atomically replaces the file, which an open
+            # connection would block on Windows.
+            if _faceit_is_empty(faceit_path):
+                self._emit("sync: FIRST RUN - downloading the current match "
+                           "database from the site (a few seconds) ...")
+                self._progress_begin("downloading current data ...")
+                try:
+                    ok = fetch_faceit_snapshot(faceit_path,
+                                               progress=self._download_progress)
+                finally:
+                    self._progress_end()
+                if ok:
+                    self._emit("sync: got the prebuilt database from the site - "
+                               "ready to scout. Click Sync again any time to top "
+                               "up with the very latest matches.")
+                    self.q.put(self._refresh_codes)
+                    return
+                self._emit("sync: site download unavailable - building from FACEIT "
+                           "directly. This one-time crawl takes a few minutes; the "
+                           "bar shows progress. Later syncs are quick.")
+
+            with FaceitDb(faceit_path) as fdb:
                 engine = SyncEngine(FaceitClient(), fdb)
-                # First run on a fresh machine: run_all() iterates championships
-                # ALREADY STORED, which on an empty database is none - the button
-                # would report "0 new" forever and the user would be stuck. Seed
-                # from the bundled match list first; transitive discovery does
-                # the rest (the same flow CI uses nightly).
+                # Download failed AND fresh: the keyless team-graph crawl needs
+                # seed matches to start (no stored teams -> nothing to enumerate),
+                # so prime it from the bundled list, then transitive discovery
+                # does the rest - the same flow CI uses nightly.
                 empty = fdb.conn.execute(
                     "SELECT COUNT(*) FROM championships").fetchone()[0] == 0
                 if empty:
@@ -575,10 +624,7 @@ class _App:  # pragma: no cover - GUI runtime only
                         return
                     refs = [ln.strip() for ln in open(seeds, encoding="utf-8")
                             if ln.strip() and not ln.startswith("#")]
-                    self._emit(f"sync: FIRST RUN - building the match database "
-                               f"from {len(refs)} seed matches. This one-time "
-                               "bootstrap takes a few minutes; the bar below "
-                               "shows how far along it is. Later syncs are quick.")
+                    self._emit(f"sync: seeding from {len(refs)} bundled matches ...")
                     self._progress_begin(f"match 0 of {len(refs)}")
                     try:
                         engine.run_matches(refs, progress=self._progress_step)

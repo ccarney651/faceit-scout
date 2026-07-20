@@ -13,9 +13,11 @@ downloads.
 3. Open Overwatch (windowed/borderless) with any replay on screen, then click
    **Calibrate** and drag the two boxes as prompted. When it finishes, the log
    says `pre-trained hero library loaded (104 refs)` — they are now trained.
-4. Click **Sync codes from FACEIT**. The first run builds the match database
-   from scratch — a progress bar shows position and a time estimate, typically a
-   few minutes. It only happens once; later syncs take seconds.
+4. Click **Sync codes from FACEIT**. The first run **downloads the current match
+   database from the site** (~1.3 MB, a few seconds) — it does not re-crawl
+   FACEIT. If the site is unreachable it falls back to building from FACEIT
+   directly, which is slow (a progress bar shows how far along). Later syncs top
+   up with the newest matches in seconds.
 5. Capture normally: pick a code, pick the left team, **Start hotkey capture**,
    F8 at key moments in the replay, ESC when done. Review → finalize.
 

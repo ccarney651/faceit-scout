@@ -112,6 +112,27 @@ jobs:
           # export reads owscout_comps.json from the repo root.
           faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
 
+      - name: Publish downloadable DB snapshot
+        run: |
+          # A fresh owscout.exe downloads THIS instead of re-crawling ~2,100
+          # rate-limited FACEIT calls (minutes of 429 backoffs) to rebuild what
+          # this job just built. VACUUM compacts; gzip mtime=0 keeps the output
+          # byte-identical when the data is unchanged, so quiet days don't churn.
+          python - <<'PY'
+          import gzip, os, sqlite3
+          snap = "docs/faceit.snapshot.sqlite3"
+          if os.path.exists(snap):
+              os.remove(snap)
+          con = sqlite3.connect("faceit.sqlite3")
+          con.execute("VACUUM INTO ?", (snap,))
+          con.close()
+          with open(snap, "rb") as src, \
+               gzip.GzipFile("docs/faceit.sqlite3.gz", "wb", compresslevel=9, mtime=0) as dst:
+              dst.write(src.read())
+          os.remove(snap)
+          print("snapshot:", os.path.getsize("docs/faceit.sqlite3.gz"), "bytes")
+          PY
+
       - name: Save database cache
         if: always()
         uses: actions/cache/save@v4
@@ -123,7 +144,7 @@ jobs:
         run: |
           git config user.name  "faceit-scout-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/index.html docs/captured.json
+          git add docs/index.html docs/captured.json docs/faceit.sqlite3.gz
           if git diff --cached --quiet; then
             echo "No changes — nothing to publish."
           else

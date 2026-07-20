@@ -615,6 +615,93 @@ def fetch_captured_games(url: str = DEFAULT_CAPTURED_FEED,
         return set()
 
 
+# The CI-built faceit database, published to the site next to captured.json.
+# A fresh install downloads THIS instead of re-crawling ~2,100 rate-limited
+# FACEIT calls to rebuild what CI already built last night. gzipped: 6.9MB -> ~1.3MB.
+DEFAULT_SNAPSHOT_URL = "https://ccarney651.github.io/faceit-scout/faceit.sqlite3.gz"
+
+
+def fetch_faceit_snapshot(
+    dest_path: str,
+    *,
+    url: str = DEFAULT_SNAPSHOT_URL,
+    timeout: float = 60.0,
+    session: Any = None,
+    progress: Any = None,
+) -> bool:
+    """Download the site's prebuilt faceit DB into ``dest_path``. True on success.
+
+    Never raises and never leaves a half-written DB in place: the download is
+    decompressed to a temp file beside the target, opened and sanity-checked
+    (it must be a real SQLite DB with the tables the code list needs), and only
+    then atomically moved into position. On ANY failure it returns False and the
+    caller falls back to crawling FACEIT from the bundled seed list, so a missing
+    or corrupt snapshot degrades to "slow" rather than "broken".
+
+    ``progress(done_bytes, total_bytes)`` is called during download when the
+    server sends a Content-Length; total is 0 when it does not.
+    """
+    import gzip
+    import os
+    import sqlite3
+    import tempfile
+
+    tmp = None
+    try:
+        if session is None:
+            import requests
+            session = requests.Session()
+        r = session.get(url, timeout=timeout, stream=True)
+        if r.status_code != 200:
+            log.info("snapshot unavailable (HTTP %s) - will crawl instead", r.status_code)
+            return False
+        total = int(r.headers.get("Content-Length") or 0)
+        chunks: list[bytes] = []
+        done = 0
+        for chunk in r.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            done += len(chunk)
+            if progress is not None:
+                try:
+                    progress(done, total)
+                except Exception:  # noqa: BLE001 - display must not break the download
+                    pass
+        raw = gzip.decompress(b"".join(chunks))
+
+        d = os.path.dirname(os.path.abspath(dest_path)) or "."
+        os.makedirs(d, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(suffix=".sqlite3", dir=d)
+        with os.fdopen(fd, "wb") as f:
+            f.write(raw)
+
+        # Prove it's the real thing before it can replace anything. A truncated
+        # or HTML-error-page "download" must never become the user's DB.
+        con = sqlite3.connect(tmp)
+        try:
+            if con.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                raise ValueError("snapshot failed integrity check")
+            for tbl in ("matches", "games", "teams", "championships"):
+                con.execute(f"SELECT 1 FROM {tbl} LIMIT 1")
+        finally:
+            con.close()
+
+        os.replace(tmp, dest_path)
+        tmp = None
+        log.info("faceit snapshot installed (%d bytes) from %s", len(raw), url)
+        return True
+    except Exception as exc:  # noqa: BLE001 - offline / corrupt is normal, not fatal
+        log.info("snapshot download failed (%s) - falling back to crawl", exc)
+        return False
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
 def contribution_files(directory: str | Path) -> list[Path]:
     """Contributor files in a stable, name-sorted order. Callers that need true
     submission order (which decides who owns a contested map) should order by
