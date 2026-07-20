@@ -896,7 +896,7 @@ class _App:  # pragma: no cover - GUI runtime only
             win.destroy()
 
         btns = ttk.Frame(win)
-        btns.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="w")
+        btns.grid(row=5, column=0, columnspan=2, padx=10, pady=10, sticky="w")
         ttk.Button(btns, text="Save", command=save).pack(side="left")
         ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="left", padx=8)
 
