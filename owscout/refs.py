@@ -885,25 +885,70 @@ def import_ref_bundle(
         out_dir = Path(refs_dir) / str(prof.id) / "imported"
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        # Resolution-aware import. HUD portraits scale with screen height, so refs
+        # learned at one resolution are the WRONG pixel size on another. Left as-is
+        # the matcher must down/upscale them AND - once a ref is bigger than the
+        # padded crop - loses its slide-to-align step, which is where most of the
+        # accuracy comes from (measured worst-slot 0.47 vs 0.70). So when the
+        # bundle's resolution differs, rescale each ref to THIS machine's scale on
+        # the way in; the phash is recomputed from the rescaled image so dedup and
+        # re-import stay correct.
+        src_res = manifest.get("profile") or {}
+        src_h = src_res.get("resolution_h")
+        scale = (prof.resolution_h / float(src_h)
+                 if src_h and prof.resolution_h and abs(src_h - prof.resolution_h) > 1
+                 else None)
+
+        _cv2: Any = None
+        _np: Any = None
+        if scale is not None:
+            try:
+                import numpy as np_mod
+                _cv2 = _import_cv2()
+                _np = np_mod
+            except Exception as exc:  # noqa: BLE001 - fall back to verbatim copy
+                log.warning("cannot rescale refs (%s); importing at bundle scale", exc)
+                scale = None
+
         added = skipped = 0
         for e in manifest.get("refs", []):
+            raw = zf.read(e["file"])
+            if scale is not None:
+                arr = _cv2.imdecode(_np.frombuffer(raw, _np.uint8), _cv2.IMREAD_COLOR)
+                if arr is not None:
+                    nh = max(1, round(arr.shape[0] * scale))
+                    nw = max(1, round(arr.shape[1] * scale))
+                    interp = _cv2.INTER_AREA if scale < 1 else _cv2.INTER_CUBIC
+                    arr = _cv2.resize(arr, (nw, nh), interpolation=interp)
+                    phash = phash_image(arr)
+                    key = (e["hero_guid"], e["state"], e["variant"], phash)
+                    if key in have:
+                        skipped += 1
+                        continue
+                    dest = out_dir / f"{phash[:16]}_{Path(e['file']).name}"
+                    _cv2.imwrite(str(dest), arr)
+                    db.save_ref(hero_guid=e["hero_guid"], profile_id=prof.id,
+                                state=e["state"], image_path=str(dest), phash=phash,
+                                source=e["source"], variant=e["variant"])
+                    have.add(key)
+                    added += 1
+                    continue
+            # No rescale (same resolution, or decode/cv2 unavailable): copy verbatim
+            # and trust the bundle's phash - the bytes on disk are unchanged.
             key = (e["hero_guid"], e["state"], e["variant"], e["phash"])
             if key in have:
                 skipped += 1
                 continue
             dest = out_dir / f"{e['phash'][:16]}_{Path(e['file']).name}"
-            dest.write_bytes(zf.read(e["file"]))
+            dest.write_bytes(raw)
             db.save_ref(hero_guid=e["hero_guid"], profile_id=prof.id,
                         state=e["state"], image_path=str(dest), phash=e["phash"],
                         source=e["source"], variant=e["variant"])
             have.add(key)
             added += 1
 
-    src_res = manifest.get("profile") or {}
-    if (src_res.get("resolution_w"), src_res.get("resolution_h")) != (
-            prof.resolution_w, prof.resolution_h):
-        log.info("bundle was learned at %sx%s, this machine runs %dx%d - fine, "
-                 "matching rescales refs to the crop",
-                 src_res.get("resolution_w"), src_res.get("resolution_h"),
-                 prof.resolution_w, prof.resolution_h)
+    if scale is not None:
+        log.info("bundle learned at %sx%s, this machine runs %dx%d - rescaled refs "
+                 "by %.3f to match", src_res.get("resolution_w"), src_h,
+                 prof.resolution_w, prof.resolution_h, scale)
     return {"added": added, "skipped": skipped}
