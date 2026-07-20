@@ -27,7 +27,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from .client import FaceitClient
 from .db import Database
@@ -819,12 +819,18 @@ class SyncEngine:
         *,
         force_refresh: bool = False,
         dry_run: bool = False,
+        progress: Optional[Callable[[int, int], None]] = None,
     ) -> SyncResult:
         """Mass-import an explicit list of match refs (ids or room URLs).
 
         Keyless: uses only the public match/democracy/stats endpoints. Each
         match's championship is derived from its own payload, so no championship
         id is required.
+
+        ``progress(done, total)`` is called after every match. A first-run
+        bootstrap is hundreds of rate-limited requests, which without this looks
+        exactly like a hung application; callers that can show a bar should.
+        Errors in the callback are never allowed to abort the import.
         """
         result = SyncResult()
         parsed: list[str] = []
@@ -836,25 +842,36 @@ class SyncEngine:
                 continue
             parsed.append(match_id)
 
-        for match_id in dedupe_preserving_order(parsed):
-            result.matches_seen += 1
-            if self._skip_stored(match_id, force_refresh):
-                result.skipped += 1
-                continue
+        queue = dedupe_preserving_order(parsed)
+        total = len(queue)
+        for done, match_id in enumerate(queue, start=1):
             try:
-                outcome = self.ingest_match(
-                    match_id, force_refresh=force_refresh, dry_run=dry_run,
-                )
-            except Exception:  # noqa: BLE001 - one bad match must not abort the batch
-                log.exception("error ingesting %s", match_id)
-                result.errors += 1
-                continue
-            if outcome == "inserted":
-                result.inserted += 1
-            elif outcome == "updated":
-                result.updated += 1
-            else:
-                result.skipped += 1
+                result.matches_seen += 1
+                if self._skip_stored(match_id, force_refresh):
+                    result.skipped += 1
+                    continue
+                try:
+                    outcome = self.ingest_match(
+                        match_id, force_refresh=force_refresh, dry_run=dry_run,
+                    )
+                except Exception:  # noqa: BLE001 - one bad match must not abort the batch
+                    log.exception("error ingesting %s", match_id)
+                    result.errors += 1
+                    continue
+                if outcome == "inserted":
+                    result.inserted += 1
+                elif outcome == "updated":
+                    result.updated += 1
+                else:
+                    result.skipped += 1
+            finally:
+                # In `finally` so a skip or an ingest error still advances the
+                # bar - a bar that freezes on a bad match is worse than none.
+                if progress is not None:
+                    try:
+                        progress(done, total)
+                    except Exception:  # noqa: BLE001 - display must not break import
+                        log.debug("progress callback failed", exc_info=True)
 
         self.db.insert_sync_log(
             ran_at=_now_iso(), championship_id=None,

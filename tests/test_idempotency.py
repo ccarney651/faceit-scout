@@ -59,3 +59,37 @@ def test_run_matches_counts(db: Database) -> None:
     assert result.matches_seen == 1
     assert result.inserted == 1
     assert result.errors == 0
+
+
+@responses.activate
+def test_run_matches_reports_progress_even_when_a_match_fails(db: Database) -> None:
+    """The bar must reach the end regardless of what happens to each match.
+
+    A first-run bootstrap that stalls its progress bar on one bad match is worse
+    than showing none at all, so a skip and an ingest error both still tick.
+    """
+    register_match(responses, RESTART_DC_ID, prefix="restart_dc", democracy=True)
+    client, _ = make_client()
+    engine = SyncEngine(client, db)
+
+    seen: list[tuple[int, int]] = []
+    # One good id, one that cannot be fetched (unregistered -> error path).
+    refs = [RESTART_DC_ID, "1-deadbeef-0000-0000-0000-000000000000"]
+    result = engine.run_matches(refs, progress=lambda d, t: seen.append((d, t)))
+
+    assert seen == [(1, 2), (2, 2)]      # every match ticks exactly once, in order
+    assert result.errors == 1            # and the failure was still counted
+
+
+@responses.activate
+def test_progress_callback_failure_cannot_abort_the_import(db: Database) -> None:
+    """A broken display must not cost the user their bootstrap."""
+    register_match(responses, RESTART_DC_ID, prefix="restart_dc", democracy=True)
+    client, _ = make_client()
+    engine = SyncEngine(client, db)
+
+    def boom(done: int, total: int) -> None:
+        raise RuntimeError("widget destroyed mid-sync")
+
+    result = engine.run_matches([RESTART_DC_ID], progress=boom)
+    assert result.inserted == 1

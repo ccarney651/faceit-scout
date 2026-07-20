@@ -36,6 +36,23 @@ def _keys_summary(binds: dict[str, str]) -> str:
     return "  ".join(f"{binds[a].upper()} {label}" for a, label in _KEY_LABELS)
 
 
+def _eta_text(done: int, total: int, elapsed: float) -> str:
+    """"match 12 of 380 - about 4 min left", or without the estimate too early.
+
+    The first few matches are a terrible sample (connection warm-up, then FACEIT's
+    rate limiter settling in), so no time is quoted until there is enough history
+    for the number not to swing wildly and look broken.
+    """
+    head = f"match {done} of {total}"
+    if done < 5 or done >= total or elapsed <= 0:
+        return head
+    remaining = (elapsed / done) * (total - done)
+    if remaining < 90:
+        return f"{head} - under a minute left"
+    mins = int(remaining // 60) + 1
+    return f"{head} - about {mins} min left"
+
+
 # A faceit DB unsynced for longer than this is called out: the code list is then
 # missing whatever has been played since, which looks the same as "no new matches".
 # The CI syncs nightly, so a day without a local sync already means divergence.
@@ -227,6 +244,16 @@ class _App:  # pragma: no cover - GUI runtime only
         self.freshness_lbl.grid(row=6, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="w")
         ttk.Button(cap, text="Sync codes from FACEIT", command=self._sync_faceit).grid(
             row=6, column=3, padx=2, pady=(0, 6), sticky="e")
+        # First-run bootstrap is hundreds of rate-limited requests. Without a bar
+        # the window just sits there for minutes and reads as a hang, so this is
+        # shown for any long job and hidden the rest of the time.
+        self.progress = ttk.Progressbar(cap, mode="determinate", maximum=100)
+        self.progress.grid(row=7, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="ew")
+        self.progress_lbl = ttk.Label(cap, text="", foreground="#555")
+        self.progress_lbl.grid(row=7, column=3, padx=6, pady=(0, 6), sticky="w")
+        self.progress.grid_remove()
+        self.progress_lbl.grid_remove()
+        self._progress_started = 0.0
         cap.columnconfigure(1, weight=1)
 
         # --- 3. review + publish -------------------------------------------
@@ -487,6 +514,36 @@ class _App:  # pragma: no cover - GUI runtime only
                 text=text, foreground="#a60" if stale else "#555"))
         self._run(go, lock=False)
 
+    # --- long-job progress. Called from worker threads, so every Tk touch is
+    # marshalled through the queue and applied on the main loop.
+    def _progress_begin(self, label: str) -> None:
+        import time
+        self._progress_started = time.monotonic()
+
+        def show() -> None:
+            self.progress.configure(value=0)
+            self.progress_lbl.configure(text=label)
+            self.progress.grid()
+            self.progress_lbl.grid()
+        self.q.put(show)
+
+    def _progress_step(self, done: int, total: int) -> None:
+        import time
+        elapsed = time.monotonic() - self._progress_started
+        pct = (done / total * 100) if total else 0
+        text = _eta_text(done, total, elapsed)
+
+        def paint() -> None:
+            self.progress.configure(value=pct)
+            self.progress_lbl.configure(text=text)
+        self.q.put(paint)
+
+    def _progress_end(self) -> None:
+        def hide() -> None:
+            self.progress.grid_remove()
+            self.progress_lbl.grid_remove()
+        self.q.put(hide)
+
     def _is_claimed(self, row: Any) -> bool:
         """Has ANY contributor already published this exact game?"""
         mid, gno = getattr(row, "match_id", None), getattr(row, "game_no", None)
@@ -520,8 +577,13 @@ class _App:  # pragma: no cover - GUI runtime only
                             if ln.strip() and not ln.startswith("#")]
                     self._emit(f"sync: FIRST RUN - building the match database "
                                f"from {len(refs)} seed matches. This one-time "
-                               "bootstrap takes a while; the log will keep moving.")
-                    engine.run_matches(refs)
+                               "bootstrap takes a few minutes; the bar below "
+                               "shows how far along it is. Later syncs are quick.")
+                    self._progress_begin(f"match 0 of {len(refs)}")
+                    try:
+                        engine.run_matches(refs, progress=self._progress_step)
+                    finally:
+                        self._progress_end()
                 res = engine.run_all()
             self._emit(f"sync: {res.inserted} new, {res.updated} updated, "
                        f"{res.skipped} unchanged, {res.errors} error(s).")

@@ -14,7 +14,8 @@ downloads.
    **Calibrate** and drag the two boxes as prompted. When it finishes, the log
    says `pre-trained hero library loaded (104 refs)` — they are now trained.
 4. Click **Sync codes from FACEIT**. The first run builds the match database
-   from scratch and takes a while; it only happens once.
+   from scratch — a progress bar shows position and a time estimate, typically a
+   few minutes. It only happens once; later syncs take seconds.
 5. Capture normally: pick a code, pick the left team, **Start hotkey capture**,
    F8 at key moments in the replay, ESC when done. Review → finalize.
 
