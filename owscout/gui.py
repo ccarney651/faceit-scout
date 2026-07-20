@@ -200,8 +200,12 @@ class _App:  # pragma: no cover - GUI runtime only
         self.code_box = ttk.Combobox(cap, textvariable=self.code_var, width=34, state="readonly")
         self.code_box.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
         self.code_box.bind("<<ComboboxSelected>>", lambda _e: self._on_code_selected())
-        ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=1, column=2, padx=2)
-        ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=1, column=3, padx=2)
+        self.hide_claimed = tk.BooleanVar(value=True)
+        ttk.Checkbutton(cap, text="hide already-scouted", variable=self.hide_claimed,
+                        command=self._apply_code_filter).grid(
+            row=1, column=2, columnspan=2, padx=6, sticky="w")
+        ttk.Button(cap, text="↻", width=3, command=self._refresh_codes).grid(row=2, column=2, padx=2)
+        ttk.Button(cap, text="Copy code", command=self._copy_code).grid(row=2, column=3, padx=2)
         # Left team: pick by clicking whichever team is on the LEFT of the HUD.
         ttk.Label(cap, text="Left team").grid(row=2, column=0, padx=6, pady=4, sticky="nw")
         self.side_a_var = tk.StringVar()
@@ -257,6 +261,7 @@ class _App:  # pragma: no cover - GUI runtime only
 
         self._stop_capture: Optional[Callable[[], None]] = None
         self._code_rows: list[Any] = []
+        self._claimed: set[str] = set()      # games already scouted by anyone
         self._keybinds: dict[str, str] = {}
         self.root.after(80, self._drain)
         self._load_keybinds()
@@ -472,11 +477,20 @@ class _App:  # pragma: no cover - GUI runtime only
                 self._emit(f"codes: {exc}")
             # Cached so the team filter is instant and needs no second query.
             self._code_rows = list(rows)
+            # Who else has scouted what. Offline-safe: an empty set just means
+            # nothing is known to be claimed.
+            from .contribute import fetch_captured_games
+            self._claimed = fetch_captured_games()
             self.q.put(self._apply_code_filter)
             text, stale = _faceit_freshness(self.faceit_var.get())
             self.q.put(lambda: self.freshness_lbl.configure(
                 text=text, foreground="#a60" if stale else "#555"))
         self._run(go, lock=False)
+
+    def _is_claimed(self, row: Any) -> bool:
+        """Has ANY contributor already published this exact game?"""
+        mid, gno = getattr(row, "match_id", None), getattr(row, "game_no", None)
+        return bool(mid) and gno is not None and f"{mid}:{gno}" in self._claimed
 
     def _sync_faceit(self) -> None:
         """Pull new matches + late-published replay codes into the faceit DB, so the
@@ -524,7 +538,14 @@ class _App:  # pragma: no cover - GUI runtime only
             want = ALL_TEAMS
             self.team_filter_var.set(want)
         keep = [r for r in rows if want == ALL_TEAMS or want in (r.team_a, r.team_b)]
-        items = [f"{r.demo_code}  {r.map_name}  {r.team_a} vs {r.team_b}" for r in keep]
+        claimed_n = sum(1 for r in keep if self._is_claimed(r))
+        if self.hide_claimed.get():
+            keep = [r for r in keep if not self._is_claimed(r)]
+        items = [
+            f"{r.demo_code}  {r.map_name}  {r.team_a} vs {r.team_b}"
+            + ("   [already scouted]" if self._is_claimed(r) else "")
+            for r in keep
+        ]
         self.code_box.configure(values=items)
         if items:
             self.code_var.set(items[0])
@@ -532,8 +553,13 @@ class _App:  # pragma: no cover - GUI runtime only
         else:
             self.code_var.set("")
         n, tot = len(items), len(rows)
-        self._emit(f"codes: {n} shown" + (f" of {tot} (filtered to {want})"
-                                          if want != ALL_TEAMS else f" ({tot} uncaptured)"))
+        note = f"codes: {n} shown of {tot}"
+        if want != ALL_TEAMS:
+            note += f" (team: {want})"
+        if claimed_n:
+            note += (f" - {claimed_n} already scouted by someone"
+                     + (" and hidden" if self.hide_claimed.get() else ""))
+        self._emit(note)
 
     def _on_code_selected(self) -> None:
         raw = self.code_var.get().strip()

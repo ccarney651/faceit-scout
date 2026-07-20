@@ -505,6 +505,17 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     payload = merged_payload(contribs, roles, names, overrides=overrides,
                              known=known_games(_faceit_db_path(args)),
                              player_names=pnames)
+    if args.captured_out:
+        # A tiny public feed of which games are already scouted, so every
+        # contributor's app can grey them out instead of two people scouting
+        # the same replay on the same evening.
+        os.makedirs(os.path.dirname(args.captured_out) or ".", exist_ok=True)
+        with open(args.captured_out, "w", encoding="utf-8") as fh:
+            _json.dump({"format": 1,
+                        "generated_at": payload.get("built_at"),
+                        "captured": payload.get("captured_games", [])}, fh)
+        print(f"  wrote {args.captured_out} "
+              f"({len(payload.get('captured_games') or [])} captured games)")
     with open(args.out, "w", encoding="utf-8") as fh:
         _json.dump(payload, fh, indent=2)
     teams = cast("dict[str, object]", payload["teams"])
@@ -1118,6 +1129,8 @@ def build_parser() -> argparse.ArgumentParser:
     cm = consub.add_parser("merge", help="merge all contributor files into the payload")
     cm.add_argument("--dir", default=CONTRIB_DIR, help="contributions directory")
     cm.add_argument("--out", default="owscout_comps.json", help="payload to write")
+    cm.add_argument("--captured-out", default=None,
+                    help="also write the public already-scouted feed here")
     cm.add_argument("--name-order", action="store_true",
                     help="order by filename instead of git commit date (testing)")
     cm.set_defaults(func=cmd_contribute_merge)

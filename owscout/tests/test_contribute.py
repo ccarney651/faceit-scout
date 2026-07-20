@@ -311,3 +311,36 @@ def test_observations_without_pairs_are_simply_absent() -> None:
         "observations": [{"side": "a", "ts": 0, "heroes": ["ram"]}],
     }}
     assert player_pools(maps, {}, {}) == {}
+
+
+def test_captured_feed_parses() -> None:
+    from owscout.contribute import fetch_captured_games
+
+    class _Feed(_FakeSession):
+        def get(self, url: str, **kw: Any) -> _FakeResp:
+            return _FakeResp(200, {"format": 1, "captured": ["m1:1", "m2:3"]})
+
+    assert fetch_captured_games(session=_Feed()) == {"m1:1", "m2:3"}
+
+
+def test_captured_feed_never_blocks_scouting() -> None:
+    """Offline, a 404, or a format this build cannot read must all degrade to
+    'nothing known to be claimed' - never to an error that stops the operator
+    picking a code."""
+    from owscout.contribute import fetch_captured_games
+
+    class _Down(_FakeSession):
+        def get(self, url: str, **kw: Any) -> _FakeResp:
+            raise OSError("no network")
+
+    class _Missing(_FakeSession):
+        def get(self, url: str, **kw: Any) -> _FakeResp:
+            return _FakeResp(404)
+
+    class _Future(_FakeSession):
+        def get(self, url: str, **kw: Any) -> _FakeResp:
+            return _FakeResp(200, {"format": 99, "captured": ["m1:1"]})
+
+    assert fetch_captured_games(session=_Down()) == set()
+    assert fetch_captured_games(session=_Missing()) == set()
+    assert fetch_captured_games(session=_Future()) == set()

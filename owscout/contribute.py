@@ -435,6 +435,8 @@ def merged_payload(
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
     payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)
+    from datetime import datetime, timezone
+    payload["built_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Games on or before this date have DEAD replay codes: the site must not
     # count them as scoutable (unless someone captured them before the wipe).
     from .db import LATEST_KNOWN_WIPE
@@ -580,6 +582,37 @@ def player_pools(
         rows.sort(key=lambda r: (-int(str(r["rounds"])), str(r["player"])))
         out[team] = rows
     return out
+
+
+# The published already-scouted feed. Read-only, cached by GitHub for a few
+# minutes - stale by a build at worst, which only means a code shows as
+# un-scouted slightly too long.
+DEFAULT_CAPTURED_FEED = "https://ccarney651.github.io/faceit-scout/captured.json"
+
+
+def fetch_captured_games(url: str = DEFAULT_CAPTURED_FEED,
+                         *, timeout: float = 10.0, session: Any = None) -> set[str]:
+    """``{"match_id:game_no", ...}`` already scouted by SOMEBODY, or an empty
+    set on any failure.
+
+    Never raises: this is a convenience that stops two contributors scouting
+    the same replay on the same evening, and it must never be able to stop
+    someone scouting at all. Empty simply means "no claims known".
+    """
+    try:
+        if session is None:
+            import requests
+            session = requests.Session()
+        r = session.get(url, timeout=timeout)
+        if r.status_code != 200:
+            return set()
+        data = r.json()
+        if int(data.get("format", 0)) != 1:
+            return set()
+        return {str(x) for x in (data.get("captured") or [])}
+    except Exception as exc:  # noqa: BLE001 - offline is normal, not an error
+        log.info("captured feed unavailable (%s) - continuing without it", exc)
+        return set()
 
 
 def contribution_files(directory: str | Path) -> list[Path]:
