@@ -5,7 +5,19 @@ from __future__ import annotations
 import os
 import sqlite3
 
-from owscout.gui import _eta_text, _faceit_is_empty
+from owscout.gui import _eta_text, _faceit_is_empty, _setup_hint
+
+
+def test_setup_hint_walks_the_user_through_the_three_steps() -> None:
+    assert _setup_hint(False, False).startswith("Step 1 of 3")   # not calibrated
+    assert _setup_hint(True, False).startswith("Step 2 of 3")    # calibrated, no codes
+    assert _setup_hint(True, True).startswith("Step 3 of 3")     # ready to capture
+
+
+def test_setup_hint_is_ascii_safe() -> None:
+    for cal in (True, False):
+        for codes in (True, False):
+            _setup_hint(cal, codes)   # must not raise building the string
 
 
 def test_missing_faceit_db_reads_as_empty_without_creating_it(tmp_path) -> None:

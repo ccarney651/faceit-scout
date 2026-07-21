@@ -88,6 +88,20 @@ def _faceit_freshness(faceit_db_path: str) -> tuple[str, bool]:
             + (" - sync to pick up newer codes" if stale else ""), stale)
 
 
+def _setup_hint(calibrated: bool, has_codes: bool) -> str:
+    """The single next step for a new user, from what's done so far. Drives the
+    banner so the app always answers 'what do I do now?' - the main gap a
+    non-technical first-timer hits."""
+    if not calibrated:
+        return ("Step 1 of 3  ·  open an Overwatch replay, then click "
+                "“Calibrate to my screen”.")
+    if not has_codes:
+        return ("Step 2 of 3  ·  click “Sync codes from FACEIT” "
+                "to load the match list.")
+    return ("Step 3 of 3  ·  pick a Replay below, choose the left team, then "
+            "“Start hotkey capture”.  Review + Publish when done.")
+
+
 def _faceit_is_empty(faceit_db_path: str) -> bool:
     """True if this is a fresh machine: the faceit DB is missing or has no
     championships yet. Read-only, so it never CREATES the file (a plain connect
@@ -190,6 +204,16 @@ class _App:  # pragma: no cover - GUI runtime only
             hdr.pack(anchor="w", padx=8, pady=(4, 0))
             render()
             return body
+
+        # First-run guidance banner: always shows the ONE next thing to do. It's
+        # the fix for the biggest non-technical stumbling block - three live
+        # sections with no obvious order.
+        self._calibrated = False
+        self.guide_lbl = tk.Label(
+            self.root, text=_setup_hint(False, False), anchor="w", justify="left",
+            font=("Segoe UI", 10, "bold"), fg="#0a3d91", bg="#e8f0fe",
+            padx=12, pady=8, wraplength=780)
+        self.guide_lbl.pack(fill="x", padx=10, pady=(10, 0))
 
         # --- 1. setup -------------------------------------------------------
         # A pre-trained build only needs ONE thing from a new user: calibrate the
@@ -564,12 +588,19 @@ class _App:  # pragma: no cover - GUI runtime only
         except Exception as exc:  # noqa: BLE001
             self._emit(f"learn: {exc}")
 
+    def _update_guide(self) -> None:
+        """Point the banner at the current next step (runs on the main loop)."""
+        self.guide_lbl.configure(
+            text=_setup_hint(self._calibrated, bool(getattr(self, "_code_rows", []))))
+
     def _verify_refs(self) -> None:
         def go() -> None:
             complete = False
             try:
                 with self._open_db() as db:
                     prof = db.latest_active_profile("default")
+                    self._calibrated = prof is not None
+                    self.q.put(self._update_guide)
                     if prof is None:
                         txt = "Step 1: not calibrated yet — click Calibrate."
                     else:
@@ -759,6 +790,7 @@ class _App:  # pragma: no cover - GUI runtime only
             note += (f" - {claimed_n} already scouted by someone"
                      + (" and hidden" if self.hide_claimed.get() else ""))
         self._emit(note)
+        self._update_guide()
 
     def _on_code_selected(self) -> None:
         raw = self.code_var.get().strip()
