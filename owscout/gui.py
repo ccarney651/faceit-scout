@@ -1749,6 +1749,7 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         except Exception:  # noqa: BLE001 - alpha unsupported on some platforms
             pass
         self.win.configure(bg=self.BG)
+        self._apply_noactivate()
         self._app = app
         self._dragoff = (0, 0)
         sw = self.win.winfo_screenwidth()
@@ -1841,6 +1842,24 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         self.win.update_idletasks()
         h = self.win.winfo_reqheight()
         self.win.geometry(f"620x{h}+{self._x}+{self._y}")
+
+    def _apply_noactivate(self) -> None:
+        """Windows: keep Overwatch in focus when the overlay (or a button on it)
+        is clicked, so the operator never loses control of the replay. Best-effort
+        - a no-op on non-Windows or if the API isn't reachable. Hotkeys work
+        regardless, so this failing costs nothing."""
+        try:
+            import ctypes
+            GWL_EXSTYLE = -20
+            WS_EX_NOACTIVATE = 0x08000000
+            WS_EX_TOOLWINDOW = 0x00000080   # also keep it out of Alt-Tab
+            self.win.update_idletasks()
+            hwnd = self.win.winfo_id()
+            u = ctypes.windll.user32
+            ex = u.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            u.SetWindowLongW(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
+        except Exception:  # noqa: BLE001 - non-Windows / API missing -> skip
+            pass
 
     # --- drag-to-move; position persists across captures --------------------
     def _load_pos(self, app: Any, default_x: int, default_y: int) -> tuple[int, int]:

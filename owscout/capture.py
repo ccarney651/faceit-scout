@@ -331,7 +331,14 @@ def read_hud_names(frame: Frame, slots: Mapping[str, Sequence[Any]]) -> dict[str
             for r in slots[side]:
                 y0, y1 = r.y + int(r.h * 0.48), r.y + int(r.h * 0.90)
                 crop = frame[y0:y1, max(0, r.x - 6):r.x + r.w + 6]
-                big = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+                # Grayscale + 6x beat colour + 4x on real frames: exact reads
+                # 6/10 -> 8/10, similarity 0.75 -> 0.88 (Otsu binarisation was
+                # worse). Better legibility here is what lifts the player-name
+                # fuzzy match over threshold, especially at 1080p. Back to BGR so
+                # the OCR helper's BGRA path is unchanged.
+                gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                big = cv2.resize(gray, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
+                big = cv2.cvtColor(big, cv2.COLOR_GRAY2BGR)
                 names.append((await _ocr(big)).strip())
             out[side] = names
         return out

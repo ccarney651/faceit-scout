@@ -41,8 +41,13 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # UPX OFF on purpose: packed binaries are a top AV false-positive trigger,
+    # and this is a binary handed to non-technical friends. A larger, unpacked
+    # exe that antivirus leaves alone beats a smaller one it quarantines.
+    upx=False,
     upx_exclude=[],
+    # Real Windows file properties so it shows as "OW Scout", not a blank binary.
+    version='owscout_version.txt' if os.path.exists('owscout_version.txt') else None,
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,

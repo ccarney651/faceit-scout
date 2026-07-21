@@ -1,0 +1,36 @@
+# PyInstaller VERSIONINFO resource for owscout.exe.
+# Gives the binary real Windows file properties (ProductName, description,
+# version) so it presents as a named application - SmartScreen shows "OW Scout"
+# rather than a blank "Unknown", and AV heuristics treat a described, versioned
+# binary far more kindly than an anonymous one. Bump the numbers when __version__
+# changes (they must be 4-tuples of ints).
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 1, 0, 0),
+    prodvers=(0, 1, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '040904B0',
+        [
+          StringStruct('CompanyName', 'OW Scout'),
+          StringStruct('FileDescription', 'OW Scout - FACEIT League hero-comp scouting'),
+          StringStruct('FileVersion', '0.1.0.0'),
+          StringStruct('InternalName', 'owscout'),
+          StringStruct('OriginalFilename', 'owscout.exe'),
+          StringStruct('ProductName', 'OW Scout'),
+          StringStruct('ProductVersion', '0.1.0.0'),
+          StringStruct('LegalCopyright', 'OW Scout'),
+        ],
+      ),
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+  ],
+)
