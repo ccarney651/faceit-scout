@@ -223,6 +223,7 @@ class PlayerInfo:
     player_id: str
     nickname: str | None
     role: str | None
+    game_name: str | None = None    # Battle.net in-game name (what the HUD shows)
 
 
 @dataclass(frozen=True)

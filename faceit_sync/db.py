@@ -47,8 +47,9 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 
 CREATE TABLE IF NOT EXISTS players (
-    id       TEXT PRIMARY KEY,
-    nickname TEXT
+    id        TEXT PRIMARY KEY,
+    nickname  TEXT,
+    game_name TEXT          -- Battle.net in-game name; what the OW HUD shows
 );
 
 CREATE TABLE IF NOT EXISTS heroes (
@@ -161,7 +162,16 @@ class Database:
 
     def init_schema(self) -> None:
         self.conn.executescript(SCHEMA)
+        # Idempotent column adds for DBs created before the column existed (the CI
+        # DB is long-lived and updated in place, so CREATE TABLE IF NOT EXISTS
+        # never re-runs for it).
+        self._ensure_column("players", "game_name", "TEXT")
         self.conn.commit()
+
+    def _ensure_column(self, table: str, column: str, decl: str) -> None:
+        cols = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     def close(self) -> None:
         self.conn.close()
@@ -246,12 +256,13 @@ class Database:
         )
 
     def upsert_player(self, p: Player) -> None:
-        # COALESCE so we never overwrite a known nickname with NULL.
+        # COALESCE so we never overwrite a known name with NULL.
         self.conn.execute(
-            """INSERT INTO players (id, nickname) VALUES (?, ?)
+            """INSERT INTO players (id, nickname, game_name) VALUES (?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
-                   nickname=COALESCE(excluded.nickname, players.nickname)""",
-            (p.id, p.nickname),
+                   nickname=COALESCE(excluded.nickname, players.nickname),
+                   game_name=COALESCE(excluded.game_name, players.game_name)""",
+            (p.id, p.nickname, p.game_name),
         )
 
     def upsert_hero(self, h: Hero) -> None:

@@ -172,6 +172,25 @@ def test_resolve_player_below_threshold_is_none() -> None:
     assert resolve_player("zxqwv", roster) is None
 
 
+def test_resolve_player_matches_battlenet_game_name_not_just_nickname() -> None:
+    """The HUD shows the Battle.net game name, which often differs from the FACEIT
+    nickname. Entries are (id, game_name, nickname); a HUD read that matches the
+    game_name must resolve even when it shares nothing with the nickname."""
+    roster = [("p1", "aes", "PRDZII"), ("p2", "TWERKNATION", "sexy_eden")]
+    assert resolve_player("aes", roster) == "p1"
+    assert resolve_player("TWERKNATION", roster) == "p2"
+    # nickname still works as a fallback alias
+    assert resolve_player("PRDZII", roster) == "p1"
+
+
+def test_resolve_player_ignores_empty_name_slots() -> None:
+    """A player with no game_name (older data) must not crash or false-match on
+    the empty string."""
+    roster = [("p1", "", "Neliozu"), ("p2", "gogo", "GOGOOGOOO")]
+    assert resolve_player("neliozu", roster) == "p1"
+    assert resolve_player("gogo", roster) == "p2"
+
+
 def test_palette_hint_names_the_dead_side() -> None:
     """The colorblind-UI signature: one side blind, the other healthy. The
     message must name the failing side and the actual cause - without it the

@@ -97,6 +97,10 @@ jobs:
           # so fetch errors are tolerated; the export must still succeed.
           faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt || echo "seed: some matches errored (continuing)"
           faceit-sync --db faceit.sqlite3 fetch || echo "update: some matches errored (continuing)"
+          # Fill Battle.net game_name for scoutable matches so player attribution
+          # matches the HUD (the HUD shows the game name, not the FACEIT nickname).
+          # Cheap + idempotent: only coded matches still missing it.
+          faceit-sync --db faceit.sqlite3 backfill-gamenames || echo "backfill: some matches errored (continuing)"
           # Scouting data arrives as RAW OBSERVATIONS, one file per contributor
           # under data/captures/. Merge them here rather than committing a derived
           # payload: the report is then always computed by the current analysis,

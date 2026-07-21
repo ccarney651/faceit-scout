@@ -57,6 +57,7 @@ class Team:
 class Player:
     id: str
     nickname: Optional[str]
+    game_name: Optional[str] = None   # Battle.net in-game name (what the OW HUD shows)
 
 
 @dataclass(slots=True)

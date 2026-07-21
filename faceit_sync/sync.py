@@ -315,9 +315,8 @@ def extract_bundle(
     championship_id = entity.get("id", "")
     entity_custom = match_payload.get("entityCustom", {}) or {}
 
-    teams, elo_by_player, team_by_player, faction_ids, nick_by_player = _parse_teams(
-        match_payload
-    )
+    (teams, elo_by_player, team_by_player, faction_ids,
+     nick_by_player, game_by_player) = _parse_teams(match_payload)
 
     results = match_payload.get("results", []) or []
     voting = match_payload.get("voting", {}) or {}
@@ -341,7 +340,8 @@ def extract_bundle(
                 pid = pl.get("playerId")
                 if pid and pid not in nick_by_player:
                     nick_by_player[pid] = pl.get("nickname")
-    players = [Player(id=pid, nickname=nn) for pid, nn in nick_by_player.items()]
+    players = [Player(id=pid, nickname=nn, game_name=game_by_player.get(pid))
+               for pid, nn in nick_by_player.items()]
 
     # Forfeit: FACEIT flags it per-faction in summaryResults / results.
     def _any_forfeit(node: dict[str, Any]) -> bool:
@@ -488,13 +488,14 @@ def extract_bundle(
 def _parse_teams(
     match_payload: dict[str, Any],
 ) -> tuple[list[Team], dict[str, Optional[int]], dict[str, str],
-           dict[str, str], dict[str, Optional[str]]]:
+           dict[str, str], dict[str, Optional[str]], dict[str, Optional[str]]]:
     teams_node = match_payload.get("teams", {}) or {}
     teams: list[Team] = []
     elo_by_player: dict[str, Optional[int]] = {}
     team_by_player: dict[str, str] = {}
     faction_ids: dict[str, str] = {}
     nick_by_player: dict[str, Optional[str]] = {}
+    game_by_player: dict[str, Optional[str]] = {}   # Battle.net in-game name
     for fac in (FACTION1, FACTION2):
         t = teams_node.get(fac)
         if not t:
@@ -509,9 +510,11 @@ def _parse_teams(
             if pid:
                 elo_by_player[pid] = _to_int(pl.get("elo"))
                 nick_by_player[pid] = pl.get("nickname")
+                game_by_player[pid] = pl.get("gameName")
                 if tid:
                     team_by_player[pid] = tid
-    return teams, elo_by_player, team_by_player, faction_ids, nick_by_player
+    return (teams, elo_by_player, team_by_player, faction_ids,
+            nick_by_player, game_by_player)
 
 
 def _round_players_for_game(
@@ -812,6 +815,59 @@ class SyncEngine:
             total.warnings += r.warnings
             total.errors += r.errors
         return total
+
+    def backfill_game_names(
+        self, *, limit: Optional[int] = None,
+        progress: Optional[Callable[[int, int], None]] = None,
+    ) -> int:
+        """Fill players.game_name (Battle.net names) for already-stored matches.
+
+        game_name arrived after most matches were ingested, and normal sync skips
+        finished matches, so historical rosters have it NULL. This is a cheap,
+        targeted backfill: only matches that HAVE a demo code (the scoutable ones,
+        where attribution matters) and still have a player missing a game_name,
+        newest first, one match-detail call each. Returns players updated.
+        """
+        mids = [
+            r[0] for r in self.db.conn.execute(
+                """SELECT DISTINCT g.match_id
+                   FROM games g JOIN matches m ON m.id = g.match_id
+                   WHERE g.demo_code IS NOT NULL
+                   ORDER BY m.finished_at DESC"""
+            ).fetchall()
+        ]
+        updated = done = 0
+        for mid in mids:
+            missing = self.db.conn.execute(
+                """SELECT COUNT(*) FROM round_players rp
+                   JOIN players p ON p.id = rp.player_id
+                   WHERE rp.match_id = ? AND p.game_name IS NULL""",
+                (mid,),
+            ).fetchone()[0]
+            if not missing:
+                continue
+            try:
+                payload = self.client.get_match(mid)
+                *_, game_by_player = _parse_teams(payload)
+            except Exception:  # noqa: BLE001 - one bad match must not abort the batch
+                log.exception("backfill: could not fetch %s", mid)
+                continue
+            for pid, gn in game_by_player.items():
+                if gn:
+                    cur = self.db.conn.execute(
+                        "UPDATE players SET game_name = ? "
+                        "WHERE id = ? AND game_name IS NULL",
+                        (gn, pid),
+                    )
+                    updated += cur.rowcount
+            self.db.conn.commit()
+            done += 1
+            if progress is not None:
+                progress(done, len(mids))
+            if limit is not None and done >= limit:
+                break
+        log.info("backfill: filled %d game_name(s) across %d match(es)", updated, done)
+        return updated
 
     def run_matches(
         self,

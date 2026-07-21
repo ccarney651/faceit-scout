@@ -374,17 +374,20 @@ def assign_sides(
 
 def resolve_player(
     ocr_name: str,
-    roster: Sequence[tuple[str, str]],   # (player_id, nickname)
+    roster: Sequence[tuple[str, ...]],   # (player_id, name, [more names...])
     *,
     scorer: Scorer = _difflib_ratio,
     threshold: float = DEFAULT_NAME_MATCH_THRESHOLD,
 ) -> Optional[str]:
     """Fuzzy-match one OCR'd in-game name against a candidate list of five
-    (SPEC §8.2). Returns player_id above ``threshold``, else None (review)."""
+    (SPEC §8.2). Each roster entry is ``(player_id, *names)`` - the HUD shows the
+    Battle.net game name, which often differs from the FACEIT nickname, so we
+    score against every known alias and keep the best. Returns the player_id above
+    ``threshold``, else None (review)."""
     best_id: Optional[str] = None
     best_score = threshold
-    for player_id, nickname in roster:
-        score = scorer(ocr_name, nickname)
+    for player_id, *names in roster:
+        score = max((scorer(ocr_name, n) for n in names if n), default=0.0)
         if score >= best_score:
             best_score, best_id = score, player_id
     return best_id
@@ -915,9 +918,11 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         except Exception as exc:  # noqa: BLE001 - attribution is best-effort
             emit(f"  (player names unavailable: {exc})")
             return
-        f1 = [(p.player_id, p.nickname or "") for p in ctx.players
+        # Give the matcher BOTH names: the HUD shows the Battle.net game name,
+        # which frequently differs from the FACEIT nickname (PRDZII -> "aes").
+        f1 = [(p.player_id, p.game_name or "", p.nickname or "") for p in ctx.players
               if p.faction == "faction1" and p.player_id]
-        f2 = [(p.player_id, p.nickname or "") for p in ctx.players
+        f2 = [(p.player_id, p.game_name or "", p.nickname or "") for p in ctx.players
               if p.faction == "faction2" and p.player_id]
         left_roster, right_roster = (f1, f2) if side_a_faction == "faction1" else (f2, f1)
         hits = 0
@@ -983,8 +988,12 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             for side in (SIDE_LEFT, SIDE_RIGHT)
         }
         if auto_side:
-            f1 = [p.nickname or "" for p in ctx.players if p.faction == "faction1"]
-            f2 = [p.nickname or "" for p in ctx.players if p.faction == "faction2"]
+            # Both names per player: the HUD shows the Battle.net game name, so
+            # including it sharpens the left/right verdict too.
+            f1 = [n for p in ctx.players if p.faction == "faction1"
+                  for n in (p.game_name, p.nickname) if n]
+            f2 = [n for p in ctx.players if p.faction == "faction2"
+                  for n in (p.game_name, p.nickname) if n]
             try:
                 reads = read_hud_names(frame, profile.slots)
                 got = confident_left_faction(reads[SIDE_LEFT], reads[SIDE_RIGHT], f1, f2)

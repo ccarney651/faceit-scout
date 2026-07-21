@@ -84,8 +84,13 @@ def derive_code_context(db: Database, faceit_db_path: str, demo_code: str) -> Co
         for b in ban_rows
     ]
 
+    # game_name (Battle.net in-game name) is what the HUD shows, so it's the best
+    # key for player attribution. It's a newer column: an older faceit DB attached
+    # read-only can't be migrated, so degrade to NULL there rather than error.
+    fcols = {r[1] for r in c.execute("PRAGMA faceit.table_info(players)")}
+    game_sel = "p.game_name" if "game_name" in fcols else "NULL AS game_name"
     player_rows = c.execute(
-        """SELECT rp.team_id, rp.player_id, rp.role, p.nickname
+        f"""SELECT rp.team_id, rp.player_id, rp.role, p.nickname, {game_sel}
            FROM faceit.round_players rp
            LEFT JOIN faceit.players p ON p.id = rp.player_id
            WHERE rp.match_id = ? AND rp.game_no = ?
@@ -101,6 +106,7 @@ def derive_code_context(db: Database, faceit_db_path: str, demo_code: str) -> Co
             player_id=r["player_id"],
             nickname=r["nickname"],
             role=r["role"],
+            game_name=r["game_name"],
         )
         for r in player_rows
     ]

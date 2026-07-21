@@ -145,6 +145,19 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backfill_gamenames(args: argparse.Namespace) -> int:
+    client = _build_client()
+    with Database(_db_path(args)) as db:
+        engine = SyncEngine(client, db)
+        n = engine.backfill_game_names(
+            limit=args.limit,
+            progress=lambda done, total: print(f"\rbackfill: {done}/{total} matches",
+                                               end="", file=sys.stderr, flush=True),
+        )
+    print(f"\nbackfilled {n} game_name(s).")
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     with Database(_db_path(args)) as db:
         stats = team_stats(db, args.team)
@@ -216,6 +229,15 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("stats", help="team ban tendencies, map picks, win rates")
     s.add_argument("--team", required=True, help="team name")
     s.set_defaults(func=cmd_stats)
+
+    b = sub.add_parser(
+        "backfill-gamenames",
+        help="fill Battle.net game_name for stored coded matches (improves player "
+             "attribution; one match-detail call each, only where missing)",
+    )
+    b.add_argument("--limit", type=int, default=None,
+                   help="stop after N matches (default: all coded matches missing it)")
+    b.set_defaults(func=cmd_backfill_gamenames)
     return p
 
 
