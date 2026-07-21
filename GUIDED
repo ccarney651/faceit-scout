@@ -1,0 +1,2 @@
+This empty file marks the guided (testers) build. Its presence makes owscout
+start in tabbed + gated mode (see gui.main / _App(guided=True)).

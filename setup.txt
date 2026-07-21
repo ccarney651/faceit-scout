@@ -1,0 +1,33 @@
+OW Scout - quick setup
+=======================
+
+1. Put owscout-testing.exe in its own folder (e.g. C:\OWScout\) and run it.
+   - Windows may show a blue "Windows protected your PC" box. This is normal for
+     a new app that isn't code-signed yet - it is NOT a virus warning.
+     Click:  More info  ->  Run anyway.
+
+2. Open Overwatch (windowed or borderless fullscreen) on any replay, so the row
+   of 10 hero portraits is showing along the top.
+
+3. In OW Scout, the app opens on the SETTINGS tab. Click "Calibrate to my
+   screen". It draws the boxes for you - if the green boxes sit on the portraits,
+   press ENTER to save. (Only if they don't line up: press ESC and drag the two
+   boxes by hand.)
+
+4. It switches you to the SCOUT tab. Click "Sync codes from FACEIT" once. The
+   first time it downloads the match list (a few seconds).
+
+5. Scout a game:
+   - Pick an Opponent and a Replay from the dropdowns, then copy the code into
+     Overwatch's replay screen.
+   - Click "Start hotkey capture", then watch the replay and press:
+        F8 = snapshot the current comp (press it whenever heroes change)
+        F7 = next round      F9 = undo      ESC = done
+     (You can also click these on the on-screen overlay. Drag the overlay by its
+      title bar if it's in the way.)
+
+6. When you've captured a game, click "Review captured maps" to check it, then
+   "Publish my captures". That's it - your scouting appears on the site in a
+   couple of minutes.
+
+The banner at the top always tells you the next step. Anything unclear - ask.

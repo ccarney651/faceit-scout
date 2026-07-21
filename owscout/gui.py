@@ -156,13 +156,18 @@ def _default_faceit() -> str:
 
 
 class _App:  # pragma: no cover - GUI runtime only
-    def __init__(self) -> None:
+    def __init__(self, guided: bool = False) -> None:
         import tkinter as tk
         from tkinter import ttk
 
         self.tk = tk
         self.q: "queue.Queue[Callable[[], Any]]" = queue.Queue()
         self.busy = False
+        # Guided (testers') build: tabbed + gated so a new user can only take the
+        # right next step. The curator build (guided=False) is the flat layout.
+        self.guided = guided
+        self._gate_calib: list[Any] = []   # enabled once calibrated
+        self._gate_codes: list[Any] = []   # enabled once codes are synced too
 
         self.root = tk.Tk()
         self.root.title("OW Scout — FACEIT League")
@@ -205,12 +210,27 @@ class _App:  # pragma: no cover - GUI runtime only
             render()
             return body
 
+        # Guided build = two tabs; the everyday flow (Scout) is separate from
+        # Calibrate + the technical tools (Settings). Curator build = one flat pane.
+        if self.guided:
+            nb = ttk.Notebook(self.root)
+            nb.pack(fill="both", expand=True, padx=6, pady=6)
+            self._nb = nb
+            self._scout_tab = ttk.Frame(nb)
+            self._settings_tab = ttk.Frame(nb)
+            nb.add(self._scout_tab, text="   Scout   ")
+            nb.add(self._settings_tab, text="   Settings   ")
+            main_parent: Any = self._scout_tab
+            settings_parent: Any = self._settings_tab
+        else:
+            main_parent = settings_parent = self.root
+
         # First-run guidance banner: always shows the ONE next thing to do. It's
         # the fix for the biggest non-technical stumbling block - three live
         # sections with no obvious order.
         self._calibrated = False
         self.guide_lbl = tk.Label(
-            self.root, text=_setup_hint(False, False), anchor="w", justify="left",
+            main_parent, text=_setup_hint(False, False), anchor="w", justify="left",
             font=("Segoe UI", 10, "bold"), fg="#0a3d91", bg="#e8f0fe",
             padx=12, pady=8, wraplength=780)
         self.guide_lbl.pack(fill="x", padx=10, pady=(10, 0))
@@ -219,7 +239,7 @@ class _App:  # pragma: no cover - GUI runtime only
         # A pre-trained build only needs ONE thing from a new user: calibrate the
         # capture boxes to their screen. Everything else (library building,
         # learning, import/export) is for curators and lives under Advanced.
-        setup = ttk.LabelFrame(self.root, text="Set up (once per computer)")
+        setup = ttk.LabelFrame(settings_parent, text="Set up (once per computer)")
         setup.pack(fill="x", **pad)
         srow = ttk.Frame(setup)
         srow.pack(fill="x", padx=6, pady=6)
@@ -255,7 +275,7 @@ class _App:  # pragma: no cover - GUI runtime only
         # expanding widget in a shared grid column shoved the right-hand controls
         # off-screen when the window widened. Here each row owns its packing, so
         # controls stay put at any width.
-        cap = ttk.LabelFrame(self.root, text="Scout a replay (Master division)")
+        cap = ttk.LabelFrame(main_parent, text="Scout a replay (Master division)")
         cap.pack(fill="x", **pad)
 
         # Filters: pick one opponent at a time - 40 codes across every Master team
@@ -269,6 +289,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self.team_filter_box.pack(side="left", padx=(4, 12))
         self.team_filter_box.bind("<<ComboboxSelected>>",
                                   lambda _e: self._apply_code_filter())
+        self._gate_codes.append(self.team_filter_box)
         ttk.Label(filt, text="Region").pack(side="left")
         self.region_var = tk.StringVar(value=ALL_REGIONS)
         region_box = ttk.Combobox(filt, textvariable=self.region_var, width=12,
@@ -277,9 +298,12 @@ class _App:  # pragma: no cover - GUI runtime only
         # Region changes WHICH codes are fetched, so it re-queries rather than
         # filtering the cached rows (the team list depends on it).
         region_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
+        self._gate_codes.append(region_box)
         self.hide_claimed = tk.BooleanVar(value=True)
-        ttk.Checkbutton(filt, text="hide already-scouted", variable=self.hide_claimed,
-                        command=self._apply_code_filter).pack(side="left")
+        hide_cb = ttk.Checkbutton(filt, text="hide already-scouted",
+                                  variable=self.hide_claimed, command=self._apply_code_filter)
+        hide_cb.pack(side="left")
+        self._gate_codes.append(hide_cb)
 
         # Replay picker: the combobox takes all the slack; the buttons stay pinned.
         crow = ttk.Frame(cap)
@@ -289,8 +313,12 @@ class _App:  # pragma: no cover - GUI runtime only
         self.code_box = ttk.Combobox(crow, textvariable=self.code_var, state="readonly")
         self.code_box.pack(side="left", fill="x", expand=True, padx=(4, 6))
         self.code_box.bind("<<ComboboxSelected>>", lambda _e: self._on_code_selected())
-        ttk.Button(crow, text="↻", width=3, command=self._refresh_codes).pack(side="left", padx=2)
-        ttk.Button(crow, text="Copy code", command=self._copy_code).pack(side="left", padx=2)
+        self._gate_codes.append(self.code_box)
+        refresh_btn = ttk.Button(crow, text="↻", width=3, command=self._refresh_codes)
+        refresh_btn.pack(side="left", padx=2)
+        copy_btn = ttk.Button(crow, text="Copy code", command=self._copy_code)
+        copy_btn.pack(side="left", padx=2)
+        self._gate_codes += [refresh_btn, copy_btn]
 
         # Left team: click whichever team is on the LEFT of the HUD (or leave it to
         # auto-detect).
@@ -309,10 +337,13 @@ class _App:  # pragma: no cover - GUI runtime only
         ttk.Label(krow, text="Keys").pack(side="left")
         self.keys_lbl = ttk.Label(krow, text="", foreground="#555")
         self.keys_lbl.pack(side="left", padx=8)
-        ttk.Button(krow, text="Change keys…", command=self._open_keybinds).pack(side="right")
+        keys_btn = ttk.Button(krow, text="Change keys…", command=self._open_keybinds)
+        keys_btn.pack(side="right")
+        self._gate_codes.append(keys_btn)
 
         self.cap_btn = ttk.Button(cap, text="Start hotkey capture", command=self._capture)
         self.cap_btn.pack(anchor="w", padx=6, pady=(6, 4))
+        self._gate_codes.append(self.cap_btn)
 
         # Code freshness. A stale faceit DB silently hides every code published
         # since the last sync, which looks identical to "no new matches".
@@ -320,8 +351,10 @@ class _App:  # pragma: no cover - GUI runtime only
         frow.pack(fill="x", padx=6, pady=(0, 6))
         self.freshness_lbl = ttk.Label(frow, text="", foreground="#555")
         self.freshness_lbl.pack(side="left")
-        ttk.Button(frow, text="Sync codes from FACEIT",
-                   command=self._sync_faceit).pack(side="right")
+        self._sync_btn = ttk.Button(frow, text="Sync codes from FACEIT",
+                                    command=self._sync_faceit)
+        self._sync_btn.pack(side="right")
+        self._gate_calib.append(self._sync_btn)
 
         # First-run bootstrap / download is a long job; without a bar the window
         # reads as hung. The whole row is hidden until a long job runs.
@@ -333,14 +366,16 @@ class _App:  # pragma: no cover - GUI runtime only
         self._progress_started = 0.0
 
         # --- 3. review + publish -------------------------------------------
-        pub = ttk.LabelFrame(self.root, text="Review & publish")
+        pub = ttk.LabelFrame(main_parent, text="Review & publish")
         pub.pack(fill="x", **pad)
         brow = ttk.Frame(pub)
         brow.pack(fill="x", padx=6, pady=6)
-        ttk.Button(brow, text="📋 Review captured maps…",
-                   command=self._open_review).pack(side="left", padx=(0, 6))
-        ttk.Button(brow, text="Publish my captures →",
-                   command=self._publish).pack(side="left", padx=6)
+        review_btn = ttk.Button(brow, text="📋 Review captured maps…",
+                                command=self._open_review)
+        review_btn.pack(side="left", padx=(0, 6))
+        publish_btn = ttk.Button(brow, text="Publish my captures →", command=self._publish)
+        publish_btn.pack(side="left", padx=6)
+        self._gate_calib += [review_btn, publish_btn]
         # Whose contribution this is. One file per contributor is what keeps two
         # people publishing at once from overwriting each other.
         arow = ttk.Frame(pub)
@@ -359,10 +394,10 @@ class _App:  # pragma: no cover - GUI runtime only
         # One friendly status line is always visible; the full activity log is a
         # lighter panel below it (not a black console) so it informs without
         # alarming. Raw file paths sit under Advanced, collapsed.
-        self.status_lbl = ttk.Label(self.root, text="Ready.", anchor="w",
+        self.status_lbl = ttk.Label(main_parent, text="Ready.", anchor="w",
                                     foreground="#222", font=("Segoe UI", 10, "bold"))
         self.status_lbl.pack(fill="x", padx=14, pady=(2, 0))
-        logf = ttk.LabelFrame(self.root, text="Activity")
+        logf = ttk.LabelFrame(main_parent, text="Activity")
         logf.pack(fill="both", expand=True, **pad)
         self.log = tk.Text(logf, height=7, wrap="word", state="disabled",
                            bg="#f6f6f6", fg="#333", font=("Consolas", 9),
@@ -372,7 +407,7 @@ class _App:  # pragma: no cover - GUI runtime only
         sb.pack(side="right", fill="y")
         self.log.configure(yscrollcommand=sb.set)
 
-        dbwrap = collapsible(self.root, "Advanced: file locations")
+        dbwrap = collapsible(settings_parent, "Advanced: file locations")
         for i, (lbl, var) in enumerate((("owscout DB", self.db_var),
                                         ("faceit DB", self.faceit_var))):
             ttk.Label(dbwrap, text=lbl, width=11).grid(row=i, column=0, sticky="w", padx=6, pady=3)
@@ -383,6 +418,11 @@ class _App:  # pragma: no cover - GUI runtime only
         self._code_rows: list[Any] = []
         self._claimed: set[str] = set()      # games already scouted by anyone
         self._keybinds: dict[str, str] = {}
+        # Guided build: start everything on the Scout tab greyed and open on
+        # Settings, where Calibrate is - the only thing a fresh user can do.
+        if self.guided:
+            self._apply_gating()
+            self._nb.select(self._settings_tab)
         self.root.after(80, self._drain)
         self._load_keybinds()
         self._refresh_codes()
@@ -589,9 +629,35 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit(f"learn: {exc}")
 
     def _update_guide(self) -> None:
-        """Point the banner at the current next step (runs on the main loop)."""
+        """Point the banner at the next step + (guided build) gate the Scout tab."""
         self.guide_lbl.configure(
             text=_setup_hint(self._calibrated, bool(getattr(self, "_code_rows", []))))
+        self._apply_gating()
+
+    def _apply_gating(self) -> None:
+        """Guided build only: enable Scout-tab controls as prerequisites are met,
+        so a new user can only ever take the right next step. No-op otherwise."""
+        if not self.guided:
+            return
+        has_codes = bool(getattr(self, "_code_rows", []))
+
+        def _set(widgets: list[Any], on: bool) -> None:
+            for w in widgets:
+                try:
+                    ready = "readonly" if w.winfo_class() == "TCombobox" else "normal"
+                    w.configure(state=ready if on else "disabled")
+                except Exception:  # noqa: BLE001 - a widget that can't gate is skipped
+                    pass
+
+        _set(self._gate_calib, self._calibrated)
+        _set(self._gate_codes, self._calibrated and has_codes)
+        # Move the user to the Scout tab the moment setup is done (once).
+        if self._calibrated and not getattr(self, "_moved_to_scout", False):
+            self._moved_to_scout = True
+            try:
+                self._nb.select(self._scout_tab)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _verify_refs(self) -> None:
         def go() -> None:
@@ -1986,11 +2052,14 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
             pass
 
 
-def main() -> int:  # pragma: no cover
+def main(guided: Optional[bool] = None) -> int:  # pragma: no cover
     try:
         import tkinter  # noqa: F401
     except ImportError:
         print("Tkinter is not available in this Python.")
         return 2
-    _App().run()
+    if guided is None:
+        # The testers' build bakes a GUIDED marker in; env var helps dev testing.
+        guided = bool(_bundled("GUIDED")) or os.getenv("OWSCOUT_GUIDED") == "1"
+    _App(guided=guided).run()
     return 0
