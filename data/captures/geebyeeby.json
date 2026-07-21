@@ -1,0 +1,105 @@
+{
+  "format": 1,
+  "contributor": "geebyeeby",
+  "tool_version": "0.1.0",
+  "heroes": {},
+  "maps": [
+    {
+      "match_id": "1-15d2b79d-de42-42b3-b902-9ffa0183f4e8",
+      "game_no": 3,
+      "demo_code": "XW7QR8",
+      "map_guid": "0x08000000000000D4",
+      "map_name": "King's Row",
+      "map_category": "Hybrid",
+      "side_a_team_id": "fccd827d-f73e-46a7-bbe3-84216d8117df",
+      "side_a_team": "Ex Oblivione",
+      "side_b_team_id": "4d38c549-3743-4d98-b5f2-3b859b7dc08d",
+      "side_b_team": "ELMT Normal",
+      "winner_side": "a",
+      "captured_at": "2026-07-21T17:44:14Z",
+      "bans": [
+        "0x02E0000000000008",
+        "0x02E0000000000068"
+      ],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "default"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000004E3",
+            "0x02E0000000000042",
+            "0x02E0000000000029"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000023B",
+              "12bfe648-c686-4711-8480-82b3118e7a0e"
+            ],
+            [
+              "0x02E0000000000231",
+              "5bd0739c-4e52-49d2-b221-4da542bf0b5c"
+            ],
+            [
+              "0x02E00000000004E3",
+              "a6d9caef-6bec-42d0-a866-d8b9682a6744"
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000029",
+              "bcd9737d-3295-450d-a20e-94d8815c6d2f"
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000023B",
+            "0x02E0000000000005",
+            "0x02E000000000000A",
+            "0x02E00000000003C3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "6b11fefd-29b1-44a7-9c98-82acfc48c0e6"
+            ],
+            [
+              "0x02E000000000023B",
+              "4f46a302-3589-4a8f-ac72-d3f8a80d245d"
+            ],
+            [
+              "0x02E0000000000005",
+              "28f9c167-bd36-48f1-9605-f8d05b5e08f9"
+            ],
+            [
+              "0x02E000000000000A",
+              "a3ed533b-358c-4525-ab2c-cbbf8d3f62af"
+            ],
+            [
+              "0x02E00000000003C3",
+              "94e414d7-c57e-4729-acaf-1eb19deb9a96"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
