@@ -1,15 +1,18 @@
 # Giving OW Scout to anyone
 
-The whole tool is one file: `owscout.exe` (~77 MB). It carries the curator's
+The whole tool is one file: `owscout.exe` (~90 MB). It carries the curator's
 learned hero library and the seed match list inside it — no Python, no separate
 downloads.
 
-## Their setup (once, ~5 minutes + one background sync)
+## Their setup (once, ~2 minutes + one background sync)
 
 1. Put `owscout.exe` in its own folder (e.g. `C:\owscout\`). It keeps all its
    data — database, calibration, captures — next to itself.
-2. Run it. Windows SmartScreen will warn because the exe is unsigned:
-   **More info → Run anyway.**
+2. Run it. The first time, Windows shows a blue **"Windows protected your PC"**
+   box — this is **expected and normal for any app that isn't code-signed yet**,
+   not a virus warning. Click **More info → Run anyway**. (The dialog names the
+   app "OW Scout" and it only appears once per machine.) See *Why Windows warns*
+   below if you want to verify the download first.
 3. Open Overwatch (windowed/borderless) with any replay on screen, then click
    **Calibrate to my screen**. It **auto-draws** the boxes from the HUD layout —
    if the green boxes sit on the portraits, press **ENTER** to save (no dragging).
@@ -46,6 +49,28 @@ relearn its own portraits via **Learn heroes**.
 
 If the endpoint is unreachable, Publish still writes
 `data\captures\<name>.json` locally and says so - nothing is ever lost.
+
+## Why Windows warns (and how to be sure it's safe)
+
+The warning is **not** malware detection. Windows SmartScreen flags *any*
+executable that hasn't been bought a code-signing certificate — a brand-new
+indie tool always trips it. The build already does what it can without a
+certificate: it is **not packed** (packers are what most antivirus actually
+reacts to) and it carries proper Windows file properties (right-click →
+Properties → Details shows "OW Scout"), so it presents as a real named app, not
+an anonymous binary.
+
+To be certain the download wasn't tampered with, verify its checksum against the
+`owscout.exe.sha256` published next to it on the release:
+
+```powershell
+Get-FileHash owscout.exe -Algorithm SHA256
+```
+
+The printed hash should equal the one in `owscout.exe.sha256`.
+
+The permanent fix (removes the warning entirely) is code signing — see
+*Signing the exe* below.
 
 ## Troubleshooting
 
@@ -91,3 +116,32 @@ never leaves Cloudflare's secret store; contributors hold no credential at all.
 
 Export the refs first — the spec bakes `owscout_refs.zip`, `matches.txt` and the
 dashboard's hero icons into the binary, and warns if the bundle is missing.
+
+Publish `owscout.exe.sha256` alongside the exe so downloaders can verify it:
+
+```powershell
+(Get-FileHash dist\owscout.exe -Algorithm SHA256).Hash > dist\owscout.exe.sha256
+```
+
+## Signing the exe (removes the SmartScreen warning)
+
+Code signing is the only thing that makes the warning disappear entirely. The
+affordable, correct option today is **Azure Trusted Signing** (~$10/month):
+Microsoft's own signing service, trusted by SmartScreen **immediately** — no
+"reputation" wait, and it signs every rebuild.
+
+1. Create an Azure account, a Trusted Signing account + certificate profile, and
+   complete identity verification (individual verification is available).
+2. Install the `Az.CodeSigning` tooling / `signtool`.
+3. Sign after each build:
+   ```powershell
+   signtool sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
+     /dlib <trusted-signing.dll> /dmdf <metadata.json> dist\owscout.exe
+   ```
+
+Traditional OV certificates (~$100–250/yr) also work but still need to *earn*
+SmartScreen reputation download-by-download; an EV certificate (~$300+/yr, on a
+hardware token) grants instant trust like Trusted Signing does. For this
+project's cadence (frequent rebuilds, small audience), Trusted Signing is the
+best value. Until then, the unsigned build ships with the mitigations above
+(no packer, real file metadata, published checksum).
