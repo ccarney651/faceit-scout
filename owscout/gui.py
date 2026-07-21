@@ -1081,9 +1081,13 @@ class _App:  # pragma: no cover - GUI runtime only
             try:
                 from faceit_sync.db import Database as FaceitDb
                 from faceit_sync.export import export_html
+                # NB: bind the dashboard handle to its OWN name. Using `out` here
+                # clobbered the contribution-file PATH (assigned above), so the
+                # upload below then did open(<TextIOWrapper>, "rb") and every
+                # upload failed with "expected str... not TextIOWrapper".
                 with FaceitDb(self.faceit_var.get()) as fdb, \
-                        open("dashboard.html", "w", encoding="utf-8") as out:
-                    n = export_html(fdb, out)
+                        open("dashboard.html", "w", encoding="utf-8") as dash:
+                    n = export_html(fdb, dash)
                 self._emit(f"publish: local preview dashboard.html rebuilt ({n} division(s)).")
             except Exception as exc:  # noqa: BLE001
                 self._emit(f"publish: JSON written; local preview skipped ({exc}).")
