@@ -1214,6 +1214,52 @@ def _profile_and_refs(db: "Any", cv2: Any, hud_variant: str) -> tuple[Any, Any]:
     return profile, refs
 
 
+def calibration_selftest(  # pragma: no cover - needs cv2 + a frame
+    db: "Any", *, hud_variant: str = "default", frame_dir: Optional[str] = None,
+) -> tuple[int, int]:
+    """Run the REAL matcher with the current calibration + refs and count how many
+    of the 10 HUD slots resolve to a hero. A low count means the boxes are
+    misaligned - which is what a non-default OW 'UI Scale' does (it moves and
+    resizes the portraits), the case a fixed-fraction auto guess can't know about.
+
+    Uses the saved calibration frame when given a ``frame_dir`` (the exact frame
+    the boxes were drawn on, so it tests alignment directly), else a fresh grab.
+    Returns ``(resolved, total)``; (0, 10) on anything that makes it inconclusive.
+    """
+    cv2, _np = _import_cv2_np_for_capture()
+    from .match import face_subrect, make_template_scorer, match_frame
+    profile = db.latest_active_profile(hud_variant)
+    if profile is None or profile.id is None:
+        return 0, 10
+    refs = db.get_refs(profile.id)
+    if not refs:
+        return 0, 10
+    frame = None
+    if frame_dir:
+        import glob
+        import os as _os
+        pat = _os.path.join(
+            str(frame_dir), f"frame_{profile.resolution_w}x{profile.resolution_h}_*.png")
+        cands = sorted(glob.glob(pat))
+        if cands:
+            frame = cv2.imread(cands[-1])
+    if frame is None:
+        frame, w, h = grab_frame()
+        if (w, h) != (profile.resolution_w, profile.resolution_h):
+            return 0, 10
+    score_fn = make_template_scorer(cv2)
+    resolved = total = 0
+    for side in (SIDE_LEFT, SIDE_RIGHT):
+        slots = [face_subrect(r) for r in profile.slots[side]]
+        matches = match_frame(
+            frame, slots, refs, {}, set(), {},
+            confidence_floor=DEFAULT_CONFIDENCE_FLOOR,
+            crop_fn=_padded_crop, score_fn=score_fn)
+        total += len(matches)
+        resolved += sum(1 for m in matches if m.resolved)
+    return resolved, total
+
+
 def _persist_observation(  # pragma: no cover
     db: "Any", map_instance_id: int, obs: "SmoothedObservation", matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],

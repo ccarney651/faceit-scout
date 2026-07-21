@@ -533,17 +533,44 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit(msg)
 
         def go() -> None:
+            from .capture import calibration_selftest
+            from .refs import default_refs_dir, import_ref_bundle
             frame_dir = default_frame_dir(self.db_var.get())
             with self._open_db() as db:
                 # Auto-draws the boxes; ESC in its preview drops to hand-drawing on
                 # the same frame (one flow). Always returns a saved profile.
                 run_auto_calibration(db, hud_variant="default", team_size=5,
                                      frame_dir=frame_dir)
-            self._emit("calibrate: saved. If heroes still read as ??, re-calibrate "
-                       "with Overwatch BORDERLESS/FULLSCREEN at native resolution.")
+                # Pre-train NOW (synchronously) so the self-test below has refs.
+                prof = db.latest_active_profile("default")
+                bundle = _bundled("owscout_refs.zip")
+                if bundle and prof and prof.id and not db.get_refs(prof.id):
+                    n = import_ref_bundle(db, bundle,
+                                          default_refs_dir(self.db_var.get()))
+                    if n["added"]:
+                        self._emit(f"setup: pre-trained hero library loaded "
+                                   f"({n['added']} refs).")
+                # Self-test: run the real matcher on the calibration frame. This
+                # is what tells a user immediately that their boxes are misaligned
+                # (a non-default UI Scale) instead of them finding out via ?? later.
+                try:
+                    resolved, total = calibration_selftest(
+                        db, hud_variant="default", frame_dir=frame_dir)
+                except Exception as exc:  # noqa: BLE001 - never block on the test
+                    resolved, total = -1, 10
+                    self._emit(f"calibrate: (self-test skipped: {exc})")
+            if resolved >= 8:
+                self._emit(f"calibrate: saved and looks good — {resolved}/{total} "
+                           "heroes recognised on the test frame. Ready to capture.")
+            elif resolved >= 0:
+                self._emit(f"calibrate: WARNING — only {resolved}/{total} heroes "
+                           "recognised, so the boxes are probably MISALIGNED (a "
+                           "non-default Overwatch 'UI Scale' does this). Click "
+                           "Calibrate again and press ESC in the preview to DRAW "
+                           "the two boxes by hand, right on the portraits.")
+            else:
+                self._emit("calibrate: saved. You can close the calibrate window now.")
             self.q.put(self._verify_refs)
-            # A fresh calibration + a bundled library = pre-trained immediately.
-            self.q.put(self._maybe_import_bundled_refs)
         self._run(go)
 
     def _load_sheet(self) -> None:
