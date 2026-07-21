@@ -1006,10 +1006,14 @@ class _App:  # pragma: no cover - GUI runtime only
         code = raw.split()[0]
         side_a = self.side_a_var.get().strip() or None   # None = auto-detect
         binds = self._keybinds
-        from .capture import run_hotkey_capture
+        from .capture import CaptureControls, run_hotkey_capture
         self._emit(f"capture: {code} — {_keys_summary(binds)} · ESC done. Watch the overlay.")
         self.cap_btn.configure(state="disabled")
-        overlay = _CaptureOverlay(self, binds)
+        controls = CaptureControls()
+        overlay = _CaptureOverlay(self, binds, controls)
+        # run_hotkey_capture binds `controls` on its worker thread once it knows
+        # the map; build the map-specific buttons back on the Tk main thread.
+        controls.on_ready = lambda: self.q.put(overlay.build_controls)
 
         def emit(msg: str) -> None:
             self._emit(msg)
@@ -1024,7 +1028,8 @@ class _App:  # pragma: no cover - GUI runtime only
                                        submap_hotkey=binds["submap"],
                                        undo_hotkey=binds["undo"],
                                        attack_toggle_hotkey=binds["attack"],
-                                       require_division="master", emit=emit)
+                                       require_division="master", emit=emit,
+                                       controls=controls)
                 self._emit("capture: finished (saved as a draft — review to finalize).")
             finally:
                 self.q.put(overlay.close)
@@ -1719,9 +1724,14 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
     MUTED = "#8493a8"
     OK = "#74e08c"
 
-    def __init__(self, app: "_App", binds: dict[str, str]) -> None:
+    def __init__(self, app: "_App", binds: dict[str, str],
+                 controls: "Any" = None) -> None:
         tk = app.tk
         self._tk = tk
+        self._binds = binds
+        self.controls = controls
+        self._built = False
+        self._sub_val: Any = None
         self.win = tk.Toplevel(app.root)
         self.win.overrideredirect(True)               # no title bar / chrome
         self.win.attributes("-topmost", True)
@@ -1731,10 +1741,10 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
             pass
         self.win.configure(bg=self.BG)
         sw = self.win.winfo_screenwidth()
-        self.win.geometry(f"620x182+{max(0, sw // 2 - 310)}+8")   # top-centre
+        self._x = max(0, sw // 2 - 310)
+        self.win.geometry(f"620x210+{self._x}+8")   # top-centre; resized to fit later
 
         self._round = 1
-        self._submap = "—"
         self._snaps = 0
 
         # Header: title + match.
@@ -1746,12 +1756,12 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
                                   font=("Segoe UI", 9))
         self.match_lbl.pack(side="left", padx=10)
 
-        # State strip: three big stat cards you can read at a glance mid-replay.
-        strip = tk.Frame(self.win, bg=self.BG)
-        strip.pack(fill="x", padx=12, pady=4)
-        self._round_val = self._stat(strip, "ROUND", "1")
-        self._sub_val = self._stat(strip, "SUB-MAP", "—")
-        self._snap_val = self._stat(strip, "SNAPSHOTS", "0")
+        # State strip. SUB-MAP is deliberately absent here - it is added by
+        # build_controls only on control maps, the only place it means anything.
+        self._strip = tk.Frame(self.win, bg=self.BG)
+        self._strip.pack(fill="x", padx=12, pady=4)
+        self._round_cell, self._round_val = self._stat(self._strip, "ROUND", "1")
+        self._snap_cell, self._snap_val = self._stat(self._strip, "SNAPSHOTS", "0")
 
         # Last action / comp read.
         self.status = tk.Label(self.win,
@@ -1760,17 +1770,56 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
                                justify="left", anchor="w", wraplength=590)
         self.status.pack(fill="x", padx=16, pady=(2, 4), anchor="w")
 
-        # Key legend, one clear row.
-        legend = "   ".join((
-            f"{binds['snapshot'].upper()} snapshot",
-            f"{binds['round'].upper()} round",
-            f"{binds['submap'].upper()} sub-map",
-            f"{binds['attack'].upper()} attacks",
-            f"{binds['undo'].upper()} undo",
-            "ESC done",
-        ))
-        tk.Label(self.win, text=legend, bg=self.BG, fg=self.MUTED,
-                 font=("Consolas", 9)).pack(fill="x", padx=16, pady=(0, 8), anchor="w")
+        # Buttons: click OR hotkey, whichever suits (small keyboards, fiddly
+        # sub-map/attack calls). The main actions never depend on the map, so
+        # build them now; they are no-ops until the capture binds `controls`.
+        self._btns = tk.Frame(self.win, bg=self.BG)
+        self._btns.pack(fill="x", padx=12, pady=(0, 8))
+        row1 = tk.Frame(self._btns, bg=self.BG)
+        row1.pack(fill="x")
+        c = controls
+        self._mkbtn(row1, f"Snapshot ({binds['snapshot'].upper()})",
+                    (lambda: c and c.snapshot()), accent=True)
+        self._mkbtn(row1, f"Next round ({binds['round'].upper()})",
+                    (lambda: c and c.next_round()))
+        self._mkbtn(row1, f"Undo ({binds['undo'].upper()})", (lambda: c and c.undo()))
+        self._mkbtn(row1, "Done (ESC)", (lambda: c and c.done()))
+        self._condrow: Any = None
+
+    def build_controls(self) -> None:
+        """Add the map-specific controls once the capture has bound `controls`:
+        the SUB-MAP card + sub-map buttons on control maps, the attack flip on
+        escort/hybrid, and nothing on map types that need neither."""
+        tk = self._tk
+        c = self.controls
+        if self._built or c is None:
+            return
+        self._built = True
+        if c.submaps:
+            # SUB-MAP belongs between ROUND and SNAPSHOTS.
+            cell, self._sub_val = self._stat(self._strip, "SUB-MAP", "—")
+            cell.pack_forget()
+            cell.pack(side="left", expand=True, fill="x", padx=4, ipady=4,
+                      before=self._snap_cell)
+            row = tk.Frame(self._btns, bg=self.BG)
+            row.pack(fill="x", pady=(6, 0))
+            tk.Label(row, text="Sub-map:", bg=self.BG, fg=self.MUTED,
+                     font=("Segoe UI", 9, "bold")).pack(side="left", padx=(2, 6))
+            for i, sm in enumerate(c.submaps, start=1):
+                self._mkbtn(row, f"{i}  {sm}", (lambda sm=sm: c.pick_sub(sm)))
+            self._condrow = row
+        elif c.phased:
+            row = tk.Frame(self._btns, bg=self.BG)
+            row.pack(fill="x", pady=(6, 0))
+            tk.Label(row, text="Attack:", bg=self.BG, fg=self.MUTED,
+                     font=("Segoe UI", 9, "bold")).pack(side="left", padx=(2, 6))
+            self._mkbtn(row, f"Flip who's attacking ({self._binds['attack'].upper()})",
+                        (lambda: c.toggle_attack()))
+            self._condrow = row
+        # Resize the window to exactly fit whatever we ended up showing.
+        self.win.update_idletasks()
+        h = self.win.winfo_reqheight()
+        self.win.geometry(f"620x{h}+{self._x}+8")
 
     def _stat(self, parent: Any, caption: str, value: str) -> Any:
         tk = self._tk
@@ -1781,7 +1830,19 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         val = tk.Label(cell, text=value, bg=self.CARD, fg="#ffffff",
                        font=("Segoe UI", 16, "bold"))
         val.pack(pady=(0, 2))
-        return val
+        return cell, val
+
+    def _mkbtn(self, parent: Any, text: str, cmd: Any, *, accent: bool = False) -> Any:
+        tk = self._tk
+        b = tk.Button(parent, text=text, command=cmd, relief="flat", bd=0,
+                      cursor="hand2", font=("Segoe UI", 9, "bold"),
+                      padx=10, pady=6,
+                      bg=self.ACCENT if accent else self.CARD,
+                      fg="#06121e" if accent else "#e6edf6",
+                      activebackground="#8fdcff" if accent else "#20304a",
+                      activeforeground="#06121e" if accent else "#ffffff")
+        b.pack(side="left", padx=3)
+        return b
 
     def update(self, msg: str) -> None:
         m = msg.strip()
@@ -1799,8 +1860,9 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
                 self._round = int(m[len("round -> "):].split()[0])
                 self._round_val.configure(text=str(self._round))
             elif m.startswith("sub-map -> "):
-                self._submap = m[len("sub-map -> "):].split("  ")[0].strip()
-                self._sub_val.configure(text=self._submap or "—")
+                if self._sub_val is not None:
+                    sub = m[len("sub-map -> "):].split("  ")[0].strip()
+                    self._sub_val.configure(text=sub or "—")
             elif m.startswith("snap "):
                 # "snap 3 (R2): heroes..."
                 self._snaps = int(m.split()[1])

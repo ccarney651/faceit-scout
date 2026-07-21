@@ -615,6 +615,85 @@ def keybind_conflicts(binds: Mapping[str, str]) -> list[str]:
     return problems
 
 
+class CaptureControls:
+    """A handle the GUI can use to drive a running capture from on-screen buttons -
+    the SAME actions the global hotkeys fire, so the two stay in lockstep.
+
+    ``run_hotkey_capture`` binds it once its handlers exist and then calls
+    ``on_ready`` on a worker thread, handing over the map facts the overlay needs
+    to show the right buttons: ``submaps`` (control maps only) and ``phased``
+    (escort/hybrid, where round 3+ attack is chosen, not derived). Calls before
+    binding or after the capture ends are no-ops, so a late click can never poke a
+    finished capture. Actions run the same handlers the keyboard hooks do; the
+    capture core already mutates that state off its own thread, so this adds no new
+    hazard.
+    """
+
+    def __init__(self) -> None:
+        self.submaps: tuple[str, ...] = ()
+        self.phased: bool = False
+        self.map_category: Optional[str] = None
+        self.on_ready: Optional[Callable[[], None]] = None
+        self._active = False
+        self._snapshot: Optional[Callable[[], None]] = None
+        self._round: Optional[Callable[[], None]] = None
+        self._attack: Optional[Callable[[], None]] = None
+        self._undo: Optional[Callable[[], None]] = None
+        self._done: Optional[Callable[[], None]] = None
+        self._pick_sub: Optional[Callable[[str], None]] = None
+
+    def _bind(
+        self, *,
+        snapshot: Callable[[], None],
+        next_round: Callable[[], None],
+        toggle_attack: Callable[[], None],
+        undo: Callable[[], None],
+        done: Callable[[], None],
+        pick_sub: Callable[[str], None],
+        submaps: "Sequence[str]",
+        phased: bool,
+        map_category: Optional[str],
+    ) -> None:
+        self._snapshot, self._round, self._attack = snapshot, next_round, toggle_attack
+        self._undo, self._done, self._pick_sub = undo, done, pick_sub
+        self.submaps = tuple(submaps)
+        self.phased = phased
+        self.map_category = map_category
+        self._active = True
+        if self.on_ready is not None:
+            try:
+                self.on_ready()
+            except Exception:  # noqa: BLE001 - a display hiccup must not break capture
+                pass
+
+    def _end(self) -> None:
+        self._active = False
+
+    def snapshot(self) -> None:
+        if self._active and self._snapshot:
+            self._snapshot()
+
+    def next_round(self) -> None:
+        if self._active and self._round:
+            self._round()
+
+    def toggle_attack(self) -> None:
+        if self._active and self._attack:
+            self._attack()
+
+    def undo(self) -> None:
+        if self._active and self._undo:
+            self._undo()
+
+    def done(self) -> None:
+        if self._active and self._done:
+            self._done()
+
+    def pick_sub(self, name: str) -> None:
+        if self._active and self._pick_sub:
+            self._pick_sub(name)
+
+
 def run_hotkey_capture(  # pragma: no cover - runtime-only path
     db: "Any",
     faceit_db_path: str,
@@ -630,6 +709,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
+    controls: Optional[CaptureControls] = None,
     debug_dir: Optional[str] = None,
     crops_dir: Optional[str] = None,
     dry_run: bool = False,
@@ -705,6 +785,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     submaps = submaps_for(ctx.map_name)
     cur_sub: list[Optional[str]] = [None]
     used_subs: set[str] = set()   # sub-maps already played this map
+    # A stable reference for the GUI's sub-map buttons; a no-op on non-control maps.
+    pick_sub_cb: Callable[[str], None] = lambda _n: None
     if submaps:
         def _cycle_sub() -> None:
             # Offer the sub-maps not yet played; fall back to all once exhausted.
@@ -728,6 +810,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
             cur_sub[0] = name
             used_subs.add(name)
             emit(f"  sub-map -> {name}")
+        pick_sub_cb = _pick_sub
         for _i, _sm in enumerate(submaps, start=1):
             keyboard.add_hotkey(str(_i), lambda _sm=_sm: _pick_sub(_sm))
             keyboard.add_hotkey(f"ctrl+{_i}", lambda _sm=_sm: _pick_sub(_sm))
@@ -786,6 +869,23 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     undo_evt = threading.Event()
     keyboard.add_hotkey(undo_hotkey, undo_evt.set)
     emit(f"  Press '{undo_hotkey}' to UNDO the last snapshot or round marker.")
+
+    # Hand the GUI a live handle so its overlay buttons fire the SAME actions as
+    # the hotkeys. Bound here, after every handler exists; on_ready then lets the
+    # overlay build exactly the right buttons for this map (sub-map picks on
+    # control maps, attack flip on escort/hybrid, nothing extra otherwise).
+    if controls is not None:
+        controls._bind(
+            snapshot=snap_evt.set,
+            next_round=_next_round,
+            toggle_attack=_toggle_attacker,
+            undo=undo_evt.set,
+            done=done_evt.set,
+            pick_sub=pick_sub_cb,
+            submaps=submaps or (),
+            phased=phased,
+            map_category=ctx.map_category,
+        )
 
     snaps = 0
     written = 0
@@ -945,6 +1045,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         emit(f"  snap {snaps} (R{cur_round[0]}): " + "   ".join(line) + sub_tag)
 
     keyboard.clear_all_hotkeys()
+    if controls is not None:
+        controls._end()   # late button clicks become no-ops once capture is over
     # Do NOT greenlight the code here — a capture is a DRAFT until the operator
     # reviews it and finalizes. Finalizing marks the code captured and lets the
     # map into exports (see Database.finalize_map).

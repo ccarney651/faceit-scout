@@ -19,7 +19,10 @@ downloads.
    directly, which is slow (a progress bar shows how far along). Later syncs top
    up with the newest matches in seconds.
 5. Capture normally: pick a code, pick the left team, **Start hotkey capture**,
-   F8 at key moments in the replay, ESC when done. Review → finalize.
+   then either press the keys (F8 snapshot, etc.) or **click the buttons in the
+   overlay** — whichever suits. On control maps the overlay shows sub-map picks;
+   on escort/hybrid it shows a "flip who's attacking" button. ESC (or Done) when
+   finished, then Review → finalize.
 
 If heroes consistently fail to match on one side, the log will say so and name
 the likely cause (custom/colorblind UI team colours) — that machine needs to
