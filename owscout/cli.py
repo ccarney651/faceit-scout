@@ -481,15 +481,76 @@ def cmd_contribute_push(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_contribute_unscout(args: argparse.Namespace) -> int:
+    """Undo an accidental publish: add (or --undo remove) a game in the exclude
+    list of overrides.json, so the merge drops it from the report AND the
+    already-scouted feed and the code frees up in the apps again."""
+    import json as _json
+    import sqlite3
+    from .contribute import OVERRIDES_FILE
+
+    raw = args.code.strip()
+    if ":" in raw:
+        mid, _, gno = raw.rpartition(":")
+        try:
+            match_id, game_no = mid, int(gno)
+        except ValueError:
+            print(f"bad match:game key {raw!r}", file=sys.stderr)
+            return 2
+    else:
+        path = _faceit_db_path(args)
+        try:
+            con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            row = con.execute(
+                "SELECT match_id, game_no FROM games WHERE demo_code = ?", (raw,)
+            ).fetchone()
+            con.close()
+        except sqlite3.Error as exc:
+            print(f"cannot read faceit DB {path}: {exc}", file=sys.stderr)
+            return 2
+        if not row:
+            print(f"code {raw!r} not found in the faceit DB", file=sys.stderr)
+            return 2
+        match_id, game_no = str(row[0]), int(row[1])
+
+    ov_path = os.path.join(args.dir, OVERRIDES_FILE)
+    data: dict[str, object] = {}
+    if os.path.exists(ov_path):
+        with open(ov_path, encoding="utf-8") as fh:
+            data = _json.load(fh)
+    raw_excl = data.get("exclude")
+    excl: list[object] = list(raw_excl) if isinstance(raw_excl, list) else []
+
+    def _same(e: object) -> bool:
+        return (isinstance(e, dict) and str(e.get("match_id")) == match_id
+                and int(e.get("game_no", -1)) == game_no)
+
+    if args.undo:
+        excl = [e for e in excl if not _same(e)]
+        verb = "re-allowed (removed from exclude list)"
+    else:
+        if not any(_same(e) for e in excl):
+            excl.append({"match_id": match_id, "game_no": game_no})
+        verb = "un-scouted (added to exclude list)"
+    data["exclude"] = excl
+    os.makedirs(args.dir, exist_ok=True)
+    with open(ov_path, "w", encoding="utf-8") as fh:
+        _json.dump(data, fh, indent=2)
+    print(f"{match_id}:{game_no} {verb}")
+    print(f"  wrote {ov_path} - commit + push (or let CI run) to apply on the site")
+    return 0
+
+
 def cmd_contribute_merge(args: argparse.Namespace) -> int:
     """Merge every contributor file into the published payload (first-wins)."""
     import json as _json
-    from .contribute import (known_games, load_overrides, merged_payload,
-                             resolve_contributions)
+    from .contribute import (known_games, load_excludes, load_overrides,
+                             merged_payload, resolve_contributions)
     from .faceit import connect_ro, hero_roles as load_roles, load_heroes
 
     contribs = resolve_contributions(args.dir, use_git_order=not args.name_order)
     overrides = load_overrides(args.dir)
+    excludes = load_excludes(args.dir)
     if not contribs:
         print(f"no contribution files in {args.dir}", file=sys.stderr)
         return 2
@@ -504,7 +565,7 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     # CI runs, and it is the only gate between a contributor file and the site.
     payload = merged_payload(contribs, roles, names, overrides=overrides,
                              known=known_games(_faceit_db_path(args)),
-                             player_names=pnames)
+                             player_names=pnames, excludes=excludes)
     if args.captured_out:
         # A tiny public feed of which games are already scouted, so every
         # contributor's app can grey them out instead of two people scouting
@@ -521,6 +582,8 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     teams = cast("dict[str, object]", payload["teams"])
     if overrides:
         print(f"  {len(overrides)} curator override(s) in effect")
+    if excludes:
+        print(f"  {len(excludes)} un-scouted map(s) excluded (freed up in the apps)")
     print(f"merged {payload['maps_merged']} map(s) from "
           f"{len(payload['contributors'])} contributor(s) -> {args.out} "
           f"({len(teams)} team(s))")
@@ -1134,6 +1197,16 @@ def build_parser() -> argparse.ArgumentParser:
     cm.add_argument("--name-order", action="store_true",
                     help="order by filename instead of git commit date (testing)")
     cm.set_defaults(func=cmd_contribute_merge)
+
+    cu = consub.add_parser(
+        "unscout",
+        help="mark a code NOT scouted (undo an accidental publish): drops it from "
+             "the report + the already-scouted feed so it frees up in the apps")
+    cu.add_argument("code", help="replay code (e.g. SXD9K6) or match_id:game_no")
+    cu.add_argument("--dir", default=CONTRIB_DIR, help="contributions directory")
+    cu.add_argument("--undo", action="store_true",
+                    help="REMOVE the code from the exclude list (re-allow scouting it)")
+    cu.set_defaults(func=cmd_contribute_unscout)
 
     gui = sub.add_parser("gui", help="launch the desktop app (clickable workflow)")
     gui.set_defaults(func=cmd_gui)

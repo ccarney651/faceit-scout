@@ -6,6 +6,7 @@ from typing import Any
 from owscout.contribute import (
     CONTRIB_FORMAT,
     MapKey,
+    load_excludes,
     merge_first_wins,
     to_obs_details,
 )
@@ -94,6 +95,40 @@ def test_override_for_absent_contributor_falls_back() -> None:
     merged = merge_first_wins([alice], overrides={MapKey("m1", 1): "ghost"})
     assert merged.owner[MapKey("m1", 1)] == "alice"
     assert MapKey("m1", 1) in merged.maps
+
+
+def test_exclude_undoes_an_accidental_publish() -> None:
+    """The un-scout escape hatch: an excluded map leaves the merge entirely, so
+    it's neither in the report nor the captured feed - the code frees up again."""
+    alice = _contrib("alice", [("m1", 1, ["ram"]), ("m1", 2, ["soj"])])
+    merged = merge_first_wins([alice], excludes={MapKey("m1", 2)})
+    assert MapKey("m1", 1) in merged.maps        # the good map stays
+    assert MapKey("m1", 2) not in merged.maps    # the excluded one is gone
+    assert ("alice", MapKey("m1", 2)) in merged.ignored
+
+
+def test_load_excludes_reads_the_overrides_file(tmp_path: Path) -> None:
+    (tmp_path / "overrides.json").write_text(
+        '{"exclude": [{"match_id": "1-abc", "game_no": 2}]}', encoding="utf-8")
+    assert load_excludes(tmp_path) == {MapKey("1-abc", 2)}
+
+
+def test_load_excludes_degrades_on_missing_or_malformed(tmp_path: Path) -> None:
+    assert load_excludes(tmp_path) == set()          # no file
+    (tmp_path / "overrides.json").write_text("{ not json", encoding="utf-8")
+    assert load_excludes(tmp_path) == set()          # malformed -> empty, no raise
+
+
+def test_excluded_map_leaves_the_captured_feed() -> None:
+    """End to end through merged_payload: the excluded game is absent from
+    captured_games, which is exactly what un-hides it in the apps."""
+    from owscout.contribute import merged_payload
+    alice = _contrib("alice", [("m1", 1, ["ram"]), ("m1", 2, ["soj"])])
+    payload = merged_payload([alice], {}, {"ram": "Ramattra", "soj": "Sojourn"},
+                             excludes={MapKey("m1", 2)})
+    assert "m1:1" in payload["captured_games"]
+    assert "m1:2" not in payload["captured_games"]
+    assert payload["maps_excluded"] == 1
 
 
 def test_overrides_file_is_not_read_as_a_contribution(tmp_path: Path) -> None:

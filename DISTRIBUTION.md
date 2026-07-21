@@ -50,6 +50,24 @@ relearn its own portraits via **Learn heroes**.
 If the endpoint is unreachable, Publish still writes
 `data\captures\<name>.json` locally and says so - nothing is ever lost.
 
+## Un-scouting a code (undo an accidental publish)
+
+If someone publishes a map they didn't mean to, that code disappears from
+everyone's app (it's now "scouted"). The curator frees it up again:
+
+```
+owscout --faceit-db faceit.sqlite3 contribute unscout SXD9K6      # or match_id:game_no
+owscout --faceit-db faceit.sqlite3 contribute unscout SXD9K6 --undo   # re-allow it
+```
+
+That writes an `exclude` entry into `data/captures/overrides.json`; the next
+build drops the map from the report AND the already-scouted feed, so the code
+comes back in the apps. It's a committed file, so it's an auditable curator act -
+you can also just edit `overrides.json` directly on GitHub (that's curator-only
+by repo access, which is why there's no public "un-scout" button: anyone could
+wipe scouting work). The publisher's OWN app still hides it via their local
+capture until they **Discard** that draft in Review.
+
 ## Why Windows warns (and how to be sure it's safe)
 
 The warning is **not** malware detection. Windows SmartScreen flags *any*

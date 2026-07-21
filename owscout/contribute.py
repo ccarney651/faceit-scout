@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Iterable, Mapping, NamedTuple, Optional, Sequence
+from typing import AbstractSet, Any, Iterable, Mapping, NamedTuple, Optional, Sequence
 
 from .models import ObsDetail
 
@@ -259,6 +259,7 @@ OVERRIDES_FILE = "overrides.json"
 def merge_first_wins(
     contributions: Sequence[Mapping[str, Any]],
     overrides: Optional[Mapping[MapKey, str]] = None,
+    excludes: Optional[AbstractSet[MapKey]] = None,
 ) -> MergeResult:
     """Combine contributions in PRIORITY ORDER (earliest submission first).
 
@@ -300,7 +301,14 @@ def merge_first_wins(
     maps: dict[MapKey, dict[str, Any]] = {}
     owner: dict[MapKey, str] = {}
     ignored: list[tuple[str, MapKey]] = []
+    excl = excludes or frozenset()
     for key, by_who in views.items():
+        if key in excl:
+            # Curator un-scout: a bad/accidental publish. Drop the map entirely -
+            # it leaves the report AND the captured feed, so the code becomes
+            # available in the apps again. Every view is recorded as ignored.
+            ignored.extend((who, key) for who in arrival[key])
+            continue
         preferred = (overrides or {}).get(key)
         if preferred is not None and preferred not in by_who:
             log.warning("override for %s prefers %r, who has no view of it - "
@@ -327,6 +335,24 @@ def load_overrides(directory: str | Path) -> dict[MapKey, str]:
     except (OSError, ValueError, KeyError, TypeError) as exc:
         log.warning("ignoring malformed %s: %s", path, exc)
         return {}
+
+
+def load_excludes(directory: str | Path) -> set[MapKey]:
+    """The curator's committed un-scout list from ``overrides.json`` - games to
+    drop entirely (a bad/accidental publish), so the code frees up in the apps
+    again. Same file as overrides, so both curator escape hatches live together.
+    Degrades to empty on any problem rather than blocking the build."""
+    path = Path(directory) / OVERRIDES_FILE
+    if not path.is_file():
+        return set()
+    try:
+        with path.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        return {MapKey(str(o["match_id"]), int(o["game_no"]))
+                for o in data.get("exclude", [])}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        log.warning("ignoring malformed exclude list in %s: %s", path, exc)
+        return set()
 
 
 def to_obs_details(maps: Mapping[MapKey, Mapping[str, Any]]) -> list[ObsDetail]:
@@ -394,6 +420,7 @@ def merged_payload(
     overrides: Optional[Mapping[MapKey, str]] = None,
     known: Optional[Mapping[MapKey, KnownGame]] = None,
     player_names: Optional[Mapping[str, str]] = None,
+    excludes: Optional[AbstractSet[MapKey]] = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
@@ -422,7 +449,7 @@ def merged_payload(
             checked.append(cleaned)
         contributions = checked
 
-    merged = merge_first_wins(contributions, overrides=overrides)
+    merged = merge_first_wins(contributions, overrides=overrides, excludes=excludes)
     payload = dashboard_comps(to_obs_rows(merged.maps, roles, names))
     report = team_scout(to_obs_details(merged.maps), roles, names)
     teams = payload["teams"]
@@ -444,6 +471,7 @@ def merged_payload(
     payload["maps_merged"] = len(merged.maps)
     payload["views_ignored"] = len(merged.ignored)
     payload["maps_rejected"] = rejected
+    payload["maps_excluded"] = len(excludes or ())
     return payload
 
 
