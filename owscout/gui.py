@@ -1740,21 +1740,32 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         except Exception:  # noqa: BLE001 - alpha unsupported on some platforms
             pass
         self.win.configure(bg=self.BG)
+        self._app = app
+        self._dragoff = (0, 0)
         sw = self.win.winfo_screenwidth()
-        self._x = max(0, sw // 2 - 310)
-        self.win.geometry(f"620x210+{self._x}+8")   # top-centre; resized to fit later
+        # Default: top-centre (clear of the left/right portrait bars the capture
+        # reads - parking the overlay over those would make the grab read the
+        # overlay, not the heroes). The operator can drag it anywhere and the spot
+        # is remembered across captures.
+        self._x, self._y = self._load_pos(app, max(0, sw // 2 - 310), 8)
+        self.win.geometry(f"620x210+{self._x}+{self._y}")   # resized to fit later
 
         self._round = 1
         self._snaps = 0
 
-        # Header: title + match.
-        head = tk.Frame(self.win, bg=self.BG)
+        # Header doubles as a drag handle (grab it to move the whole overlay).
+        head = tk.Frame(self.win, bg=self.BG, cursor="fleur")
         head.pack(fill="x", padx=16, pady=(8, 2))
-        tk.Label(head, text="● OW Scout — capturing", bg=self.BG, fg=self.ACCENT,
-                 font=("Segoe UI", 11, "bold")).pack(side="left")
-        self.match_lbl = tk.Label(head, text="", bg=self.BG, fg=self.MUTED,
-                                  font=("Segoe UI", 9))
+        title = tk.Label(head, text="● OW Scout — capturing", bg=self.BG, fg=self.ACCENT,
+                         font=("Segoe UI", 11, "bold"), cursor="fleur")
+        title.pack(side="left")
+        self.match_lbl = tk.Label(head, text="drag to move", bg=self.BG, fg=self.MUTED,
+                                  font=("Segoe UI", 9), cursor="fleur")
         self.match_lbl.pack(side="left", padx=10)
+        for _w in (head, title, self.match_lbl):
+            _w.bind("<Button-1>", self._drag_start)
+            _w.bind("<B1-Motion>", self._drag)
+            _w.bind("<ButtonRelease-1>", self._drag_end)
 
         # State strip. SUB-MAP is deliberately absent here - it is added by
         # build_controls only on control maps, the only place it means anything.
@@ -1816,10 +1827,37 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
             self._mkbtn(row, f"Flip who's attacking ({self._binds['attack'].upper()})",
                         (lambda: c.toggle_attack()))
             self._condrow = row
-        # Resize the window to exactly fit whatever we ended up showing.
+        # Resize the window to exactly fit whatever we ended up showing, keeping
+        # wherever the operator has dragged it.
         self.win.update_idletasks()
         h = self.win.winfo_reqheight()
-        self.win.geometry(f"620x{h}+{self._x}+8")
+        self.win.geometry(f"620x{h}+{self._x}+{self._y}")
+
+    # --- drag-to-move; position persists across captures --------------------
+    def _load_pos(self, app: Any, default_x: int, default_y: int) -> tuple[int, int]:
+        try:
+            with app._open_db() as db:
+                got = db.get_settings("overlay.")
+            return (int(got.get("overlay.x", default_x)),
+                    int(got.get("overlay.y", default_y)))
+        except Exception:  # noqa: BLE001 - a bad/absent value just means default
+            return default_x, default_y
+
+    def _drag_start(self, e: Any) -> None:
+        self._dragoff = (e.x_root - self.win.winfo_rootx(),
+                         e.y_root - self.win.winfo_rooty())
+
+    def _drag(self, e: Any) -> None:
+        self._x = e.x_root - self._dragoff[0]
+        self._y = e.y_root - self._dragoff[1]
+        self.win.geometry(f"+{self._x}+{self._y}")
+
+    def _drag_end(self, _e: Any) -> None:
+        try:
+            with self._app._open_db() as db:
+                db.set_settings({"overlay.x": str(self._x), "overlay.y": str(self._y)})
+        except Exception:  # noqa: BLE001 - failing to remember the spot is harmless
+            pass
 
     def _stat(self, parent: Any, caption: str, value: str) -> Any:
         tk = self._tk
