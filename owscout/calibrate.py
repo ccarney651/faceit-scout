@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from .errors import CaptureError
 from .db import Database
@@ -95,6 +95,39 @@ def build_profile(
         team_size=team_size,
         slots=slots,
         anchors=anchors,
+    )
+
+
+# --- auto-calibration --------------------------------------------------------
+# Normalized (fractions of screen width/height) bounding strips for the two
+# 5-portrait rosters in the observer HUD, averaged over hand calibrations at
+# 2560x1440. The HUD sits at fixed fractions of the screen, so scaling these to
+# any 16:9 resolution reproduces a hand calibration to within a pixel or two -
+# inside the matcher's slide tolerance (round-tripped: 1080p and 1440p both land
+# on the measured boxes). Non-16:9 (ultrawide) or a non-default in-game UI scale
+# will be off; those still calibrate by hand, which the confirm preview prompts.
+AUTO_STRIPS: dict[str, tuple[float, float, float, float]] = {
+    SIDE_LEFT:  (0.0506, 0.0832, 0.2579, 0.0675),   # x, y, w, h as fractions
+    SIDE_RIGHT: (0.6912, 0.0818, 0.2573, 0.0705),
+}
+
+
+def auto_profile(
+    width: int, height: int, *, hud_variant: str, team_size: int = 5,
+) -> RoiProfile:
+    """A profile drawn from the known HUD proportions - no dragging. Reuses the
+    same strip->slots split as manual calibration, so the geometry is identical
+    to a hand calibration that boxed the rosters perfectly. Accurate on standard
+    16:9 at default UI scale; callers should still preview it so an off case can
+    fall back to manual."""
+    def strip(side: str) -> Rect:
+        fx, fy, fw, fh = AUTO_STRIPS[side]
+        return Rect(round(fx * width), round(fy * height),
+                    round(fw * width), round(fh * height))
+    return build_profile(
+        resolution_w=width, resolution_h=height, hud_variant=hud_variant,
+        team_size=team_size, left_strip=strip(SIDE_LEFT),
+        right_strip=strip(SIDE_RIGHT), anchors=[],
     )
 
 
@@ -175,6 +208,40 @@ def run_calibration(
     return profile
 
 
+def run_auto_calibration(
+    db: Database,
+    *,
+    hud_variant: str,
+    team_size: int,
+    frame_dir: str | Path,
+    confirm: bool = True,
+    dry_run: bool = False,
+) -> Optional[RoiProfile]:
+    """Auto-detect the ROI boxes from HUD proportions and save - no dragging.
+
+    With ``confirm`` a preview opens: ENTER saves, ESC returns None so the caller
+    can fall back to hand calibration (e.g. ultrawide / scaled HUD where the
+    proportions differ). Returns the saved profile, or None if the operator chose
+    to draw by hand.
+    """
+    from . import capture
+
+    cv2 = _import_cv2()
+    frame, width, height = capture.grab_frame()
+    log.info("auto-calibrate grabbed frame at %dx%d", width, height)
+    capture.save_frame(frame, frame_dir, f"{width}x{height}_{hud_variant}")
+    profile = auto_profile(width, height, hud_variant=hud_variant, team_size=team_size)
+
+    if confirm and not _confirm_slots(cv2, frame, profile.slots):
+        return None
+    if dry_run:
+        return profile
+    profile_id = db.save_profile(profile)
+    log.info("saved AUTO roi_profile id=%d for %dx%d '%s'",
+             profile_id, width, height, hud_variant)
+    return profile
+
+
 def _import_cv2() -> Any:
     try:
         import cv2
@@ -207,6 +274,21 @@ def _preview_slots(cv2: Any, frame: Any, slots: dict[str, list[Rect]]) -> None: 
     cv2.imshow(window, preview)
     cv2.waitKey(0)
     cv2.destroyWindow(window)
+
+
+def _confirm_slots(cv2: Any, frame: Any, slots: dict[str, list[Rect]]) -> bool:  # pragma: no cover
+    """Show the auto-detected boxes; ENTER (any key but ESC) accepts, ESC rejects
+    so the caller falls back to manual calibration."""
+    preview = frame.copy()
+    for rects in slots.values():
+        for r in rects:
+            cv2.rectangle(preview, (r.x, r.y), (r.x + r.w, r.y + r.h), (0, 255, 0), 2)
+    window = "AUTO-CALIBRATE: boxes on the portraits?  ENTER = save   ESC = draw by hand"
+    cv2.imshow(window, preview)
+    key = cv2.waitKey(0)
+    cv2.destroyWindow(window)
+    cv2.waitKey(1)   # pump so the window actually closes
+    return key != 27   # 27 = ESC
 
 
 def _select_anchors(cv2: Any, frame: Any, limit: int = 3) -> list[Anchor]:  # pragma: no cover

@@ -11,8 +11,11 @@ downloads.
 2. Run it. Windows SmartScreen will warn because the exe is unsigned:
    **More info → Run anyway.**
 3. Open Overwatch (windowed/borderless) with any replay on screen, then click
-   **Calibrate** and drag the two boxes as prompted. When it finishes, the log
-   says `pre-trained hero library loaded (104 refs)` — they are now trained.
+   **Calibrate to my screen**. It **auto-draws** the boxes from the HUD layout —
+   if the green boxes sit on the portraits, press **ENTER** to save (no dragging).
+   Only if they don't line up (ultrawide, or a changed HUD scale) press **ESC**
+   and drag the two boxes by hand. When it finishes, the log says
+   `pre-trained hero library loaded (104 refs)` — they are now trained.
 4. Click **Sync codes from FACEIT**. The first run **downloads the current match
    database from the site** (~1.3 MB, a few seconds) — it does not re-crawl
    FACEIT. If the site is unreachable it falls back to building from FACEIT

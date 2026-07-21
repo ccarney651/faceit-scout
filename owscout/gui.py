@@ -454,22 +454,31 @@ class _App:  # pragma: no cover - GUI runtime only
             self._emit("calibrate: cancelled" +
                        (" (your learned heroes are untouched)." if already else "."))
             return
-        from .calibrate import default_frame_dir, run_calibration
+        from .calibrate import (default_frame_dir, run_auto_calibration,
+                                 run_calibration)
         for msg in (
-            "CALIBRATE — first get an Overwatch observer/replay view on screen (the",
-            "  bar of 10 hero portraits along the top). A screenshot window will open:",
-            "  1. Drag a box tightly around the LEFT team's 5 portraits, press ENTER.",
-            "  2. Drag a box around the RIGHT team's 5 portraits, press ENTER.",
-            "  3. A preview shows the 5+5 slots — press any key to save (or close the",
-            "     window and redo if they don't line up). That's it.",
-            "  (Tip: box just the portrait row — including the names below is fine.)",
+            "CALIBRATE — get an Overwatch observer/replay view on screen (the bar",
+            "  of 10 hero portraits along the top), then watch for the window:",
+            "  * AUTO first: it draws the boxes for you. If the green boxes sit on",
+            "    the portraits, press ENTER to save — done.",
+            "  * If they DON'T line up (ultrawide, or a changed HUD scale), press",
+            "    ESC and drag the two boxes by hand instead.",
         ):
             self._emit(msg)
 
         def go() -> None:
+            frame_dir = default_frame_dir(self.db_var.get())
             with self._open_db() as db:
-                run_calibration(db, hud_variant="default", team_size=5,
-                                frame_dir=default_frame_dir(self.db_var.get()))
+                # Try the no-drag path first; ESC in its preview returns None and
+                # we fall back to boxing by hand.
+                prof = run_auto_calibration(db, hud_variant="default", team_size=5,
+                                            frame_dir=frame_dir)
+                if prof is None:
+                    self._emit("calibrate: drawing the boxes by hand instead …")
+                    run_calibration(db, hud_variant="default", team_size=5,
+                                    frame_dir=frame_dir)
+                else:
+                    self._emit("calibrate: auto-calibrated from the HUD layout.")
             self._emit("calibrate: saved. You can close the calibrate window now.")
             self.q.put(self._verify_refs)
             # A fresh calibration + a bundled library = pre-trained immediately.
