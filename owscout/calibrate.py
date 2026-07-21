@@ -219,10 +219,10 @@ def run_auto_calibration(
 ) -> Optional[RoiProfile]:
     """Auto-detect the ROI boxes from HUD proportions and save - no dragging.
 
-    With ``confirm`` a preview opens: ENTER saves, ESC returns None so the caller
-    can fall back to hand calibration (e.g. ultrawide / scaled HUD where the
-    proportions differ). Returns the saved profile, or None if the operator chose
-    to draw by hand.
+    With ``confirm`` a preview opens: ENTER saves the auto boxes; ESC drops to
+    HAND calibration ON THE SAME FRAME (box each team's 5 portraits) - one frame,
+    one continuous window flow, so an off auto guess (ultrawide / scaled HUD /
+    windowed OW) recovers without a second grab. Always returns the saved profile.
     """
     from . import capture
 
@@ -233,11 +233,20 @@ def run_auto_calibration(
     profile = auto_profile(width, height, hud_variant=hud_variant, team_size=team_size)
 
     if confirm and not _confirm_slots(cv2, frame, profile.slots):
-        return None
+        # Draw by hand on the SAME frame - no second grab, no separate flow.
+        left = _select_box(
+            cv2, frame, "DRAW 1/2: box the LEFT team's 5 hero portraits, then ENTER")
+        right = _select_box(
+            cv2, frame, "DRAW 2/2: box the RIGHT team's 5 hero portraits, then ENTER")
+        profile = build_profile(
+            resolution_w=width, resolution_h=height, hud_variant=hud_variant,
+            team_size=team_size, left_strip=left, right_strip=right, anchors=[])
+        _preview_slots(cv2, frame, profile.slots)
+
     if dry_run:
         return profile
     profile_id = db.save_profile(profile)
-    log.info("saved AUTO roi_profile id=%d for %dx%d '%s'",
+    log.info("saved roi_profile id=%d for %dx%d '%s'",
              profile_id, width, height, hud_variant)
     return profile
 
@@ -283,7 +292,8 @@ def _confirm_slots(cv2: Any, frame: Any, slots: dict[str, list[Rect]]) -> bool: 
     for rects in slots.values():
         for r in rects:
             cv2.rectangle(preview, (r.x, r.y), (r.x + r.w, r.y + r.h), (0, 255, 0), 2)
-    window = "AUTO-CALIBRATE: boxes on the portraits?  ENTER = save   ESC = draw by hand"
+    window = ("AUTO-CALIBRATE: green boxes on the portraits?  ENTER = save   "
+              "ESC = draw by hand   (if way off: OW must be BORDERLESS/FULLSCREEN)")
     cv2.imshow(window, preview)
     key = cv2.waitKey(0)
     cv2.destroyWindow(window)

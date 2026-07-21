@@ -93,8 +93,8 @@ def _setup_hint(calibrated: bool, has_codes: bool) -> str:
     banner so the app always answers 'what do I do now?' - the main gap a
     non-technical first-timer hits."""
     if not calibrated:
-        return ("Step 1 of 3  ·  open an Overwatch replay, then click "
-                "“Calibrate to my screen”.")
+        return ("Step 1 of 3  ·  open a replay in Overwatch (BORDERLESS/FULLSCREEN, "
+                "native resolution), then click “Calibrate to my screen”.")
     if not has_codes:
         return ("Step 2 of 3  ·  click “Sync codes from FACEIT” "
                 "to load the match list.")
@@ -510,40 +510,37 @@ class _App:  # pragma: no cover - GUI runtime only
                 "Calibrate to your screen",
                 "This is the one-time setup: it teaches owscout where the hero "
                 "portraits sit on YOUR screen.\n\n"
-                "First, have Overwatch open on a replay with the row of 10 hero "
-                "portraits showing along the top. Then continue — it takes about a "
-                "minute.",
+                "IMPORTANT: run Overwatch in BORDERLESS or FULLSCREEN at your "
+                "monitor's native resolution (Options → Video → Display Mode). "
+                "In a WINDOW the HUD sits in the wrong place and the boxes will "
+                "miss the portraits.\n\n"
+                "Open a replay so the row of 10 hero portraits shows along the "
+                "top, then continue — it takes about a minute.",
                 default="yes", parent=self.root)
         if not ok:
             self._emit("calibrate: cancelled" +
                        (" (your learned heroes are untouched)." if already else "."))
             return
-        from .calibrate import (default_frame_dir, run_auto_calibration,
-                                 run_calibration)
+        from .calibrate import default_frame_dir, run_auto_calibration
         for msg in (
-            "CALIBRATE — get an Overwatch observer/replay view on screen (the bar",
-            "  of 10 hero portraits along the top), then watch for the window:",
+            "CALIBRATE — Overwatch must be BORDERLESS/FULLSCREEN at native",
+            "  resolution (NOT windowed), on a replay showing the 10 portraits.",
+            "  A window will open:",
             "  * AUTO first: it draws the boxes for you. If the green boxes sit on",
             "    the portraits, press ENTER to save — done.",
-            "  * If they DON'T line up (ultrawide, or a changed HUD scale), press",
-            "    ESC and drag the two boxes by hand instead.",
+            "  * If they DON'T line up, press ESC and drag the two boxes by hand.",
         ):
             self._emit(msg)
 
         def go() -> None:
             frame_dir = default_frame_dir(self.db_var.get())
             with self._open_db() as db:
-                # Try the no-drag path first; ESC in its preview returns None and
-                # we fall back to boxing by hand.
-                prof = run_auto_calibration(db, hud_variant="default", team_size=5,
-                                            frame_dir=frame_dir)
-                if prof is None:
-                    self._emit("calibrate: drawing the boxes by hand instead …")
-                    run_calibration(db, hud_variant="default", team_size=5,
-                                    frame_dir=frame_dir)
-                else:
-                    self._emit("calibrate: auto-calibrated from the HUD layout.")
-            self._emit("calibrate: saved. You can close the calibrate window now.")
+                # Auto-draws the boxes; ESC in its preview drops to hand-drawing on
+                # the same frame (one flow). Always returns a saved profile.
+                run_auto_calibration(db, hud_variant="default", team_size=5,
+                                     frame_dir=frame_dir)
+            self._emit("calibrate: saved. If heroes still read as ??, re-calibrate "
+                       "with Overwatch BORDERLESS/FULLSCREEN at native resolution.")
             self.q.put(self._verify_refs)
             # A fresh calibration + a bundled library = pre-trained immediately.
             self.q.put(self._maybe_import_bundled_refs)

@@ -6,13 +6,16 @@ OW Scout - quick setup
      a new app that isn't code-signed yet - it is NOT a virus warning.
      Click:  More info  ->  Run anyway.
 
-2. Open Overwatch (windowed or borderless fullscreen) on any replay, so the row
-   of 10 hero portraits is showing along the top.
+2. IMPORTANT - set Overwatch to BORDERLESS or FULLSCREEN at your monitor's
+   native resolution (Options -> Video -> Display Mode). Do NOT run it in a
+   window - the calibration boxes will miss the portraits if you do.
+   Then open any replay so the row of 10 hero portraits shows along the top.
 
 3. In OW Scout, the app opens on the SETTINGS tab. Click "Calibrate to my
-   screen". It draws the boxes for you - if the green boxes sit on the portraits,
-   press ENTER to save. (Only if they don't line up: press ESC and drag the two
-   boxes by hand.)
+   screen". It draws the boxes for you - if the green boxes sit ON the portraits,
+   press ENTER to save. If they're clearly off, press ESC and drag the two boxes
+   by hand (one around each team's 5 portraits, ENTER after each). Keep Overwatch
+   in the SAME display mode for calibrating AND capturing.
 
 4. It switches you to the SCOUT tab. Click "Sync codes from FACEIT" once. The
    first time it downloads the match list (a few seconds).
