@@ -1780,7 +1780,7 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         # State strip. SUB-MAP is deliberately absent here - it is added by
         # build_controls only on control maps, the only place it means anything.
         self._strip = tk.Frame(self.win, bg=self.BG)
-        self._strip.pack(fill="x", padx=12, pady=4)
+        self._strip.pack(fill="x", padx=16, pady=(0, 2))
         self._round_cell, self._round_val = self._stat(self._strip, "ROUND", "1")
         self._snap_cell, self._snap_val = self._stat(self._strip, "SNAPSHOTS", "0")
 
@@ -1820,8 +1820,7 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
             # SUB-MAP belongs between ROUND and SNAPSHOTS.
             cell, self._sub_val = self._stat(self._strip, "SUB-MAP", "—")
             cell.pack_forget()
-            cell.pack(side="left", expand=True, fill="x", padx=4, ipady=4,
-                      before=self._snap_cell)
+            cell.pack(side="left", padx=(0, 16), before=self._snap_cell)
             row = tk.Frame(self._btns, bg=self.BG)
             row.pack(fill="x", pady=(6, 0))
             tk.Label(row, text="Sub-map:", bg=self.BG, fg=self.MUTED,
@@ -1888,26 +1887,29 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
             pass
 
     def _stat(self, parent: Any, caption: str, value: str) -> Any:
+        # Compact inline "CAPTION value" - reference info, deliberately small so
+        # the CONTROLS are the prominent part of the overlay.
         tk = self._tk
-        cell = tk.Frame(parent, bg=self.CARD)
-        cell.pack(side="left", expand=True, fill="x", padx=4, ipady=4)
-        tk.Label(cell, text=caption, bg=self.CARD, fg=self.MUTED,
-                 font=("Segoe UI", 8, "bold")).pack(pady=(4, 0))
-        val = tk.Label(cell, text=value, bg=self.CARD, fg="#ffffff",
-                       font=("Segoe UI", 16, "bold"))
-        val.pack(pady=(0, 2))
+        cell = tk.Frame(parent, bg=self.BG)
+        cell.pack(side="left", padx=(0, 16))
+        tk.Label(cell, text=caption + " ", bg=self.BG, fg=self.MUTED,
+                 font=("Segoe UI", 9, "bold")).pack(side="left")
+        val = tk.Label(cell, text=value, bg=self.BG, fg="#ffffff",
+                       font=("Segoe UI", 12, "bold"))
+        val.pack(side="left")
         return cell, val
 
     def _mkbtn(self, parent: Any, text: str, cmd: Any, *, accent: bool = False) -> Any:
+        # The controls are the point of the overlay, so they're the biggest thing.
         tk = self._tk
         b = tk.Button(parent, text=text, command=cmd, relief="flat", bd=0,
-                      cursor="hand2", font=("Segoe UI", 9, "bold"),
-                      padx=10, pady=6,
+                      cursor="hand2", font=("Segoe UI", 11, "bold"),
+                      padx=14, pady=10,
                       bg=self.ACCENT if accent else self.CARD,
                       fg="#06121e" if accent else "#e6edf6",
                       activebackground="#8fdcff" if accent else "#20304a",
                       activeforeground="#06121e" if accent else "#ffffff")
-        b.pack(side="left", padx=3)
+        b.pack(side="left", padx=(0, 6))
         return b
 
     def update(self, msg: str) -> None:
