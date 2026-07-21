@@ -25,9 +25,10 @@ OW Scout - quick setup
      Overwatch's replay screen.
    - Click "Start hotkey capture", then watch the replay and press:
         F8 = snapshot the current comp (press it whenever heroes change)
-        F7 = next round      F9 = undo      ESC = done
-     (You can also click these on the on-screen overlay. Drag the overlay by its
-      title bar if it's in the way.)
+        F7 = next round      F9 = undo      F10 = done (finish capturing)
+     (Do NOT use Esc - that opens the Overwatch menu. You can also click these
+      buttons on the on-screen overlay. Drag the overlay by its title bar if it's
+      in the way.)
 
 6. When you've captured a game, click "Review captured maps" to check it, then
    "Publish my captures". That's it - your scouting appears on the site in a

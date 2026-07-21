@@ -41,3 +41,13 @@ def test_esc_is_rejected() -> None:
 
 def test_default_keybinds_are_themselves_valid() -> None:
     assert keybind_conflicts(DEFAULT_KEYBINDS) == []
+
+
+def test_done_is_a_configurable_bind_and_never_esc() -> None:
+    """Stopping capture must NOT be on Esc (Esc opens the OW menu). It's a normal
+    rebindable action with a non-Esc default, and Esc stays rejected for it."""
+    assert "done" in DEFAULT_KEYBINDS
+    assert DEFAULT_KEYBINDS["done"] not in ("esc", "escape")
+    assert keybind_conflicts({**DEFAULT_KEYBINDS, "done": "esc"})   # rejected
+    # a sane rebind is accepted
+    assert keybind_conflicts({**DEFAULT_KEYBINDS, "done": "f12"}) == []

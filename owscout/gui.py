@@ -29,7 +29,7 @@ ALL_REGIONS = "(all regions)"
 
 # The capture legend, built from whatever keys the operator has bound.
 _KEY_LABELS = (("snapshot", "snapshot"), ("round", "next round"), ("submap", "sub-map"),
-               ("attack", "who-attacks"), ("undo", "undo"))
+               ("attack", "who-attacks"), ("undo", "undo"), ("done", "done"))
 
 
 def _keys_summary(binds: dict[str, str]) -> str:
@@ -1111,7 +1111,7 @@ class _App:  # pragma: no cover - GUI runtime only
         side_a = self.side_a_var.get().strip() or None   # None = auto-detect
         binds = self._keybinds
         from .capture import CaptureControls, run_hotkey_capture
-        self._emit(f"capture: {code} — {_keys_summary(binds)} · ESC done. Watch the overlay.")
+        self._emit(f"capture: {code} — {_keys_summary(binds)}. Watch the overlay.")
         self.cap_btn.configure(state="disabled")
         controls = CaptureControls()
         overlay = _CaptureOverlay(self, binds, controls)
@@ -1132,6 +1132,7 @@ class _App:  # pragma: no cover - GUI runtime only
                                        submap_hotkey=binds["submap"],
                                        undo_hotkey=binds["undo"],
                                        attack_toggle_hotkey=binds["attack"],
+                                       done_hotkey=binds["done"],
                                        require_division="master", emit=emit,
                                        controls=controls)
                 self._emit("capture: finished (saved as a draft — review to finalize).")
@@ -1899,7 +1900,8 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         self._mkbtn(row1, f"Next round ({binds['round'].upper()})",
                     (lambda: c and c.next_round()))
         self._mkbtn(row1, f"Undo ({binds['undo'].upper()})", (lambda: c and c.undo()))
-        self._mkbtn(row1, "Done (ESC)", (lambda: c and c.done()))
+        self._mkbtn(row1, f"Done ({binds.get('done', 'f10').upper()})",
+                    (lambda: c and c.done()))
         self._condrow: Any = None
 
     def build_controls(self) -> None:

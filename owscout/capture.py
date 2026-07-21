@@ -588,9 +588,11 @@ KEYBIND_ACTIONS: tuple[tuple[str, str, str], ...] = (
     ("submap", "Cycle the control sub-map", "control maps only"),
     ("attack", "Flip who is attacking", "escort/hybrid, round 3+"),
     ("undo", "Undo the last snapshot", "rare, deliberately across the F8/F9 gap"),
+    ("done", "Stop / finish capture", "NOT Esc - Esc opens the OW menu"),
 )
 DEFAULT_KEYBINDS: dict[str, str] = {
     "snapshot": "f8", "round": "f7", "submap": "f6", "attack": "f5", "undo": "f9",
+    "done": "f10",
 }
 SETTING_PREFIX = "keybind."
 
@@ -609,7 +611,8 @@ def resolve_keybinds(stored: Mapping[str, str]) -> dict[str, str]:
 
 def keybind_conflicts(binds: Mapping[str, str]) -> list[str]:
     """Human-readable problems with a keybind set: duplicates (one press would fire
-    two actions) and ESC, which always ends the capture."""
+    two actions) and ESC, which is reserved for the Overwatch menu (binding
+    capture to it would end the session every time you open the menu)."""
     problems: list[str] = []
     seen: dict[str, str] = {}
     for action, key in binds.items():
@@ -618,7 +621,7 @@ def keybind_conflicts(binds: Mapping[str, str]) -> list[str]:
             problems.append(f"{action}: no key set")
             continue
         if k in ("esc", "escape"):
-            problems.append(f"{action}: ESC always ends the capture - pick another key")
+            problems.append(f"{action}: ESC opens the Overwatch menu - pick another key")
         if k in seen:
             problems.append(f"{action} and {seen[k]} are both on '{k.upper()}'")
         seen[k] = action
@@ -716,6 +719,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     submap_hotkey: str = "f6",
     undo_hotkey: str = "f9",
     attack_toggle_hotkey: str = "f5",
+    done_hotkey: str = "f10",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     require_division: Optional[str] = None,
     emit: Callable[[str], None] = print,
@@ -783,11 +787,13 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 
     snap_evt, done_evt = threading.Event(), threading.Event()
     keyboard.add_hotkey(hotkey, snap_evt.set)
-    keyboard.add_hotkey("esc", done_evt.set)
+    # Done is its OWN key, NOT Esc: Esc opens the OW menu, so binding capture to it
+    # ended the session every time the operator glanced at the menu.
+    keyboard.add_hotkey(done_hotkey, done_evt.set)
     emit(f"HOTKEY capture ready for {ctx.map_name} ({ctx.faction1_team_name} vs "
           f"{ctx.faction2_team_name}).")
     emit(f"  Jump to key moments in the replay, press '{hotkey}' to snapshot the comp. "
-          f"Press 'esc' when done.")
+          f"Press '{done_hotkey}' when done.")
 
     # Control maps rotate between sub-maps with different geometry; let the operator
     # tag the current sub-map with number keys so snapshots are attributed to it.
