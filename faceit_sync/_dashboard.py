@@ -198,6 +198,14 @@ details.mapblk>summary::-webkit-details-marker{display:none}
 details.mapblk>summary::after{content:'▾';color:var(--muted);transition:transform .15s}
 details.mapblk[open]>summary::after{transform:rotate(180deg)}
 details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
+/* Per-map comp history: a light inline expander under the "last 3" headline. */
+details.hist{margin:1px 0 4px}
+details.hist>summary{cursor:pointer;list-style:none;color:var(--muted);font-size:11.5px;
+  font-weight:650;padding:3px 0;user-select:none}
+details.hist>summary::-webkit-details-marker{display:none}
+details.hist>summary::before{content:'\25B8 ';color:var(--faint)}
+details.hist[open]>summary::before{content:'\25BE '}
+b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 /* Two columns inside a map: openers on the left, the swaps seen there on the
    right (the right half was dead space before). Collapses on narrow screens. */
 .mapbody{padding:2px 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:0 22px}
@@ -218,6 +226,25 @@ details.mapblk>summary:hover{background:var(--surface2);border-radius:10px}
   padding:8px 2px;background:var(--bg);border-bottom:1px solid var(--line)}
 .minibar a{color:var(--muted);text-decoration:none;font-size:12.5px;font-weight:650}
 .minibar a:hover{color:var(--accent)}
+/* Scout tab body: deep analysis (main) beside a sticky Matches rail. */
+.scoutgrid{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(300px,1fr);
+  gap:0 20px;align-items:start;margin-top:12px}
+.scout-side{position:sticky;top:88px;align-self:start}
+.scout-side .scrollbox.rail{max-height:calc(100vh - 108px)}
+/* Match cards are full-width by nature; in the narrow rail force single-column
+   rosters and a slightly tighter type so nothing overflows. */
+.scout-side .rosters{grid-template-columns:1fr}
+.scout-side .match{font-size:12.5px}
+@media(max-width:900px){
+  .scoutgrid{grid-template-columns:1fr}
+  .scout-side{position:static}
+  .scout-side .scrollbox.rail{max-height:min(60vh,560px)}
+}
+/* At-a-glance band: four self-wrapping summary panels. */
+.glance{margin-top:10px}
+.glance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 22px}
+.glance-col+.glance-col{position:relative}
+.glance-col>.eyebrow{margin-top:0}
 /* A sub-map / phase separator is a heading; "then" is a note ON a row, so it must
    not read as one - it is inline, lighter, and lower-case. */
 .then{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
@@ -355,6 +382,11 @@ const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
 const MAP_POP={};
 Object.values(DIVS).forEach(d=>d.matches.forEach(m=>m.games.forEach(g=>{
   if(g.map) MAP_POP[g.map]=(MAP_POP[g.map]||0)+1; })));
+// match_id -> match, so a captured comp (which carries only match_id/game_no) can
+// be dated by the real match date — capture order is not match order.
+const MATCH_BY_ID={};
+Object.values(DIVS).forEach(d=>d.matches.forEach(m=>{ MATCH_BY_ID[m.id]=m; }));
+const matchWhen=(mid)=> (MATCH_BY_ID[mid]&&MATCH_BY_ID[mid].finished_at)||'';
 function modeRank(mp){ const i=MODE_ORDER.indexOf(MAP_CAT[mp]||''); return i<0?MODE_ORDER.length:i; }
 function mapCmp(a,b){ return modeRank(a)-modeRank(b) || (MAP_POP[b]||0)-(MAP_POP[a]||0)
                           || a.localeCompare(b); }
@@ -404,6 +436,41 @@ function compDelta(from,to){
   return (out.length||inn.length)?{out,in:inn}:null;
 }
 function deltaHtml(d){ return `${compRow(d.out)}<span class="arr">&rarr;</span>${compRow(d.in)}`; }
+
+// Comp-family identity, ported from analysis.same_comp: two lineups are the same
+// comp when they share >=4 heroes, or exactly 3 including the same tank. Lets a
+// one-hero flex fold into the same comp when we ask "what did they run here".
+function tankOf(hs){ return hs.find(h=>HERO_ROLE[h]==='Tank')||null; }
+function sameCompJS(a,b){
+  const sb=new Set(b); let shared=0; a.forEach(h=>{ if(sb.has(h)) shared++; });
+  if(shared>=4) return true;
+  if(shared===3){ const t=tankOf(a); return !!t&&sb.has(t)&&tankOf(b)===t; }
+  return false;
+}
+// The representative comp across a set of games (the "average" of the last N):
+// cluster by family, the biggest cluster wins, ties broken toward the most recent
+// game. `games` is newest-first, each {heroes,won}. Returns {heroes,n,of,wins,losses}.
+function modalComp(games){
+  if(!games.length) return null;
+  const used=new Array(games.length).fill(false), clusters=[];
+  for(let i=0;i<games.length;i++){ if(used[i])continue;
+    const c=[i]; used[i]=true;
+    for(let j=i+1;j<games.length;j++){
+      if(!used[j]&&sameCompJS(games[i].heroes,games[j].heroes)){ c.push(j); used[j]=true; } }
+    clusters.push(c); }
+  clusters.sort((x,y)=> y.length-x.length || x[0]-y[0]);  // size, then most-recent anchor
+  const best=clusters[0], wins=best.filter(k=>games[k].won).length;
+  return {heroes:games[best[0]].heroes, n:best.length, of:games.length,
+          wins, losses:best.length-wins};
+}
+// A team's captured games on one map, newest match first, each carrying the
+// opponent and the opening comp — the raw material for "last 3" + full history.
+function mapHistory(scout, mp){
+  return (scout.matchups||[]).filter(m=>m.map===mp)
+    .map(m=>({heroes:m.open||[], won:m.won, opp:m.opp, when:matchWhen(m.match_id)}))
+    .sort((a,b)=> (b.when||'').localeCompare(a.when||''));
+}
+
 let SWAP_NOISE=new Set();   // per-team: heroes in ~every enemy lineup (set by renderScoutBody)
 function swapLine(s){
   const vs=(s.vs||[]).filter(h=>!SWAP_NOISE.has(h));
@@ -917,7 +984,12 @@ function renderScout(){
 }
 
 function renderScoutBody(t){
-  const w=el(`<div></div>`);
+  // Layout: a full-width top band (header, glance, coverage) over a two-column
+  // body — the deep analysis in `w` (main column), the match receipts in a
+  // sticky rail. `w` stays the analysis container so that body is untouched.
+  const root=el(`<div></div>`);
+  const w=el(`<div class="scout-main"></div>`);
+  const side=el(`<div class="scout-side"></div>`);
   const matchW=t.results.filter(r=>r.won).length;
   const form=t.results.slice(0,7).map(r=>`<b class="${r.won?'w':'l'}" title="${esc(r.opp)} ${esc(r.series)}">${r.won?'W':'L'}</b>`).join('');
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
@@ -925,7 +997,63 @@ function renderScoutBody(t){
     `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div>`));
   head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
-  w.appendChild(head);
+  root.appendChild(head);
+
+  // ---- At a glance: the prep headline before any scrolling. Four panels —
+  // go-to comps, their bans, map pool, form/tempo. Degrades to the FACEIT-derived
+  // bans/maps when no comps have been captured for this team yet.
+  {
+    const scoutG=((DATA.owscout_comps||{})[t.team]||{}).scout;
+    const g=el(`<div class="card glance"></div>`);
+    g.appendChild(el(`<p class="eyebrow">At a glance</p>`));
+    const cols=el(`<div class="glance-grid"></div>`);
+
+    const c1=el(`<div class="glance-col"></div>`);
+    c1.appendChild(el(`<p class="eyebrow">Go-to comps</p>`));
+    const tops=((scoutG&&scoutG.overall)||[]).slice(0,2);
+    if(tops.length) tops.forEach(c=>c1.appendChild(el(
+      `<div class="crow${c.maps<=1?' thin':''}"><span>${compRow(c.heroes)}</span>`+
+      `<span class="rec">${c.maps>=3?`${c.wins}W-${c.losses}L`:`${c.maps} map${c.maps===1?'':'s'}`}</span></div>`)));
+    else c1.appendChild(el(`<p class="note" style="margin:2px 0 0">No comps captured yet.</p>`));
+    cols.appendChild(c1);
+
+    const c2=el(`<div class="glance-col"></div>`);
+    c2.appendChild(el(`<p class="eyebrow">Their bans</p>`));
+    const tb=rank(t.bans).slice(0,4);
+    if(tb.length) tb.forEach(([h,n])=>c2.appendChild(el(
+      `<div class="crow"><span>${heroChip(h)}</span><span class="rec">${n}x</span></div>`)));
+    else c2.appendChild(el(`<p class="note" style="margin:2px 0 0">No bans in window.</p>`));
+    cols.appendChild(c2);
+
+    const c3=el(`<div class="glance-col"></div>`);
+    c3.appendChild(el(`<p class="eyebrow">Map pool</p>`));
+    const mp=Object.entries(t.mapStats).filter(([,v])=>v.picks>0)
+      .map(([m,v])=>({m,picks:v.picks,wr:pctOf(v.wins,v.games)}))
+      .sort((a,b)=>b.picks-a.picks).slice(0,4);
+    if(mp.length) mp.forEach(r=>c3.appendChild(el(
+      `<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
+      `<span class="rec">${r.picks}x · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
+    else c3.appendChild(el(`<p class="note" style="margin:2px 0 0">No picked maps in window.</p>`));
+    cols.appendChild(c3);
+
+    const c4=el(`<div class="glance-col"></div>`);
+    c4.appendChild(el(`<p class="eyebrow">Form &amp; tempo</p>`));
+    c4.appendChild(el(`<div class="wl" style="margin:2px 0 7px">${form||'<span class="faint">no maps</span>'}</div>`));
+    if(scoutG&&scoutG.adapt){
+      const ad=scoutG.adapt;
+      const bits=[`<b>${ad.swaps_per_map}</b> swaps/map`,
+                  `<b>${ad.families}</b> comp famil${ad.families===1?'y':'ies'}`];
+      if(ad.loss_followups>0) bits.push(`changed after loss <b>${ad.changed_after_loss}/${ad.loss_followups}</b>`);
+      c4.appendChild(el(`<p class="note" style="margin:0;font-size:12.5px">${bits.join(' · ')}</p>`));
+      c4.appendChild(el(`<p class="note" style="margin:4px 0 0;font-size:11.5px">${ad.families<=2?'rigid — preppable':'flexible — outplay live'}</p>`));
+    } else {
+      c4.appendChild(el(`<p class="note" style="margin:0;font-size:12px">No captured comps for a tempo read.</p>`));
+    }
+    cols.appendChild(c4);
+
+    g.appendChild(cols);
+    root.appendChild(g);
+  }
 
   // Scouting coverage - the capture work-list. Every replay-coded game either
   // has captured comps or is still to scout; the pending codes are click-to-copy
@@ -953,29 +1081,14 @@ function renderScoutBody(t){
     } else {
       cov.appendChild(el(`<p class="note" style="margin:0">Fully scouted - every replay-coded game is captured.</p>`));
     }
-    w.appendChild(cov);
+    root.appendChild(cov);
   }
 
-  // Adaptability - three numbers that say HOW this team behaves, which at
-  // small samples is more trustworthy than whether they won.
-  if(((DATA.owscout_comps||{})[t.team]||{}).scout){
-    const ad=(DATA.owscout_comps[t.team].scout||{}).adapt;
-    if(ad){
-      const bits=[`<b>${ad.swaps_per_map}</b> swaps/map`,
-                  `<b>${ad.families}</b> comp famil${ad.families===1?'y':'ies'}`];
-      if(ad.loss_followups>0){
-        bits.push(`after a lost map: changed comp <b>${ad.changed_after_loss} of ${ad.loss_followups}</b> times`);
-      }
-      w.appendChild(el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Adaptability</p>`+
-        `<p style="margin:0;font-size:13.5px">${bits.join(' <span class="faint">·</span> ')}`+
-        `<span class="faint" style="font-size:12px"> - rigid teams can be prepped against; flexible ones must be outplayed live</span></p></div>`));
-    }
-  }
-
-  // Sticky jump bar: the page is navigated, not scrolled.
+  // Adaptability now lives in the glance band above. Sticky jump bar heads the
+  // main column; Matches moved to the rail, so it drops out of the jump links.
   w.appendChild(el(`<nav class="minibar">`+
     `<a href="#sc-run">What they run</a><a href="#sc-ban">Ban decision</a>`+
-    `<a href="#sc-map">Map decision</a><a href="#sc-receipts">Matches</a></nav>`));
+    `<a href="#sc-map">Map decision</a></nav>`));
 
   // ---- Scouting from captured replays (owscout) -------------------------
   // Three sections: what they play (Common comps + Hero pool), where they play
@@ -1074,9 +1187,30 @@ function renderScoutBody(t){
           `<div class="mapbody"><div class="mapcol opens"></div>`+
           `<div class="mapcol swaps"></div></div></details>`);
         const body=d.querySelector('.mapcol.opens');
+        // Recency first: the comp from the last 3 games on this map predicts what
+        // they'll run better than an all-time cluster, and the history says who
+        // they ran each comp against. Ordered by real match date, not capture time.
+        const hist=mapHistory(scout, mp);
+        if(hist.length){
+          const last3=hist.slice(0,3), mod=modalComp(last3);
+          body.appendChild(el(`<p class="seg">last 3 games</p>`));
+          if(mod){
+            const lab=mod.of>=3?`${mod.n} of last ${mod.of}`:`${mod.of} game${mod.of===1?'':'s'}`;
+            const w3=last3.filter(g=>g.won).length;
+            body.appendChild(el(`<div class="crow${thin(mod.of)}"><span>${compRow(mod.heroes)}</span>`+
+              `<span class="rec">${lab} · ${w3}W-${last3.length-w3}L</span></div>`));
+          }
+          const hd=el(`<details class="hist"><summary>history &middot; ${hist.length} game${hist.length===1?'':'s'} vs teams</summary></details>`);
+          hist.forEach(g=>hd.appendChild(el(
+            `<div class="crow"><span>${compRow(g.heroes)} <span class="faint">vs ${esc(g.opp||'?')}</span></span>`+
+            `<span class="rec">${g.when?dshort(g.when)+' &middot; ':''}${g.won?'<b class="wlw">W</b>':'<b class="wll">L</b>'}</span></div>`)));
+          body.appendChild(hd);
+        }
         Object.keys(segs).forEach(seg=>{
           const both=segs[seg]||{};
-          if(seg!=='all') body.appendChild(el(`<p class="seg">${esc(seg)}</p>`));
+          // "all captured" heads the single-geometry block so it reads distinctly
+          // from the "last 3 games" above it; phased/control maps use their seg name.
+          body.appendChild(el(`<p class="seg" style="margin-top:12px">${seg==='all'?'all captured':esc(seg)}</p>`));
           (both.open||[]).slice(0,3).forEach(c=>body.appendChild(el(compLine(c))));
           // Only show "settled" when they actually changed off the opener - and
           // only the heroes that changed, since the rest is the row above it.
@@ -1394,24 +1528,22 @@ function renderScoutBody(t){
     w.appendChild(dv.root);
   }
 
-  // ==== RECEIPTS ====
-  w.appendChild(cluster('sc-receipts','Receipts'));
-  {
-    const dv=drawer('Match receipts','full cards, bans in draft order, replay codes');
-  // Kept in its own scrolling box: the match list grows without bound and pushed
-  // every analysis section below it off the screen.
-      dv.body.appendChild(el(sectionH('Matches',`<span class="note">${t.matches.length} match${t.matches.length===1?'':'es'} · scrolls · click a map for rosters · replay codes inline</span>`)));
+  // ==== MATCHES: a sticky right rail, not a bottom drawer — the receipts stay
+  // in view while you read the analysis, and the list scrolls inside the rail.
+  side.appendChild(el(sectionH('Matches',
+    `<span class="note">${t.matches.length} game${t.matches.length===1?'':'es'} · click a map for rosters · codes inline</span>`)));
   if(t.matches.length){
-    const mbox=el(`<div class="scrollbox"></div>`);
+    const mbox=el(`<div class="scrollbox rail"></div>`);
     t.matches.forEach(m=>mbox.appendChild(matchCard(m)));
-        dv.body.appendChild(mbox);
+    side.appendChild(mbox);
   } else {
-        dv.body.appendChild(el(`<p class="note">No matches in this window.</p>`));
+    side.appendChild(el(`<p class="note">No matches in this window.</p>`));
   }
 
-    w.appendChild(dv.root);
-  }
-  return w;
+  const layout=el(`<div class="scoutgrid"></div>`);
+  layout.append(w, side);
+  root.appendChild(layout);
+  return root;
 }
 
 /* ================================================= DRAFT SIMULATOR (manual scenario planner) */

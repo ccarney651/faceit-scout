@@ -123,9 +123,20 @@ def test_matchups_pair_opening_with_enemy_opening() -> None:
     assert mu[0]["open"] == [g.upper() for g in mine]
     assert mu[0]["vs"] == [g.upper() for g in theirs]
     assert mu[0]["won"] is True and mu[0]["map"] == "King's Row"
+    assert mu[0]["opp"] == "Bravo"          # opponent TEAM name, for "vs <team>"
     # and the enemy's entry mirrors it
     bmu = rep["Bravo"]["matchups"][0]
     assert bmu["vs"] == [g.upper() for g in mine] and bmu["won"] is False
+    assert bmu["opp"] == "Alpha"
+
+
+def test_matchups_carry_match_identity_for_recency_and_history() -> None:
+    """The map history orders games by real match date and links opponents, so
+    each matchup must carry the FACEIT match_id/game_no the dashboard joins on."""
+    mine = ["ram", "soj", "mei", "luc", "kir"]
+    details = [_obs(1, "a", 0, mine, "hybrid", "a")._replace(match_id="M7", game_no=2)]
+    mu = team_scout(details, ROLES, NAMES)["Alpha"]["matchups"][0]
+    assert mu["match_id"] == "M7" and mu["game_no"] == 2
 
 
 def test_adaptability_change_after_loss() -> None:

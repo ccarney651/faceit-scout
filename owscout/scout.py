@@ -215,10 +215,16 @@ def team_scout(
             (e for e in games.get((mi, "b" if side == "a" else "a"), [])),
             key=lambda e: e.sample_ts_ms)
         enemy_open = enemy_obs[0].hero_guids if enemy_obs else ()
+        # The opponent TEAM (not their heroes): "vs Frost Tails" needs the name,
+        # and match_id lets the dashboard order these by real match date (capture
+        # order is not match order) and show a per-opponent comp history per map.
+        opp_team = first.side_b_team if side == "a" else first.side_a_team
         matchups.setdefault(team, []).append({
             "open": [hero_names.get(g, g) for g in first.hero_guids],
             "vs": [hero_names.get(g, g) for g in enemy_open],
             "won": won, "map": mp,
+            "opp": opp_team,
+            "match_id": first.match_id, "game_no": first.game_no,
         })
         if first.match_id is not None and first.game_no is not None:
             series.setdefault(team, []).append(
