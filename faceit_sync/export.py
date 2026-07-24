@@ -338,18 +338,35 @@ def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
     }
 
 
-def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None) -> int:
+def _tier_of(name: Optional[str]) -> Optional[str]:
+    """The skill tier a championship name encodes ('Master' | 'Expert' | None)."""
+    if not name:
+        return None
+    return "Master" if "Master" in name else "Expert" if "Expert" in name else None
+
+
+def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,
+                only_tier: Optional[str] = None) -> int:
     """Render the multi-division dashboard.
 
     With ``championship_id`` set, only that division is included; otherwise every
-    championship in the database becomes a switchable division. Returns the number
-    of divisions with data.
+    championship in the database becomes a switchable division. ``only_tier``
+    ('master'/'expert', case-insensitive) restricts the dashboard to one skill
+    tier - the site ships Master-only for now, though the DB holds both. Returns
+    the number of divisions with data.
     """
+    want_tier: Optional[str] = None
+    if only_tier:
+        w = only_tier.strip().lower()
+        want_tier = "Master" if w.startswith("m") else "Expert" if w.startswith("e") else None
+
     if championship_id:
         cids = [championship_id]
     else:
-        cids = [str(r["id"]) for r in
-                db.conn.execute("SELECT id FROM championships ORDER BY name").fetchall()]
+        rows = db.conn.execute("SELECT id, name FROM championships ORDER BY name").fetchall()
+        if want_tier:
+            rows = [r for r in rows if _tier_of(r["name"]) == want_tier]
+        cids = [str(r["id"]) for r in rows]
 
     divisions: dict[str, Any] = {}
     heroes: dict[str, Any] = {}
@@ -377,13 +394,10 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         u = name.upper()
         return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
 
-    def tier_of(name: str) -> Optional[str]:
-        return "Master" if "Master" in name else "Expert" if "Expert" in name else None
-
     by_region_tier: dict[tuple[str, str], str] = {}
     for cid, d in divisions.items():
         nm = str(d["summary"]["championship"])
-        r, t = region_of(nm), tier_of(nm)
+        r, t = region_of(nm), _tier_of(nm)
         if r and t:
             by_region_tier[(r, t)] = cid
 

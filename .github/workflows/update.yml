@@ -114,7 +114,9 @@ jobs:
           fi
           # docs/index.html is the LIVE SITE and this job is its only writer.
           # export reads owscout_comps.json from the repo root.
-          faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
+          # --tier master: the DB holds Expert too, but the site is Master-only
+          # for now. Drop the flag to bring Expert (and Combined views) back.
+          faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html --tier master
 
       - name: Publish downloadable DB snapshot
         run: |
