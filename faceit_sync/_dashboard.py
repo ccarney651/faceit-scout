@@ -1032,6 +1032,30 @@ function renderScoutBody(t){
     w.appendChild(el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Not scouted yet</p>`+
       `<p class="note" style="margin:0">No captured comps for ${esc(t.team)} <b>(0 of ${t.games} maps played)</b>. Everything below is FACEIT draft data only — grab their replay codes from the Matches rail to scout their comps.</p></div>`));
   }
+
+  // Scouting tells: a scannable TL;DR of the team's strongest, data-backed
+  // tendencies. Each line names its evidence; none fires on a single game. Built
+  // entirely from signals already computed (ban-lift, ban-response, signatures).
+  {
+    const tells=[];
+    const bb=divBanBaseline();
+    const sigBan=banLiftRows(t.bans, bb.all, 3).filter(r=>r.lift&&r.lift>=1.5)[0];
+    if(sigBan) tells.push(`<span class="then">ban</span> leans on banning ${heroChip(sigBan.hero)} `+
+      `<span class="faint">×${sigBan.lift.toFixed(1)} the field rate · ${sigBan.n} bans</span>`);
+    const br=((scout&&scout.ban_response)||[]).filter(b=>b.games>=2 && (b.opens||[]).length)[0];
+    if(br) tells.push(`<span class="then">when ${esc(br.banned)} banned</span> opens ${compRow(br.opens[0].heroes)} `+
+      `<span class="faint">${br.games} games</span>`);
+    const sig=Object.entries(t.pickFirstBan).map(([m,v])=>({m,v}))
+      .filter(x=>x.v.games>=2).sort((a,b)=>b.v.games-a.v.games)[0];
+    if(sig){ const tb=rank(sig.v.bans)[0];
+      tells.push(`<span class="then">map</span> on ${esc(sig.m)} they pick &amp; open the ban`+
+        (tb?` on ${heroChip(tb[0])}`:'')+` <span class="faint">${sig.v.games}x, self-chosen</span>`); }
+    if(tells.length){
+      const card=el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Scouting tells</p></div>`);
+      tells.forEach(tx=>card.appendChild(el(`<div class="crow" style="border:none;padding:4px 2px"><span class="swapline">${tx}</span></div>`)));
+      w.appendChild(card);
+    }
+  }
   // n=1 is an anecdote, not a pattern - show it, but visibly weaker.
   const thin=n=>n<=1?' thin':'';
   // Below 3 maps a W-L is an anecdote that READS like a rate (Redline and
