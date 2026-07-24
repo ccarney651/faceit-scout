@@ -621,28 +621,32 @@ def rank_player_heroes(
 ) -> dict[tuple[str, str], dict[str, Any]]:
     """(player_id, hero_guid) -> {games, avg{...}, and rank/of/pct when the hero
     has >= ``min_group`` players and this one has >= ``min_games`` on it}. Rank is
-    within the hero, by the role-weighted blend in ``_STAT_WEIGHTS`` over stats
-    standardised across that hero's players (so scales/heroes are comparable)."""
+    within (division, hero), by the role-weighted blend in ``_STAT_WEIGHTS`` over
+    stats standardised across that hero's players (so scales/heroes are
+    comparable). The division scope (``champ`` on each stat row) keeps skill tiers
+    apart - a Master player is never ranked against an Expert one."""
     prim = _primary_hero_per_game(maps)
-    acc: dict[tuple[str, str], dict[str, float]] = {}
+    # Accumulate per (player, hero, division) so tiers/championships never pool.
+    acc: dict[tuple[str, str, str], dict[str, float]] = {}
     for (mid, gno, pid), guid in prim.items():
         st = player_stats.get((mid, gno, pid))
         if not st or not st.get("captured", True):
             continue
-        a = acc.setdefault((pid, guid), {"games": 0.0, **{f: 0.0 for f in _STAT_FIELDS}})
+        div = str(st.get("champ") or "")
+        a = acc.setdefault((pid, guid, div), {"games": 0.0, **{f: 0.0 for f in _STAT_FIELDS}})
         a["games"] += 1.0
         for f in _STAT_FIELDS:
             a[f] += float(st.get(f) or 0.0)
 
-    by_hero: dict[str, list[tuple[str, dict[str, float]]]] = {}
-    for (pid, guid), a in acc.items():
+    by_group: dict[tuple[str, str], list[tuple[str, dict[str, float]]]] = {}
+    for (pid, guid, div), a in acc.items():
         g = a["games"] or 1.0
         avg = {f: a[f] / g for f in _STAT_FIELDS}
         avg["games"] = a["games"]
-        by_hero.setdefault(guid, []).append((pid, avg))
+        by_group.setdefault((div, guid), []).append((pid, avg))
 
     out: dict[tuple[str, str], dict[str, Any]] = {}
-    for guid, members in by_hero.items():
+    for (_div, guid), members in by_group.items():
         weights = _STAT_WEIGHTS.get((hero_roles.get(guid) or "").lower(),
                                     _STAT_WEIGHTS["damage"])
         means: dict[str, float] = {}

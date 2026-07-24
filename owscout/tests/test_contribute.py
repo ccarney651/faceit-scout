@@ -425,3 +425,31 @@ def test_rank_player_heroes_thin_group_keeps_avg_but_no_rank() -> None:
     info = rank_player_heroes(maps, stats, {"ana": "support"})[("P1", "ana")]
     assert "rank" not in info
     assert info["avg"]["healing"] == 6000 and info["games"] == 1
+
+
+def test_rank_player_heroes_scopes_by_division() -> None:
+    """Tier safety: a Master pool and an Expert player on the same hero must not
+    pool. The Master group of 3 ranks among itself (of==3, not 4), and the lone
+    Expert player - a group of 1 - gets no rank."""
+    from owscout.contribute import MapKey, rank_player_heroes
+
+    maps: dict[Any, Any] = {}
+    stats: dict[Any, Any] = {}
+
+    def add(pid: str, mid: str, champ: str, dmg: int) -> None:
+        for gno in (1, 2):
+            maps[MapKey(mid, gno)] = {"observations": [
+                {"side": "a", "round_no": 1, "sub_map": None, "pairs": [["ram", pid]]}]}
+            stats[(mid, gno, pid)] = {"elims": 10, "deaths": 4, "damage": dmg,
+                                      "healing": 0, "mitigation": 2000,
+                                      "champ": champ, "captured": True}
+
+    add("P1", "M1", "emea-master", 8000)
+    add("P2", "M2", "emea-master", 5000)
+    add("P3", "M3", "emea-master", 3000)
+    add("PX", "MX", "emea-expert", 9999)      # different pool - must not mix in
+    ranks = rank_player_heroes(maps, stats, {"ram": "tank"})
+
+    assert ranks[("P1", "ram")]["of"] == 3    # 3 Master players, not 4
+    assert ranks[("P1", "ram")]["rank"] == 1
+    assert "rank" not in ranks[("PX", "ram")]  # Expert group of 1 -> unranked

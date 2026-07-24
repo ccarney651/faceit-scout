@@ -719,6 +719,7 @@ function aggregate(matches,team){
 const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
  {id:'scout',label:'Scout a team',render:renderScout},
+ {id:'players',label:'Players',render:renderPlayers},
  {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
  {id:'matches',label:'Matches',render:renderMatches},
@@ -728,6 +729,7 @@ let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
+let PLAYERS_ROLE='All';        // Players tab role filter
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
@@ -1482,6 +1484,61 @@ function renderScoutBody(t){
 
 /* ================================================= DRAFT SIMULATOR (manual scenario planner) */
 // Per-team history over the active division: map-pick counts, per-map ban counts, overall ban counts.
+/* ============================================================= PLAYERS */
+// League-wide, per-hero player leaderboard. Reads the ranks owscout computed at
+// merge time (scoped within division/tier, role-weighted) and inverts them from
+// team -> player -> hero into hero -> ranked players.
+function renderPlayers(){
+  const wrap=el(`<div></div>`);
+  const ocs=DATA.owscout_comps||{}, byHero={};
+  D().team_names.forEach(team=>{
+    (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
+      (p.heroes||[]).forEach(h=>{ if(h.rank==null) return;
+        (byHero[h.hero]=byHero[h.hero]||[]).push({player:p.player, team, ...h}); });
+    });
+  });
+  const heroNames=Object.keys(byHero);
+  if(!heroNames.length){
+    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No ranked players yet. A player earns a per-hero rank once that hero has <b>3+ captured players</b> and the player has <b>2+ games</b> on it — capture more games to fill this in.</p>`));
+    return wrap;
+  }
+  wrap.appendChild(el(sectionH('Players — best on each hero',
+    `<span class="note">ranked within ${esc(D().summary.championship||'the division')} · role-weighted (tanks favour damage+elims) · hover a row for per-game stats</span>`)));
+  const bar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);
+  const body=el(`<div></div>`);
+  wrap.append(bar, body);
+  const draw=()=>{
+    [...bar.children].forEach(b=>b.classList.toggle('selA', b.textContent===PLAYERS_ROLE));
+    body.innerHTML='';
+    const heroes=heroNames.filter(h=>PLAYERS_ROLE==='All'||HERO_ROLE[h]===PLAYERS_ROLE)
+      .sort((a,b)=>byHero[b].length-byHero[a].length||a.localeCompare(b));
+    if(!heroes.length){ body.appendChild(el(`<p class="note">No ranked ${esc(PLAYERS_ROLE)} players yet.</p>`)); return; }
+    const grid=el(`<div class="grid cols-2"></div>`);
+    heroes.forEach(hero=>{
+      const rows=[...byHero[hero]].sort((a,b)=>a.rank-b.rank), of=rows[0].of;
+      const card=el(`<div class="card"></div>`);
+      card.appendChild(el(`<p class="eyebrow">${heroChip(hero)} <span class="note" style="text-transform:none;letter-spacing:0">${of} player${of===1?'':'s'} on this hero</span></p>`));
+      rows.forEach(r=>{
+        const col=r.pct>=67?'var(--good)':r.pct>=34?'var(--mid)':'var(--bad)', s=r.stats||{};
+        const line=HERO_ROLE[hero]==='Support'
+          ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
+          : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
+        card.appendChild(el(`<div class="crow" title="${r.games}g avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
+          `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span></span>`+
+          `<span class="rec">${line}</span></div>`));
+      });
+      grid.appendChild(card);
+    });
+    body.appendChild(grid);
+  };
+  ['All','Tank','Damage','Support'].forEach(role=>{
+    const b=el(`<span class="wbtn ${role===PLAYERS_ROLE?'selA':''}">${role}</span>`);
+    b.onclick=()=>{ PLAYERS_ROLE=role; draw(); }; bar.appendChild(b);
+  });
+  draw();
+  return wrap;
+}
+
 function simModel(team){
   const pick={}, banByMap={}, bansAll={};
   D().matches.forEach(m=>{
@@ -1651,6 +1708,30 @@ function renderMeta(){
     body.appendChild(v);
   }
   draw();
+
+  // Most-played comps across the league (captured openings). Aggregated by exact
+  // 5-hero identity across every team; capture-gated, so honest when thin.
+  {
+    const agg={};
+    D().team_names.forEach(team=>{
+      (((DATA.owscout_comps||{})[team]||{}).comps||[]).forEach(c=>{
+        const key=[...c.heroes].sort().join(',');
+        const a=agg[key]||(agg[key]={heroes:c.heroes,maps:0,games:0,wins:0,teams:new Set()});
+        a.maps+=c.maps||0; a.games+=c.games||0; a.wins+=c.wins||0; a.teams.add(team);
+      });
+    });
+    const rows=Object.values(agg).sort((a,b)=>b.maps-a.maps).slice(0,12);
+    wrap.appendChild(el(sectionH('Most-played comps',`<span class="note">captured openings across the league · win% shown at 3+ maps</span>`)));
+    if(rows.length){
+      const card=el(`<div class="card"></div>`);
+      rows.forEach(r=>card.appendChild(el(`<div class="crow${r.maps<=1?' thin':''}"><span>${compRow(r.heroes)}</span>`+
+        `<span class="rec">${r.maps} map${r.maps===1?'':'s'} · ${r.teams.size} team${r.teams.size===1?'':'s'}`+
+        `${r.maps>=3?` · ${Math.round(100*r.wins/(r.games||1))}%`:''}</span></div>`)));
+      wrap.appendChild(card);
+    } else {
+      wrap.appendChild(el(`<p class="note">No comps captured yet — this fills in as games are scouted.</p>`));
+    }
+  }
 
   // Current map pool, grouped by mode the way FACEIT lays out the veto pool.
   const MODE_ORDER=['Control','Escort','Flashpoint','Hybrid','Push','Clash'];

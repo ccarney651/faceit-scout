@@ -564,15 +564,19 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
         # predate round_players, in which case ranking is simply skipped.
         pstats: dict[tuple[str, int, str], dict[str, object]] = {}
         try:
+            # championship_id scopes the ranking to one competitive pool, so a
+            # Master player is never ranked against an Expert one.
             for r in fdb.execute(
-                "SELECT match_id, game_no, player_id, role, stats_captured, "
-                "eliminations, deaths, damage, healing, damage_mitigated FROM round_players"):
+                "SELECT rp.match_id, rp.game_no, rp.player_id, rp.role, rp.stats_captured, "
+                "rp.eliminations, rp.deaths, rp.damage, rp.healing, rp.damage_mitigated, "
+                "m.championship_id AS champ FROM round_players rp "
+                "JOIN matches m ON m.id = rp.match_id"):
                 if not r["stats_captured"]:
                     continue
                 pstats[(str(r["match_id"]), int(r["game_no"]), str(r["player_id"]))] = {
                     "role": r["role"], "elims": r["eliminations"], "deaths": r["deaths"],
                     "damage": r["damage"], "healing": r["healing"],
-                    "mitigation": r["damage_mitigated"], "captured": True}
+                    "mitigation": r["damage_mitigated"], "champ": r["champ"], "captured": True}
         except Exception:  # noqa: BLE001 - DB without round_players: skip ranking
             pstats = {}
     # No owscout DB needed: contributions declare their own custom heroes, so a
