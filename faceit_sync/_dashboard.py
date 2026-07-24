@@ -393,6 +393,13 @@ function mapCmp(a,b){ return modeRank(a)-modeRank(b) || (MAP_POP[b]||0)-(MAP_POP
 function sortMaps(names){ return names.slice().sort(mapCmp); }
 const roleVar = (r)=> ({Tank:'var(--tank)',Damage:'var(--damage)',Support:'var(--support)'}[r]||'var(--accent)');
 const winVar = (p)=> p>=58?'var(--good)': p>=42?'var(--mid)':'var(--bad)';
+// A win-rate cell that never lies at low n (SPEC 10.0): a coloured % only at
+// n>=3, else the raw fraction, so a 2-0 can't masquerade as a confident 100%.
+function wrCell(wins,games){
+  if(!games) return '<span class="faint">—</span>';
+  return games>=3 ? pill(pctOf(wins,games)+'%',winVar(pctOf(wins,games)))
+                  : `<span class="faint">${wins}/${games}</span>`;
+}
 
 /* recency: matches newest-first (recency is measured in matches ≈ how a season is counted).
    Recomputed whenever the active division changes. */
@@ -1032,7 +1039,8 @@ function renderScoutBody(t){
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
   head.appendChild(el(`<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
     `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div>`));
-  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</div>`+
+  const _hsc=((DATA.owscout_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
+  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))} ${pill(`comps ${capMaps}/${t.games} maps`,capMaps?'var(--accent)':'var(--faint)')}</div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   root.appendChild(head);
 
@@ -1065,11 +1073,11 @@ function renderScoutBody(t){
     const c3=el(`<div class="glance-col"></div>`);
     c3.appendChild(el(`<p class="eyebrow">Map pool</p>`));
     const mp=Object.entries(t.mapStats).filter(([,v])=>v.picks>0)
-      .map(([m,v])=>({m,picks:v.picks,wr:pctOf(v.wins,v.games)}))
+      .map(([m,v])=>({m,picks:v.picks,wins:v.wins,games:v.games}))
       .sort((a,b)=>b.picks-a.picks).slice(0,4);
     if(mp.length) mp.forEach(r=>c3.appendChild(el(
       `<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
-      `<span class="rec">${r.picks}x · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
+      `<span class="rec">${r.picks}x · ${wrCell(r.wins,r.games)}</span></div>`)));
     else c3.appendChild(el(`<p class="note" style="margin:2px 0 0">No picked maps in window.</p>`));
     cols.appendChild(c3);
 
@@ -1133,6 +1141,12 @@ function renderScoutBody(t){
   const oc=(DATA.owscout_comps||{})[t.team];
   const scout=oc&&oc.scout;
   const nGames=(scout&&scout.games)||0;
+  // Honest degrade: don't let the hero sections silently vanish for an uncaptured
+  // team - say so, and point at the rail so they get scouted.
+  if(!scout){
+    w.appendChild(el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Not scouted yet</p>`+
+      `<p class="note" style="margin:0">No captured comps for ${esc(t.team)} <b>(0 of ${t.games} maps played)</b>. Everything below is FACEIT draft data only — grab their replay codes from the Matches rail to scout their comps.</p></div>`));
+  }
   // n=1 is an anecdote, not a pattern - show it, but visibly weaker.
   const thin=n=>n<=1?' thin':'';
   // Below 3 maps a W-L is an anecdote that READS like a rate (Redline and
@@ -1435,11 +1449,11 @@ function renderScoutBody(t){
   two.appendChild(banC);
   const mapC=el(`<div class="card"></div>`);
   mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
-  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
+  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wins:v.wins,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
   mapC.appendChild(mrows.length?table(
     [{k:'map',label:'Map'},
      {k:'picks',label:'Picked',num:true},{k:'games',label:'Played',num:true},
-     {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], mrows, byMode)
+     {k:'wr',label:'Win %',num:true,html:r=>wrCell(r.wins,r.games)}], mrows, byMode)
    :el(`<p class="note">No maps in window.</p>`));
   two.appendChild(mapC);
   w.appendChild(two);
