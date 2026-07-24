@@ -402,9 +402,44 @@ function recomputeDivision(){
   SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
   const tn=D().team_names;
   SIM_A=tn[0]||null; SIM_B=tn[1]||tn[0]||null; SIM_FIRST='A'; SIM_PATH=[];
+  DIV_BAN_BASE=null;                        // ban-lift baseline is per division
 }
 const recent=(arr,lim)=> (lim && lim<arr.length)? arr.slice(0,lim) : arr;
 const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();return {from:w[0]||'',to:w[w.length-1]||''};};
+
+// Ban lift: a team's ban rate vs the division's, so the read is "what do they
+// value MORE than the field" instead of restating the meta everyone bans. Share-
+// based (fraction of ban budget spent on a hero) keeps it comparable across teams.
+let DIV_BAN_BASE=null;
+function divBanBaseline(){
+  if(DIV_BAN_BASE) return DIV_BAN_BASE;
+  const all={}, first={};
+  D().matches.forEach(m=>m.games.forEach(g=>{ if(!g.map) return;
+    (g.bans||[]).forEach(b=>{ if(!b.hero) return; inc(all,b.hero);
+      if(b.order===1) inc(first,b.hero); }); }));
+  const shares=(o)=>{ const t=Object.values(o).reduce((a,b)=>a+b,0)||1; const s={};
+    Object.entries(o).forEach(([h,n])=>s[h]=n/t); return s; };
+  DIV_BAN_BASE={all:shares(all), first:shares(first)};
+  return DIV_BAN_BASE;
+}
+// A team's ban counts -> lift rows vs a baseline share map. Drops n<minN (a lone
+// ban makes any lift meaningless), sorts by lift then count.
+function banLiftRows(counts, baseShare, minN){
+  const tot=Object.values(counts).reduce((a,b)=>a+b,0)||1;
+  return Object.entries(counts).map(([h,n])=>({hero:h, n, share:n/tot,
+      base:baseShare[h]||0, lift: baseShare[h]? (n/tot)/baseShare[h] : null}))
+    .filter(r=>r.n>=(minN||2))
+    .sort((a,b)=>((b.lift==null?-1:b.lift)-(a.lift==null?-1:a.lift))||b.n-a.n);
+}
+function banLiftList(rows){
+  if(!rows.length) return `<p class="note">Too few bans to read a tendency (needs 2+ of a hero).</p>`;
+  return `<div>`+rows.slice(0,10).map(r=>{
+    const lab=r.lift==null?'new':'×'+r.lift.toFixed(1);
+    const col=r.lift==null?'var(--faint)':r.lift>=1.5?'var(--good)':r.lift<=0.6?'var(--bad)':'var(--mid)';
+    return `<div class="crow"><span>${heroChip(r.hero)} <span class="faint">${r.n} ban${r.n===1?'':'s'} · ${Math.round(r.share*100)}% of theirs vs ${Math.round(r.base*100)}% field</span></span>`+
+      `<span class="rec">${pill(lab,col)}</span></div>`;
+  }).join('')+`</div>`;
+}
 
 /* ---------- reusable renderers ---------- */
 const HERO_ICON=DATA.hero_icons||{};
@@ -677,7 +712,6 @@ function aggregate(matches,team){
 const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
  {id:'scout',label:'Scout a team',render:renderScout},
- {id:'versus',label:'Team vs team',render:renderVersus},
  {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
  {id:'matches',label:'Matches',render:renderMatches},
@@ -745,6 +779,9 @@ const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===tea
 
 
 /* =============================================== TEAM vs TEAM (matchup prep) */
+// RETIRED: the 'Team vs team' tab was removed from TABS (low value in a single
+// round-robin, where H2H is n<=1). This function is now dead code, kept only to
+// avoid a risky bulk delete; safe to remove wholesale in a later cleanup.
 function renderVersus(){
   const names=D().team_names;
   if(names.length<2) return el(`<p class="note">Need at least two teams.</p>`);
@@ -1388,11 +1425,12 @@ function renderScoutBody(t){
   // by operator request after the reorg had split it across the clusters.
   const two=el(`<div class="grid cols-2" style="margin-top:16px;align-items:start"></div>`);
   const banC=el(`<div class="card"></div>`);
-  banC.appendChild(el(`<p class="eyebrow">Preferred bans</p>`));
-  banC.appendChild(el(barList(rank(t.bans).slice(0,12).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
+  const banBase=divBanBaseline();
+  banC.appendChild(el(`<p class="eyebrow">Ban tendencies <span class="note" style="text-transform:none;letter-spacing:0">· lift vs the field, not raw counts</span></p>`));
+  banC.appendChild(el(banLiftList(banLiftRows(t.bans, banBase.all))));
   if(t.firstBanGames){
-    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note">(when they draft first — ${t.firstBanGames} maps)</span></p>`));
-    banC.appendChild(el(barList(rank(t.firstBans).slice(0,6).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
+    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note" style="text-transform:none;letter-spacing:0">· when they draft first (${t.firstBanGames} maps) — the intentional one</span></p>`));
+    banC.appendChild(el(banLiftList(banLiftRows(t.firstBans, banBase.first))));
   }
   two.appendChild(banC);
   const mapC=el(`<div class="card"></div>`);
@@ -1407,45 +1445,10 @@ function renderScoutBody(t){
   w.appendChild(two);
 
   {
-    const dv=drawer('Ban evidence','banned-hero records · counter-bans · ban response');
-  // Map win rate conditioned on a hero being banned out (by either team).
-  // One row per (hero, who banned it): banning a hero yourself and having it taken
-  // from you are different situations, and averaging them together hides both.
-  // One BLOCK per hero holding both cases, so the portrait is drawn once and the
-  // two numbers you are actually comparing sit directly above each other.
-  const bhw=Object.entries(t.banHeroWin).map(([h,v])=>({
-      hero:h, tot:v.games, wr:pctOf(v.wins,v.games),
-      rows:[['them',`${t.team} banned it`],['opp','Opponent banned it']]
-        .map(([k,label])=>({label,...v[k],wr:pctOf(v[k].wins,v[k].games)}))
-        .filter(r=>r.games)}))
-    .filter(b=>b.rows.length);
-  const bhwSort=el(`<button class="sortbtn" type="button">Win % high &rarr; low</button>`);
-      dv.body.appendChild(el(sectionH('Win rate by banned hero',
-    `<span class="note">map win % when this hero is banned out · split by who banned it</span>`)));
-  if(bhw.length){
-        dv.body.appendChild(el(`<p class="note" style="margin-top:0">How ${esc(t.team)} does on maps where a given hero is banned (removed for both teams), split by whether they banned it or the opponent did. Low map counts are noisy — check <b>Maps</b> before trusting a row.</p>`));
-    const bar=el(`<div class="ctlrow"></div>`); bar.appendChild(bhwSort);     dv.body.appendChild(bar);
-    const box=el(`<div class="scroll"><table class="blocks"><thead><tr>`+
-      `<th>Banned hero</th><th>Banned by</th><th class="num">Maps</th>`+
-      `<th class="num">Won</th><th class="num">Win %</th></tr></thead><tbody></tbody></table></div>`);
-    let desc=true;
-    const draw=()=>{
-      const list=[...bhw].sort((a,b)=>(desc?b.wr-a.wr:a.wr-b.wr)||b.tot-a.tot
-                                       ||a.hero.localeCompare(b.hero));
-      box.querySelector('tbody').innerHTML=list.map(b=>b.rows.map((r,i)=>
-        `<tr class="${i===0?'blk':''}">`+
-        `<td>${i===0?heroChip(b.hero):''}</td>`+
-        `<td><span class="faint">${esc(r.label)}</span></td>`+
-        `<td class="num">${r.games}</td><td class="num">${r.wins}</td>`+
-        `<td class="num">${pill(r.wr+'%',winVar(r.wr))}</td></tr>`).join('')).join('');
-    };
-    bhwSort.onclick=()=>{ desc=!desc;
-      bhwSort.innerHTML=desc?'Win % high &rarr; low':'Win % low &rarr; high'; draw(); };
-    draw();
-        dv.body.appendChild(box);
-  } else {
-        dv.body.appendChild(el(`<p class="note">No bans in this window.</p>`));
-  }
+    const dv=drawer('Ban evidence','counter-bans · ban response');
+  // "Win rate by banned hero" was removed here: conditioned on team strength it
+  // does not survive out-of-sample (negative correlation), and the sort floated
+  // the noisiest small samples to the top. Ban tendency now reads as lift, above.
 
   // Counter-bans — genuine responses only: the opponent banned first, this team
   // banned second in reply. (Cases where this team banned first are excluded.)
@@ -1490,16 +1493,14 @@ function renderScoutBody(t){
       games:v.games,wr:pctOf(v.wins,v.games),comp:openOn(m),
       ban:rank(v.bans).slice(0,2).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' ')}))
     .sort((a,b)=>mapCmp(a.map,b.map));
-  const pfbG=pfb.reduce((s,r)=>s+r.games,0), pfbW=pfb.reduce((s,r)=>s+Math.round(r.wr*r.games/100),0);
   w.appendChild(el(sectionH('Signature setups',`<span class="note">maps they pick &amp; ban first on · self-chosen drafts</span>`)));
   if(pfb.length){
-    w.appendChild(el(`<p class="note" style="margin-top:0">On maps ${esc(t.team)} both picked and opened the ban on, they won <b>${pfbW}/${pfbG}</b> = <b>${pctOf(pfbW,pfbG)}%</b>. A repeated map with a strong win rate is likely a rehearsed strat.</p>`));
+    w.appendChild(el(`<p class="note" style="margin-top:0">Maps ${esc(t.team)} both picked and opened the ban on — a fully self-chosen draft. A map+first-ban they repeat is a rehearsed setup worth being ready for. (Win rate omitted — at ~2 games per map it is noise.)</p>`));
     w.appendChild(table(
       [{k:'map',label:'Map'},
        {k:'ban',label:'Their first ban',html:r=>r.ban},
        {k:'comp',label:'What they run there',html:r=>r.comp||`<span class="faint">not captured</span>`},
-       {k:'games',label:'Maps',num:true},
-       {k:'wr',label:'Win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}], pfb, byMode));
+       {k:'games',label:'Maps',num:true}], pfb, byMode));
   } else {
     w.appendChild(el(`<p class="note">No maps in this window where they both picked and banned first.</p>`));
   }
@@ -1773,7 +1774,6 @@ function renderMatches(){
 // a teammate directly on the right page: site/#scout=Redline
 function hashFor(id){
   if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
-  if(id==='versus'&&VS_A&&VS_B) return 'vs='+encodeURIComponent(VS_A)+'~'+encodeURIComponent(VS_B);
   return id;
 }
 function show(id){
@@ -1826,21 +1826,6 @@ function init(){
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
   const start=decodeURIComponent((location.hash||'#overview').slice(1));
-  if(start.startsWith('vs=')){
-    const parts=start.slice(3).split('~');
-    const a=parts[0], b=parts[1];
-    for(const v of VIEWS){
-      if(v.divisions.length===1){
-        const tn=DIVS[v.divisions[0]].team_names||[];
-        if(tn.includes(a)&&tn.includes(b)){
-          CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
-          document.getElementById('division').value=v.id; break;
-        }
-      }
-    }
-    const tn=D().team_names||[];
-    if(tn.includes(a)&&tn.includes(b)){ VS_A=a; VS_B=b; show('versus'); return; }
-  }
   if(start.startsWith('prep=')||start.startsWith('scout=')){
     SCOUT_PREP=start.startsWith('prep=');
   }

@@ -118,7 +118,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             out_path = args.out or "dashboard.html"
             with open(out_path, "w", newline="", encoding="utf-8") as out:
                 n = export_html(db, out, championship_id=args.championship,
-                                only_tier=args.tier)
+                                only_tier=args.tier, only_region=args.region)
             if n == 0:
                 print("no data to export yet", file=sys.stderr)
                 return 1
@@ -225,6 +225,8 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--format", choices=("csv", "json", "html"), required=True)
     e.add_argument("--tier", choices=("master", "expert"), default=None,
                    help="restrict the HTML dashboard to one skill tier (default: all)")
+    e.add_argument("--region", choices=("emea", "na"), default=None,
+                   help="restrict the HTML dashboard to one region (default: all)")
     e.add_argument("--out", default=None,
                    help="output file (csv/json default: stdout; html default: dashboard-<id>.html)")
     e.set_defaults(func=cmd_export)

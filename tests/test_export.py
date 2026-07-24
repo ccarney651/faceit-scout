@@ -65,14 +65,18 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert div["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy
 
 
-def test_tier_of_classifies_championship_names() -> None:
-    """The Master-only site filter keys off this. Names carry the tier as a word."""
-    from faceit_sync.export import _tier_of
+def test_tier_and_region_classify_championship_names() -> None:
+    """The EMEA-Master-only site filter keys off these. Names carry both words."""
+    from faceit_sync.export import _region_of, _tier_of
 
     assert _tier_of("S9 EMEA Master Central - Regular Season") == "Master"
     assert _tier_of("S9 NA Expert Central - Regular Season") == "Expert"
     assert _tier_of("Some Open Qualifier") is None
     assert _tier_of(None) is None
+    assert _region_of("S9 EMEA Master Central - Regular Season") == "EMEA"
+    assert _region_of("S9 NA Expert Central - Regular Season") == "NA"
+    assert _region_of("Some Open Qualifier") is None
+    assert _region_of(None) is None
 
 
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):

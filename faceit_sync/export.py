@@ -345,20 +345,32 @@ def _tier_of(name: Optional[str]) -> Optional[str]:
     return "Master" if "Master" in name else "Expert" if "Expert" in name else None
 
 
+def _region_of(name: Optional[str]) -> Optional[str]:
+    """The region a championship name encodes ('EMEA' | 'NA' | None)."""
+    if not name:
+        return None
+    u = name.upper()
+    return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
+
+
 def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,
-                only_tier: Optional[str] = None) -> int:
+                only_tier: Optional[str] = None, only_region: Optional[str] = None) -> int:
     """Render the multi-division dashboard.
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
-    ('master'/'expert', case-insensitive) restricts the dashboard to one skill
-    tier - the site ships Master-only for now, though the DB holds both. Returns
-    the number of divisions with data.
+    ('master'/'expert') and ``only_region`` ('emea'/'na') restrict the dashboard -
+    the site ships EMEA Master only for now, though the DB holds every division.
+    Returns the number of divisions with data.
     """
     want_tier: Optional[str] = None
     if only_tier:
         w = only_tier.strip().lower()
         want_tier = "Master" if w.startswith("m") else "Expert" if w.startswith("e") else None
+    want_region: Optional[str] = None
+    if only_region:
+        w = only_region.strip().lower()
+        want_region = "EMEA" if w.startswith("e") else "NA" if w.startswith("n") else None
 
     if championship_id:
         cids = [championship_id]
@@ -366,6 +378,8 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         rows = db.conn.execute("SELECT id, name FROM championships ORDER BY name").fetchall()
         if want_tier:
             rows = [r for r in rows if _tier_of(r["name"]) == want_tier]
+        if want_region:
+            rows = [r for r in rows if _region_of(r["name"]) == want_region]
         cids = [str(r["id"]) for r in rows]
 
     divisions: dict[str, Any] = {}
@@ -390,14 +404,10 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     # Build the switcher "views": each real division, plus a merged "Combined"
     # per region (Master + Expert), in the order EMEA Master/Expert/Combined then
     # NA Master/Expert/Combined. Region/tier are read from the championship name.
-    def region_of(name: str) -> Optional[str]:
-        u = name.upper()
-        return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
-
     by_region_tier: dict[tuple[str, str], str] = {}
     for cid, d in divisions.items():
         nm = str(d["summary"]["championship"])
-        r, t = region_of(nm), _tier_of(nm)
+        r, t = _region_of(nm), _tier_of(nm)
         if r and t:
             by_region_tier[(r, t)] = cid
 
