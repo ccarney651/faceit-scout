@@ -925,7 +925,11 @@ function renderScoutBody(t){
   head.appendChild(el(`<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
     `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div>`));
   const _hsc=((DATA.owscout_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
-  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))} ${pill(`comps ${capMaps}/${t.games} maps`,capMaps?'var(--accent)':'var(--faint)')}</div>`+
+  // Coverage is all-time (captures aren't windowed), so its denominator must be
+  // all-time maps played too - windowing it (t.games) could show capMaps > total.
+  const _allMaps=MATCHES_RECENT.filter(m=>m.f1===t.team||m.f2===t.team)
+    .reduce((s,m)=>s+m.games.filter(g=>g.map).length,0);
+  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))} ${pill(`comps ${capMaps}/${_allMaps} maps`,capMaps?'var(--accent)':'var(--faint)')}</div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   root.appendChild(head);
 
