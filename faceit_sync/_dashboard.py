@@ -725,7 +725,6 @@ const TABS=[
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
-let VS_A=null, VS_B=null;   // team-vs-team selections (any team vs any team)
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
@@ -736,12 +735,17 @@ function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
 function renderOverview(){
   const s=D().summary, wrap=el(`<div></div>`);
 
-  const tiles=[['played_games','Maps played',`${s.matches} matches`],
-    ['teams','Teams',`${s.walkovers} walkovers`],
-    ['matches_with_attribution','Matches w/ veto data',`of ${s.matches} — ${pctOf(s.matches_with_attribution,s.matches)}%`],
-    ['dc_games','Maps w/ a DC',`stats stored as NULL`]];
+  // Coverage-at-a-glance beats data-health diagnostics: how much of the league
+  // is actually scouted is the thing a scout wants to see first.
+  const ocs=DATA.owscout_comps||{}, tn=D().team_names;
+  const teamsScouted=tn.filter(n=>(((ocs[n]||{}).scout)||{}).games).length;
+  const capturedMaps=tn.reduce((a,n)=>a+((((ocs[n]||{}).scout)||{}).games||0),0);
+  const tiles=[[nf(s.played_games),'Maps played',`${s.matches} matches`],
+    [nf(s.teams),'Teams',`single round-robin`],
+    [`${teamsScouted}/${tn.length}`,'Teams scouted',`have captured comps`],
+    [nf(capturedMaps),'Comps captured',`maps with hero data`]];
   const g=el(`<div class="grid cols-auto"></div>`);
-  tiles.forEach(([k,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${nf(s[k])}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
+  tiles.forEach(([v,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${v}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
   wrap.appendChild(g);
 
   // Scout launcher
@@ -783,125 +787,6 @@ function scoutData(team,lim){
 }
 
 const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team).length;
-
-
-/* =============================================== TEAM vs TEAM (matchup prep) */
-// RETIRED: the 'Team vs team' tab was removed from TABS (low value in a single
-// round-robin, where H2H is n<=1). This function is now dead code, kept only to
-// avoid a risky bulk delete; safe to remove wholesale in a later cleanup.
-function renderVersus(){
-  const names=D().team_names;
-  if(names.length<2) return el(`<p class="note">Need at least two teams.</p>`);
-  if(!VS_A||!names.includes(VS_A)) VS_A=names[0];
-  if(!VS_B||!names.includes(VS_B)||VS_B===VS_A) VS_B=names.find(n=>n!==VS_A);
-
-  const wrap=el(`<div></div>`);
-  const bar=el(`<div class="card controls"></div>`);
-  const mkSel=(val)=>{ const sel=el(`<select style="min-width:170px"></select>`);
-    names.forEach(n=>sel.appendChild(el(`<option ${n===val?'selected':''}>${esc(n)}</option>`)));
-    return sel; };
-  const selA=mkSel(VS_A), selB=mkSel(VS_B);
-  const swap=el(`<button class="btn" type="button" style="padding:4px 10px">&harr;</button>`);
-  bar.append(selA, swap, selB);
-  const body=el(`<div></div>`);
-  wrap.append(bar, body);
-
-  function draw(){
-    location.hash=hashFor('versus');
-    body.innerHTML='';
-    const A=scoutData(VS_A,null), B=scoutData(VS_B,null);
-
-    // Head-to-head history first: the only DIRECT evidence in the matchup.
-    const h2h=MATCHES_RECENT.filter(m=>(m.f1===VS_A&&m.f2===VS_B)||(m.f1===VS_B&&m.f2===VS_A));
-    let wa=0, wb=0;
-    h2h.forEach(m=>{ const w=m.winner==='faction1'?m.f1:(m.winner==='faction2'?m.f2:null);
-      if(w===VS_A)wa++; else if(w===VS_B)wb++; });
-    body.appendChild(el(sectionH('Head to head',
-      h2h.length?`<span class="note">${esc(VS_A)} ${wa} - ${wb} ${esc(VS_B)} · ${h2h.length} match${h2h.length===1?'':'es'}</span>`
-                :`<span class="note">never played each other in this window</span>`)));
-    h2h.slice(0,4).forEach(m=>body.appendChild(matchCard(m)));
-
-    // The two teams side by side; collapses to one column on narrow screens.
-    const cols=el(`<div class="grid cols-2" style="margin-top:14px;align-items:start"></div>`);
-    [[A,VS_A],[B,VS_B]].forEach(([t,name])=>{
-      const c=el(`<div class="card"></div>`);
-      const wins=t.results.filter(r=>r.won).length;
-      c.appendChild(el(`<div style="font-size:16px;font-weight:680;margin-bottom:2px">${esc(name)}</div>`+
-        `<p class="note" style="margin:0 0 8px">${pill(`${wins}/${t.results.length} matches`,winVar(pctOf(wins,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</p>`));
-      c.appendChild(el(`<p class="eyebrow">Top bans</p>`));
-      c.appendChild(el(barList(rank(t.bans).slice(0,6).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
-      c.appendChild(el(`<p class="eyebrow" style="margin-top:12px">Most-picked maps</p>`));
-      const mp=Object.entries(t.mapStats).filter(([,v])=>v.picks>0)
-        .map(([m,v])=>({map:m,picks:v.picks,wr:pctOf(v.wins,v.games)}))
-        .sort((a,b)=>b.picks-a.picks).slice(0,5);
-      if(!mp.length) c.appendChild(el(`<p class="note">No picked maps in window.</p>`));
-      mp.forEach(r=>c.appendChild(el(`<div class="crow"><span>${esc(r.map)} <span class="faint">${esc(MAP_CAT[r.map]||'')}</span></span>`+
-        `<span class="rec">${r.picks}x picked · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
-      const oc=(DATA.owscout_comps||{})[name], sc=oc&&oc.scout;
-      if(sc&&(sc.overall||[]).length){
-        const top=sc.overall[0];
-        c.appendChild(el(`<p class="eyebrow" style="margin-top:12px">Captured comp (${sc.games} map${sc.games===1?'':'s'})</p>`));
-        c.appendChild(el(`<div class="crow"><span>${compRow(top.heroes)}</span>`+
-          `<span class="rec">${top.maps>=3?`${top.wins}W-${top.losses}L`:`${top.maps} map${top.maps===1?'':'s'}`}</span></div>`));
-      }
-      cols.appendChild(c);
-    });
-    body.appendChild(cols);
-
-    // Seat by seat: where the matchup is actually contested. Needs captured
-    // hero pools; a team without captures shows a gap, not a guess.
-    const poolOf=(name)=>{ const oc=(DATA.owscout_comps||{})[name];
-      return ((oc&&oc.scout&&oc.scout.hero_pool)||[]); };
-    const pa=poolOf(VS_A), pb=poolOf(VS_B);
-    if(pa.length||pb.length){
-      body.appendChild(el(sectionH('Seat by seat',`<span class="note">each team's captured pool per competitive seat</span>`)));
-      const seatCard=el(`<div class="card"></div>`);
-      SEATS.forEach(seat=>{
-        const pick=(pool)=>pool.filter(h=>(HERO_SEAT[h.hero]||'')===seat)
-          .sort((x,y)=>y.rounds-x.rounds).slice(0,3);
-        const A=pick(pa), B=pick(pb);
-        if(!A.length&&!B.length) return;
-        const row=el(`<div class="crow" style="align-items:flex-start"><span style="min-width:110px" class="seg">${esc(seat)}</span>`+
-          `<span style="flex:1">${A.map(h=>heroChip(h.hero)).join(' ')||'<span class="faint">no captures</span>'}</span>`+
-          `<span style="flex:1;text-align:right">${B.map(h=>heroChip(h.hero)).join(' ')||'<span class="faint">no captures</span>'}</span></div>`);
-        seatCard.appendChild(row);
-      });
-      body.appendChild(seatCard);
-    }
-
-    // The veto battleground: maps BOTH teams pick, with each side's win rate.
-    const contested=Object.keys(A.mapStats).filter(m=>
-      (A.mapStats[m]||{}).picks>0 && (B.mapStats[m]||{}).picks>0)
-      .map(m=>({map:m,cat:MAP_CAT[m]||'',
-        awr:pctOf(A.mapStats[m].wins,A.mapStats[m].games),
-        bwr:pctOf(B.mapStats[m].wins,B.mapStats[m].games)}))
-      .sort((a,b)=>mapCmp(a.map,b.map));
-    body.appendChild(el(sectionH('Contested maps',`<span class="note">maps both teams pick - the veto battleground</span>`)));
-    body.appendChild(contested.length?table(
-      [{k:'map',label:'Map'},
-       {k:'awr',label:esc(VS_A)+' win %',num:true,html:r=>pill(r.awr+'%',winVar(r.awr))},
-       {k:'bwr',label:esc(VS_B)+' win %',num:true,html:r=>pill(r.bwr+'%',winVar(r.bwr))}],
-      contested, byMode)
-      :el(`<p class="note">No overlap in picked maps.</p>`));
-
-    // Heroes BOTH teams ban often: gone either way, plan around their absence.
-    const topA=new Set(rank(A.bans).slice(0,8).map(([h])=>h));
-    const both=rank(B.bans).slice(0,8).map(([h])=>h).filter(h=>topA.has(h));
-    if(both.length){
-      body.appendChild(el(sectionH('Banned either way',`<span class="note">in both teams' top bans - plan around their absence</span>`)));
-      const rowEl=el(`<div class="card" style="display:flex;flex-wrap:wrap;gap:6px"></div>`);
-      both.forEach(h=>rowEl.appendChild(el(`<span class="opt" style="cursor:default">${heroChip(h)}</span>`)));
-      body.appendChild(rowEl);
-    }
-  }
-  selA.onchange=()=>{ VS_A=selA.value;
-    if(VS_B===VS_A){ VS_B=names.find(n=>n!==VS_A); selB.value=VS_B; } draw(); };
-  selB.onchange=()=>{ VS_B=selB.value;
-    if(VS_A===VS_B){ VS_A=names.find(n=>n!==VS_B); selA.value=VS_A; } draw(); };
-  swap.onclick=()=>{ [VS_A,VS_B]=[VS_B,VS_A]; selA.value=VS_A; selB.value=VS_B; draw(); };
-  draw();
-  return wrap;
-}
 
 
 /* ================================= PREP SHEET (the night-before one-pager) */
@@ -1623,7 +1508,7 @@ function renderSim(){
   const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset draft</span>`); reset.onclick=()=>{SIM_PATH=[];draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
-  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Plan a Bo5 draft by hand. Each map, the team on the clock <b>picks the map</b> and <b>bans first</b>, then the other team bans. Click a suggested hero (from that team's history) or choose <b>any hero</b> from the dropdown — e.g. ban a pocket pick so the enemy can't take it. Mark who wins each map to continue (the loser picks next). A team can't repeat its own bans across the series; used heroes drop out of its list automatically.</p>`));
+  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Plan a Bo5 draft by hand. Each map, the team on the clock <b>picks the map</b> and <b>bans first</b>, then the other team bans. Click a suggested hero (from that team's history) or choose <b>any hero</b> from the dropdown — e.g. ban a pocket pick so the enemy can't take it. Mark who wins each map to continue (the loser picks next). A team can't repeat its own bans across the series; used heroes drop out of its list automatically. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
   function draw(){
@@ -1668,7 +1553,13 @@ function renderSim(){
           if(node[key] && illegal.has(node[key])) node[key]=null;      // heal an illegal repeat after an edit
           const row=el(`<div class="simrow"><span class="rl">${esc(nameOf(tab))} ban</span></div>`);
           const sugg=banSuggest(modelOf(tab), node.map, illegal);
-          sugg.forEach(s2=>{ const o=el(`<span class="opt ${node[key]===s2.hero?'sel':''} ${(s2.onMap+s2.all)<2?'dim':''}">${heroChip(s2.hero)}<span class="pp">${s2.onMap?s2.onMap+'× here':s2.all+'× total'}</span></span>`);
+          // Signature marker: a hero this team bans well above the division rate
+          // is a rehearsed, intentional ban — worth pre-empting.
+          const tm=modelOf(tab), teamTot=Object.values(tm.bansAll).reduce((a,b)=>a+b,0)||1, dbase=divBanBaseline();
+          sugg.forEach(s2=>{
+            const lift=dbase.all[s2.hero]?(s2.all/teamTot)/dbase.all[s2.hero]:0;
+            const sig=lift>=1.5?` <span class="pp" style="color:var(--good)">★×${lift.toFixed(1)}</span>`:'';
+            const o=el(`<span class="opt ${node[key]===s2.hero?'sel':''} ${(s2.onMap+s2.all)<2?'dim':''}">${heroChip(s2.hero)}<span class="pp">${s2.onMap?s2.onMap+'× here':s2.all+'× total'}</span>${sig}</span>`);
             o.onclick=()=>{node[key]=s2.hero;draw();}; row.appendChild(o); });
           row.appendChild(heroSelect(node[key], illegal, h=>{node[key]=h;draw();}));
           if(node[key] && !sugg.some(x=>x.hero===node[key]))
@@ -1776,7 +1667,11 @@ function renderMatches(){
   const search=el(`<input placeholder="search team, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
   const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
   bar.append(search,sort);
-  const list=el(`<div></div>`); wrap.append(bar,list);
+  // In a single round-robin every team has faced the same opponents, so a team's
+  // full match list reads as their "book" against a field you already know -
+  // search a team to see exactly how they drafted vs each opponent you also play.
+  const note=el(`<p class="note" style="margin:0 2px 10px">Single round-robin — everyone plays the same 15 opponents. Search a team to read their book against the field.</p>`);
+  const list=el(`<div></div>`); wrap.append(bar,note,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
   function draw(){
     const q=(search.value||'').trim().toLowerCase(); list.innerHTML='';
