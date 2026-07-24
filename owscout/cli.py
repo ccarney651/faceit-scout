@@ -559,13 +559,30 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
         names = {h.guid: h.name for h in load_heroes(fdb)}
         pnames = {str(r["id"]): str(r["nickname"]) for r in fdb.execute(
             "SELECT id, nickname FROM players WHERE nickname IS NOT NULL")}
+        # Per-game player stats for the per-hero, role-relative ranking. Joined to
+        # captured hero attribution inside merged_payload. Guarded: older DBs may
+        # predate round_players, in which case ranking is simply skipped.
+        pstats: dict[tuple[str, int, str], dict[str, object]] = {}
+        try:
+            for r in fdb.execute(
+                "SELECT match_id, game_no, player_id, role, stats_captured, "
+                "eliminations, deaths, damage, healing, damage_mitigated FROM round_players"):
+                if not r["stats_captured"]:
+                    continue
+                pstats[(str(r["match_id"]), int(r["game_no"]), str(r["player_id"]))] = {
+                    "role": r["role"], "elims": r["eliminations"], "deaths": r["deaths"],
+                    "damage": r["damage"], "healing": r["healing"],
+                    "mitigation": r["damage_mitigated"], "captured": True}
+        except Exception:  # noqa: BLE001 - DB without round_players: skip ranking
+            pstats = {}
     # No owscout DB needed: contributions declare their own custom heroes, so a
     # build server can merge with nothing but the faceit roster and the files.
     # Validation against faceit.games is NOT optional here: this command is what
     # CI runs, and it is the only gate between a contributor file and the site.
     payload = merged_payload(contribs, roles, names, overrides=overrides,
                              known=known_games(_faceit_db_path(args)),
-                             player_names=pnames, excludes=excludes)
+                             player_names=pnames, excludes=excludes,
+                             player_stats=pstats)
     if args.captured_out:
         # A tiny public feed of which games are already scouted, so every
         # contributor's app can grey them out instead of two people scouting

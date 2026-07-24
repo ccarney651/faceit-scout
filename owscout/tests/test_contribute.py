@@ -379,3 +379,49 @@ def test_captured_feed_never_blocks_scouting() -> None:
     assert fetch_captured_games(session=_Down()) == set()
     assert fetch_captured_games(session=_Missing()) == set()
     assert fetch_captured_games(session=_Future()) == set()
+
+
+def test_rank_player_heroes_weights_tank_damage_over_mitigation() -> None:
+    """Operator call: for tanks, damage + elims outweigh mitigation. A high
+    damage/elim, low-mitigation tank must out-rank a high-mitigation, low-output
+    one on the same hero."""
+    from owscout.contribute import MapKey, rank_player_heroes
+
+    roles = {"ram": "tank"}
+    maps: dict[Any, Any] = {}
+    stats: dict[Any, Any] = {}
+
+    def add(pid: str, mid: str, dmg: int, elims: int, deaths: int, mit: int) -> None:
+        for gno in (1, 2):                      # 2 games each -> above min_games
+            maps[MapKey(mid, gno)] = {
+                "side_a_team": "A", "side_b_team": "B",
+                "observations": [{"side": "a", "round_no": 1, "sub_map": None,
+                                  "pairs": [["ram", pid]]}]}
+            stats[(mid, gno, pid)] = {"elims": elims, "deaths": deaths, "damage": dmg,
+                                      "healing": 0, "mitigation": mit, "captured": True}
+
+    add("P1", "M1", 8000, 20, 3, 1000)          # high output, low mitigation
+    add("P2", "M2", 5000, 12, 5, 3000)          # middle
+    add("P3", "M3", 2500, 6, 6, 6000)           # low output, high mitigation
+    ranks = rank_player_heroes(maps, stats, roles)
+
+    assert ranks[("P1", "ram")]["rank"] == 1    # damage+elims win over mitigation
+    assert ranks[("P3", "ram")]["rank"] == 3
+    assert ranks[("P1", "ram")]["of"] == 3
+    assert ranks[("P1", "ram")]["games"] == 2
+    assert ranks[("P1", "ram")]["avg"]["damage"] == 8000
+
+
+def test_rank_player_heroes_thin_group_keeps_avg_but_no_rank() -> None:
+    """A hero only one captured player has played can't be ranked - the average
+    is still returned, but no rank/of/pct (they'd be a meaningless '1 of 1')."""
+    from owscout.contribute import MapKey, rank_player_heroes
+
+    maps = {MapKey("M1", 1): {"side_a_team": "A", "side_b_team": "B",
+            "observations": [{"side": "a", "round_no": 1, "sub_map": None,
+                              "pairs": [["ana", "P1"]]}]}}
+    stats = {("M1", 1, "P1"): {"elims": 5, "deaths": 4, "damage": 2000,
+                               "healing": 6000, "mitigation": 800, "captured": True}}
+    info = rank_player_heroes(maps, stats, {"ana": "support"})[("P1", "ana")]
+    assert "rank" not in info
+    assert info["avg"]["healing"] == 6000 and info["games"] == 1

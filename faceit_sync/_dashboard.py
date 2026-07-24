@@ -1206,14 +1206,20 @@ function renderScoutBody(t){
     const ppools=scout.players||[];
     if(ppools.length){
       w.appendChild(el(sectionH('Player pools',
-        `<span class="note">read from the HUD name bars · unmatched battletags stay anonymous</span>`)));
+        `<span class="note">HUD-attributed · #rank = this hero vs the field's other players of it</span>`)));
       const pgrid=el(`<div class="grid cols-3"></div>`);
       ppools.forEach(p=>{
         const card=el(`<div class="card"></div>`);
         card.appendChild(el(`<p class="eyebrow">${esc(p.player)} <span class="note" style="text-transform:none;letter-spacing:0">${p.rounds} rounds seen</span></p>`));
-        p.heroes.slice(0,5).forEach(h=>card.appendChild(el(
-          `<div class="crow"><span>${heroChip(h.hero)}</span>`+
-          `<span class="rec">${Math.round((h.share||0)*100)}% · ${h.rounds}</span></div>`)));
+        p.heroes.slice(0,5).forEach(h=>{
+          // Per-hero rank vs everyone who plays it (role-weighted): green=top
+          // third, amber=middle, red=bottom. Hover shows the per-game averages.
+          const rk=h.rank?pill('#'+h.rank+'/'+h.of,h.pct>=67?'var(--good)':h.pct>=34?'var(--mid)':'var(--bad)'):'';
+          const st=h.stats?` title="${h.games}g avg · ${nf(h.stats.damage)} dmg · ${h.stats.elims} elim · ${h.stats.deaths} deaths · ${nf(h.stats.healing)} heal · ${nf(h.stats.mitigation)} mit"`:'';
+          card.appendChild(el(
+            `<div class="crow"${st}><span>${heroChip(h.hero)} ${rk}</span>`+
+            `<span class="rec">${Math.round((h.share||0)*100)}% · ${h.rounds}r</span></div>`));
+        });
         pgrid.appendChild(card);
       });
       w.appendChild(pgrid);

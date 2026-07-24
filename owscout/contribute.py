@@ -421,6 +421,7 @@ def merged_payload(
     known: Optional[Mapping[MapKey, KnownGame]] = None,
     player_names: Optional[Mapping[str, str]] = None,
     excludes: Optional[AbstractSet[MapKey]] = None,
+    player_stats: Optional[Mapping[tuple[str, int, str], Mapping[str, Any]]] = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
@@ -454,7 +455,8 @@ def merged_payload(
     report = team_scout(to_obs_details(merged.maps), roles, names)
     teams = payload["teams"]
     assert isinstance(teams, dict)
-    pools = player_pools(merged.maps, player_names or {}, names)
+    ranks = rank_player_heroes(merged.maps, player_stats or {}, roles)
+    pools = player_pools(merged.maps, player_names or {}, names, ranks=ranks)
     for team, r in report.items():
         r["players"] = pools.get(team, [])
         teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
@@ -571,9 +573,112 @@ def _raise_push_error(resp: Any, repo: str) -> None:
         f"upload failed (HTTP {resp.status_code})" + (f": {hint}" if hint else ""))
 
 
+# --- per-hero, role-relative player ranking ----------------------------------
+# "How well does this player play THIS hero, versus everyone else who plays it."
+# Captures give the (player -> hero) attribution FACEIT lacks; FACEIT's
+# round_players gives the per-game numbers (but no hero). We attribute a game's
+# numbers to the hero the player spent the most captured rounds on that game,
+# average per player-hero, then rank within each hero by a role-weighted blend of
+# standardised stats.
+
+# Operator-tuned weights on standardised (z-scored) per-game stats. Tanks lean on
+# damage + elims OVER mitigation; DPS on damage with a positive elim/death trade;
+# supports on healing with mitigation/elims secondary. Deaths always cost.
+_STAT_WEIGHTS: dict[str, dict[str, float]] = {
+    "tank":    {"damage": 1.0, "elims": 1.0, "mitigation": 0.3, "deaths": -0.6},
+    "damage":  {"damage": 1.0, "elims": 0.7, "deaths": -0.7},
+    "support": {"healing": 1.0, "mitigation": 0.4, "elims": 0.4, "deaths": -0.5},
+}
+_STAT_FIELDS = ("elims", "deaths", "damage", "healing", "mitigation")
+
+
+def _primary_hero_per_game(
+    maps: Mapping[Any, Mapping[str, Any]]
+) -> dict[tuple[str, int, str], str]:
+    """(match_id, game_no, player_id) -> the hero that player spent the most
+    captured rounds on that game, so a whole-game stat line can be attributed to
+    a single hero."""
+    rounds: dict[tuple[str, int, str], dict[str, set[str]]] = {}
+    for key, m in maps.items():
+        for o in m.get("observations", []):
+            side = str(o.get("side"))
+            rk = f"{side}:{o.get('round_no') or 0}:{o.get('sub_map') or ''}"
+            for pair in o.get("pairs", []):
+                if not pair or len(pair) != 2 or not pair[1]:
+                    continue
+                guid, pid = str(pair[0]), str(pair[1])
+                rounds.setdefault((key.match_id, key.game_no, pid), {}) \
+                      .setdefault(guid, set()).add(rk)
+    return {k: max(hs.items(), key=lambda kv: (len(kv[1]), kv[0]))[0]
+            for k, hs in rounds.items()}
+
+
+def rank_player_heroes(
+    maps: Mapping[Any, Mapping[str, Any]],
+    player_stats: Mapping[tuple[str, int, str], Mapping[str, Any]],
+    hero_roles: Mapping[str, str],
+    *, min_group: int = 3, min_games: int = 2,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """(player_id, hero_guid) -> {games, avg{...}, and rank/of/pct when the hero
+    has >= ``min_group`` players and this one has >= ``min_games`` on it}. Rank is
+    within the hero, by the role-weighted blend in ``_STAT_WEIGHTS`` over stats
+    standardised across that hero's players (so scales/heroes are comparable)."""
+    prim = _primary_hero_per_game(maps)
+    acc: dict[tuple[str, str], dict[str, float]] = {}
+    for (mid, gno, pid), guid in prim.items():
+        st = player_stats.get((mid, gno, pid))
+        if not st or not st.get("captured", True):
+            continue
+        a = acc.setdefault((pid, guid), {"games": 0.0, **{f: 0.0 for f in _STAT_FIELDS}})
+        a["games"] += 1.0
+        for f in _STAT_FIELDS:
+            a[f] += float(st.get(f) or 0.0)
+
+    by_hero: dict[str, list[tuple[str, dict[str, float]]]] = {}
+    for (pid, guid), a in acc.items():
+        g = a["games"] or 1.0
+        avg = {f: a[f] / g for f in _STAT_FIELDS}
+        avg["games"] = a["games"]
+        by_hero.setdefault(guid, []).append((pid, avg))
+
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for guid, members in by_hero.items():
+        weights = _STAT_WEIGHTS.get((hero_roles.get(guid) or "").lower(),
+                                    _STAT_WEIGHTS["damage"])
+        means: dict[str, float] = {}
+        stds: dict[str, float] = {}
+        for stat in weights:
+            xs = [m[1][stat] for m in members]
+            mean = sum(xs) / len(xs)
+            means[stat] = mean
+            stds[stat] = (sum((x - mean) ** 2 for x in xs) / len(xs)) ** 0.5
+        scored: list[tuple[str, dict[str, float]]] = []
+        for pid, avg in members:
+            comp = sum(w * (avg[stat] - means[stat]) / stds[stat]
+                       for stat, w in weights.items() if stds[stat] > 0)
+            scored.append((pid, avg))
+            avg["_comp"] = comp
+        scored.sort(key=lambda x: -x[1]["_comp"])
+        n = len(scored)
+        for i, (pid, avg) in enumerate(scored):
+            info: dict[str, Any] = {
+                "games": int(avg["games"]),
+                "avg": {"elims": round(avg["elims"], 1), "deaths": round(avg["deaths"], 1),
+                        "damage": int(avg["damage"]), "healing": int(avg["healing"]),
+                        "mitigation": int(avg["mitigation"])},
+            }
+            if n >= min_group and avg["games"] >= min_games:
+                info["rank"] = i + 1
+                info["of"] = n
+                info["pct"] = round(100 * (n - 1 - i) / (n - 1)) if n > 1 else 100
+            out[(pid, guid)] = info
+    return out
+
+
 def player_pools(
     maps: Mapping[MapKey, Mapping[str, Any]],
     player_names: Mapping[str, str], hero_names: Mapping[str, str],
+    ranks: Optional[Mapping[tuple[str, str], Mapping[str, Any]]] = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Per team, each attributed player's hero pool in ROUNDS (same unit as the
     team pool). Only observations that carry (hero, player) pairs contribute;
@@ -598,14 +703,22 @@ def player_pools(
         rows = []
         for pid, heroes in players.items():
             total = len(seen_rounds[(team, pid)])
+            hrows: list[dict[str, Any]] = []
+            for g, rs in heroes.items():
+                d: dict[str, Any] = {"hero": hero_names.get(g, g), "rounds": len(rs),
+                                     "share": round(len(rs) / total, 3) if total else 0.0}
+                ri = (ranks or {}).get((pid, g))
+                if ri:
+                    d["stats"] = ri["avg"]
+                    d["games"] = ri["games"]
+                    if "rank" in ri:
+                        d["rank"], d["of"], d["pct"] = ri["rank"], ri["of"], ri["pct"]
+                hrows.append(d)
+            hrows.sort(key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))
             rows.append({
                 "player": player_names.get(pid, pid),
                 "rounds": total,
-                "heroes": sorted(
-                    ({"hero": hero_names.get(g, g), "rounds": len(rs),
-                      "share": round(len(rs) / total, 3) if total else 0.0}
-                     for g, rs in heroes.items()),
-                    key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))[:8],
+                "heroes": hrows[:8],
             })
         rows.sort(key=lambda r: (-int(str(r["rounds"])), str(r["player"])))
         out[team] = rows
