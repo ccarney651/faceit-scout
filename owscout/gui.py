@@ -722,8 +722,12 @@ class _App:  # pragma: no cover - GUI runtime only
             try:
                 with self._open_db() as db:
                     region = self.region_var.get()
+                    # No limit: the newest 40 could ALL be already-scouted, which
+                    # would hide older-but-still-open codes entirely. Fetch every
+                    # uncaptured code for the division/region; the "hide already-
+                    # scouted" filter trims the list to what's actually free.
                     rows = db.list_codes(
-                        self.faceit_var.get(), uncaptured=True, limit=40,
+                        self.faceit_var.get(), uncaptured=True,
                         region=None if region == ALL_REGIONS else region)
             except Exception as exc:  # noqa: BLE001
                 rows = []
