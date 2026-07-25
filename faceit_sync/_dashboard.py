@@ -283,12 +283,16 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .game-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
 .game-hd .gno{font-weight:700;color:var(--faint);width:22px}
 .bans{display:flex;gap:6px 4px;flex-wrap:wrap;align-items:center;margin-top:7px}
-/* Per-game opening comps on a match card: one row per team, its segments inline. */
-.gamecomps{margin-top:8px;display:flex;flex-direction:column;gap:5px}
-.gcrow{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;font-size:12px}
-.gcrow .gcteam{min-width:118px;font-weight:650;color:var(--muted)}
-.gcseg{display:inline-flex;align-items:center;gap:5px}
-.gcseg .lab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint)}
+/* Per-game opening comps on a match card: an aligned grid so both teams' comps
+   line up per segment. Columns = segment label + one per team; width is bounded
+   by the two comp columns (segments add rows, not columns), so it fits the rail. */
+.gamecomps{margin-top:8px;display:grid;grid-template-columns:auto auto auto;
+  gap:5px 14px;align-items:center;overflow-x:auto}
+.gamecomps.single{grid-template-columns:auto auto}
+.gamecomps .gchdr{font-size:11px;font-weight:650;color:var(--muted);white-space:nowrap}
+.gamecomps .gcseglab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--faint);white-space:nowrap}
+.gamecomps .gccell{min-width:0}
 .banstep{display:inline-flex;align-items:center;gap:5px;margin-right:16px}
 .ord{width:17px;height:17px;border-radius:50%;background:var(--accent-weak);color:var(--accent);
   font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -590,6 +594,17 @@ function bansOrdered(g){
     `<b>${b.team?esc(b.team):'<span class=\'faint\'>?</span>'}</b> banned ${heroChip(b.hero)}</span>`).join('');
 }
 // One full match card: header (teams/score), then each map with bans + toggleable rosters.
+// Canonical segment order for a game's per-team opening comps: attack/defend for
+// Escort/Hybrid, a single 'map' for Push/Flashpoint, else control sub-maps in
+// play order. Both teams share the same segments, so we can grid them.
+function segOrder(pg){
+  const all=new Set();
+  Object.values(pg).forEach(segs=>Object.keys(segs).forEach(s=>all.add(s)));
+  if(all.has('attack')||all.has('defend')) return ['attack','defend'].filter(s=>all.has(s));
+  if(all.has('map')) return ['map'];
+  const order=[]; Object.values(pg).forEach(segs=>Object.keys(segs).forEach(s=>{ if(!order.includes(s)) order.push(s); }));
+  return order;
+}
 function matchCard(m){
   const c=el(`<div class="card match"></div>`);
   const w1=m.winner==='faction1',w2=m.winner==='faction2';
@@ -616,17 +631,25 @@ function matchCard(m){
     // Captured opening comps per segment: sub-map (Control), attack/defend
     // (Escort/Hybrid), or the whole map (Push/Flashpoint). Only when captured.
     const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
-    if(pg){
-      const cbox=el(`<div class="gamecomps"></div>`);
-      Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)))
-        .forEach(team=>{
-          const segs=pg[team]; if(!segs||!Object.keys(segs).length) return;
-          const row=el(`<div class="gcrow"><span class="gcteam">${esc(team)}</span></div>`);
-          Object.keys(segs).forEach(seg=>row.appendChild(el(
-            `<span class="gcseg">${seg!=='map'?`<span class="lab">${esc(seg)}</span>`:''}${compRow(segs[seg])}</span>`)));
-          cbox.appendChild(row);
-        });
-      if(cbox.querySelector('.gcrow')) gEl.appendChild(cbox);
+    if(pg && Object.keys(pg).length){
+      // Aligned grid so both teams' comps line up per segment. Columns: segment
+      // label + one per team; rows: header (team names) then a row per segment.
+      // Push/Flashpoint has a single 'map' segment, so drop the label column.
+      const teams=Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)));
+      const order=segOrder(pg);
+      const cell=c=>`<span class="gccell">${c&&c.length?compRow(c):'<span class="faint">—</span>'}</span>`;
+      const single=order.length===1 && order[0]==='map';
+      const box=el(`<div class="gamecomps${single?' single':''}"></div>`);
+      if(single){
+        teams.forEach(t=>{ box.appendChild(el(`<span class="gchdr">${esc(t)}</span>`));
+          box.appendChild(el(cell((pg[t]||{}).map))); });
+      } else {
+        box.appendChild(el(`<span></span>`));
+        teams.forEach(t=>box.appendChild(el(`<span class="gchdr">${esc(t)}</span>`)));
+        order.forEach(seg=>{ box.appendChild(el(`<span class="gcseglab">${esc(seg)}</span>`));
+          teams.forEach(t=>box.appendChild(el(cell((pg[t]||{})[seg])))); });
+      }
+      gEl.appendChild(box);
     }
     const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
     gEl.appendChild(ros);
