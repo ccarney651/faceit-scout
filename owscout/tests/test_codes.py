@@ -89,6 +89,19 @@ def test_list_codes_captured_flag_and_uncaptured(db: Database, tmp_path: Path) -
     assert {r.demo_code for r in db.list_codes(fp, uncaptured=True)} == {"NEW222"}
 
 
+def test_list_codes_skips_empty_code(db: Database, tmp_path: Path) -> None:
+    # A FINISHED game FACEIT never produced a replay for stores demo_code=''.
+    # It is not NULL, so it must be filtered explicitly or it leaks into the app
+    # list as a blank, unscoutable entry (the site already treats '' as no-code).
+    fp = str(tmp_path / "faceit.sqlite3")
+    _faceit(tmp_path / "faceit.sqlite3")
+    con = sqlite3.connect(fp)
+    con.execute("INSERT INTO games VALUES('NEW',3,'m-ilios','')")
+    con.commit(); con.close()
+    codes = {r.demo_code for r in db.list_codes(fp, include_wiped=True)}
+    assert codes == {"OLD111", "NEW111", "NEW222"}  # the '' game is gone
+
+
 def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
     fp = _faceit(tmp_path / "faceit.sqlite3")
     con = sqlite3.connect(fp)

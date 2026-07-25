@@ -655,7 +655,7 @@ class Database:
             LEFT JOIN faceit.teams t1 ON t1.id = m.faction1_team_id
             LEFT JOIN faceit.teams t2 ON t2.id = m.faction2_team_id
             LEFT JOIN faceit.championships ch ON ch.id = m.championship_id
-            WHERE g.demo_code IS NOT NULL
+            WHERE g.demo_code IS NOT NULL AND g.demo_code <> ''
         """
         params: list[object] = []
         if division is not None:
