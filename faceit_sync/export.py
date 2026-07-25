@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 import os
 import sqlite3
-from typing import Any, Optional, TextIO
+from typing import Any, Mapping, Optional, TextIO
 
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
@@ -177,7 +177,43 @@ def team_stats(db: Database, team_name: str) -> Optional[dict[str, Any]]:
 
 # --- self-contained HTML dashboard -------------------------------------------
 
-def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
+def _attack_first_panels(
+    game_rows: "list[Any]", attack_cycles: "Mapping[str, Any]"
+) -> "tuple[dict[str, Any], dict[str, Any]]":
+    """(total, extra) attacking-first panels using the DECIDING attack/defend cycle.
+    Normal games (max score <= 3) use FACEIT's round-1 attacker; extra-round games
+    (score > 3) use owscout's round-3 attacker from ``attack_cycles`` and are
+    dropped when not captured. Each panel: {by_map:[{name,category,games,
+    atk_first_wins}], total_games, atk_first_wins}."""
+    from collections import defaultdict
+    cat: dict[str, str] = {}
+    tot: dict[str, list[int]] = defaultdict(lambda: [0, 0])   # map -> [games, wins]
+    ext: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    tg = tw = eg = ew = 0
+    for r in game_rows:
+        mp = r["name"]
+        cat[mp] = r["category"]
+        s1, s2 = r["faction1_score"] or 0, r["faction2_score"] or 0
+        if max(s1, s2) <= 3:                        # normal 2-round game -> round 1
+            if r["attacking_first_faction"] and r["winner_faction"]:
+                won = 1 if r["winner_faction"] == r["attacking_first_faction"] else 0
+                tot[mp][0] += 1; tot[mp][1] += won; tg += 1; tw += won
+        else:                                       # extra rounds -> round-3 attacker
+            ci = attack_cycles.get(f"{r['match_id']}:{r['game_no']}")
+            if ci and ci.get("decider") == 3:
+                won = 1 if ci.get("won") else 0
+                tot[mp][0] += 1; tot[mp][1] += won; tg += 1; tw += won
+                ext[mp][0] += 1; ext[mp][1] += won; eg += 1; ew += won
+
+    def panel(agg: dict[str, list[int]], g: int, w: int) -> dict[str, Any]:
+        by_map = [{"name": mp, "category": cat[mp], "games": v[0], "atk_first_wins": v[1]}
+                  for mp, v in sorted(agg.items(), key=lambda kv: -kv[1][0])]
+        return {"by_map": by_map, "total_games": g, "atk_first_wins": w}
+    return panel(tot, tg, tw), panel(ext, eg, ew)
+
+
+def _dashboard_data(db: Database, cid: str,
+                    attack_cycles: "Optional[Mapping[str, Any]]" = None) -> dict[str, Any]:
     c = db.conn
 
     def _p(a: tuple[Any, ...]) -> Any:
@@ -242,22 +278,19 @@ def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
       WHERE g.map_guid IS NOT NULL AND g.match_id IN {in_champ}
       GROUP BY g.map_guid ORDER BY games DESC""", {"c": cid})
 
-    # Attack-first advantage, asymmetric modes only (Escort/Hybrid).
+    # Attack-first advantage (asymmetric modes). Uses the DECIDING attack/defend
+    # cycle: round 1 for normal games (FACEIT), round 3 for games that went to
+    # extra rounds (owscout capture, keyed match:game). Uncaptured extra-round
+    # games can't be decided and drop out. Two panels: total and extra-round only.
     ph = ",".join("?" for _ in ASYMMETRIC_CATEGORIES)
-    atk = rows(f"""
-      SELECT mp.name, mp.category, COUNT(*) games,
-             SUM(CASE WHEN g.winner_faction=g.attacking_first_faction THEN 1 ELSE 0 END) atk_first_wins
+    atk_rows = rows(f"""
+      SELECT mp.name, mp.category, g.faction1_score, g.faction2_score,
+             g.attacking_first_faction, g.winner_faction, g.match_id, g.game_no
       FROM games g JOIN maps mp ON mp.guid=g.map_guid
-      WHERE g.attacking_first_faction IS NOT NULL AND g.winner_faction IS NOT NULL
-        AND mp.category IN ({ph}) AND g.match_id IN (SELECT id FROM matches WHERE championship_id=?)
-      GROUP BY g.map_guid ORDER BY games DESC""", *ASYMMETRIC_CATEGORIES, cid)
-    atk_total = c.execute(f"""
-      SELECT COUNT(*) games,
-             SUM(CASE WHEN g.winner_faction=g.attacking_first_faction THEN 1 ELSE 0 END) w
-      FROM games g JOIN maps mp ON mp.guid=g.map_guid
-      WHERE g.attacking_first_faction IS NOT NULL AND g.winner_faction IS NOT NULL
-        AND mp.category IN ({ph}) AND g.match_id IN (SELECT id FROM matches WHERE championship_id=?)""",
-      (*ASYMMETRIC_CATEGORIES, cid)).fetchone()
+      WHERE mp.category IN ({ph})
+        AND g.match_id IN (SELECT id FROM matches WHERE championship_id=?)""",
+      *ASYMMETRIC_CATEGORIES, cid)
+    atk_panel, atk_extra = _attack_first_panels(atk_rows, attack_cycles or {})
 
     matches: list[dict[str, Any]] = []
     team_names: set[str] = set()
@@ -328,11 +361,8 @@ def _dashboard_data(db: Database, cid: str) -> dict[str, Any]:
     return {
         "summary": summary, "teams": teams, "heroes": heroes,
         "bans_by_role": bans_by_role, "maps": maps,
-        "attacking_first": {
-            "by_map": atk,
-            "total_games": atk_total["games"] or 0,
-            "atk_first_wins": atk_total["w"] or 0,
-        },
+        "attacking_first": atk_panel,
+        "attacking_first_extra": atk_extra,
         "matches": matches,
         "team_names": sorted(team_names),
     }
@@ -382,12 +412,31 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
         cids = [str(r["id"]) for r in rows]
 
+    # Captured comps synced in from owscout (if present). Loaded once, up front, so
+    # the per-game deciding-cycle data (attack_cycles) can feed each division's
+    # attacking-first panel. Team-keyed JSON from `owscout ... contribute merge`.
+    owscout_comps: dict[str, object] = {}
+    owscout_captured: list[str] = []
+    owscout_wipe: object = None
+    owscout_cycles: dict[str, object] = {}
+    oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
+    if os.path.exists(oc_path):
+        try:
+            with open(oc_path, encoding="utf-8") as fh:
+                oc = json.load(fh)
+            owscout_comps = oc.get("teams", {})
+            owscout_captured = list(oc.get("captured_games", []))
+            owscout_wipe = oc.get("code_wipe_date")
+            owscout_cycles = oc.get("attack_cycles", {})
+        except (json.JSONDecodeError, OSError):
+            owscout_comps = {}
+
     divisions: dict[str, Any] = {}
     heroes: dict[str, Any] = {}
     maps: dict[str, Any] = {}
     ordered: list[tuple[str, str]] = []
     for cid in cids:
-        d = _dashboard_data(db, cid)
+        d = _dashboard_data(db, cid, attack_cycles=owscout_cycles)
         if not d["summary"]["matches"]:
             continue
         for h in d.pop("heroes"):
@@ -437,26 +486,6 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             "SELECT name, role FROM heroes ORDER BY name"
         ).fetchall()
     ]
-
-    # Captured comps synced in from owscout (if present). Team-keyed JSON written
-    # by `owscout export --format dashboard --out owscout_comps.json`; the operator
-    # commits it and the dashboard renders it on team Scout pages. Git-native sync,
-    # no shared database.
-    owscout_comps: dict[str, object] = {}
-    owscout_captured: list[str] = []
-    owscout_wipe: object = None
-    oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
-    if os.path.exists(oc_path):
-        try:
-            with open(oc_path, encoding="utf-8") as fh:
-                oc = json.load(fh)
-            owscout_comps = oc.get("teams", {})
-            # "match_id:game_no" keys of captured games - drives the scouted
-            # badges and each team's still-to-scout queue on the page.
-            owscout_captured = list(oc.get("captured_games", []))
-            owscout_wipe = oc.get("code_wipe_date")
-        except (json.JSONDecodeError, OSError):
-            owscout_comps = {}
 
     data = {
         "divisions": divisions,

@@ -414,6 +414,41 @@ def to_obs_rows(
     return rows
 
 
+def attack_first_cycles(
+    maps: Mapping[MapKey, Mapping[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Per captured Escort/Hybrid game: who attacked FIRST in the DECIDING cycle,
+    and whether they won. The deciding cycle is the last attack/defend pair -
+    rounds 1/2 for a normal game (``decider=1`` -> round-1 attacker) or rounds 3/4
+    when it went long (``decider=3`` -> round-3 attacker, which is NOT the round-1
+    attacker: extra-round attack order is set by time banks, only the capture
+    records it). Games captured to an odd final round (R3 with no R4 - asymmetric)
+    are skipped. Keyed 'match_id:game_no', so the dashboard can fold it into the
+    attacking-first panel for the games FACEIT alone can't decide."""
+    out: dict[str, dict[str, Any]] = {}
+    for key, m in maps.items():
+        if (m.get("map_category") or "").strip().lower() not in ("escort", "hybrid"):
+            continue
+        winner = m.get("winner_side")
+        if winner not in ("a", "b"):
+            continue
+        att: dict[int, str] = {}   # round_no -> attacking side
+        for o in m.get("observations", []):
+            if o.get("phase") == "attack" and o.get("round_no"):
+                att[int(o["round_no"])] = str(o.get("side"))
+        if not att:
+            continue
+        if 4 in att and 3 in att:
+            decider, side = 3, att[3]
+        elif max(att) == 2 and 1 in att:
+            decider, side = 1, att[1]
+        else:
+            continue
+        out[f"{key.match_id}:{key.game_no}"] = {
+            "won": side == winner, "decider": decider, "map": m.get("map_name")}
+    return out
+
+
 def merged_payload(
     contributions: Sequence[Mapping[str, Any]],
     hero_roles: Mapping[str, str], hero_names: Mapping[str, str],
@@ -464,6 +499,9 @@ def merged_payload(
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
     payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)
+    # Deciding-cycle attacker per captured escort/hybrid game (for the attacking-
+    # first panel: FACEIT only knows the round-1 attacker, not round 3's).
+    payload["attack_cycles"] = attack_first_cycles(merged.maps)
     from datetime import datetime, timezone
     payload["built_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Games on or before this date have DEAD replay codes: the site must not
@@ -583,15 +621,19 @@ def _raise_push_error(resp: Any, repo: str) -> None:
 
 # Operator-tuned weights on standardised (z-scored) per-game stats. Tanks lean on
 # damage + elims OVER mitigation; DPS on damage with a positive elim/death trade;
-# supports on healing with mitigation/elims secondary. Deaths are weighted the
-# HEAVIEST single factor per role (operator call): staying alive matters more
-# than any one output stat. (True per-10-min isn't possible - FACEIT gives no
-# game duration - but z-scoring within a hero group makes the comparison fair.)
+# Operator-tuned, in priority order (heaviest first). ``kd`` = elims/deaths, so
+# staying alive is baked into the top factor AND penalised again via ``deaths``.
+#   tank    : k/d, then deaths, then damage
+#   damage  : k/d, then damage, then deaths
+#   support : healing, then deaths, then k/d
+# (True per-10-min isn't possible - FACEIT gives no game duration - but z-scoring
+# within a hero group makes the comparison fair.)
 _STAT_WEIGHTS: dict[str, dict[str, float]] = {
-    "tank":    {"damage": 1.0, "elims": 1.0, "mitigation": 0.3, "deaths": -1.6},
-    "damage":  {"damage": 1.0, "elims": 0.7, "deaths": -1.6},
-    "support": {"healing": 1.0, "mitigation": 0.4, "elims": 0.4, "deaths": -1.3},
+    "tank":    {"kd": 1.0, "deaths": -0.6, "damage": 0.3},
+    "damage":  {"kd": 1.0, "damage": 0.6, "deaths": -0.3},
+    "support": {"healing": 1.0, "deaths": -0.6, "kd": 0.3},
 }
+# Raw fields summed per game; ``kd`` is derived from elims/deaths afterwards.
 _STAT_FIELDS = ("elims", "deaths", "damage", "healing", "mitigation")
 
 
@@ -646,6 +688,7 @@ def rank_player_heroes(
         g = a["games"] or 1.0
         avg = {f: a[f] / g for f in _STAT_FIELDS}
         avg["games"] = a["games"]
+        avg["kd"] = avg["elims"] / max(avg["deaths"], 0.5)   # avoid div-by-zero
         by_group.setdefault((div, guid), []).append((pid, avg))
 
     out: dict[tuple[str, str], dict[str, Any]] = {}
@@ -677,7 +720,7 @@ def rank_player_heroes(
                     "games": int(avg["games"]),
                     "avg": {"elims": round(avg["elims"], 1), "deaths": round(avg["deaths"], 1),
                             "damage": int(avg["damage"]), "healing": int(avg["healing"]),
-                            "mitigation": int(avg["mitigation"])},
+                            "mitigation": int(avg["mitigation"]), "kd": round(avg["kd"], 2)},
                 }
                 if ranked:
                     info["rank"] = i + 1

@@ -381,35 +381,31 @@ def test_captured_feed_never_blocks_scouting() -> None:
     assert fetch_captured_games(session=_Future()) == set()
 
 
-def test_rank_player_heroes_weights_tank_damage_over_mitigation() -> None:
-    """Operator call: for tanks, damage + elims outweigh mitigation. A high
-    damage/elim, low-mitigation tank must out-rank a high-mitigation, low-output
+def test_rank_player_heroes_tank_weights_kd_over_damage() -> None:
+    """Operator call: tank blend leads with k/d (elims/deaths), then deaths, then
+    damage. A great-k/d, modest-damage tank must out-rank a big-damage, poor-k/d
     one on the same hero."""
     from owscout.contribute import MapKey, rank_player_heroes
 
-    roles = {"ram": "tank"}
     maps: dict[Any, Any] = {}
     stats: dict[Any, Any] = {}
 
-    def add(pid: str, mid: str, dmg: int, elims: int, deaths: int, mit: int) -> None:
-        for gno in (1, 2):                      # 2 games each -> above min_games
+    def add(pid: str, mid: str, elims: int, deaths: int, dmg: int) -> None:
+        for gno in (1, 2):                      # 2 games each -> confident
             maps[MapKey(mid, gno)] = {
-                "side_a_team": "A", "side_b_team": "B",
                 "observations": [{"side": "a", "round_no": 1, "sub_map": None,
                                   "pairs": [["ram", pid]]}]}
             stats[(mid, gno, pid)] = {"elims": elims, "deaths": deaths, "damage": dmg,
-                                      "healing": 0, "mitigation": mit, "captured": True}
+                                      "healing": 0, "mitigation": 2000, "captured": True}
 
-    add("P1", "M1", 8000, 20, 3, 1000)          # high output, low mitigation
-    add("P2", "M2", 5000, 12, 5, 3000)          # middle
-    add("P3", "M3", 2500, 6, 6, 6000)           # low output, high mitigation
-    ranks = rank_player_heroes(maps, stats, roles)
+    add("P1", "M1", 20, 2, 4000)                # k/d 10, lowest damage
+    add("P2", "M2", 12, 4, 6000)                # k/d 3
+    add("P3", "M3", 8, 8, 9000)                 # k/d 1, highest damage
+    ranks = rank_player_heroes(maps, stats, {"ram": "tank"})
 
-    assert ranks[("P1", "ram")]["rank"] == 1    # damage+elims win over mitigation
-    assert ranks[("P3", "ram")]["rank"] == 3
-    assert ranks[("P1", "ram")]["of"] == 3
-    assert ranks[("P1", "ram")]["games"] == 2
-    assert ranks[("P1", "ram")]["avg"]["damage"] == 8000
+    assert ranks[("P1", "ram")]["rank"] == 1    # best k/d wins despite least damage
+    assert ranks[("P3", "ram")]["rank"] == 3    # most damage can't save worst k/d
+    assert ranks[("P1", "ram")]["avg"]["kd"] == 10.0
 
 
 def test_rank_player_heroes_thin_group_keeps_avg_but_no_rank() -> None:

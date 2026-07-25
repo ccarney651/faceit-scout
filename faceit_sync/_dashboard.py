@@ -349,14 +349,16 @@ function mergeDivisions(v){
   const fr=ds.map(d=>d.summary.date_from).filter(Boolean).sort();
   const to=ds.map(d=>d.summary.date_to).filter(Boolean).sort();
   sum.date_from=fr[0]||''; sum.date_to=to[to.length-1]||'';
-  const bm={};
-  ds.forEach(d=>d.attacking_first.by_map.forEach(m=>{
-    const e=bm[m.name]||(bm[m.name]={name:m.name,category:m.category,games:0,atk_first_wins:0});
-    e.games+=m.games; e.atk_first_wins+=m.atk_first_wins; }));
-  const af={by_map:Object.values(bm).sort((a,b)=>b.games-a.games),
-    total_games:ds.reduce((a,d)=>a+d.attacking_first.total_games,0),
-    atk_first_wins:ds.reduce((a,d)=>a+d.attacking_first.atk_first_wins,0)};
-  return {summary:sum, teams, team_names, matches, attacking_first:af};
+  const mergePanel=(get)=>{ const bm={};
+    ds.forEach(d=>((get(d)||{}).by_map||[]).forEach(m=>{
+      const e=bm[m.name]||(bm[m.name]={name:m.name,category:m.category,games:0,atk_first_wins:0});
+      e.games+=m.games; e.atk_first_wins+=m.atk_first_wins; }));
+    return {by_map:Object.values(bm).sort((a,b)=>b.games-a.games),
+      total_games:ds.reduce((a,d)=>a+((get(d)||{}).total_games||0),0),
+      atk_first_wins:ds.reduce((a,d)=>a+((get(d)||{}).atk_first_wins||0),0)}; };
+  return {summary:sum, teams, team_names, matches,
+    attacking_first:mergePanel(d=>d.attacking_first),
+    attacking_first_extra:mergePanel(d=>d.attacking_first_extra)};
 }
 
 /* ---------- tiny DOM + format helpers ---------- */
@@ -383,6 +385,11 @@ const CAPTURED=new Set(DATA.owscout_captured||[]);
 // date can never be replayed, so it is only "scoutable" if already captured.
 const CODE_WIPE=DATA.code_wipe||null;
 const codeDead=(when)=>!!(CODE_WIPE&&when&&String(when).slice(0,10)<=CODE_WIPE);
+// Every capture-based stat can only see games since the last replay-code wipe
+// (codes reset each patch), so capture sections append this to their subtitle.
+const capSince=()=> CODE_WIPE
+  ? ` <span class="faint" title="Replay codes reset each patch, so captured data only covers games since the last code wipe">· captures since ${dshort(CODE_WIPE)}</span>`
+  : '';
 // Map lists everywhere read as a mode block at a time (all Control together, etc),
 // and within a mode the maps the league actually plays come first.
 const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
@@ -1108,7 +1115,7 @@ function renderScoutBody(t){
     const top=(scout.overall||[]).slice(0,5);
     if(top.length){
       w.appendChild(el(sectionH('Common comps',
-        `<span class="note">most-played compositions · ${nGames} map${nGames===1?'':'s'} captured</span>`)));
+        `<span class="note">most-played compositions · ${nGames} map${nGames===1?'':'s'} captured${capSince()}</span>`)));
       const card=el(`<div class="card"></div>`);
       top.forEach(c=>card.appendChild(el(compLine(c))));
       w.appendChild(card);
@@ -1121,7 +1128,7 @@ function renderScoutBody(t){
     const nRounds=scout.rounds||0;
     if(pool.length){
       w.appendChild(el(sectionH('Hero pool',
-        `<span class="note">rounds played · ${nRounds} round${nRounds===1?'':'s'} captured</span>`)));
+        `<span class="note">rounds played · ${nRounds} round${nRounds===1?'':'s'} captured${capSince()}</span>`)));
       const grid=el(`<div class="grid cols-3"></div>`);
       ['Tank','Damage','Support'].forEach(role=>{
         const rows=pool.filter(h=>(h.role||HERO_ROLE[h.hero])===role).slice(0,8);
@@ -1143,7 +1150,7 @@ function renderScoutBody(t){
     const ppools=scout.players||[];
     if(ppools.length){
       w.appendChild(el(sectionH('Player pools',
-        `<span class="note">HUD-attributed · #rank = this hero vs the field's other players of it</span>`)));
+        `<span class="note">HUD-attributed · #rank = this hero vs the field's other players of it${capSince()}</span>`)));
       const pgrid=el(`<div class="grid cols-3"></div>`);
       ppools.forEach(p=>{
         const card=el(`<div class="card"></div>`);
@@ -1156,7 +1163,7 @@ function renderScoutBody(t){
           const rk=h.rank?(h.low_data
               ?`<span class="faint" style="font-size:11px">low data</span>`
               :pill('#'+h.rank+'/'+h.of,h.pct>=67?'var(--good)':h.pct>=34?'var(--mid)':'var(--bad)')):'';
-          const st=h.stats?` title="${h.games}g avg · ${nf(h.stats.damage)} dmg · ${h.stats.elims} elim · ${h.stats.deaths} deaths · ${nf(h.stats.healing)} heal · ${nf(h.stats.mitigation)} mit"`:'';
+          const st=h.stats?` title="${h.games}g avg · ${h.stats.kd!=null?h.stats.kd+' k/d · ':''}${nf(h.stats.damage)} dmg · ${h.stats.elims} elim · ${h.stats.deaths} deaths · ${nf(h.stats.healing)} heal · ${nf(h.stats.mitigation)} mit"`:'';
           card.appendChild(el(
             `<div class="crow"${st}><span>${heroChip(h.hero)} ${rk}</span>`+
             `<span class="rec">${Math.round((h.share||0)*100)}% · ${h.rounds}r</span></div>`));
@@ -1171,7 +1178,7 @@ function renderScoutBody(t){
     const maps=scout.maps||{};
     const mapNames=sortMaps(Object.keys(maps));
     if(mapNames.length){
-      w.appendChild(el(sectionH('Map scouting',`<span class="note">click a map for captured detail</span>`)));
+      w.appendChild(el(sectionH('Map scouting',`<span class="note">click a map for captured detail${capSince()}</span>`)));
       let lastMode=null;
       mapNames.forEach(mp=>{
         // One mode at a time, with a heading where the mode changes.
@@ -1232,7 +1239,7 @@ function renderScoutBody(t){
     // 4. Common swaps - lead with the trigger: what makes them counter-swap.
     const swaps=(scout.swaps||[]).slice(0,8);
     if(swaps.length){
-      w.appendChild(el(sectionH('Common swaps',`<span class="note">what makes them change heroes</span>`)));
+      w.appendChild(el(sectionH('Common swaps',`<span class="note">what makes them change heroes${capSince()}</span>`)));
       const card=el(`<div class="card"></div>`);
       swaps.forEach(s=>card.appendChild(el(swapLine(s))));
       w.appendChild(card);
@@ -1519,14 +1526,15 @@ const PLAYER_STAT_FIELDS=['damage','elims','deaths','healing','mitigation'];
 // Aggregate each player's per-hero composite across the heroes of a seat, weighted
 // by games, then rank within the seat. Confident (>=2 seat games) vs low-data.
 function seatLeaderboards(){
-  const ocs=DATA.owscout_comps||{}, bySeat={};
+  const ocs=DATA.owscout_comps||{}, byPlayer={};
   D().team_names.forEach(team=>{
     (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
       (p.heroes||[]).forEach(h=>{
         if(h.comp==null||!h.games) return;
         const seat=HERO_SEAT[h.hero]; if(!seat) return;
-        const key=team+'|'+p.player, m=(bySeat[seat]=bySeat[seat]||{});
-        const e=m[key]||(m[key]={player:p.player,team,g:0,cw:0,heroes:{},
+        const key=team+'|'+p.player;
+        const pe=byPlayer[key]||(byPlayer[key]={player:p.player,team,seats:{}});
+        const e=pe.seats[seat]||(pe.seats[seat]={g:0,cw:0,heroes:{},
           st:{damage:0,elims:0,deaths:0,healing:0,mitigation:0}});
         e.g+=h.games; e.cw+=h.comp*h.games;
         PLAYER_STAT_FIELDS.forEach(k=>e.st[k]+=((h.stats&&h.stats[k])||0)*h.games);
@@ -1534,18 +1542,28 @@ function seatLeaderboards(){
       });
     });
   });
+  // Each player appears ONLY on their primary (most-played) seat, so a hitscan
+  // main doesn't also clutter the Flex DPS board.
+  const bySeat={};
+  Object.values(byPlayer).forEach(pe=>{
+    const seats=Object.entries(pe.seats).sort((a,b)=>b[1].g-a[1].g);
+    if(!seats.length) return;
+    const seat=seats[0][0], e=seats[0][1];
+    (bySeat[seat]=bySeat[seat]||[]).push(Object.assign({player:pe.player,team:pe.team},e));
+  });
   const rankGrp=arr=>{ arr.sort((a,b)=>b.idx-a.idx);
     arr.forEach((r,i)=>{ r.rank=i+1; r.of=arr.length;
       r.pct=arr.length>1?Math.round(100*(arr.length-1-i)/(arr.length-1)):100; }); return arr; };
   const out={};
   SEATS.forEach(seat=>{
     const players=bySeat[seat]; if(!players) return;
-    const list=Object.values(players).map(e=>({player:e.player,team:e.team,games:e.g,
-      idx:e.cw/e.g, low:e.g<2,
-      stats:{damage:Math.round(e.st.damage/e.g),healing:Math.round(e.st.healing/e.g),
-        mitigation:Math.round(e.st.mitigation/e.g),
-        elims:Math.round(e.st.elims/e.g*10)/10,deaths:Math.round(e.st.deaths/e.g*10)/10},
-      heroes:Object.entries(e.heroes).sort((a,b)=>b[1]-a[1]).map(x=>x[0])}));
+    const list=players.map(e=>{ const kd=e.st.elims/Math.max(e.st.deaths,0.5);
+      return {player:e.player,team:e.team,games:e.g,idx:e.cw/e.g,low:e.g<2,
+        stats:{damage:Math.round(e.st.damage/e.g),healing:Math.round(e.st.healing/e.g),
+          mitigation:Math.round(e.st.mitigation/e.g),
+          elims:Math.round(e.st.elims/e.g*10)/10,deaths:Math.round(e.st.deaths/e.g*10)/10,
+          kd:Math.round(kd*100)/100},
+        heroes:Object.entries(e.heroes).sort((a,b)=>b[1]-a[1]).map(x=>x[0])}; });
     out[seat]={conf:rankGrp(list.filter(r=>!r.low)),low:rankGrp(list.filter(r=>r.low))};
   });
   return out;
@@ -1564,19 +1582,24 @@ function renderPlayers(){
     return wrap;
   }
   wrap.appendChild(el(sectionH('Players',
-    `<span class="note">ranked within ${esc(D().summary.championship||'the division')} · role-weighted (tanks favour damage+elims, deaths weigh heavy) · hover a row for per-game stats</span>`)));
+    `<span class="note">ranked within ${esc(D().summary.championship||'the division')} · by k/d, deaths, then output (role-weighted) · By role lists each player on their main seat only · hover for per-game stats${capSince()}</span>`)));
   const modebar=el(`<div class="wsel" style="margin:2px 2px 10px"></div>`);   // By hero | By role
   const bar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);       // hero-role sub-filter
   const body=el(`<div></div>`);
   wrap.append(modebar, bar, body);
 
-  const statLine=(base,s)=> base==='Support'
-    ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
-    : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
+  // Stats shown in the blend's priority order per role: tank k/d>deaths>dmg,
+  // dps k/d>dmg>deaths, support heal>deaths>k/d.
+  const statLine=(base,s)=>{
+    const kd=s.kd!=null?`${s.kd} k/d`:'';
+    if(base==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
+    if(base==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
+    return `${kd?kd+' · ':''}${nf(s.damage)} dmg · ${s.deaths} d`;
+  };
   const rowHtml=(base,r,extra)=>{
     const lo=r.low_data||r.low, s=r.stats||{};
     const col=lo?'var(--faint)':(r.pct>=67?'var(--good)':r.pct>=34?'var(--mid)':'var(--bad)');
-    return `<div class="crow${lo?' thin':''}" title="${r.games} game${r.games===1?'':'s'} avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
+    return `<div class="crow${lo?' thin':''}" title="${r.games} game${r.games===1?'':'s'} avg · ${s.kd!=null?s.kd+' k/d · ':''}${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
       `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span>${extra||''}</span>`+
       `<span class="rec">${statLine(base,s)}${lo?` <span class="faint">· ${r.games}g</span>`:''}</span></div>`;
   };
@@ -1815,7 +1838,7 @@ function renderMeta(){
       });
     });
     const rows=Object.values(agg).sort((a,b)=>b.maps-a.maps).slice(0,12);
-    wrap.appendChild(el(sectionH('Most-played comps',`<span class="note">captured openings across the league · win% shown at 3+ maps</span>`)));
+    wrap.appendChild(el(sectionH('Most-played comps',`<span class="note">captured openings across the league · win% shown at 3+ maps${capSince()}</span>`)));
     if(rows.length){
       const card=el(`<div class="card"></div>`);
       rows.forEach(r=>card.appendChild(el(`<div class="crow${r.maps<=1?' thin':''}"><span>${compRow(r.heroes)}</span>`+
@@ -1852,15 +1875,23 @@ function renderMeta(){
   });
   wrap.appendChild(pg);
 
-  // attacking-first (all season)
-  const af=D().attacking_first;
-  wrap.appendChild(el(sectionH('Attacking-first advantage',`<span class="note">Escort &amp; Hybrid only · all season</span>`)));
-  wrap.appendChild(el(`<p class="note" style="margin-top:0">Mirrored modes (Control/Flashpoint/Push) excluded. Overall the first-attacking team won <b>${af.atk_first_wins}/${af.total_games}</b> = <b>${pctOf(af.atk_first_wins,af.total_games)}%</b>.</p>`));
-  wrap.appendChild(table(
-    [{k:'name',label:'Map'},{k:'games',label:'Maps',num:true},
-     {k:'wr',label:'Atk-first win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}],
-    af.by_map.map(m=>({...m,map:m.name,wr:pctOf(m.atk_first_wins,m.games)}))
-      .sort((a,b)=>mapCmp(a.map,b.map)), byMode));
+  // Attacking-first advantage, by the DECIDING attack/defend cycle (round 1
+  // normally, round 3 when it went long). Two panels: all games, and the long
+  // games only. Mirrored modes (Control/Flashpoint/Push) have no attacker.
+  const afPanel=(af,title,note)=>{
+    wrap.appendChild(el(sectionH(title,`<span class="note">${note}</span>`)));
+    if(!af||!af.total_games){ wrap.appendChild(el(`<p class="note" style="margin-top:0">No decidable games yet — extra-round games need a scouting capture to know the round-3 attacker.</p>`)); return; }
+    wrap.appendChild(el(`<p class="note" style="margin-top:0">The team that attacked first in the deciding cycle won <b>${af.atk_first_wins}/${af.total_games}</b> = <b>${pctOf(af.atk_first_wins,af.total_games)}%</b>.</p>`));
+    wrap.appendChild(table(
+      [{k:'name',label:'Map'},{k:'games',label:'Maps',num:true},
+       {k:'wr',label:'Atk-first win %',num:true,html:r=>pill(r.wr+'%',winVar(r.wr))}],
+      af.by_map.map(m=>({...m,map:m.name,wr:pctOf(m.atk_first_wins,m.games)}))
+        .sort((a,b)=>mapCmp(a.map,b.map)), byMode));
+  };
+  afPanel(D().attacking_first,'Attacking-first advantage',
+    'Escort &amp; Hybrid · deciding attack/defend cycle · uncaptured extra-round games excluded');
+  afPanel(D().attacking_first_extra,'Attacking-first — extra rounds only',
+    'Escort &amp; Hybrid games that went to rounds 3/4 · round-3 attacker, from scouting captures'+capSince());
   return wrap;
 }
 
