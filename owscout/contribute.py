@@ -620,14 +620,14 @@ def rank_player_heroes(
     maps: Mapping[Any, Mapping[str, Any]],
     player_stats: Mapping[tuple[str, int, str], Mapping[str, Any]],
     hero_roles: Mapping[str, str],
-    *, min_group: int = 3, min_games: int = 1,
+    *, min_group: int = 3, confident_min: int = 2,
 ) -> dict[tuple[str, str], dict[str, Any]]:
-    """(player_id, hero_guid) -> {games, avg{...}, and rank/of/pct when the hero
-    has >= ``min_group`` players and this one has >= ``min_games`` on it}. Rank is
-    within (division, hero), by the role-weighted blend in ``_STAT_WEIGHTS`` over
-    stats standardised across that hero's players (so scales/heroes are
-    comparable). The division scope (``champ`` on each stat row) keeps skill tiers
-    apart - a Master player is never ranked against an Expert one."""
+    """(player_id, hero_guid) -> {games, avg{...}, and rank/of/pct/low_data when the
+    hero has >= ``min_group`` captured players}. Rank is within (division, hero),
+    by the role-weighted blend in ``_STAT_WEIGHTS`` over stats standardised across
+    that hero's players. ``champ`` keeps skill tiers apart. Players with fewer than
+    ``confident_min`` games are ranked SEPARATELY (``low_data=True``) so a one-game
+    sample never outranks a real one - the caller lists them apart."""
     prim = _primary_hero_per_game(maps)
     # Accumulate per (player, hero, division) so tiers/championships never pool.
     acc: dict[tuple[str, str, str], dict[str, float]] = {}
@@ -659,26 +659,32 @@ def rank_player_heroes(
             mean = sum(xs) / len(xs)
             means[stat] = mean
             stds[stat] = (sum((x - mean) ** 2 for x in xs) / len(xs)) ** 0.5
-        scored: list[tuple[str, dict[str, float]]] = []
         for pid, avg in members:
-            comp = sum(w * (avg[stat] - means[stat]) / stds[stat]
-                       for stat, w in weights.items() if stds[stat] > 0)
-            scored.append((pid, avg))
-            avg["_comp"] = comp
-        scored.sort(key=lambda x: -x[1]["_comp"])
-        n = len(scored)
-        for i, (pid, avg) in enumerate(scored):
-            info: dict[str, Any] = {
-                "games": int(avg["games"]),
-                "avg": {"elims": round(avg["elims"], 1), "deaths": round(avg["deaths"], 1),
-                        "damage": int(avg["damage"]), "healing": int(avg["healing"]),
-                        "mitigation": int(avg["mitigation"])},
-            }
-            if n >= min_group and avg["games"] >= min_games:
-                info["rank"] = i + 1
-                info["of"] = n
-                info["pct"] = round(100 * (n - 1 - i) / (n - 1)) if n > 1 else 100
-            out[(pid, guid)] = info
+            avg["_comp"] = sum(w * (avg[stat] - means[stat]) / stds[stat]
+                               for stat, w in weights.items() if stds[stat] > 0)
+        ranked = len(members) >= min_group
+        # Confident (>=confident_min games) and low-data players are ranked in
+        # SEPARATE lists so a single game never sits above a real sample. The
+        # composite (z-blend) is still pool-relative; only the display rank splits.
+        conf = sorted((m for m in members if m[1]["games"] >= confident_min),
+                      key=lambda x: -x[1]["_comp"])
+        low = sorted((m for m in members if m[1]["games"] < confident_min),
+                     key=lambda x: -x[1]["_comp"])
+        for grp, is_low in ((conf, False), (low, True)):
+            n = len(grp)
+            for i, (pid, avg) in enumerate(grp):
+                info: dict[str, Any] = {
+                    "games": int(avg["games"]),
+                    "avg": {"elims": round(avg["elims"], 1), "deaths": round(avg["deaths"], 1),
+                            "damage": int(avg["damage"]), "healing": int(avg["healing"]),
+                            "mitigation": int(avg["mitigation"])},
+                }
+                if ranked:
+                    info["rank"] = i + 1
+                    info["of"] = n
+                    info["pct"] = round(100 * (n - 1 - i) / (n - 1)) if n > 1 else 100
+                    info["low_data"] = is_low
+                out[(pid, guid)] = info
     return out
 
 
@@ -720,6 +726,7 @@ def player_pools(
                     d["games"] = ri["games"]
                     if "rank" in ri:
                         d["rank"], d["of"], d["pct"] = ri["rank"], ri["of"], ri["pct"]
+                        d["low_data"] = ri.get("low_data", False)
                 hrows.append(d)
             hrows.sort(key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))
             rows.append({

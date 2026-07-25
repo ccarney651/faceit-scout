@@ -1149,8 +1149,12 @@ function renderScoutBody(t){
         card.appendChild(el(`<p class="eyebrow">${esc(p.player)} <span class="note" style="text-transform:none;letter-spacing:0">${p.rounds} rounds seen</span></p>`));
         p.heroes.slice(0,5).forEach(h=>{
           // Per-hero rank vs everyone who plays it (role-weighted): green=top
-          // third, amber=middle, red=bottom. Hover shows the per-game averages.
-          const rk=h.rank?pill('#'+h.rank+'/'+h.of,h.pct>=67?'var(--good)':h.pct>=34?'var(--mid)':'var(--bad)'):'';
+          // third, amber=middle, red=bottom. Low-sample ranks aren't shown as a
+          // confident pill - just a faint "low data" note - so a 1-game hero
+          // doesn't flash "#1". Hover shows the per-game averages.
+          const rk=h.rank?(h.low_data
+              ?`<span class="faint" style="font-size:11px">low data</span>`
+              :pill('#'+h.rank+'/'+h.of,h.pct>=67?'var(--good)':h.pct>=34?'var(--mid)':'var(--bad)')):'';
           const st=h.stats?` title="${h.games}g avg · ${nf(h.stats.damage)} dmg · ${h.stats.elims} elim · ${h.stats.deaths} deaths · ${nf(h.stats.healing)} heal · ${nf(h.stats.mitigation)} mit"`:'';
           card.appendChild(el(
             `<div class="crow"${st}><span>${heroChip(h.hero)} ${rk}</span>`+
@@ -1535,20 +1539,28 @@ function renderPlayers(){
       .sort((a,b)=>byHero[b].length-byHero[a].length||a.localeCompare(b));
     if(!heroes.length){ body.appendChild(el(`<p class="note">No ranked ${esc(PLAYERS_ROLE)} players yet.</p>`)); return; }
     const grid=el(`<div class="grid cols-2"></div>`);
+    const rowHtml=(hero,r)=>{
+      const col=r.low_data?'var(--faint)':(r.pct>=67?'var(--good)':r.pct>=34?'var(--mid)':'var(--bad)'), s=r.stats||{};
+      const line=HERO_ROLE[hero]==='Support'
+        ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
+        : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
+      return `<div class="crow${r.low_data?' thin':''}" title="${r.games} game${r.games===1?'':'s'} avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
+        `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span></span>`+
+        `<span class="rec">${line}${r.low_data?` <span class="faint">· ${r.games}g</span>`:''}</span></div>`;
+    };
     heroes.forEach(hero=>{
-      const rows=[...byHero[hero]].sort((a,b)=>a.rank-b.rank), of=rows[0].of;
+      const all=byHero[hero];
+      const conf=all.filter(r=>!r.low_data).sort((a,b)=>a.rank-b.rank);
+      const low =all.filter(r=> r.low_data).sort((a,b)=>a.rank-b.rank);
       const card=el(`<div class="card"></div>`);
-      card.appendChild(el(`<p class="eyebrow">${heroChip(hero)} <span class="note" style="text-transform:none;letter-spacing:0">${of} player${of===1?'':'s'} on this hero</span></p>`));
-      rows.forEach(r=>{
-        const col=r.pct>=67?'var(--good)':r.pct>=34?'var(--mid)':'var(--bad)', s=r.stats||{};
-        const line=HERO_ROLE[hero]==='Support'
-          ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
-          : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
-        const thinG=r.games<2?' thin':'';   // 1 game = low confidence, flag it
-        card.appendChild(el(`<div class="crow${thinG}" title="${r.games} game${r.games===1?'':'s'} avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
-          `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span></span>`+
-          `<span class="rec">${line}${r.games<2?' <span class="faint">· 1g</span>':''}</span></div>`));
-      });
+      card.appendChild(el(`<p class="eyebrow">${heroChip(hero)} <span class="note" style="text-transform:none;letter-spacing:0">${all.length} player${all.length===1?'':'s'} on this hero</span></p>`));
+      conf.forEach(r=>card.appendChild(el(rowHtml(hero,r))));
+      if(low.length){
+        // Low-sample players don't compete with the real ones - they sit at the
+        // bottom under a marker, ranked only among themselves.
+        card.appendChild(el(`<p class="seg" style="margin-top:8px;color:var(--faint)">not enough data</p>`));
+        low.forEach(r=>card.appendChild(el(rowHtml(hero,r))));
+      }
       grid.appendChild(card);
     });
     body.appendChild(grid);

@@ -455,9 +455,9 @@ def test_rank_player_heroes_scopes_by_division() -> None:
     assert "rank" not in ranks[("PX", "ram")]  # Expert group of 1 -> unranked
 
 
-def test_rank_player_heroes_includes_single_game_players() -> None:
-    """A player with one captured game must still be ranked (and counted) so the
-    leaderboard has no gaps - only the group-size floor (min_group) gates."""
+def test_rank_player_heroes_splits_low_data_players() -> None:
+    """Low-data players (< confident_min games) are still ranked, but SEPARATELY,
+    so a one-game sample never outranks a real one. The caller lists them apart."""
     from owscout.contribute import MapKey, rank_player_heroes
 
     maps: dict[Any, Any] = {}
@@ -473,7 +473,12 @@ def test_rank_player_heroes_includes_single_game_players() -> None:
 
     add("P1", "M1", 2, 9000)
     add("P2", "M2", 2, 6000)
-    add("P3", "M3", 1, 3000)          # only one game - must still be ranked
+    add("P3", "M3", 1, 3000)          # one game -> low_data, ranked separately
     ranks = rank_player_heroes(maps, stats, {"ram": "tank"})
-    assert {ranks[(p, "ram")]["rank"] for p in ("P1", "P2", "P3")} == {1, 2, 3}
-    assert ranks[("P3", "ram")]["of"] == 3 and ranks[("P3", "ram")]["games"] == 1
+    # confident players ranked among themselves
+    assert ranks[("P1", "ram")]["low_data"] is False and ranks[("P1", "ram")]["rank"] == 1
+    assert ranks[("P2", "ram")]["low_data"] is False and ranks[("P2", "ram")]["of"] == 2
+    # the single-game player is included but ranked in the low-data list
+    assert ranks[("P3", "ram")]["low_data"] is True
+    assert ranks[("P3", "ram")]["rank"] == 1 and ranks[("P3", "ram")]["of"] == 1
+    assert ranks[("P3", "ram")]["games"] == 1
