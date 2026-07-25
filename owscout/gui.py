@@ -27,6 +27,20 @@ from .models import REGIONS
 ALL_TEAMS = "(all teams)"
 ALL_REGIONS = "(all regions)"
 
+# Light/dark palettes. ttk widgets are themed via ttk.Style; the handful of tk
+# widgets (Text logs, banners, Toplevels) read these directly. Muted/Link labels
+# use the 'Muted.TLabel'/'Link.TLabel' styles so they stay readable in both.
+_THEMES = {
+    "light": dict(bg="#f0f0f0", surface="#ffffff", text="#1a1a1a", muted="#555555",
+                  entry="#ffffff", accent="#0a63c9", sel="#cfe3ff", line="#c8ccd0",
+                  log_bg="#f6f6f6", log_fg="#333333", banner_bg="#e8f0fe",
+                  banner_fg="#0a3d91", ok="#0a7d3b", warn="#c0392b"),
+    "dark":  dict(bg="#12161d", surface="#1b222c", text="#e6edf6", muted="#9aa7b8",
+                  entry="#0f141b", accent="#5cc8ff", sel="#26364b", line="#2a3646",
+                  log_bg="#0d1117", log_fg="#c8d3e0", banner_bg="#15243f",
+                  banner_fg="#cfe3ff", ok="#5fd38a", warn="#e5715c"),
+}
+
 # The capture legend, built from whatever keys the operator has bound.
 _KEY_LABELS = (("snapshot", "snapshot"), ("round", "next round"), ("submap", "sub-map"),
                ("attack", "who-attacks"), ("undo", "undo"), ("done", "done"))
@@ -186,12 +200,33 @@ class _App:  # pragma: no cover - GUI runtime only
         self.db_var = tk.StringVar(value=_default_db())
         self.faceit_var = tk.StringVar(value=_default_faceit())
 
+        # Theme: read the saved preference now so every widget is created already
+        # themed. 'clam' is the most themable built-in ttk theme. The Settings
+        # toggle flips it live. Persisted window geometry is restored here too.
+        self._style = ttk.Style(self.root)
+        try:
+            self._style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self._dark = False
+        try:
+            with self._open_db() as _db:
+                ui = _db.get_settings("ui.")
+                self._dark = ui.get("ui.dark") == "1"
+                geo = ui.get("ui.geometry")
+                if geo:
+                    self.root.geometry(geo)
+        except Exception:  # noqa: BLE001 - first run has no DB/settings yet
+            pass
+        self._apply_theme()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
         # A lightweight collapsible: a clickable header that shows/hides its body,
         # so advanced controls and raw paths stay reachable without cluttering the
         # first thing a new user sees.
         def collapsible(parent: Any, title: str, *, start_open: bool = False) -> Any:
             body = ttk.Frame(parent)
-            hdr = ttk.Label(parent, foreground="#06c", cursor="hand2")
+            hdr = ttk.Label(parent, style="Link.TLabel", cursor="hand2")
             st = {"open": start_open}
 
             def render() -> None:
@@ -231,8 +266,8 @@ class _App:  # pragma: no cover - GUI runtime only
         self._calibrated = False
         self.guide_lbl = tk.Label(
             main_parent, text=_setup_hint(False, False), anchor="w", justify="left",
-            font=("Segoe UI", 10, "bold"), fg="#0a3d91", bg="#e8f0fe",
-            padx=12, pady=8, wraplength=780)
+            font=("Segoe UI", 10, "bold"), fg=self._pal["banner_fg"],
+            bg=self._pal["banner_bg"], padx=12, pady=8, wraplength=780)
         self.guide_lbl.pack(fill="x", padx=10, pady=(10, 0))
 
         # --- 1. setup -------------------------------------------------------
@@ -245,7 +280,7 @@ class _App:  # pragma: no cover - GUI runtime only
         srow.pack(fill="x", padx=6, pady=6)
         ttk.Button(srow, text="Calibrate to my screen",
                    command=self._calibrate).pack(side="left")
-        self.setup_status = ttk.Label(srow, text="", foreground="#555")
+        self.setup_status = ttk.Label(srow, text="", style="Muted.TLabel")
         self.setup_status.pack(side="left", padx=12)
 
         adv = collapsible(setup, "Advanced hero tools", start_open=False)
@@ -256,7 +291,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self.sheet_btn.pack(side="left", padx=(0, 6))
         ttk.Button(r1, text="Check refs", command=self._verify_refs).pack(side="left", padx=6)
         ttk.Label(adv, text="Teach owscout your in-game portraits for best accuracy:",
-                  foreground="#333").pack(anchor="w", pady=(6, 2))
+                  style="Muted.TLabel").pack(anchor="w", pady=(6, 2))
         r2 = ttk.Frame(adv)
         r2.pack(fill="x", pady=2)
         self.learn_btn = ttk.Button(r2, text="⭐ Learn heroes from a replay…",
@@ -329,13 +364,13 @@ class _App:  # pragma: no cover - GUI runtime only
         self.team_frame = ttk.Frame(lrow)
         self.team_frame.pack(side="left", padx=8)
         self.roster_lbl = ttk.Label(cap, text="(pick a replay to see the teams)",
-                                    foreground="#555", justify="left")
+                                    style="Muted.TLabel", justify="left")
         self.roster_lbl.pack(anchor="w", padx=(74, 6))
 
         krow = ttk.Frame(cap)
         krow.pack(fill="x", padx=6, pady=2)
         ttk.Label(krow, text="Keys").pack(side="left")
-        self.keys_lbl = ttk.Label(krow, text="", foreground="#555")
+        self.keys_lbl = ttk.Label(krow, text="", style="Muted.TLabel")
         self.keys_lbl.pack(side="left", padx=8)
         keys_btn = ttk.Button(krow, text="Change keys…", command=self._open_keybinds)
         keys_btn.pack(side="right")
@@ -349,7 +384,7 @@ class _App:  # pragma: no cover - GUI runtime only
         # since the last sync, which looks identical to "no new matches".
         frow = ttk.Frame(cap)
         frow.pack(fill="x", padx=6, pady=(0, 6))
-        self.freshness_lbl = ttk.Label(frow, text="", foreground="#555")
+        self.freshness_lbl = ttk.Label(frow, text="", style="Muted.TLabel")
         self.freshness_lbl.pack(side="left")
         self._sync_btn = ttk.Button(frow, text="Sync codes from FACEIT",
                                     command=self._sync_faceit)
@@ -361,7 +396,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self._progress_row = ttk.Frame(cap)
         self.progress = ttk.Progressbar(self._progress_row, mode="determinate", maximum=100)
         self.progress.pack(side="left", fill="x", expand=True)
-        self.progress_lbl = ttk.Label(self._progress_row, text="", foreground="#555")
+        self.progress_lbl = ttk.Label(self._progress_row, text="", style="Muted.TLabel")
         self.progress_lbl.pack(side="left", padx=6)
         self._progress_started = 0.0
 
@@ -388,24 +423,31 @@ class _App:  # pragma: no cover - GUI runtime only
                    command=self._open_sync_settings).pack(side="left", padx=6)
         ttk.Label(pub, text="Captures are drafts until you review + finalize them; "
                             "only finalized maps are exported.",
-                  foreground="#555").pack(anchor="w", padx=6, pady=(0, 6))
+                  style="Muted.TLabel").pack(anchor="w", padx=6, pady=(0, 6))
 
         # --- status + activity ---------------------------------------------
         # One friendly status line is always visible; the full activity log is a
         # lighter panel below it (not a black console) so it informs without
         # alarming. Raw file paths sit under Advanced, collapsed.
         self.status_lbl = ttk.Label(main_parent, text="Ready.", anchor="w",
-                                    foreground="#222", font=("Segoe UI", 10, "bold"))
+                                    font=("Segoe UI", 10, "bold"))
         self.status_lbl.pack(fill="x", padx=14, pady=(2, 0))
         logf = ttk.LabelFrame(main_parent, text="Activity")
         logf.pack(fill="both", expand=True, **pad)
         self.log = tk.Text(logf, height=7, wrap="word", state="disabled",
-                           bg="#f6f6f6", fg="#333", font=("Consolas", 9),
+                           bg=self._pal["log_bg"], fg=self._pal["log_fg"],
+                           insertbackground=self._pal["text"], font=("Consolas", 9),
                            relief="flat", borderwidth=1, highlightthickness=0)
         self.log.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(logf, command=self.log.yview)
         sb.pack(side="right", fill="y")
         self.log.configure(yscrollcommand=sb.set)
+
+        appear = ttk.LabelFrame(settings_parent, text="Appearance")
+        appear.pack(fill="x", **pad)
+        self.dark_var = tk.BooleanVar(value=self._dark)
+        ttk.Checkbutton(appear, text="Dark mode", variable=self.dark_var,
+                        command=self._toggle_theme).pack(anchor="w", padx=8, pady=6)
 
         dbwrap = collapsible(settings_parent, "Advanced: file locations")
         for i, (lbl, var) in enumerate((("owscout DB", self.db_var),
@@ -428,6 +470,85 @@ class _App:  # pragma: no cover - GUI runtime only
         self._refresh_codes()
         self._maybe_import_bundled_refs()
         self._verify_refs()
+
+    # --- theme --------------------------------------------------------------
+    @property
+    def _pal(self) -> dict:
+        return _THEMES["dark" if self._dark else "light"]
+
+    def _apply_theme(self) -> None:
+        """Configure ttk styles + tk widgets for the active theme. Idempotent so
+        the Settings toggle can switch it live."""
+        p, s = self._pal, self._style
+        self.root.configure(bg=p["bg"])
+        # A ttk combobox dropdown is a tk Listbox, styled via the option DB.
+        self.root.option_add("*TCombobox*Listbox.background", p["entry"])
+        self.root.option_add("*TCombobox*Listbox.foreground", p["text"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", p["sel"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", p["text"])
+        s.configure(".", background=p["bg"], foreground=p["text"],
+                    fieldbackground=p["entry"], bordercolor=p["line"],
+                    lightcolor=p["line"], darkcolor=p["line"],
+                    troughcolor=p["surface"], insertcolor=p["text"])
+        s.configure("TFrame", background=p["bg"])
+        s.configure("TLabel", background=p["bg"], foreground=p["text"])
+        s.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"])
+        s.configure("Link.TLabel", background=p["bg"], foreground=p["accent"])
+        s.configure("TButton", background=p["surface"], foreground=p["text"])
+        s.map("TButton", background=[("active", p["sel"]), ("pressed", p["sel"])],
+              foreground=[("disabled", p["muted"])])
+        s.configure("TCheckbutton", background=p["bg"], foreground=p["text"])
+        s.map("TCheckbutton", background=[("active", p["bg"])],
+              foreground=[("disabled", p["muted"])])
+        s.configure("TEntry", fieldbackground=p["entry"], foreground=p["text"],
+                    insertcolor=p["text"])
+        s.configure("TCombobox", fieldbackground=p["entry"], foreground=p["text"],
+                    background=p["surface"], arrowcolor=p["text"])
+        s.map("TCombobox",
+              fieldbackground=[("readonly", p["entry"]), ("disabled", p["bg"])],
+              foreground=[("readonly", p["text"]), ("disabled", p["muted"])],
+              background=[("readonly", p["surface"])])
+        s.configure("TNotebook", background=p["bg"], bordercolor=p["line"])
+        s.configure("TNotebook.Tab", background=p["surface"],
+                    foreground=p["muted"], padding=(12, 5))
+        s.map("TNotebook.Tab", background=[("selected", p["bg"])],
+              foreground=[("selected", p["text"])])
+        s.configure("TLabelframe", background=p["bg"], bordercolor=p["line"])
+        s.configure("TLabelframe.Label", background=p["bg"], foreground=p["muted"])
+        s.configure("Horizontal.TProgressbar", background=p["accent"],
+                    troughcolor=p["surface"])
+        # tk (non-ttk) widgets built later in __init__.
+        for attr, kw in (("guide_lbl", dict(bg=p["banner_bg"], fg=p["banner_fg"])),
+                         ("log", dict(bg=p["log_bg"], fg=p["log_fg"],
+                                      insertbackground=p["text"]))):
+            w = getattr(self, attr, None)
+            if w is not None:
+                w.configure(**kw)
+
+    def _theme_toplevel(self, win: Any) -> None:
+        """Match a popup window's background to the theme; its ttk children are
+        already styled globally."""
+        try:
+            win.configure(bg=self._pal["bg"])
+        except tk.TclError:
+            pass
+
+    def _toggle_theme(self) -> None:
+        self._dark = bool(self.dark_var.get())
+        self._apply_theme()
+        try:
+            with self._open_db() as db:
+                db.set_settings({"ui.dark": "1" if self._dark else "0"})
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _on_close(self) -> None:
+        try:
+            with self._open_db() as db:
+                db.set_settings({"ui.geometry": self.root.winfo_geometry()})
+        except Exception:  # noqa: BLE001
+            pass
+        self.root.destroy()
 
     # --- infra --------------------------------------------------------------
 
@@ -599,6 +720,7 @@ class _App:  # pragma: no cover - GUI runtime only
         from tkinter import ttk, messagebox
         dlg = tk.Toplevel(self.root)
         dlg.title("Add new hero")
+        self._theme_toplevel(dlg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
         frm = ttk.Frame(dlg)
@@ -741,7 +863,7 @@ class _App:  # pragma: no cover - GUI runtime only
             self.q.put(self._apply_code_filter)
             text, stale = _faceit_freshness(self.faceit_var.get())
             self.q.put(lambda: self.freshness_lbl.configure(
-                text=text, foreground="#a60" if stale else "#555"))
+                text=text, foreground="#d08a00" if stale else self._pal["muted"]))
         self._run(go, lock=False)
 
     # --- long-job progress. Called from worker threads, so every Tk touch is
@@ -1026,7 +1148,8 @@ class _App:  # pragma: no cover - GUI runtime only
         win = tk.Toplevel(self.root)
         win.title("Sync settings")
         win.transient(self.root)
-        ttk.Label(win, wraplength=470, justify="left", foreground="#555",
+        self._theme_toplevel(win)
+        ttk.Label(win, wraplength=470, justify="left", style="Muted.TLabel",
                   text="Publishing uploads to the open endpoint automatically - there "
                        "is nothing to configure for normal use. Your chosen name is "
                        "claimed by this install on first upload, so nobody else can "
@@ -1079,7 +1202,8 @@ class _App:  # pragma: no cover - GUI runtime only
         win = tk.Toplevel(self.root)
         win.title("Capture keybinds")
         win.transient(self.root)
-        ttk.Label(win, wraplength=430, justify="left", foreground="#555",
+        self._theme_toplevel(win)
+        ttk.Label(win, wraplength=430, justify="left", style="Muted.TLabel",
                   text="These are global keys: the press reaches Overwatch AND every "
                        "other app. OW-side effects (POV switching) are harmless - the "
                        "top bar the capture reads never changes - so the real rule is "
@@ -1310,6 +1434,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.win.minsize(560, 640)
         self.win.resizable(True, True)
         self.win.transient(app.root)
+        app._theme_toplevel(self.win)
 
         pad = {"padx": 12, "pady": 6}
         steps = (
@@ -1323,13 +1448,13 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
             "   5.  Repeat for each hero. Do a few, then re-capture to check.\n"
         )
         lbl = tk.Label(self.win, text=steps, justify="left", anchor="w",
-                       font=("Segoe UI", 9), fg="#222")
+                       font=("Segoe UI", 9), bg=app._pal["bg"], fg=app._pal["text"])
         lbl.pack(fill="x", **pad)
 
         # Big banner showing which team the current grab will be saved to, so the
         # operator can't accidentally overwrite the wrong team's refs.
         self.team_banner = tk.Label(self.win, text="", font=("Segoe UI", 12, "bold"),
-                                    fg="#fff")
+                                    fg="#fff", bg=app._pal["bg"])
         self.team_banner.pack(fill="x", padx=12)
 
         # Optional: calibrate ONE box so learning reads a single portrait only.
@@ -1341,7 +1466,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.clear_btn = ttk.Button(boxrow, text="use all 10 slots",
                                     command=self._clear_slot)
         self.clear_btn.pack(side="left", padx=6)
-        self.mode_lbl = ttk.Label(boxrow, text="", foreground="#555")
+        self.mode_lbl = ttk.Label(boxrow, text="", style="Muted.TLabel")
         self.mode_lbl.pack(side="left", padx=12)
 
         # Some heroes read poorly while DEAD; teach a dead-state ref for those.
@@ -1355,13 +1480,13 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         grabrow.pack(fill="x", **pad)
         self.grab_btn = ttk.Button(grabrow, text="📷  Grab screen", command=self._grab)
         self.grab_btn.pack(side="left")
-        self.status = ttk.Label(grabrow, text="loading…", foreground="#555")
+        self.status = ttk.Label(grabrow, text="loading…", style="Muted.TLabel")
         self.status.pack(side="left", padx=12)
 
         # Bottom controls are packed FIRST (bottom-up) so they stay visible no
         # matter how tall the preview is; the preview then fills the middle.
         self.progress = ttk.Label(self.win, text="Learned this session: 0",
-                                   foreground="#333", font=("Segoe UI", 10, "bold"))
+                                   style="Muted.TLabel", font=("Segoe UI", 10, "bold"))
         self.progress.pack(side="bottom", **pad)
 
         pick = ttk.Frame(self.win)
@@ -1385,7 +1510,7 @@ class _LearnWindow:  # pragma: no cover - GUI runtime only
         self.next_btn.grid(row=0, column=1, padx=4, pady=3)
 
         self.guess_lbl = tk.Label(self.win, text="", font=("Segoe UI", 15, "bold"),
-                                  fg="#1a5")
+                                  fg=app._pal["ok"], bg=app._pal["bg"])
         self.guess_lbl.pack(side="bottom", **pad)
 
         # Preview fills the remaining space between the grab row and the controls.
@@ -1608,6 +1733,7 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         self.win.title("Review captured maps")
         self.win.geometry("760x560")
         self.win.transient(app.root)
+        app._theme_toplevel(self.win)
         pad = {"padx": 10, "pady": 6}
 
         # Load the hero roster (faceit + operator-added) for the correction pickers.
@@ -1629,7 +1755,8 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         except Exception as exc:  # noqa: BLE001
             self.app._emit(f"review: couldn't load hero list for corrections ({exc}).")
 
-        tk.Label(self.win, justify="left", anchor="w", fg="#222", font=("Segoe UI", 9),
+        tk.Label(self.win, justify="left", anchor="w", bg=app._pal["bg"],
+                 fg=app._pal["text"], font=("Segoe UI", 9),
                  text="Captured maps are DRAFTS. Check the comps, then Finalize to send "
                       "to the scout data, or Discard a test run.").pack(fill="x", **pad)
 
@@ -1637,24 +1764,29 @@ class _ReviewWindow:  # pragma: no cover - GUI runtime only
         body.pack(fill="both", expand=True, **pad)
         left = ttk.Frame(body)
         left.pack(side="left", fill="y")
-        tk.Label(left, text="Draft maps").pack(anchor="w")
+        tk.Label(left, text="Draft maps", bg=app._pal["bg"],
+                 fg=app._pal["text"]).pack(anchor="w")
         # extended = ctrl/shift multi-select, so a whole session's maps can be
         # finalized in one action instead of one dialog round-trip each.
         self.listbox = tk.Listbox(left, width=34, height=16, exportselection=False,
-                                  selectmode="extended")
+                                  selectmode="extended", bg=app._pal["entry"],
+                                  fg=app._pal["text"], selectbackground=app._pal["sel"],
+                                  selectforeground=app._pal["text"],
+                                  highlightthickness=0, borderwidth=1)
         self.listbox.pack(fill="y", expand=True)
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._show_selected())
 
-        self.detail = tk.Text(body, wrap="word", state="disabled", bg="#f6f6f6", fg="#222",
+        self.detail = tk.Text(body, wrap="word", state="disabled", bg=app._pal["surface"],
+                              fg=app._pal["text"], insertbackground=app._pal["text"],
                               font=("Consolas", 10), relief="flat", borderwidth=1,
                               highlightthickness=0, padx=8, pady=6)
         self.detail.pack(side="left", fill="both", expand=True, padx=(10, 0))
         # Colour tags so a misread is impossible to miss in Review: the whole job
         # here is spotting the comps the matcher wasn't sure about.
-        self.detail.tag_configure("hdr", font=("Segoe UI", 11, "bold"), foreground="#111")
-        self.detail.tag_configure("side", font=("Consolas", 10, "bold"), foreground="#0a7d3b")
-        self.detail.tag_configure("muted", foreground="#777")
-        self.detail.tag_configure("warn", foreground="#c0392b")
+        self.detail.tag_configure("hdr", font=("Segoe UI", 11, "bold"), foreground=app._pal["text"])
+        self.detail.tag_configure("side", font=("Consolas", 10, "bold"), foreground=app._pal["ok"])
+        self.detail.tag_configure("muted", foreground=app._pal["muted"])
+        self.detail.tag_configure("warn", foreground=app._pal["warn"])
 
         # Fix a misread on the selected map — replaces a hero across a side.
         hero_list = sorted(self.name_to_guid)
