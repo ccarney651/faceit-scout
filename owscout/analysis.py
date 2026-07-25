@@ -19,7 +19,7 @@ game or DB.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 # hero identifier -> role ('tank' | 'damage' | 'support'), case-insensitive.
@@ -97,6 +97,7 @@ class CompInstance:
     heroes: tuple[str, ...]
     won: bool
     map_key: str
+    bans: tuple[str, ...] = ()         # heroes banned out in this game
 
 
 @dataclass
@@ -111,6 +112,7 @@ class CompFamily:
     losses: int
     win_rate: float
     variants: list[tuple[str, ...]]   # distinct lineups in this family
+    bans: list[str] = field(default_factory=list)  # banned in a majority of this comp's games
 
 
 def cluster_comps(instances: Sequence[CompInstance], roles: Roles) -> list[CompFamily]:
@@ -120,10 +122,10 @@ def cluster_comps(instances: Sequence[CompInstance], roles: Roles) -> list[CompF
     from collections import Counter
 
     # Canonicalise each lineup to a sorted tuple so order never splits a family.
-    norm: list[tuple[tuple[str, ...], bool, str]] = [
-        (tuple(sorted(i.heroes)), i.won, i.map_key) for i in instances
+    norm: list[tuple[tuple[str, ...], bool, str, tuple[str, ...]]] = [
+        (tuple(sorted(i.heroes)), i.won, i.map_key, tuple(i.bans)) for i in instances
     ]
-    freq = Counter(h for h, _, _ in norm)
+    freq = Counter(t[0] for t in norm)
     order = [h for h, _ in freq.most_common()]
     assigned: set[tuple[str, ...]] = set()
     families: list[CompFamily] = []
@@ -136,13 +138,24 @@ def cluster_comps(instances: Sequence[CompInstance], roles: Roles) -> list[CompF
             if other not in assigned and same_comp(anchor, other, roles):
                 members.add(other)
                 assigned.add(other)
-        insts = [(h, won, mk) for (h, won, mk) in norm if h in members]
+        insts = [t for t in norm if t[0] in members]
         n = len(insts)
-        maps = len({mk for _, _, mk in insts})
-        wins = sum(1 for _, won, _ in insts if won)
+        maps = len({mk for _, _, mk, _ in insts})
+        wins = sum(1 for _, won, _, _ in insts if won)
+        # Bans in play WHEN this comp appears: each game's ban set counted once,
+        # keep heroes banned in a strict majority of the comp's games (for a
+        # single game, that game's bans). This is the draft context the comp lives in.
+        ban_games: dict[str, set[str]] = {}
+        for _, _, mk, bns in insts:
+            ban_games.setdefault(mk, set()).update(bns)
+        bc: Counter[str] = Counter()
+        for bset in ban_games.values():
+            bc.update(bset)
+        gcount = len(ban_games)
+        fam_bans = [g for g, c in bc.most_common() if c * 2 > gcount][:4]
         families.append(CompFamily(
             heroes=list(anchor), samples=n, maps=maps, wins=wins, losses=n - wins,
-            win_rate=(wins / n if n else 0.0), variants=sorted(members)))
+            win_rate=(wins / n if n else 0.0), variants=sorted(members), bans=fam_bans))
     families.sort(key=lambda f: (f.maps, f.samples), reverse=True)
     return families
 

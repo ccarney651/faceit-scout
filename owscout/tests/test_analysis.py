@@ -121,3 +121,18 @@ def test_cluster_comps_separates_tank_change_without_4_shared() -> None:
     b = ("dva", "sojourn", "mei", "bap", "ana")   # tank + 2 supports differ -> different
     fams = cluster_comps([CompInstance(a, True, "m1"), CompInstance(b, True, "m2")], ROLES)
     assert len(fams) == 2
+
+
+def test_cluster_comps_surfaces_majority_bans() -> None:
+    """A comp carries the bans it lives under: heroes banned out in a strict
+    majority of the games the comp was run (each game's ban set counted once)."""
+    from owscout.analysis import CompInstance, cluster_comps
+
+    comp = ("ram", "soj", "mei", "luc", "kir")
+    insts = [
+        CompInstance(comp, True, "g1", bans=("sombra", "widow")),
+        CompInstance(comp, False, "g2", bans=("sombra",)),
+        CompInstance(comp, True, "g3", bans=("mauga",)),
+    ]
+    fam = cluster_comps(insts, {"ram": "tank"})[0]
+    assert fam.bans == ["sombra"]        # 2 of 3 games; widow/mauga only 1 each

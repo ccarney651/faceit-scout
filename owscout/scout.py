@@ -97,12 +97,19 @@ def aggregate_swaps(
         rows = []
         for (o, i, kind), v in sorted(swaps.items(), key=lambda kv: -kv[1]["count"]):
             n = v["count"]
-            thresh = max(2, (n + 1) // 2)
-            vs = [hero_names.get(g, g) for g, c in v["vs"].most_common() if c >= thresh]
+            if n == 1:
+                # A one-off swap has an exact enemy lineup - show it (the cause),
+                # rather than losing it to a >=half threshold that needs 2 to pass.
+                vs = [hero_names.get(g, g) for g, _ in v["vs"].most_common()]
+            else:
+                # Recurring swap: the enemy heroes present in a majority of its
+                # occurrences - the consistent trigger, not one game's noise.
+                thresh = max(2, (n + 1) // 2)
+                vs = [hero_names.get(g, g) for g, c in v["vs"].most_common() if c >= thresh]
             rows.append({
                 "out": [hero_names.get(x, x) for x in o],
                 "in": [hero_names.get(x, x) for x in i],
-                "kind": kind, "count": n, "vs": vs[:4],
+                "kind": kind, "count": n, "vs": vs[:5],
             })
         out[team] = rows
     return out
@@ -171,6 +178,7 @@ def _family_dict(f: CompFamily, names: dict[str, str]) -> dict[str, Any]:
         "maps": f.maps, "wins": f.wins, "losses": f.losses,
         "win_rate": round(f.win_rate, 3), "samples": f.samples,
         "variants": len(f.variants),
+        "bans": [names.get(g, g) for g in f.bans],
     }
 
 
@@ -210,7 +218,7 @@ def team_scout(
         first = obs[0]
         mp = first.map_name or "?"
         overall.setdefault(team, []).append(
-            CompInstance(first.hero_guids, won, game_key))
+            CompInstance(first.hero_guids, won, game_key, bans=first.bans))
         enemy_obs = sorted(
             (e for e in games.get((mi, "b" if side == "a" else "a"), [])),
             key=lambda e: e.sample_ts_ms)
@@ -249,9 +257,11 @@ def team_scout(
         for key, fd in seg_first.items():
             slot = by_map.setdefault(team, {}).setdefault(mp, {}).setdefault(
                 key, {"open": [], "settled": []})
-            slot["open"].append(CompInstance(fd.hero_guids, won, game_key))
+            slot["open"].append(
+                CompInstance(fd.hero_guids, won, game_key, bans=fd.bans))
             slot["settled"].append(
-                CompInstance(seg_last[key].hero_guids, won, game_key))
+                CompInstance(seg_last[key].hero_guids, won, game_key,
+                             bans=seg_last[key].bans))
 
     swaps = aggregate_swaps(details, roles, hero_names)
     swaps_by_map = aggregate_swaps(details, roles, hero_names, per_map=True)

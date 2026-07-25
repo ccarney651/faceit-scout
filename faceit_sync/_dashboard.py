@@ -188,6 +188,10 @@ table.blocks thead th:hover{color:var(--faint)}
 /* Spacer between role groups inside a comp, so tank | dps dps | sup sup reads as a shape. */
 .comp .rgap{flex:0 0 9px}
 .swapsep{margin:0 3px}
+/* Bans accompanying a comp: smaller, slightly desaturated (they're OUT of play). */
+.cbans{display:inline-flex;align-items:center;gap:3px;opacity:.9;margin:0 auto}
+.cbans .bl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin-right:2px}
+.cbans .hicon{width:19px;height:19px;filter:grayscale(.4)}
 .comp .hicon+.hicon{margin-left:0}
 /* A row of icons + a right-aligned record; the workhorse of the scouting page. */
 .crow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 2px}
@@ -530,7 +534,7 @@ function swapLine(s){
   // is the actual out->in swap. A second arrow after "vs" read as a swap too.
   const vs=(s.vs||[]).filter(h=>!SWAP_NOISE.has(h));
   const trig=vs.length
-    ? `<span class="faint">vs</span>${compRow(vs.slice(0,3))}<span class="faint swapsep">&middot;</span>`
+    ? `<span class="faint">vs</span>${compRow(vs.slice(0,5))}<span class="faint swapsep">&middot;</span>`
     : '';
   return `<div class="crow${s.count<=1?' thin':''}">`+
     `<span class="swapline">${trig}${deltaHtml({out:s.out,in:s.in})}</span>`+
@@ -1082,8 +1086,12 @@ function renderScoutBody(t){
   // only, and records appear once there is something behind them.
   const rec=c=>c.maps>=3?`${c.maps} maps · ${c.wins}W-${c.losses}L`
                         :`${c.maps} map${c.maps===1?'':'s'}`;
+  // Bans that accompany a comp fill the row's dead middle: the draft context the
+  // comp lives in (heroes banned out in a majority of the games they ran it).
+  const banHtml=c=>(c.bans&&c.bans.length)
+    ? `<span class="cbans"><span class="bl">bans</span>${c.bans.slice(0,4).map(h=>heroIcon(h)).join('')}</span>` : '';
   const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
-                    `<span class="rec">${rec(c)}</span></div>`;
+                    `${banHtml(c)}<span class="rec">${rec(c)}</span></div>`;
 
   // Ubiquitous heroes carry no trigger signal - computed once per team, used
   // by every swap row this page renders.
