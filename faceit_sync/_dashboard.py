@@ -283,6 +283,12 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .game-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
 .game-hd .gno{font-weight:700;color:var(--faint);width:22px}
 .bans{display:flex;gap:6px 4px;flex-wrap:wrap;align-items:center;margin-top:7px}
+/* Per-game opening comps on a match card: one row per team, its segments inline. */
+.gamecomps{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+.gcrow{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;font-size:12px}
+.gcrow .gcteam{min-width:118px;font-weight:650;color:var(--muted)}
+.gcseg{display:inline-flex;align-items:center;gap:5px}
+.gcseg .lab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint)}
 .banstep{display:inline-flex;align-items:center;gap:5px;margin-right:16px}
 .ord{width:17px;height:17px;border-radius:50%;background:var(--accent-weak);color:var(--accent);
   font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -607,6 +613,21 @@ function matchCard(m){
           :'<span class="faint" style="font-size:11.5px">no replay</span>')+
         `<span class="faint rtog">▸ rosters</span></span></div>`));
     gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
+    // Captured opening comps per segment: sub-map (Control), attack/defend
+    // (Escort/Hybrid), or the whole map (Push/Flashpoint). Only when captured.
+    const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+    if(pg){
+      const cbox=el(`<div class="gamecomps"></div>`);
+      Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)))
+        .forEach(team=>{
+          const segs=pg[team]; if(!segs||!Object.keys(segs).length) return;
+          const row=el(`<div class="gcrow"><span class="gcteam">${esc(team)}</span></div>`);
+          Object.keys(segs).forEach(seg=>row.appendChild(el(
+            `<span class="gcseg">${seg!=='map'?`<span class="lab">${esc(seg)}</span>`:''}${compRow(segs[seg])}</span>`)));
+          cbox.appendChild(row);
+        });
+      if(cbox.querySelector('.gcrow')) gEl.appendChild(cbox);
+    }
     const ros=el(`<div class="hidden">${rosterHTML(g)}</div>`);
     gEl.appendChild(ros);
     const toggle=gEl.querySelector('.game-hd');

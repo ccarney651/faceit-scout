@@ -465,7 +465,7 @@ def merged_payload(
     contributed map is validated against it first; rejected views never reach
     the merge, and the count is reported in the payload."""
     from .derive import dashboard_comps
-    from .scout import team_scout
+    from .scout import per_game_comps, team_scout
 
     # Fold in any custom heroes the contributors declared, so the merging side
     # needs nothing beyond the faceit roster and the files themselves.
@@ -486,8 +486,9 @@ def merged_payload(
         contributions = checked
 
     merged = merge_first_wins(contributions, overrides=overrides, excludes=excludes)
+    obs_details = to_obs_details(merged.maps)
     payload = dashboard_comps(to_obs_rows(merged.maps, roles, names))
-    report = team_scout(to_obs_details(merged.maps), roles, names)
+    report = team_scout(obs_details, roles, names)
     teams = payload["teams"]
     assert isinstance(teams, dict)
     ranks = rank_player_heroes(merged.maps, player_stats or {}, roles)
@@ -502,6 +503,9 @@ def merged_payload(
     # Deciding-cycle attacker per captured escort/hybrid game (for the attacking-
     # first panel: FACEIT only knows the round-1 attacker, not round 3's).
     payload["attack_cycles"] = attack_first_cycles(merged.maps)
+    # Per-game opening comps by segment, so match cards can show what each team
+    # started each round/phase/sub-map on.
+    payload["per_game_comps"] = per_game_comps(obs_details, names)
     from datetime import datetime, timezone
     payload["built_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Games on or before this date have DEAD replay codes: the site must not

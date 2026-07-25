@@ -168,3 +168,20 @@ def test_adaptability_ignores_cross_match_sequences() -> None:
     ]
     adapt = team_scout(details, ROLES, NAMES)["Alpha"]["adapt"]
     assert adapt["loss_followups"] == 0
+
+
+def test_per_game_comps_splits_by_segment() -> None:
+    """Per-game opening comps: the comp a team started each segment on, keyed by
+    'match:game' -> team -> segment, in play order and in observed hero order."""
+    from owscout.scout import per_game_comps
+
+    atk = ["ram", "soj", "mei", "luc", "kir"]
+    dfd = ["dva", "reaper", "mei", "ana", "kir"]
+    details = [
+        _obs(1, "b", 0, atk, "hybrid", "b", rnd=1)._replace(match_id="M1", game_no=1),
+        _obs(1, "b", 200, dfd, "hybrid", "b", rnd=2)._replace(match_id="M1", game_no=1),
+    ]
+    b = per_game_comps(details, NAMES)["M1:1"]["Bravo"]
+    assert list(b.keys()) == ["attack", "defend"]        # play order preserved
+    assert b["attack"] == ["RAM", "SOJ", "MEI", "LUC", "KIR"]
+    assert b["defend"] == ["DVA", "REAPER", "MEI", "ANA", "KIR"]

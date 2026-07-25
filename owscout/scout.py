@@ -31,11 +31,13 @@ def scout_payload(db: Any, faceit_db_path: str) -> dict[str, Any]:
         names[h.guid] = h.name
         if h.role:
             roles[h.guid] = h.role
-    report = team_scout(db.observation_details(), roles, names)
+    details = list(db.observation_details())
+    report = team_scout(details, roles, names)
     teams = payload["teams"]
     assert isinstance(teams, dict)
     for team, r in report.items():
         teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
+    payload["per_game_comps"] = per_game_comps(details, names)
     return payload
 
 
@@ -180,6 +182,41 @@ def _family_dict(f: CompFamily, names: dict[str, str]) -> dict[str, Any]:
         "variants": len(f.variants),
         "bans": [names.get(g, g) for g in f.bans],
     }
+
+
+def per_game_comps(
+    details: Iterable[ObsDetail], hero_names: dict[str, str]
+) -> dict[str, dict[str, dict[str, list[str]]]]:
+    """Per captured game, the comp each team OPENED each segment on:
+    ``{'match_id:game_no': {team_name: {segment: [hero names]}}}``. Segment is
+    attack/defend on Escort/Hybrid, the sub-map on Control, else 'map'; the
+    opening comp of a segment is the team's earliest observation in it, and
+    segments keep play order. Keyed by team NAME so a match card can line it up
+    with either faction."""
+    from collections import defaultdict
+
+    by_game_side: dict[tuple[Any, Any, str], list[ObsDetail]] = defaultdict(list)
+    for d in details:
+        if d.match_id is None or d.game_no is None:
+            continue
+        by_game_side[(d.match_id, d.game_no, d.side)].append(d)
+
+    out: dict[str, dict[str, dict[str, list[str]]]] = {}
+    for (mid, gno, side), obs in by_game_side.items():
+        obs.sort(key=lambda x: x.sample_ts_ms)
+        team = obs[0].side_a_team if side == "a" else obs[0].side_b_team
+        if not team:
+            continue
+        seg_first: dict[str, tuple[str, ...]] = {}
+        for d in obs:                       # obs sorted by ts -> insertion = play order
+            seg = _segment(d) or "map"
+            if seg not in seg_first:
+                seg_first[seg] = d.hero_guids
+        out.setdefault(f"{mid}:{gno}", {})[team] = {
+            seg: [hero_names.get(g, g) for g in guids]
+            for seg, guids in seg_first.items()
+        }
+    return out
 
 
 def team_scout(
