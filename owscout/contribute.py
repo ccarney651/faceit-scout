@@ -583,11 +583,14 @@ def _raise_push_error(resp: Any, repo: str) -> None:
 
 # Operator-tuned weights on standardised (z-scored) per-game stats. Tanks lean on
 # damage + elims OVER mitigation; DPS on damage with a positive elim/death trade;
-# supports on healing with mitigation/elims secondary. Deaths always cost.
+# supports on healing with mitigation/elims secondary. Deaths are weighted the
+# HEAVIEST single factor per role (operator call): staying alive matters more
+# than any one output stat. (True per-10-min isn't possible - FACEIT gives no
+# game duration - but z-scoring within a hero group makes the comparison fair.)
 _STAT_WEIGHTS: dict[str, dict[str, float]] = {
-    "tank":    {"damage": 1.0, "elims": 1.0, "mitigation": 0.3, "deaths": -0.6},
-    "damage":  {"damage": 1.0, "elims": 0.7, "deaths": -0.7},
-    "support": {"healing": 1.0, "mitigation": 0.4, "elims": 0.4, "deaths": -0.5},
+    "tank":    {"damage": 1.0, "elims": 1.0, "mitigation": 0.3, "deaths": -1.6},
+    "damage":  {"damage": 1.0, "elims": 0.7, "deaths": -1.6},
+    "support": {"healing": 1.0, "mitigation": 0.4, "elims": 0.4, "deaths": -1.3},
 }
 _STAT_FIELDS = ("elims", "deaths", "damage", "healing", "mitigation")
 
@@ -617,7 +620,7 @@ def rank_player_heroes(
     maps: Mapping[Any, Mapping[str, Any]],
     player_stats: Mapping[tuple[str, int, str], Mapping[str, Any]],
     hero_roles: Mapping[str, str],
-    *, min_group: int = 3, min_games: int = 2,
+    *, min_group: int = 3, min_games: int = 1,
 ) -> dict[tuple[str, str], dict[str, Any]]:
     """(player_id, hero_guid) -> {games, avg{...}, and rank/of/pct when the hero
     has >= ``min_group`` players and this one has >= ``min_games`` on it}. Rank is

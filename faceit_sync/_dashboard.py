@@ -184,7 +184,10 @@ table.blocks thead th:hover{color:var(--faint)}
 .hicon.r-Support{box-shadow:0 0 0 1.5px var(--support)}
 .hicon.sm{width:18px;height:18px;border-radius:5px;box-shadow:none;margin:-1px 1px -1px -3px}
 .chip.ico{padding-left:4px;gap:4px}
-.comp{display:inline-flex;align-items:center;gap:4px}
+.comp{display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap}
+/* Spacer between role groups inside a comp, so tank | dps dps | sup sup reads as a shape. */
+.comp .rgap{flex:0 0 9px}
+.swapsep{margin:0 3px}
 .comp .hicon+.hicon{margin-left:0}
 /* A row of icons + a right-aligned record; the workhorse of the scouting page. */
 .crow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 2px}
@@ -469,7 +472,15 @@ function seatRank(h){
 }
 function byRole(heroes){ return heroes.slice().sort((a,b)=>
   seatRank(a)-seatRank(b) || String(a).localeCompare(b)); }
-function compRow(heroes){ return `<span class="comp">${byRole(heroes).map(h=>heroIcon(h)).join('')}</span>`; }
+// A comp reads as a LINEUP, not five loose faces: role-order the portraits and
+// put a gap between role groups (tank | dps dps | sup sup) so the 1-2-2 shape is
+// scannable at a glance.
+function compRow(heroes){
+  const s=byRole(heroes); let out='';
+  s.forEach((h,i)=>{ if(i>0 && HERO_ROLE[h]!==HERO_ROLE[s[i-1]]) out+='<i class="rgap"></i>';
+    out+=heroIcon(h); });
+  return `<span class="comp">${out}</span>`;
+}
 // A comp change is only interesting in the heroes that moved - repeating the four
 // unchanged portraits buries the one that matters. null = no change at all.
 function compDelta(from,to){
@@ -515,9 +526,11 @@ function mapHistory(scout, mp){
 
 let SWAP_NOISE=new Set();   // per-team: heroes in ~every enemy lineup (set by renderScoutBody)
 function swapLine(s){
+  // One arrow only: the enemy lineup is the TRIGGER (context), the single arrow
+  // is the actual out->in swap. A second arrow after "vs" read as a swap too.
   const vs=(s.vs||[]).filter(h=>!SWAP_NOISE.has(h));
   const trig=vs.length
-    ? `<span class="faint">vs</span>${compRow(vs.slice(0,3))}<span class="arr">&rarr;</span>`
+    ? `<span class="faint">vs</span>${compRow(vs.slice(0,3))}<span class="faint swapsep">&middot;</span>`
     : '';
   return `<div class="crow${s.count<=1?' thin':''}">`+
     `<span class="swapline">${trig}${deltaHtml({out:s.out,in:s.in})}</span>`+
@@ -1523,9 +1536,10 @@ function renderPlayers(){
         const line=HERO_ROLE[hero]==='Support'
           ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
           : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
-        card.appendChild(el(`<div class="crow" title="${r.games}g avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
+        const thinG=r.games<2?' thin':'';   // 1 game = low confidence, flag it
+        card.appendChild(el(`<div class="crow${thinG}" title="${r.games} game${r.games===1?'':'s'} avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
           `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span></span>`+
-          `<span class="rec">${line}</span></div>`));
+          `<span class="rec">${line}${r.games<2?' <span class="faint">· 1g</span>':''}</span></div>`));
       });
       grid.appendChild(card);
     });

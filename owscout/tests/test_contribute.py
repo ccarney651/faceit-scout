@@ -453,3 +453,27 @@ def test_rank_player_heroes_scopes_by_division() -> None:
     assert ranks[("P1", "ram")]["of"] == 3    # 3 Master players, not 4
     assert ranks[("P1", "ram")]["rank"] == 1
     assert "rank" not in ranks[("PX", "ram")]  # Expert group of 1 -> unranked
+
+
+def test_rank_player_heroes_includes_single_game_players() -> None:
+    """A player with one captured game must still be ranked (and counted) so the
+    leaderboard has no gaps - only the group-size floor (min_group) gates."""
+    from owscout.contribute import MapKey, rank_player_heroes
+
+    maps: dict[Any, Any] = {}
+    stats: dict[Any, Any] = {}
+
+    def add(pid: str, mid: str, ngames: int, dmg: int) -> None:
+        for gno in range(1, ngames + 1):
+            maps[MapKey(mid, gno)] = {"observations": [
+                {"side": "a", "round_no": 1, "sub_map": None, "pairs": [["ram", pid]]}]}
+            stats[(mid, gno, pid)] = {"elims": 10, "deaths": 4, "damage": dmg,
+                                      "healing": 0, "mitigation": 2000,
+                                      "champ": "em", "captured": True}
+
+    add("P1", "M1", 2, 9000)
+    add("P2", "M2", 2, 6000)
+    add("P3", "M3", 1, 3000)          # only one game - must still be ranked
+    ranks = rank_player_heroes(maps, stats, {"ram": "tank"})
+    assert {ranks[(p, "ram")]["rank"] for p in ("P1", "P2", "P3")} == {1, 2, 3}
+    assert ranks[("P3", "ram")]["of"] == 3 and ranks[("P3", "ram")]["games"] == 1
