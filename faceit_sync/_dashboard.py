@@ -746,7 +746,8 @@ let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
-let PLAYERS_ROLE='All';        // Players tab role filter
+let PLAYERS_ROLE='All';        // Players tab: By hero role filter
+let PLAYERS_VIEW='hero';        // Players tab mode: 'hero' | 'role'
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
@@ -1510,9 +1511,45 @@ function renderScoutBody(t){
 /* ================================================= DRAFT SIMULATOR (manual scenario planner) */
 // Per-team history over the active division: map-pick counts, per-map ban counts, overall ban counts.
 /* ============================================================= PLAYERS */
-// League-wide, per-hero player leaderboard. Reads the ranks owscout computed at
-// merge time (scoped within division/tier, role-weighted) and inverts them from
-// team -> player -> hero into hero -> ranked players.
+// League-wide player leaderboards from owscout's merge-time ranks (division/tier-
+// scoped, role-weighted, deaths heavy). Two modes: "By hero" (rank within one
+// hero) and "By role" (aggregate a player across the heroes of a competitive seat
+// — Tank / Hitscan / Flex DPS / Main Support / Flex Support).
+const PLAYER_STAT_FIELDS=['damage','elims','deaths','healing','mitigation'];
+// Aggregate each player's per-hero composite across the heroes of a seat, weighted
+// by games, then rank within the seat. Confident (>=2 seat games) vs low-data.
+function seatLeaderboards(){
+  const ocs=DATA.owscout_comps||{}, bySeat={};
+  D().team_names.forEach(team=>{
+    (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
+      (p.heroes||[]).forEach(h=>{
+        if(h.comp==null||!h.games) return;
+        const seat=HERO_SEAT[h.hero]; if(!seat) return;
+        const key=team+'|'+p.player, m=(bySeat[seat]=bySeat[seat]||{});
+        const e=m[key]||(m[key]={player:p.player,team,g:0,cw:0,heroes:{},
+          st:{damage:0,elims:0,deaths:0,healing:0,mitigation:0}});
+        e.g+=h.games; e.cw+=h.comp*h.games;
+        PLAYER_STAT_FIELDS.forEach(k=>e.st[k]+=((h.stats&&h.stats[k])||0)*h.games);
+        e.heroes[h.hero]=(e.heroes[h.hero]||0)+h.games;
+      });
+    });
+  });
+  const rankGrp=arr=>{ arr.sort((a,b)=>b.idx-a.idx);
+    arr.forEach((r,i)=>{ r.rank=i+1; r.of=arr.length;
+      r.pct=arr.length>1?Math.round(100*(arr.length-1-i)/(arr.length-1)):100; }); return arr; };
+  const out={};
+  SEATS.forEach(seat=>{
+    const players=bySeat[seat]; if(!players) return;
+    const list=Object.values(players).map(e=>({player:e.player,team:e.team,games:e.g,
+      idx:e.cw/e.g, low:e.g<2,
+      stats:{damage:Math.round(e.st.damage/e.g),healing:Math.round(e.st.healing/e.g),
+        mitigation:Math.round(e.st.mitigation/e.g),
+        elims:Math.round(e.st.elims/e.g*10)/10,deaths:Math.round(e.st.deaths/e.g*10)/10},
+      heroes:Object.entries(e.heroes).sort((a,b)=>b[1]-a[1]).map(x=>x[0])}));
+    out[seat]={conf:rankGrp(list.filter(r=>!r.low)),low:rankGrp(list.filter(r=>r.low))};
+  });
+  return out;
+}
 function renderPlayers(){
   const wrap=el(`<div></div>`);
   const ocs=DATA.owscout_comps||{}, byHero={};
@@ -1522,52 +1559,75 @@ function renderPlayers(){
         (byHero[h.hero]=byHero[h.hero]||[]).push({player:p.player, team, ...h}); });
     });
   });
-  const heroNames=Object.keys(byHero);
-  if(!heroNames.length){
-    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No ranked players yet. A player earns a per-hero rank once that hero has <b>3+ captured players</b> and the player has <b>2+ games</b> on it — capture more games to fill this in.</p>`));
+  if(!Object.keys(byHero).length){
+    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No ranked players yet. A player earns a rank once a hero has <b>3+ captured players</b> — capture more games to fill this in.</p>`));
     return wrap;
   }
-  wrap.appendChild(el(sectionH('Players — best on each hero',
-    `<span class="note">ranked within ${esc(D().summary.championship||'the division')} · role-weighted (tanks favour damage+elims) · hover a row for per-game stats</span>`)));
-  const bar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);
+  wrap.appendChild(el(sectionH('Players',
+    `<span class="note">ranked within ${esc(D().summary.championship||'the division')} · role-weighted (tanks favour damage+elims, deaths weigh heavy) · hover a row for per-game stats</span>`)));
+  const modebar=el(`<div class="wsel" style="margin:2px 2px 10px"></div>`);   // By hero | By role
+  const bar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);       // hero-role sub-filter
   const body=el(`<div></div>`);
-  wrap.append(bar, body);
-  const draw=()=>{
+  wrap.append(modebar, bar, body);
+
+  const statLine=(base,s)=> base==='Support'
+    ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
+    : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
+  const rowHtml=(base,r,extra)=>{
+    const lo=r.low_data||r.low, s=r.stats||{};
+    const col=lo?'var(--faint)':(r.pct>=67?'var(--good)':r.pct>=34?'var(--mid)':'var(--bad)');
+    return `<div class="crow${lo?' thin':''}" title="${r.games} game${r.games===1?'':'s'} avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
+      `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span>${extra||''}</span>`+
+      `<span class="rec">${statLine(base,s)}${lo?` <span class="faint">· ${r.games}g</span>`:''}</span></div>`;
+  };
+  const makeCard=(titleHtml,conf,low,base,extraFn)=>{
+    const card=el(`<div class="card"></div>`);
+    card.appendChild(el(`<p class="eyebrow">${titleHtml}</p>`));
+    conf.forEach(r=>card.appendChild(el(rowHtml(base,r,extraFn&&extraFn(r)))));
+    if(low.length){
+      card.appendChild(el(`<p class="seg" style="margin-top:8px;color:var(--faint)">not enough data</p>`));
+      low.forEach(r=>card.appendChild(el(rowHtml(base,r,extraFn&&extraFn(r)))));
+    }
+    return card;
+  };
+
+  function drawHero(){
+    body.innerHTML=''; bar.style.display='';
     [...bar.children].forEach(b=>b.classList.toggle('selA', b.textContent===PLAYERS_ROLE));
-    body.innerHTML='';
-    const heroes=heroNames.filter(h=>PLAYERS_ROLE==='All'||HERO_ROLE[h]===PLAYERS_ROLE)
+    const heroes=Object.keys(byHero).filter(h=>PLAYERS_ROLE==='All'||HERO_ROLE[h]===PLAYERS_ROLE)
       .sort((a,b)=>byHero[b].length-byHero[a].length||a.localeCompare(b));
     if(!heroes.length){ body.appendChild(el(`<p class="note">No ranked ${esc(PLAYERS_ROLE)} players yet.</p>`)); return; }
     const grid=el(`<div class="grid cols-2"></div>`);
-    const rowHtml=(hero,r)=>{
-      const col=r.low_data?'var(--faint)':(r.pct>=67?'var(--good)':r.pct>=34?'var(--mid)':'var(--bad)'), s=r.stats||{};
-      const line=HERO_ROLE[hero]==='Support'
-        ? `${nf(s.healing)} heal · ${nf(s.damage)} dmg · ${s.deaths} d`
-        : `${nf(s.damage)} dmg · ${s.elims} e · ${s.deaths} d`;
-      return `<div class="crow${r.low_data?' thin':''}" title="${r.games} game${r.games===1?'':'s'} avg · ${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
-        `<span>${pill('#'+r.rank,col)} <b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span></span>`+
-        `<span class="rec">${line}${r.low_data?` <span class="faint">· ${r.games}g</span>`:''}</span></div>`;
-    };
     heroes.forEach(hero=>{
-      const all=byHero[hero];
+      const all=byHero[hero], base=HERO_ROLE[hero];
       const conf=all.filter(r=>!r.low_data).sort((a,b)=>a.rank-b.rank);
       const low =all.filter(r=> r.low_data).sort((a,b)=>a.rank-b.rank);
-      const card=el(`<div class="card"></div>`);
-      card.appendChild(el(`<p class="eyebrow">${heroChip(hero)} <span class="note" style="text-transform:none;letter-spacing:0">${all.length} player${all.length===1?'':'s'} on this hero</span></p>`));
-      conf.forEach(r=>card.appendChild(el(rowHtml(hero,r))));
-      if(low.length){
-        // Low-sample players don't compete with the real ones - they sit at the
-        // bottom under a marker, ranked only among themselves.
-        card.appendChild(el(`<p class="seg" style="margin-top:8px;color:var(--faint)">not enough data</p>`));
-        low.forEach(r=>card.appendChild(el(rowHtml(hero,r))));
-      }
-      grid.appendChild(card);
+      grid.appendChild(makeCard(`${heroChip(hero)} <span class="note" style="text-transform:none;letter-spacing:0">${all.length} player${all.length===1?'':'s'} on this hero</span>`, conf, low, base));
     });
     body.appendChild(grid);
-  };
+  }
+  function drawRole(){
+    body.innerHTML=''; bar.style.display='none';
+    const seats=seatLeaderboards();
+    const grid=el(`<div class="grid cols-2"></div>`); let any=false;
+    SEATS.forEach(seat=>{
+      const sd=seats[seat]; if(!sd||(!sd.conf.length&&!sd.low.length)) return; any=true;
+      const base=/Support/.test(seat)?'Support':(seat==='Tank'?'Tank':'Damage');
+      const heroesOf=r=> r.heroes&&r.heroes.length?` <span class="faint" style="font-size:11px">${r.heroes.slice(0,3).map(esc).join(', ')}</span>`:'';
+      grid.appendChild(makeCard(`${esc(seat)} <span class="note" style="text-transform:none;letter-spacing:0">${sd.conf.length+sd.low.length} players</span>`, sd.conf, sd.low, base, heroesOf));
+    });
+    body.appendChild(any?grid:el(`<p class="note">No ranked players in any seat yet.</p>`));
+  }
+  const draw=()=>{ [...modebar.children].forEach(b=>b.classList.toggle('selA', b.dataset.v===PLAYERS_VIEW));
+    if(PLAYERS_VIEW==='role') drawRole(); else drawHero(); };
+
+  [['hero','By hero'],['role','By role']].forEach(([v,label])=>{
+    const b=el(`<span class="wbtn" data-v="${v}">${esc(label)}</span>`);
+    b.onclick=()=>{ PLAYERS_VIEW=v; draw(); }; modebar.appendChild(b);
+  });
   ['All','Tank','Damage','Support'].forEach(role=>{
-    const b=el(`<span class="wbtn ${role===PLAYERS_ROLE?'selA':''}">${role}</span>`);
-    b.onclick=()=>{ PLAYERS_ROLE=role; draw(); }; bar.appendChild(b);
+    const b=el(`<span class="wbtn">${role}</span>`);
+    b.onclick=()=>{ PLAYERS_ROLE=role; drawHero(); }; bar.appendChild(b);
   });
   draw();
   return wrap;

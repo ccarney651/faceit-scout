@@ -684,6 +684,9 @@ def rank_player_heroes(
                     info["of"] = n
                     info["pct"] = round(100 * (n - 1 - i) / (n - 1)) if n > 1 else 100
                     info["low_data"] = is_low
+                    # The pool-relative composite, so the dashboard can aggregate a
+                    # player across the heroes of a seat (Hitscan, Flex DPS, ...).
+                    info["comp"] = round(float(avg["_comp"]), 3)
                 out[(pid, guid)] = info
     return out
 
@@ -727,6 +730,7 @@ def player_pools(
                     if "rank" in ri:
                         d["rank"], d["of"], d["pct"] = ri["rank"], ri["of"], ri["pct"]
                         d["low_data"] = ri.get("low_data", False)
+                        d["comp"] = ri.get("comp")
                 hrows.append(d)
             hrows.sort(key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))
             rows.append({
