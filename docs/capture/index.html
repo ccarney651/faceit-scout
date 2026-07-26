@@ -294,11 +294,13 @@ function refreshSession(){ if(!session) return;
   const ol=document.getElementById('obslist'); ol.innerHTML='';
   session.snaps.slice().reverse().forEach(s=>{ const el=document.createElement('div'); el.className='obs';
     el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${s.aNames.join('/')}  vs  ${s.bNames.join('/')}`; ol.appendChild(el); });
-  updateBtns();
+  updateBtns(); renderPipControls();
 }
 function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
   for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
-function snapMsg(t,warn){ const e=document.getElementById('snapmsg'); if(e) e.innerHTML=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:''; }
+function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:'';
+  const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
+  if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
 function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
   if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   const comp=readComp(); if(!comp) return;
@@ -351,25 +353,48 @@ async function renderCaptured(){ const rows=await idbAll(); document.getElementB
 // ---------- pop-out overlay (Document PiP): full scouting console over OW ----------
 // Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
 // always match the current map — the whole loop runs with no alt-tab.
-function renderPipControls(){ if(!pipWin||pipWin.closed) return; const box=pipWin.document.getElementById('pbtns'); if(!box) return; box.innerHTML='';
-  const mk=(t,fn,cls)=>{ const b=pipWin.document.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; box.appendChild(b); };
-  mk('◉ Snapshot',()=>snapshot(false),'go');
-  mk('Round ▸',nextRound);
-  if(session&&session.submaps.length) session.submaps.forEach(s=>mk('◦ '+s,()=>pickSub(s)));
-  if(session&&session.phased) mk('⇄ Flip attack',flipAttack);
-  mk('↶ Undo',undo);
-  mk('✓ Finish map',()=>finishMap(),'fin');
-  mk('⏭ Next code',nextCode);
+function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.document;
+  const main=d.getElementById('prow-main'), sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'); if(!main) return;
+  const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
+  main.className='prow'; main.innerHTML='';
+  mk(main,'◉ Snapshot',()=>snapshot(false),'go');
+  mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin'); mk(main,'⏭ Next',nextCode);
+  // sub-map row (control maps) — warn colour until one is picked; active highlighted
+  sub.innerHTML='';
+  if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
+    const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
+    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
+  else sub.className='prow';
+  // attack row (escort/hybrid) — tells you who attacks this round
+  atk.innerHTML='';
+  if(session&&session.phased){ atk.className='prow';
+    const l=d.createElement('span'); l.className='lbl'; l.textContent='Attack R'+session.round; atk.appendChild(l);
+    const who=d.createElement('span'); who.style.cssText='margin-right:6px;font-weight:700';
+    who.innerHTML=session.attacker==='a'?'<span style="color:#5a9bd8">LEFT / blue</span>':'<span style="color:#e9694f">RIGHT / red</span>'; atk.appendChild(who);
+    mk(atk,'⇄ Flip',flipAttack); }
+  else atk.className='prow';
 }
-async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+.'); return; }
-  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:440}); pipWin=w;
+async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).'); return; }
+  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w;
     w.document.body.style.cssText='margin:0;background:#0d1015;color:#e7ebf2;font:13px system-ui,sans-serif';
-    const st=w.document.createElement('style'); st.textContent='.pt{padding:5px 10px}.pt h3{margin:0 0 4px;font-size:10.5px;color:#98a2b2;text-transform:uppercase}.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37}.slot:first-of-type{border-top:0}.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}button{margin:3px;padding:6px 9px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:6px;cursor:pointer;font-size:12px}button.go{background:#8087ff;color:#0b1020;font-weight:700;border:0}button.fin{border-color:#34b877;color:#34b877}#pinfo{padding:5px 10px;color:#98a2b2;font-size:11px}#pbtns{padding:2px 6px;display:flex;flex-wrap:wrap}'; w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pbtns"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
+    const st=w.document.createElement('style'); st.textContent=
+      '#pinfo{padding:6px 10px 1px;color:#98a2b2;font-size:11px}'+
+      '#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}'+
+      '.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}'+
+      '.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#98a2b2;margin-right:2px}'+
+      '.prow.warn .lbl{color:#e5624a}'+
+      'button{padding:6px 9px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:6px;cursor:pointer;font-size:12px}'+
+      'button.go{background:#8087ff;color:#0b1020;font-weight:700;border:0;flex:1 1 100%}'+
+      'button.fin{border-color:#34b877;color:#34b877}button.on{background:#8087ff;color:#0b1020;border:0;font-weight:600}'+
+      '.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:#98a2b2;text-transform:uppercase}'+
+      '.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37;font-size:12px}.slot:first-of-type{border-top:0}'+
+      '.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}.warn{color:#e5624a}.ok{color:#34b877}';
+    w.document.head.appendChild(st);
+    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
     target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
     renderPipControls();
     const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
-      if(el) el.textContent=session?`${c?c.code:''} · R${session.round}${session.sub?' ['+session.sub+']':''}${session.phased?' · atk '+(session.attacker==='a'?'L':'R'):''} · ${session.snaps.length} snaps`:''; };
+      if(el) el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; };
     w._tick=setInterval(tick,600); tick();
     if(!document.getElementById('auto').checked){ document.getElementById('auto').checked=true; document.getElementById('auto').dispatchEvent(new Event('change')); }
     w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
