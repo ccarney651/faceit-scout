@@ -105,7 +105,6 @@
       <span id="subbtns" class="row"></span>
       <button id="flip" class="mk" style="display:none">Flip attack</button>
       <button id="undo" class="mk" disabled>Undo</button>
-      <label class="status"><input type="checkbox" id="auto"> auto-snapshot (1.5s, dedup)</label>
       <button id="pop" class="ghost">Pop out overlay ⇱</button>
       <span class="status" id="snapmsg"></span>
     </div>
@@ -115,7 +114,7 @@
     </div>
     <div class="row" style="margin-top:10px">
       <button id="finish" class="ghost" disabled>Finish + save this map</button>
-      <label class="status"><input type="checkbox" id="autofetch"> auto-fetch next map on finish</label>
+      <label class="status"><input type="checkbox" id="autofetch" checked> auto-fetch next map on finish</label>
       <span class="status" id="obscount">0 snapshots</span>
     </div>
     <div id="obslist" style="margin-top:6px"></div>
@@ -214,7 +213,7 @@ document.getElementById('skip').onclick=nextCode;
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
-let boxes=JSON.parse(localStorage.getItem('owscout_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null, autoTimer=null;
+let boxes=JSON.parse(localStorage.getItem('owscout_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
 function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
@@ -259,14 +258,13 @@ function autoCalibrate(){ if(!vid.videoWidth){ document.getElementById('calhint'
   for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s]; boxes[s]={x:R.x+fx*R.w,y:R.y+fy*R.h,w:fw*R.w,h:fh*R.h}; }
   localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); drawOverlay(); updateBtns(); selfTest(); }
 function stopCapture(){ if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
-  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('auto').checked=false; }
   drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
 function togglePreview(){ const L=document.getElementById('layout'); L.classList.toggle('nopreview');
   document.getElementById('hidep').textContent=L.classList.contains('nopreview')?'Show preview':'Hide preview'; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     const trk=st.getVideoTracks()[0];
-    if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('auto').checked=false;} drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
+    if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
     document.getElementById('calhint').textContent='Screen shared — click Auto-calibrate ✨ (or set the boxes by hand).'; updateBtns();
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
@@ -468,7 +466,6 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
     const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
       if(el) el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; };
     w._tick=setInterval(tick,600); tick();
-    if(!document.getElementById('auto').checked){ document.getElementById('auto').checked=true; document.getElementById('auto').dispatchEvent(new Event('change')); }
     w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
   }catch(err){ alert('Pop-out failed: '+err); } }
 
@@ -496,7 +493,7 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
-document.getElementById('autofetch').checked=localStorage.getItem('owscout_autofetch')==='1';
+document.getElementById('autofetch').checked=localStorage.getItem('owscout_autofetch')!=='0';   // default ON
 document.getElementById('autofetch').onchange=e=>localStorage.setItem('owscout_autofetch',e.target.checked?'1':'0');
 document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('autocal').onclick=autoCalibrate;
@@ -514,6 +511,5 @@ document.getElementById('flip').onclick=flipAttack;
 document.getElementById('undo').onclick=undo;
 document.getElementById('finish').onclick=finishMap;
 document.getElementById('pop').onclick=popout;
-document.getElementById('auto').onchange=e=>{ if(e.target.checked){ autoTimer=setInterval(()=>snapshot(true),1500);} else clearInterval(autoTimer); };
 updateBtns(); loadFeeds();
 </script></body></html>
