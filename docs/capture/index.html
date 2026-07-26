@@ -43,6 +43,7 @@
   <div class="sub">Zero-install scouting: share your Overwatch screen (borderless/windowed), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
 </header>
 <main>
+  <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 13px;font-size:13px"></div>
   <div class="card">
     <h2>1 · Set up (once)</h2>
     <div class="row">
@@ -60,6 +61,10 @@
 
   <div class="card">
     <h2>2 · Pick a replay</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button id="refresh" class="ghost">↻ Refresh codes</button>
+      <span class="status" id="feedmeta"></span>
+    </div>
     <div class="row">
       <label class="f">Region<span class="lock">EMEA</span></label>
       <label class="f">Division<select id="div"></select></label>
@@ -94,6 +99,7 @@
       <button id="undo" class="mk" disabled>Undo</button>
       <label class="status"><input type="checkbox" id="auto"> auto-snapshot (1.5s, dedup)</label>
       <button id="pop" class="ghost">Pop out overlay ⇱</button>
+      <span class="status" id="snapmsg"></span>
     </div>
     <div class="grid2" style="margin-top:10px">
       <div class="team"><h3 id="hA">Left / blue</h3><div id="outA"></div></div>
@@ -144,8 +150,12 @@ async function loadFeeds(){
   }catch(e){ document.getElementById('ctxwarn').textContent='Could not load refs.json ('+e+').'; }
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
-  buildDivisions(); refreshCodes(); renderCaptured();
+  buildDivisions(); refreshCodes(); renderCaptured(); setFeedMeta();
 }
+function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(el) el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
+async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(el) el.textContent='refreshing…';
+  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
+  buildDivisions(); refreshCodes(); setFeedMeta(); }
 
 // ---------- pick a replay ----------
 function buildDivisions(){ document.getElementById('div').innerHTML='<option value="all">all</option>'+(DATA.divisions||[]).map(t=>`<option>${t}</option>`).join(''); }
@@ -200,7 +210,12 @@ ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); 
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
   const x=Math.min(dragS.x,p.x)/s,y=Math.min(dragS.y,p.y)/s,w=Math.abs(p.x-dragS.x)/s,h=Math.abs(p.y-dragS.y)/s;
   if(w>10&&h>10){ boxes[drawMode]={x,y,w,h}; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); }
-  drawMode=null;dragS=null;dragC=null; document.getElementById('calhint').textContent='Box saved.'; drawOverlay(); updateBtns(); });
+  drawMode=null;dragS=null;dragC=null; document.getElementById('calhint').textContent='Box saved.'; drawOverlay(); updateBtns(); if(boxes.a&&boxes.b) selfTest(); });
+function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const comp=readComp(); if(!comp) return;
+  const ok=[...comp.a,...comp.b].filter(s=>s.score>=0.55).length; const el=document.getElementById('calhint');
+  el.innerHTML = ok>=8?`<span class="ok">calibration looks good — ${ok}/10 portraits recognised.</span>`
+    : ok>=5?`calibration: ${ok}/10 recognised — usable; nudge the boxes if some read ??.`
+    : `<span class="warn">only ${ok}/10 recognised — boxes look misaligned; redraw them right on the portraits.</span>`; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     document.getElementById('calhint').textContent='Screen shared — set the two boxes over the portrait strips.'; updateBtns();
@@ -209,7 +224,13 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready; document.getElementById('flip').disabled=!ready;
   document.getElementById('undo').disabled=!(session&&session.snaps.length);
-  document.getElementById('finish').disabled=!(session&&session.snaps.length); }
+  document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
+function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
+  if(!vid.srcObject) m='① Click <b>Share my screen</b> and pick your Overwatch window (borderless/windowed).';
+  else if(!(boxes.a&&boxes.b)) m='② Drag the <b>LEFT</b> and <b>RIGHT</b> boxes over the two 5-portrait strips.';
+  else if(!selectedCode()) m='③ Pick a replay code in step 2.';
+  else m='④ <b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.';
+  g.innerHTML=m; }
 
 // ---------- matcher ----------
 const work=document.createElement('canvas'); let wctx;
@@ -267,17 +288,18 @@ function refreshSession(){ if(!session) return;
 }
 function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
   for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
+function snapMsg(t,warn){ const e=document.getElementById('snapmsg'); if(e) e.innerHTML=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:''; }
 function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
-  if(session.submaps.length && !session.sub){ if(!auto) document.getElementById('codenote').innerHTML='<span class="warn">pick a sub-map first</span>'; return; }
+  if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   const comp=readComp(); if(!comp) return;
   const aG=comp.a.map(s=>s.guid), bG=comp.b.map(s=>s.guid);
   // dedup: same round+sub and only-lost-known both sides => skip (a worse read, not new info)
   const lk=session.lastKept;
-  if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)) return;
+  if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)){ if(!auto) snapMsg('unchanged — nothing new'); return; }
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
     a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name), ts:session.snaps.length*1000};
   session.snaps.push(snap); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
-  refreshSession();
+  refreshSession(); snapMsg('✓ snapshot '+session.snaps.length+' kept');
 }
 function nextRound(){ if(!session) return; session.round++; if(session.phased) session.attacker=(session.attacker==='a'?'b':'a'); session.lastKept=null; refreshSession(); }
 function pickSub(s){ if(!session) return; session.sub=s; refreshSession(); }
@@ -367,6 +389,7 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
+document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('publish').onclick=publish;
 document.getElementById('download').onclick=downloadContrib;
 document.getElementById('share').onclick=share;
