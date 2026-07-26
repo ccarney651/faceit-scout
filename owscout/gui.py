@@ -28,6 +28,12 @@ ALL_TEAMS = "(all teams)"
 ALL_REGIONS = "(all regions)"
 ALL_DIVISIONS = "(all)"
 
+# Region lock. The live site currently ships EMEA only, so scouting any other
+# region would produce captures the site never displays. Pin the app to EMEA to
+# keep effort aligned. Set to None to restore the region picker (e.g. when NA is
+# brought onto the site).
+LOCK_REGION: Optional[str] = "EMEA"
+
 # Light/dark palettes. ttk widgets are themed via ttk.Style; the handful of tk
 # widgets (Text logs, banners, Toplevels) read these directly. Muted/Link labels
 # use the 'Muted.TLabel'/'Link.TLabel' styles so they stay readable in both.
@@ -210,10 +216,15 @@ class _App:  # pragma: no cover - GUI runtime only
         except tk.TclError:
             pass
         self._dark = False
+        self._overlay_enabled = True
         try:
             with self._open_db() as _db:
                 ui = _db.get_settings("ui.")
                 self._dark = ui.get("ui.dark") == "1"
+                # Default ON; only an explicit "0" disables it. The overlay is the
+                # main reported cause of in-game lag / Alt-Tab + Snipping Tool
+                # interference, so this is the escape hatch (hotkeys still work).
+                self._overlay_enabled = ui.get("ui.overlay", "1") != "0"
                 geo = ui.get("ui.geometry")
                 if geo:
                     self.root.geometry(geo)
@@ -338,14 +349,21 @@ class _App:  # pragma: no cover - GUI runtime only
         division_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
         self._gate_codes.append(division_box)
         ttk.Label(filt, text="Region").pack(side="left")
-        self.region_var = tk.StringVar(value=ALL_REGIONS)
-        region_box = ttk.Combobox(filt, textvariable=self.region_var, width=12,
-                                  state="readonly", values=[ALL_REGIONS, *REGIONS])
-        region_box.pack(side="left", padx=(4, 12))
-        # Region changes WHICH codes are fetched, so it re-queries rather than
-        # filtering the cached rows (the team list depends on it).
-        region_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
-        self._gate_codes.append(region_box)
+        if LOCK_REGION:
+            # Pinned region (see LOCK_REGION): a static label, not a picker, so the
+            # restriction is obvious and no other region's codes can be fetched.
+            self.region_var = tk.StringVar(value=LOCK_REGION)
+            ttk.Label(filt, text=f"{LOCK_REGION} (locked)",
+                      style="Muted.TLabel").pack(side="left", padx=(4, 12))
+        else:
+            self.region_var = tk.StringVar(value=ALL_REGIONS)
+            region_box = ttk.Combobox(filt, textvariable=self.region_var, width=12,
+                                      state="readonly", values=[ALL_REGIONS, *REGIONS])
+            region_box.pack(side="left", padx=(4, 12))
+            # Region changes WHICH codes are fetched, so it re-queries rather than
+            # filtering the cached rows (the team list depends on it).
+            region_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
+            self._gate_codes.append(region_box)
         self.hide_claimed = tk.BooleanVar(value=True)
         hide_cb = ttk.Checkbutton(filt, text="hide already-scouted",
                                   variable=self.hide_claimed, command=self._apply_code_filter)
@@ -459,7 +477,13 @@ class _App:  # pragma: no cover - GUI runtime only
         appear.pack(fill="x", **pad)
         self.dark_var = tk.BooleanVar(value=self._dark)
         ttk.Checkbutton(appear, text="Dark mode", variable=self.dark_var,
-                        command=self._toggle_theme).pack(anchor="w", padx=8, pady=6)
+                        command=self._toggle_theme).pack(anchor="w", padx=8, pady=(6, 0))
+        self.overlay_var = tk.BooleanVar(value=self._overlay_enabled)
+        ttk.Checkbutton(
+            appear, variable=self.overlay_var, command=self._toggle_overlay,
+            text="Show the on-screen capture overlay  (turn OFF if you get in-game "
+                 "lag, or Alt-Tab / Snipping Tool problems — the hotkeys still work)"
+        ).pack(anchor="w", padx=8, pady=(0, 6))
 
         dbwrap = collapsible(settings_parent, "Advanced: file locations")
         for i, (lbl, var) in enumerate((("owscout DB", self.db_var),
@@ -553,6 +577,19 @@ class _App:  # pragma: no cover - GUI runtime only
                 db.set_settings({"ui.dark": "1" if self._dark else "0"})
         except Exception:  # noqa: BLE001
             pass
+
+    def _toggle_overlay(self) -> None:
+        """Persist the overlay preference. Takes effect on the NEXT capture (an
+        in-flight overlay is left alone)."""
+        self._overlay_enabled = bool(self.overlay_var.get())
+        try:
+            with self._open_db() as db:
+                db.set_settings({"ui.overlay": "1" if self._overlay_enabled else "0"})
+        except Exception:  # noqa: BLE001
+            pass
+        self._emit("overlay " + ("ON for the next capture."
+                   if self._overlay_enabled else
+                   "OFF — captures will run headless (use the hotkeys)."))
 
     def _on_close(self) -> None:
         try:
@@ -1286,17 +1323,24 @@ class _App:  # pragma: no cover - GUI runtime only
         req_div = self._division_param()   # guard: refuse a wrong-division code
         binds = self._keybinds
         from .capture import CaptureControls, run_hotkey_capture
-        self._emit(f"capture: {code} — {_keys_summary(binds)}. Watch the overlay.")
-        self.cap_btn.configure(state="disabled")
         controls = CaptureControls()
-        overlay = _CaptureOverlay(self, binds, controls)
-        # run_hotkey_capture binds `controls` on its worker thread once it knows
-        # the map; build the map-specific buttons back on the Tk main thread.
-        controls.on_ready = lambda: self.q.put(overlay.build_controls)
+        # The overlay is optional (Settings → Appearance). When off, capture runs
+        # headless: the hotkeys drive it and status lands in the Activity log.
+        overlay = _CaptureOverlay(self, binds, controls) if self._overlay_enabled else None
+        if overlay is not None:
+            self._emit(f"capture: {code} — {_keys_summary(binds)}. Watch the overlay.")
+            # run_hotkey_capture binds `controls` on its worker thread once it knows
+            # the map; build the map-specific buttons back on the Tk main thread.
+            controls.on_ready = lambda: self.q.put(overlay.build_controls)
+        else:
+            self._emit(f"capture: {code} — overlay off; use the hotkeys: "
+                       f"{_keys_summary(binds)}")
+        self.cap_btn.configure(state="disabled")
 
         def emit(msg: str) -> None:
             self._emit(msg)
-            self.q.put(lambda: overlay.update(msg))
+            if overlay is not None:
+                self.q.put(lambda: overlay.update(msg))
 
         def go() -> None:
             try:
@@ -1312,7 +1356,8 @@ class _App:  # pragma: no cover - GUI runtime only
                                        controls=controls)
                 self._emit("capture: finished (saved as a draft — review to finalize).")
             finally:
-                self.q.put(overlay.close)
+                if overlay is not None:
+                    self.q.put(overlay.close)
                 self.q.put(self._refresh_codes)
         self._run(go)
 
@@ -2023,10 +2068,9 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
         self.win = tk.Toplevel(app.root)
         self.win.overrideredirect(True)               # no title bar / chrome
         self.win.attributes("-topmost", True)
-        try:
-            self.win.attributes("-alpha", 0.94)
-        except Exception:  # noqa: BLE001 - alpha unsupported on some platforms
-            pass
+        # Deliberately NOT a layered (-alpha) window: a translucent always-on-top
+        # window over the game is a known cause of compositor overhead / in-game
+        # lag, and buys only a faint see-through look. Opaque is cheaper.
         self.win.configure(bg=self.BG)
         self._apply_noactivate()
         self._app = app
@@ -2131,12 +2175,20 @@ class _CaptureOverlay:  # pragma: no cover - GUI runtime only
             import ctypes
             GWL_EXSTYLE = -20
             WS_EX_NOACTIVATE = 0x08000000
-            WS_EX_TOOLWINDOW = 0x00000080   # also keep it out of Alt-Tab
+            WS_EX_TOOLWINDOW = 0x00000080   # keep it out of Alt-Tab
+            WS_EX_APPWINDOW = 0x00040000    # ...and out of the taskbar
+            # SWP_NOSIZE|NOMOVE|NOZORDER|NOACTIVATE|FRAMECHANGED
+            SWP = 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020
             self.win.update_idletasks()
             hwnd = self.win.winfo_id()
             u = ctypes.windll.user32
             ex = u.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            u.SetWindowLongW(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
+            ex = (ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW
+            u.SetWindowLongW(hwnd, GWL_EXSTYLE, ex)
+            # Windows only re-reads these for the Alt-Tab / taskbar list on a frame
+            # change, so force one — without it the TOOLWINDOW bit often doesn't
+            # take and the overlay can still hijack Alt-Tab.
+            u.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP)
         except Exception:  # noqa: BLE001 - non-Windows / API missing -> skip
             pass
 
