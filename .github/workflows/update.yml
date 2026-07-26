@@ -117,6 +117,9 @@ jobs:
           # The DB holds every division; the site ships EMEA Master + Expert
           # (switchable views, plus an EMEA Combined). Drop --region to add NA.
           faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html --region emea
+          # Codes + rosters feed for the browser capture app (docs/capture/). It
+          # CONSUMES this instead of crawling FACEIT; refs.json is curator-committed.
+          python tools/build_capture_data.py || echo "capture feed: skipped"
 
       - name: Publish downloadable DB snapshot
         run: |
@@ -150,7 +153,7 @@ jobs:
         run: |
           git config user.name  "faceit-scout-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/index.html docs/captured.json docs/faceit.sqlite3.gz
+          git add docs/index.html docs/captured.json docs/faceit.sqlite3.gz docs/capture/data.json
           if git diff --cached --quiet; then
             echo "No changes — nothing to publish."
           else
