@@ -146,8 +146,9 @@
       <span class="status faint" id="atkhint">— click the team on attack (as the HUD shows)</span>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
+      <button id="autodetect" class="ghost" type="button" disabled title="Read the HUD player names once to set which team is on the left and tag each hero with its player">✨ Auto-detect sides + players</button>
       <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD">⇄ Swap teams</button>
-      <span class="status" id="sidehint">Check each team matches the HUD before saving — the browser tool can't auto-detect sides yet.</span>
+      <span class="status" id="sidehint">Confirm each team matches the HUD before saving. <b>Auto-detect</b> reads the names once to set sides and tag players (opt-in; first use downloads a small OCR pack).</span>
     </div>
     <div class="grid2" style="margin-top:10px">
       <div class="team"><h3 id="hA">Left / blue</h3><div id="outA"></div></div>
@@ -270,7 +271,7 @@ function onCode(){ const c=selectedCode(); if(!c) return;
   const sr=document.getElementById('sideradios');
   sr.innerHTML=`<label class="status"><input type="radio" name="side" value="" checked> auto/blank</label>`+
     [[c.t1,c.team_a],[c.t2,c.team_b]].map(([id,nm])=>`<label class="status"><input type="radio" name="side" value="${id||''}"> ${nm||'?'}</label>`).join('');
-  sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=relabelTeams);
+  sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=onSideChange);
   startMap();
 }
 document.getElementById('div').onchange=refreshCodes;
@@ -375,6 +376,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
   document.getElementById('fscal').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready;
+  document.getElementById('autodetect').disabled=!ready;
   document.getElementById('undo').disabled=!(session&&session.history.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
@@ -410,6 +412,113 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
       if(host){ const row=document.createElement('div'); row.className='slot'; row.innerHTML=`<span>${ok?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 
+// ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
+// A faithful browser port of the .exe's confident_left_faction: OCR the 10 HUD
+// name bars, fuzzy-match them to the two rosters, and only act when one
+// orientation clearly wins. Same difflib ratio + thresholds the exe tuned on
+// real frames (owscout/capture.py), so a garbled read can't assign sides or
+// players from noise.
+const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=3;
+// difflib.SequenceMatcher.ratio() = 2*M/(len a+len b), M = total size of the
+// longest matching blocks (Ratcliff/Obershelp). Names are short → skip junk.
+function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
+  for(let i=ai;i<aj;i++){ const nj={};
+    for(let j=bi;j<bj;j++){ if(a[i]===b[j]){ const k=(j2[j-1]||0)+1; nj[j]=k;
+      if(k>best){besti=i-k+1;bestj=j-k+1;best=k;} } } j2=nj; }
+  let tot=best;
+  if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
+  return tot; }
+function simScore(a,b){ a=(a||'').toLowerCase().trim(); b=(b||'').toLowerCase().trim();
+  const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }  // 0..100
+function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
+  let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
+// Which faction is on the LEFT HUD strip: 't1', 't2', or null when unclear.
+function confidentLeft(leftNames,rightNames,t1,t2){
+  const direct=affinity(leftNames,t1)+affinity(rightNames,t2);
+  const swap=affinity(leftNames,t2)+affinity(rightNames,t1);
+  let got,lead,rosters;
+  if(direct>=swap){ got='t1'; lead=direct-swap; rosters=[t1,t2]; }
+  else { got='t2'; lead=swap-direct; rosters=[t2,t1]; }
+  if(lead<AUTO_SIDE_MARGIN) return null;
+  let strong=0; const sides=[leftNames,rightNames];
+  for(let k=0;k<2;k++) for(const n of sides[k]){ if(!n) continue;
+    let best=0; for(const r of rosters[k]) best=Math.max(best,simScore(n,r));
+    if(best>=STRONG_NAME_SCORE) strong++; }
+  return strong>=MIN_STRONG_NAMES ? got : null; }
+
+// tesseract.js, loaded lazily from CDN on first use (this page isn't an artifact,
+// so no CSP block). Opt-in: nothing downloads until Auto-detect is clicked.
+let _ocrWorker=null, _ocrLoading=null;
+function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
+  if(_ocrLoading) return _ocrLoading;
+  _ocrLoading=(async()=>{
+    if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
+    const w=await Tesseract.createWorker('eng');
+    await w.setParameters({ tessedit_pageseg_mode:'7' });   // single text line = one name
+    _ocrWorker=w; return w; })();
+  return _ocrLoading; }
+// Name bar sits at ~48-90% of each portrait cell's height (mirror of the .exe's
+// read_hud_names); grayscale + 6x upscale + a light contrast stretch lift the
+// ~10px text enough for OCR.
+function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
+  const sx=Math.max(0,cell.x-padX), sy=cell.y+cell.h*0.48, sw=cell.w+2*padX, sh=cell.h*0.42, sc=6;
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(sw*sc)); cv.height=Math.max(1,Math.round(sh*sc));
+  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(frame, sx,sy,sw,sh, 0,0,cv.width,cv.height);
+  const im=cx.getImageData(0,0,cv.width,cv.height), d=im.data;
+  for(let i=0;i<d.length;i+=4){ let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
+  cx.putImageData(im,0,0); return cv; }
+async function ocrNames(){ const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
+  for(const side of ['a','b']){ const b=boxes[side];
+    for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
+      const {data}=await w.recognize(nameCanvas(frame,cell));
+      out[side].push((data.text||'').replace(/\s+/g,' ').trim());
+      setDetectMsg('reading HUD names… '+(++done)+'/10'); } }
+  return out; }
+function teamRoster(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
+  const t=((DATA.rosters||{})[c.match_id]||{})[teamId]; if(!t||!t.players) return [];
+  return t.players.map(p=>({ id:p.id||null, name:(p.game_name||p.nick||'').trim() })).filter(x=>x.name); }
+// Greedy 1:1: each HUD slot → its best-scoring roster player above the strong
+// threshold, no player used twice. Returns [id|null x5] aligned to slots.
+function attribute(names,roster){ const out=[null,null,null,null,null], cand=[];
+  for(let i=0;i<names.length;i++){ if(!names[i]) continue;
+    for(const p of roster){ if(!p.id) continue; cand.push({i, id:p.id, s:simScore(names[i],p.name)}); } }
+  cand.sort((x,y)=>y.s-x.s); const usedSlot=new Set(), usedId=new Set();
+  for(const c of cand){ if(c.s<STRONG_NAME_SCORE) break;
+    if(usedSlot.has(c.i)||usedId.has(c.id)) continue;
+    out[c.i]=c.id; usedSlot.add(c.i); usedId.add(c.id); }
+  return out; }
+function setDetectMsg(html,cls){ const e=document.getElementById('sidehint');
+  if(e) e.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
+function sideTeamName(id){ const c=selectedCode(); if(!c) return '?';
+  const t=((DATA.rosters||{})[c.match_id]||{})[id]; return (t&&t.name) || (id===c.t1?c.team_a:c.team_b) || '?'; }
+async function autoDetect(){ const c=selectedCode();
+  if(!c){ setDetectMsg('pick a replay first.','warn'); return; }
+  if(!(boxes.a&&boxes.b&&vid.srcObject)){ setDetectMsg('share your screen and calibrate first.','warn'); return; }
+  const btn=document.getElementById('autodetect'); btn.disabled=true;
+  try{
+    setDetectMsg('loading OCR (first use downloads a small pack)…');
+    const names=await ocrNames();
+    const t1n=teamRoster(c.t1).map(x=>x.name), t2n=teamRoster(c.t2).map(x=>x.name);
+    const left=confidentLeft(names.a,names.b,t1n,t2n);      // 't1' | 't2' | null
+    let sideMsg;
+    if(left){ const leftId = left==='t1'?c.t1:c.t2;
+      document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===leftId); });
+      relabelTeams(); sideMsg=sideTeamName(leftId)+' on the left'; }
+    else sideMsg='sides unclear — set the left team by hand';
+    // Attribute against whichever teams are now on each side.
+    const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
+    const aIds=attribute(names.a,teamRoster(leftId)), bIds=attribute(names.b,teamRoster(rightId));
+    if(session) session.players={a:aIds,b:bIds};
+    const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
+    setDetectMsg(`✨ ${sideMsg} · ${hit}/10 players tagged`+(left?'':' — check sides'), left?'ok':'warn');
+  }catch(e){ setDetectMsg('auto-detect failed: '+(e.message||e)+' — use manual sides / Swap teams.','warn'); }
+  finally{ updateBtns(); }
+}
+
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
 function startMap(){ const c=selectedCode();
@@ -432,16 +541,19 @@ function relabelTeams(){ if(!selectedCode()) return; const {leftName,rightName}=
   document.getElementById('hB').textContent='Right / red · '+rightName;
   renderAttack();
 }
-// Which FACEIT team the tool currently treats as the LEFT/blue box. There's no
-// auto side-detect in the browser yet (the exe OCRs the HUD names and matches
-// rosters); until there is, the default is a guess (faction1 = left) and the
-// operator confirms/flips it with Swap teams so mis-sided comps aren't published.
+// Which FACEIT team the tool currently treats as the LEFT/blue box. Default is a
+// guess (faction1 = left); the operator confirms it with Auto-detect (OCRs the
+// HUD names and matches rosters) or flips it with Swap teams so mis-sided comps
+// aren't published.
 function currentLeftId(){ const c=selectedCode(); if(!c) return null;
   return ((document.querySelector('input[name=side]:checked')||{}).value||'') || c.t1; }
+// Any manual side change invalidates Auto-detect's player tags (they were matched
+// to the previous orientation's rosters) — clear them rather than publish wrong ids.
+function onSideChange(){ if(session) session.players=null; relabelTeams(); }
 function swapSides(){ const c=selectedCode(); if(!c) return;
   const newLeft = currentLeftId()===c.t1 ? c.t2 : c.t1;
   document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked = (r.value===newLeft); });
-  relabelTeams(); }
+  onSideChange(); }
 function refreshSession(){ if(!session) return;
   document.getElementById('roundpill').textContent='Round '+session.round;
   if(session.submaps.length) document.getElementById('subpill').textContent='sub: '+(session.sub||'—');
@@ -516,10 +628,13 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
   const leftId = sideId||c.t1, rightId = (leftId===c.t1)?c.t2:c.t1;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nm=id=>(rs[id]&&rs[id].name)||null;
   const observations=[];
-  for(const s of session.snaps){ for(const side of ['a','b']){ const guids=(side==='a'?s.a:s.b).filter(Boolean);
+  for(const s of session.snaps){ for(const side of ['a','b']){ const slots=(side==='a'?s.a:s.b);
+    const pids=(session.players&&session.players[side])||[];   // per-slot FACEIT ids from Auto-detect
+    const heroes=[], pairs=[];                                  // pair hero i with player i, then drop empty slots
+    for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue; heroes.push(g); pairs.push([g, pids[i]||null]); }
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: session.phased? (s.attacker===side?'attack':'defend') : null,
-      heroes:guids, pairs:guids.map(g=>[g,null]) }); } }
+      heroes, pairs }); } }
   const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
@@ -696,6 +811,7 @@ document.getElementById('nextr').onclick=nextRound;
 document.getElementById('undo').onclick=undo;
 document.getElementById('finish').onclick=finishMap;
 document.getElementById('swapsides').onclick=swapSides;
+document.getElementById('autodetect').onclick=autoDetect;
 document.getElementById('pop').onclick=popout;
 updateBtns(); loadFeeds();
 </script></body></html>

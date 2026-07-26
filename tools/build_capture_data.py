@@ -8,7 +8,7 @@ fetches it same-origin. Scoped to EMEA, all tiers, post-wipe coded games.
 data.json:
   { built_at, code_wipe_date, divisions:[...],
     codes: [{code,match_id,game_no,map,division,team_a,team_b,t1,t2,finished_at}],
-    rosters: { <match_id>: { <team_id>: {name, players:[{nick,game_name}]} } } }
+    rosters: { <match_id>: { <team_id>: {name, players:[{id,nick,game_name}]} } } }
 Whether a code is already scouted is read from the sibling docs/captured.json,
 so it is not duplicated here.
 """
@@ -78,7 +78,7 @@ def main() -> None:
     for mid in match_ids:
         by_team: dict[str, dict[str, object]] = {}
         for rp in con.execute(
-            """SELECT rp.team_id, te.name tname,
+            """SELECT rp.team_id, te.name tname, rp.player_id pid,
                       COALESCE(p.nickname, rp.player_id) nick, p.game_name gname
                FROM round_players rp
                LEFT JOIN players p ON p.id = rp.player_id
@@ -88,7 +88,10 @@ def main() -> None:
             (mid,),
         ):
             slot = by_team.setdefault(rp["team_id"], {"name": rp["tname"], "players": []})
-            slot["players"].append({"nick": rp["nick"], "game_name": rp["gname"]})
+            # id = FACEIT player_id: the browser's HUD-name OCR matches game_name to
+            # a roster entry, then attributes the hero to this id (pairs[hero,id]).
+            slot["players"].append(
+                {"id": rp["pid"], "nick": rp["nick"], "game_name": rp["gname"]})
         rosters[mid] = by_team
     con.close()
 
