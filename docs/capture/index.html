@@ -179,7 +179,8 @@ document.getElementById('opp').onchange=refreshCodes;
 document.getElementById('hide').onchange=refreshCodes;
 document.getElementById('code').onchange=onCode;
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
-document.getElementById('skip').onclick=()=>{const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`⏭ ${c.code} — copied`;}};
+function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`⏭ ${c.code} — copied`;} }
+document.getElementById('skip').onclick=nextCode;
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
@@ -235,7 +236,7 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
   return out; }
 
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
-let session=null;
+let session=null, pipWin=null;
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   session={code:c, submaps, phased, round:1, sub: submaps.length?null:null, attacker: phased?'b':null, snaps:[], lastKept:null};
@@ -245,7 +246,7 @@ function startMap(){ const c=selectedCode();
   document.getElementById('flip').style.display=phased?'':'none';
   document.getElementById('atkpill').style.display=phased?'':'none';
   if(submaps.length) submaps.forEach(s=>{ const b=document.createElement('button'); b.className='mk'; b.textContent=s; b.onclick=()=>pickSub(s); subbtns.appendChild(b); });
-  refreshSession(); relabelTeams(); updateBtns();
+  refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
 }
 function relabelTeams(){ const c=selectedCode(); if(!c) return; const rs=(DATA.rosters||{})[c.match_id]||{};
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
@@ -315,20 +316,31 @@ async function renderCaptured(){ const rows=await idbAll(); document.getElementB
     el.innerHTML=`<span><b style="color:var(--fg)">${r.code}</b> <span class="status">${r.map_name||''} · ${r.division} · ${r.observations.length} obs</span><br><span class="status">${r.side_a_team} vs ${r.side_b_team}</span></span><button class="ghost" data-id="${r.id}">delete</button>`;
     el.querySelector('button').onclick=async()=>{ await idbDel(r.id); renderCaptured(); }; host.appendChild(el); }); }
 
-// ---------- pop-out overlay (Document PiP) with controls ----------
+// ---------- pop-out overlay (Document PiP): full scouting console over OW ----------
+// Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
+// always match the current map — the whole loop runs with no alt-tab.
+function renderPipControls(){ if(!pipWin||pipWin.closed) return; const box=pipWin.document.getElementById('pbtns'); if(!box) return; box.innerHTML='';
+  const mk=(t,fn,cls)=>{ const b=pipWin.document.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; box.appendChild(b); };
+  mk('◉ Snapshot',()=>snapshot(false),'go');
+  mk('Round ▸',nextRound);
+  if(session&&session.submaps.length) session.submaps.forEach(s=>mk('◦ '+s,()=>pickSub(s)));
+  if(session&&session.phased) mk('⇄ Flip attack',flipAttack);
+  mk('↶ Undo',undo);
+  mk('✓ Finish map',()=>finishMap(),'fin');
+  mk('⏭ Next code',nextCode);
+}
 async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+.'); return; }
-  try{ const w=await documentPictureInPicture.requestWindow({width:320,height:380});
+  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:440}); pipWin=w;
     w.document.body.style.cssText='margin:0;background:#0d1015;color:#e7ebf2;font:13px system-ui,sans-serif';
-    const st=w.document.createElement('style'); st.textContent='.pt{padding:5px 10px}.pt h3{margin:0 0 4px;font-size:10.5px;color:#98a2b2;text-transform:uppercase}.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37}.slot:first-of-type{border-top:0}.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}button{margin:3px;padding:6px 9px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:6px;cursor:pointer}#pinfo{padding:5px 10px;color:#98a2b2;font-size:11px}'; w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pbtns" style="padding:2px 6px"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
-    const mk=(t,fn)=>{ const b=w.document.createElement('button'); b.textContent=t; b.onclick=fn; w.document.getElementById('pbtns').appendChild(b); };
-    mk('Snapshot',()=>snapshot(false)); mk('Round ▸',nextRound); if(session&&session.phased) mk('Flip',flipAttack); mk('Undo',undo);
-    if(session&&session.submaps.length) session.submaps.forEach(s=>mk(s,()=>pickSub(s)));
+    const st=w.document.createElement('style'); st.textContent='.pt{padding:5px 10px}.pt h3{margin:0 0 4px;font-size:10.5px;color:#98a2b2;text-transform:uppercase}.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37}.slot:first-of-type{border-top:0}.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}button{margin:3px;padding:6px 9px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:6px;cursor:pointer;font-size:12px}button.go{background:#8087ff;color:#0b1020;font-weight:700;border:0}button.fin{border-color:#34b877;color:#34b877}#pinfo{padding:5px 10px;color:#98a2b2;font-size:11px}#pbtns{padding:2px 6px;display:flex;flex-wrap:wrap}'; w.document.head.appendChild(st);
+    w.document.body.innerHTML='<div id="pinfo"></div><div id="pbtns"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
     target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
-    const tick=()=>{ if(w.closed) return; w.document.getElementById('pinfo').textContent=session?`R${session.round}${session.sub?' ['+session.sub+']':''}${session.phased?' · atk '+(session.attacker==='a'?'L':'R'):''} · ${session.snaps.length} snaps`:''; };
+    renderPipControls();
+    const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
+      if(el) el.textContent=session?`${c?c.code:''} · R${session.round}${session.sub?' ['+session.sub+']':''}${session.phased?' · atk '+(session.attacker==='a'?'L':'R'):''} · ${session.snaps.length} snaps`:''; };
     w._tick=setInterval(tick,600); tick();
     if(!document.getElementById('auto').checked){ document.getElementById('auto').checked=true; document.getElementById('auto').dispatchEvent(new Event('change')); }
-    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
+    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
   }catch(err){ alert('Pop-out failed: '+err); } }
 
 // ---------- publish (Phase 2): build contribution + upload to the worker ----------
