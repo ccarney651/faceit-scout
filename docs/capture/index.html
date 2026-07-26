@@ -115,6 +115,7 @@
     </div>
     <div class="row" style="margin-top:10px">
       <button id="finish" class="ghost" disabled>Finish + save this map</button>
+      <label class="status"><input type="checkbox" id="autofetch"> auto-fetch next map on finish</label>
       <span class="status" id="obscount">0 snapshots</span>
     </div>
     <div id="obslist" style="margin-top:6px"></div>
@@ -307,7 +308,7 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
   return out; }
 
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
-let session=null, pipWin=null;
+let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   session={code:c, submaps, phased, round:1, sub: submaps.length?null:null, attacker: phased?'b':null, snaps:[], lastKept:null, history:[]};
@@ -394,10 +395,26 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
     winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
     captured_at:new Date().toISOString(), bans:[], observations };
   await idbPut(rec);
-  document.getElementById('codenote').innerHTML=`<span class="ok">saved ${c.code} — ${session.snaps.length} snapshots (${observations.length} observations)</span>`;
-  startMap(); renderCaptured();
+  savedKeys.add(c.match_id+':'+c.game_no); renderCaptured();
+  const savedMsg=`saved ${c.code} — ${session.snaps.length} snapshots`;
+  if(document.getElementById('autofetch').checked){ advanceToNext(savedMsg); }
+  else { document.getElementById('codenote').innerHTML='<span class="ok">'+savedMsg+'</span>'; startMap(); if(pipWin&&!pipWin.closed) pipWin.close(); }
+}
+// Auto-fetch: move to the next code in the CURRENT filtered list that isn't
+// already captured locally, copy its replay code, and carry the overlay onto it.
+function advanceToNext(savedMsg){
+  const sel=document.getElementById('code'), codes=sel._codes||[], cur=+sel.value;
+  let idx=-1; for(let i=1;i<=codes.length;i++){ const j=(cur+i)%codes.length; const c=codes[j]; if(!savedKeys.has(c.match_id+':'+c.game_no)){ idx=j; break; } }
+  if(idx<0){ startMap(); const m='<span class="ok">'+(savedMsg?savedMsg+' · ':'')+'all maps in this filter are captured. Nice.</span>';
+    document.getElementById('codenote').innerHTML=m; if(pipWin&&!pipWin.closed) pipWin.close(); return; }
+  sel.value=idx; onCode();                                  // -> startMap(new session) -> renderPipControls
+  const c=codes[idx]; try{ navigator.clipboard.writeText(c.code); }catch(e){}
+  const m=`${savedMsg?savedMsg+' · ':''}▶ next: ${c.code} ${c.map||''} — code copied, paste into OW`;
+  document.getElementById('codenote').innerHTML='<span class="ok">'+m+'</span>';
+  if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML='<span class="ok">▶ next: '+c.code+' — copied</span>'; }
 }
 async function renderCaptured(){ const rows=await idbAll(); document.getElementById('capcount').textContent=rows.length;
+  savedKeys=new Set(rows.map(r=>r.match_id+':'+r.game_no));
   const pub=document.getElementById('publish'); if(pub) pub.disabled=!rows.length;
   const host=document.getElementById('caplist'); if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
   host.innerHTML=''; rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at)).forEach(r=>{ const el=document.createElement('div'); el.className='cap';
@@ -413,6 +430,7 @@ function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.
   main.className='prow'; main.innerHTML='';
   mk(main,'◉ Snapshot',()=>snapshot(false),'go');
   mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
+  mk(main,'⧉ Copy code',()=>{ const c=selectedCode(); if(c){ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); } });
   // sub-map row (control maps) — warn colour until one is picked; active highlighted
   sub.innerHTML='';
   if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
@@ -478,6 +496,8 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
+document.getElementById('autofetch').checked=localStorage.getItem('owscout_autofetch')==='1';
+document.getElementById('autofetch').onchange=e=>localStorage.setItem('owscout_autofetch',e.target.checked?'1':'0');
 document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('autocal').onclick=autoCalibrate;
 document.getElementById('stopcap').onclick=stopCapture;
