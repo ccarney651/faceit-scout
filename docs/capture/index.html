@@ -15,6 +15,7 @@
   label.f{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}
   button{background:var(--accent);color:#0b1020;border:0;border-radius:7px;padding:9px 13px;font-weight:650;cursor:pointer}
   button.ghost{background:var(--surface2);color:var(--fg);border:1px solid var(--line)}
+  button.mk{background:var(--surface2);color:var(--fg);border:1px solid var(--line);font-weight:600}
   button:disabled{opacity:.45;cursor:default}
   select,input[type=text]{background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:13px}
   select#code{min-width:340px;flex:1}
@@ -30,14 +31,16 @@
   .slot:first-of-type{border-top:0}.sc{font-variant-numeric:tabular-nums;font-size:12px}
   .hi{color:var(--good)}.mid{color:var(--mid)}.lo{color:var(--bad)}
   .rosterline{font-size:12.5px;color:var(--muted);padding:2px 0}
-  .cap{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line);font-size:12.5px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;background:var(--surface2);border:1px solid var(--line);font-size:12px;margin-right:6px}
+  .obs{font-size:12px;color:var(--muted);padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+  .obs:first-of-type{border-top:0}
+  .cap{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
   .cap:first-of-type{border-top:0}
   .warn{color:var(--bad)} .ok{color:var(--good)}
-  code{background:var(--surface2);padding:1px 5px;border-radius:4px}
 </style></head><body>
 <header>
   <h1>OW Scout — Capture <span class="status">· browser</span></h1>
-  <div class="sub">Zero-install scouting: share your Overwatch screen (borderless/windowed), calibrate once, then capture comps. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
+  <div class="sub">Zero-install scouting: share your Overwatch screen (borderless/windowed), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
 </header>
 <main>
   <div class="card">
@@ -58,7 +61,7 @@
   <div class="card">
     <h2>2 · Pick a replay</h2>
     <div class="row">
-      <label class="f">Region<span class="lock" id="regionlock">EMEA</span></label>
+      <label class="f">Region<span class="lock">EMEA</span></label>
       <label class="f">Division<select id="div"></select></label>
       <label class="f">Opponent<select id="opp"></select></label>
       <label class="f" style="justify-content:flex-end"><span>&nbsp;</span><label class="status"><input type="checkbox" id="hide" checked> hide already-scouted</label></label>
@@ -69,37 +72,52 @@
       <button id="skip" class="ghost">Skip ⏭</button>
     </div>
     <div class="row" style="margin-top:8px">
-      <span class="status">Left team on the HUD:</span>
-      <span id="sideradios" class="row"></span>
+      <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
     </div>
     <div id="roster" style="margin-top:6px"></div>
     <div class="status" id="codenote" style="margin-top:4px"></div>
   </div>
 
   <div class="card">
-    <h2>3 · Capture</h2>
-    <div class="row">
-      <button id="read" disabled>Read comp</button>
-      <label class="status"><input type="checkbox" id="auto"> auto every 1.5s</label>
+    <h2>3 · Capture this map</h2>
+    <div class="row" id="mapbar">
+      <span class="pill" id="mapinfo">pick a replay</span>
+      <span class="pill" id="roundpill">Round 1</span>
+      <span class="pill" id="subpill" style="display:none">sub: —</span>
+      <span class="pill" id="atkpill" style="display:none">attack: —</span>
+    </div>
+    <div class="row" style="margin-top:8px" id="controls">
+      <button id="snap" disabled>Snapshot</button>
+      <button id="nextr" class="mk" disabled>Next round ▸</button>
+      <span id="subbtns" class="row"></span>
+      <button id="flip" class="mk" style="display:none">Flip attack</button>
+      <button id="undo" class="mk" disabled>Undo</button>
+      <label class="status"><input type="checkbox" id="auto"> auto-snapshot (1.5s, dedup)</label>
       <button id="pop" class="ghost">Pop out overlay ⇱</button>
-      <button id="save" class="ghost" disabled>Save this comp</button>
-      <span class="status" id="meta"></span>
     </div>
     <div class="grid2" style="margin-top:10px">
-      <div class="team"><h3>Left / blue</h3><div id="outA"></div></div>
-      <div class="team"><h3>Right / red</h3><div id="outB"></div></div>
+      <div class="team"><h3 id="hA">Left / blue</h3><div id="outA"></div></div>
+      <div class="team"><h3 id="hB">Right / red</h3><div id="outB"></div></div>
     </div>
+    <div class="row" style="margin-top:10px">
+      <button id="finish" class="ghost" disabled>Finish + save this map</button>
+      <span class="status" id="obscount">0 snapshots</span>
+    </div>
+    <div id="obslist" style="margin-top:6px"></div>
   </div>
 
   <div class="card">
-    <h2>Captured (saved in this browser) · <span id="capcount">0</span></h2>
+    <h2>Captured maps (saved in this browser) · <span id="capcount">0</span></h2>
     <div id="caplist" class="status">Nothing captured yet.</div>
   </div>
 </main>
 <script>
-const LOCK_REGION='EMEA', PAD=2;
+const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
-let lastRead=null;   // {a:[names], b:[names]} for Save
+// control-map sub-maps (mirror of owscout/maps.py)
+const CONTROL_SUBMAPS={ilios:["Lighthouse","Ruins","Well"],"lijiang tower":["Control Center","Garden","Night Market"],nepal:["Sanctum","Shrine","Village"],oasis:["City Center","Gardens","University"],"antarctic peninsula":["Icebreaker","Labs","Sublevel"],samoa:["Beach","Downtown","Volcano"],busan:["Downtown","Sanctuary","MEKA Base"]};
+const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
+function submapsFor(m){ if(!m) return []; let k=m.trim().toLowerCase(); k=MAP_ALIASES[k]||k; return CONTROL_SUBMAPS[k]||[]; }
 
 if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
   document.getElementById('ctxwarn').textContent="Screen capture may be blocked here. Use the hosted site (https) or a localhost server.";
@@ -108,60 +126,43 @@ function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=
 
 // ---------- load feeds ----------
 async function loadFeeds(){
-  try{
-    const rj=await (await fetch('refs.json',{cache:'no-store'})).json();
+  try{ const rj=await (await fetch('refs.json',{cache:'no-store'})).json();
     REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction;
     REFS=rj.refs.map(r=>{const px=b64bytes(r.d);let m=0;for(let i=0;i<px.length;i++)m+=px[i];m/=px.length;
       const c=new Float32Array(px.length);let ss=0;for(let i=0;i<px.length;i++){c[i]=px[i]-m;ss+=c[i]*c[i];}
-      return {n:r.n,v:r.v,c,norm:Math.sqrt(ss)||1};});
+      return {n:r.n,g:r.g,v:r.v,c,norm:Math.sqrt(ss)||1};});
   }catch(e){ document.getElementById('ctxwarn').textContent='Could not load refs.json ('+e+').'; }
-  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){ DATA={codes:[],rosters:{},divisions:[]}; }
+  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
-  buildDivisions(); refreshCodes(); document.getElementById('capcount');
-  document.getElementById('meta').textContent=`${REFS.length} refs · ${DATA.codes.length} codes`;
-  renderCaptured();
+  buildDivisions(); refreshCodes(); renderCaptured();
 }
 
 // ---------- pick a replay ----------
-function buildDivisions(){
-  const d=document.getElementById('div'); d.innerHTML='<option value="all">all</option>'+
-    (DATA.divisions||[]).map(t=>`<option>${t}</option>`).join('');
-}
-function currentCodes(){
-  let cs=DATA.codes.slice();
+function buildDivisions(){ document.getElementById('div').innerHTML='<option value="all">all</option>'+(DATA.divisions||[]).map(t=>`<option>${t}</option>`).join(''); }
+function currentCodes(){ let cs=DATA.codes.slice();
   const dv=document.getElementById('div').value, op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
   if(dv!=='all') cs=cs.filter(c=>c.division===dv);
   if(op&&op!=='all') cs=cs.filter(c=>c.team_a===op||c.team_b===op);
   if(hide) cs=cs.filter(c=>!CLAIMED.has(c.match_id+':'+c.game_no));
-  return cs;
-}
-function refreshOpponents(){
-  const dv=document.getElementById('div').value;
-  let cs=DATA.codes.slice(); if(dv!=='all') cs=cs.filter(c=>c.division===dv);
+  return cs; }
+function refreshOpponents(){ const dv=document.getElementById('div').value; let cs=DATA.codes.slice(); if(dv!=='all') cs=cs.filter(c=>c.division===dv);
   const teams=[...new Set(cs.flatMap(c=>[c.team_a,c.team_b]).filter(Boolean))].sort();
   const sel=document.getElementById('opp'), cur=sel.value;
-  sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join('');
-}
-function refreshCodes(){
-  refreshOpponents();
-  const cs=currentCodes(), sel=document.getElementById('code');
+  sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join(''); }
+function refreshCodes(){ refreshOpponents(); const cs=currentCodes(), sel=document.getElementById('code');
   sel.innerHTML=cs.map((c,i)=>`<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${CLAIMED.has(c.match_id+':'+c.game_no)?'  [scouted]':''}</option>`).join('');
-  sel._codes=cs;
-  document.getElementById('codenote').textContent=`${cs.length} codes shown`;
-  if(cs.length){ sel.value='0'; onCode(); } else { document.getElementById('roster').innerHTML=''; document.getElementById('sideradios').innerHTML=''; }
-}
+  sel._codes=cs; document.getElementById('codenote').textContent=`${cs.length} codes shown`;
+  if(cs.length){ sel.value='0'; onCode(); } else { document.getElementById('roster').innerHTML=''; document.getElementById('sideradios').innerHTML=''; startMap(); } }
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
-function onCode(){
-  const c=selectedCode(); if(!c) return;
-  const rs=(DATA.rosters||{})[c.match_id]||{};
-  const nameOf=id=>(rs[id]&&rs[id].name)||null;
-  const line=(id,label)=>{ const r=rs[id]; const who=r?r.players.map(p=>p.nick).join(', '):'—';
-    return `<div class="rosterline"><b style="color:var(--fg)">${nameOf(id)||label}</b>: ${who}</div>`; };
+function onCode(){ const c=selectedCode(); if(!c) return;
+  const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
+  const line=(id,label)=>{ const r=rs[id]; const who=r?r.players.map(p=>p.nick).join(', '):'—'; return `<div class="rosterline"><b style="color:var(--fg)">${nameOf(id)||label}</b>: ${who}</div>`; };
   document.getElementById('roster').innerHTML=line(c.t1,c.team_a)+line(c.t2,c.team_b);
-  // left-team radios (auto later via OCR; manual for now)
   const sr=document.getElementById('sideradios');
   sr.innerHTML=`<label class="status"><input type="radio" name="side" value="" checked> auto/blank</label>`+
     [[c.t1,c.team_a],[c.t2,c.team_b]].map(([id,nm])=>`<label class="status"><input type="radio" name="side" value="${id||''}"> ${nm||'?'}</label>`).join('');
+  sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=relabelTeams);
+  startMap();
 }
 document.getElementById('div').onchange=refreshCodes;
 document.getElementById('opp').onchange=refreshCodes;
@@ -173,118 +174,163 @@ document.getElementById('skip').onclick=()=>{const sel=document.getElementById('
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
 let boxes=JSON.parse(localStorage.getItem('owscout_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null, autoTimer=null;
-let target={A:document.getElementById('outA'),B:document.getElementById('outB'),meta:document.getElementById('meta')};
-function scale(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
+function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
 addEventListener('resize', fitOverlay);
-function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scale();
+function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scl();
   for(const side of ['a','b']){ const b=boxes[side]; if(!b) continue;
-    octx.strokeStyle=side==='a'?getCss('--blue'):getCss('--red'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
+    octx.strokeStyle=side==='a'?css('--blue'):css('--red'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
     octx.setLineDash([3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
-  if(dragS&&dragC){ octx.strokeStyle=getCss('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); }
-}
-function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
+  if(dragS&&dragC){ octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); } }
 function evp(e){ const r=ov.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
-ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scale();
+ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
   const x=Math.min(dragS.x,p.x)/s,y=Math.min(dragS.y,p.y)/s,w=Math.abs(p.x-dragS.x)/s,h=Math.abs(p.y-dragS.y)/s;
   if(w>10&&h>10){ boxes[drawMode]={x,y,w,h}; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); }
   drawMode=null;dragS=null;dragC=null; document.getElementById('calhint').textContent='Box saved.'; drawOverlay(); updateBtns(); });
-async function share(){
-  try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
-    vid.srcObject=st; await vid.play().catch(()=>{});
-    vid.onloadedmetadata=()=>{ fitOverlay(); }; setTimeout(fitOverlay,300);
+async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
+    vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     document.getElementById('calhint').textContent='Screen shared — set the two boxes over the portrait strips.'; updateBtns();
-  }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; }
-}
-function updateBtns(){ const ready=!!vid.srcObject;
-  document.getElementById('setL').disabled=!ready; document.getElementById('setR').disabled=!ready;
-  document.getElementById('read').disabled=!(ready&&boxes.a&&boxes.b);
-  document.getElementById('save').disabled=!lastRead;
-}
+  }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
+function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
+  document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
+  document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready; document.getElementById('flip').disabled=!ready;
+  document.getElementById('undo').disabled=!(session&&session.snaps.length);
+  document.getElementById('finish').disabled=!(session&&session.snaps.length); }
 
-// ---------- matcher (same math as the desktop) ----------
+// ---------- matcher ----------
 const work=document.createElement('canvas'); let wctx;
 function ensureWork(){ work.width=REF_W+2*PAD; work.height=REF_H+2*PAD; wctx=work.getContext('2d',{willReadFrequently:true}); }
-function cellGrayPadded(frame, cell){
-  const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
+function cellGrayPadded(frame, cell){ const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
   wctx.drawImage(frame,fx,fy,fw,fh,0,0,work.width,work.height);
   const d=wctx.getImageData(0,0,work.width,work.height).data, g=new Float32Array(work.width*work.height);
-  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-  return g;
-}
-function bestMatch(gp, variant){ const W=REF_W+2*PAD; let best={score:-2,name:'?'};
-  for(let dy=0;dy<=2*PAD;dy+=PAD) for(let dx=0;dx<=2*PAD;dx+=PAD){
-    const cand=new Float32Array(REF_W*REF_H); let m=0;
+  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; return g; }
+function bestMatch(gp, variant){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
+  for(let dy=0;dy<=2*PAD;dy+=PAD) for(let dx=0;dx<=2*PAD;dx+=PAD){ const cand=new Float32Array(REF_W*REF_H); let m=0;
     for(let y=0;y<REF_H;y++){ const s=(y+dy)*W+dx; for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
     m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
-    for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n}; }
-  } return best;
-}
+    for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
+  return best; }
 function grabFrame(){ const c=document.createElement('canvas'); c.width=vid.videoWidth; c.height=vid.videoHeight; c.getContext('2d').drawImage(vid,0,0); return c; }
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
-function read(){
-  if(!boxes.a||!boxes.b) return; ensureWork();
-  const t0=performance.now(), frame=grabFrame(), got={a:[],b:[]};
-  for(const side of ['a','b']){ const b=boxes[side], host=(side==='a'?target.A:target.B); host.innerHTML='';
+// read both sides -> {a:[{name,guid,score}], b:[...]}; render to target
+let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
+function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
+  for(const side of ['a','b']){ const b=boxes[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
-      got[side].push(r.score>=0.5?r.name:'??');
-      const row=document.createElement('div'); row.className='slot';
-      row.innerHTML=`<span>${r.score>=0.5?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row);
-    } }
-  lastRead=got; updateBtns();
-  target.meta.textContent=`${vid.videoWidth}x${vid.videoHeight} · ${(performance.now()-t0).toFixed(0)} ms · ${new Date().toLocaleTimeString()}`;
-}
+      const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
+      if(host){ const row=document.createElement('div'); row.className='slot'; row.innerHTML=`<span>${ok?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+  return out; }
 
-// ---------- pop-out overlay (Document PiP) ----------
-async function popout(){
-  if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+.'); return; }
-  try{ const w=await documentPictureInPicture.requestWindow({width:300,height:300});
+// ---------- capture session (rounds / sub-map / attack / dedup) ----------
+let session=null;
+function startMap(){ const c=selectedCode();
+  const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
+  session={code:c, submaps, phased, round:1, sub: submaps.length?null:null, attacker: phased?'b':null, snaps:[], lastKept:null};
+  document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
+  const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
+  document.getElementById('subpill').style.display=submaps.length?'':'none';
+  document.getElementById('flip').style.display=phased?'':'none';
+  document.getElementById('atkpill').style.display=phased?'':'none';
+  if(submaps.length) submaps.forEach(s=>{ const b=document.createElement('button'); b.className='mk'; b.textContent=s; b.onclick=()=>pickSub(s); subbtns.appendChild(b); });
+  refreshSession(); relabelTeams(); updateBtns();
+}
+function relabelTeams(){ const c=selectedCode(); if(!c) return; const rs=(DATA.rosters||{})[c.match_id]||{};
+  const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
+  const leftName = sideId? ((rs[sideId]&&rs[sideId].name)||'?') : (c.team_a||'left');
+  const rightName = sideId? (sideId===c.t1? (c.team_b||'?') : (c.team_a||'?')) : (c.team_b||'right');
+  document.getElementById('hA').textContent='Left / blue · '+leftName;
+  document.getElementById('hB').textContent='Right / red · '+rightName;
+}
+function refreshSession(){ if(!session) return;
+  document.getElementById('roundpill').textContent='Round '+session.round;
+  if(session.submaps.length) document.getElementById('subpill').textContent='sub: '+(session.sub||'—');
+  if(session.phased) document.getElementById('atkpill').textContent='attack: '+(session.attacker==='a'?'left/blue':'right/red');
+  document.getElementById('obscount').textContent=session.snaps.length+' snapshot'+(session.snaps.length===1?'':'s');
+  const ol=document.getElementById('obslist'); ol.innerHTML='';
+  session.snaps.slice().reverse().forEach(s=>{ const el=document.createElement('div'); el.className='obs';
+    el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${s.aNames.join('/')}  vs  ${s.bNames.join('/')}`; ol.appendChild(el); });
+  updateBtns();
+}
+function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
+  for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
+function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
+  if(session.submaps.length && !session.sub){ if(!auto) document.getElementById('codenote').innerHTML='<span class="warn">pick a sub-map first</span>'; return; }
+  const comp=readComp(); if(!comp) return;
+  const aG=comp.a.map(s=>s.guid), bG=comp.b.map(s=>s.guid);
+  // dedup: same round+sub and only-lost-known both sides => skip (a worse read, not new info)
+  const lk=session.lastKept;
+  if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)) return;
+  const snap={round:session.round, sub:session.sub, attacker:session.attacker,
+    a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name), ts:session.snaps.length*1000};
+  session.snaps.push(snap); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
+  refreshSession();
+}
+function nextRound(){ if(!session) return; session.round++; if(session.phased) session.attacker=(session.attacker==='a'?'b':'a'); session.lastKept=null; refreshSession(); }
+function pickSub(s){ if(!session) return; session.sub=s; refreshSession(); }
+function flipAttack(){ if(!session||!session.phased) return; session.attacker=(session.attacker==='a'?'b':'a'); refreshSession(); }
+function undo(){ if(!session||!session.snaps.length) return; session.snaps.pop(); session.lastKept=null; refreshSession(); }
+
+// ---------- save map -> IndexedDB (keyed match:game, replace) ----------
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',2);
+  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('maps')) db.createObjectStore('maps',{keyPath:'id'}); };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('maps','readonly').objectStore('maps').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
+async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
+async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }
+async function finishMap(){ if(!session||!session.snaps.length) return; const c=session.code;
+  const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
+  const leftId = sideId||c.t1, rightId = (leftId===c.t1)?c.t2:c.t1;
+  const rs=(DATA.rosters||{})[c.match_id]||{}; const nm=id=>(rs[id]&&rs[id].name)||null;
+  const observations=[];
+  for(const s of session.snaps){ for(const side of ['a','b']){ const guids=(side==='a'?s.a:s.b).filter(Boolean);
+    observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
+      phase: session.phased? (s.attacker===side?'attack':'defend') : null,
+      heroes:guids, pairs:guids.map(g=>[g,null]) }); } }
+  const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
+    division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
+    side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
+    winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
+    captured_at:new Date().toISOString(), bans:[], observations };
+  await idbPut(rec);
+  document.getElementById('codenote').innerHTML=`<span class="ok">saved ${c.code} — ${session.snaps.length} snapshots (${observations.length} observations)</span>`;
+  startMap(); renderCaptured();
+}
+async function renderCaptured(){ const rows=await idbAll(); document.getElementById('capcount').textContent=rows.length;
+  const host=document.getElementById('caplist'); if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
+  host.innerHTML=''; rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at)).forEach(r=>{ const el=document.createElement('div'); el.className='cap';
+    el.innerHTML=`<span><b style="color:var(--fg)">${r.code}</b> <span class="status">${r.map_name||''} · ${r.division} · ${r.observations.length} obs</span><br><span class="status">${r.side_a_team} vs ${r.side_b_team}</span></span><button class="ghost" data-id="${r.id}">delete</button>`;
+    el.querySelector('button').onclick=async()=>{ await idbDel(r.id); renderCaptured(); }; host.appendChild(el); }); }
+
+// ---------- pop-out overlay (Document PiP) with controls ----------
+async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+.'); return; }
+  try{ const w=await documentPictureInPicture.requestWindow({width:320,height:380});
     w.document.body.style.cssText='margin:0;background:#0d1015;color:#e7ebf2;font:13px system-ui,sans-serif';
-    const st=w.document.createElement('style'); st.textContent='#pm{color:#98a2b2;font-size:11px;padding:5px 10px}.pt{padding:5px 10px}.pt h3{margin:0 0 4px;font-size:10.5px;color:#98a2b2;text-transform:uppercase}.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37}.slot:first-of-type{border-top:0}.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}'; w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pm">live</div><div class="pt"><h3>Left / blue</h3><div id="poutA"></div></div><div class="pt"><h3>Right / red</h3><div id="poutB"></div></div>';
-    target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB'),meta:w.document.getElementById('pm')};
+    const st=w.document.createElement('style'); st.textContent='.pt{padding:5px 10px}.pt h3{margin:0 0 4px;font-size:10.5px;color:#98a2b2;text-transform:uppercase}.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37}.slot:first-of-type{border-top:0}.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}button{margin:3px;padding:6px 9px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:6px;cursor:pointer}#pinfo{padding:5px 10px;color:#98a2b2;font-size:11px}'; w.document.head.appendChild(st);
+    w.document.body.innerHTML='<div id="pinfo"></div><div id="pbtns" style="padding:2px 6px"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
+    const mk=(t,fn)=>{ const b=w.document.createElement('button'); b.textContent=t; b.onclick=fn; w.document.getElementById('pbtns').appendChild(b); };
+    mk('Snapshot',()=>snapshot(false)); mk('Round ▸',nextRound); if(session&&session.phased) mk('Flip',flipAttack); mk('Undo',undo);
+    if(session&&session.submaps.length) session.submaps.forEach(s=>mk(s,()=>pickSub(s)));
+    target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
+    const tick=()=>{ if(w.closed) return; w.document.getElementById('pinfo').textContent=session?`R${session.round}${session.sub?' ['+session.sub+']':''}${session.phased?' · atk '+(session.attacker==='a'?'L':'R'):''} · ${session.snaps.length} snaps`:''; };
+    w._tick=setInterval(tick,600); tick();
     if(!document.getElementById('auto').checked){ document.getElementById('auto').checked=true; document.getElementById('auto').dispatchEvent(new Event('change')); }
-    if(boxes.a&&boxes.b&&vid.srcObject) read();
-    w.addEventListener('pagehide',()=>{ target={A:document.getElementById('outA'),B:document.getElementById('outB'),meta:document.getElementById('meta')}; });
-  }catch(err){ alert('Pop-out failed: '+err); }
-}
-
-// ---------- save + captured list (IndexedDB) ----------
-function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',1);
-  r.onupgradeneeded=()=>r.result.createObjectStore('captures',{keyPath:'id'}); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('captures','readonly').objectStore('captures').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
-async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('captures','readwrite'); tx.objectStore('captures').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
-async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('captures','readwrite'); tx.objectStore('captures').delete(id); tx.oncomplete=res; }); }
-async function saveComp(){
-  const c=selectedCode(); if(!c||!lastRead) return;
-  const side=(document.querySelector('input[name=side]:checked')||{}).value||'';
-  const rec={ id:c.match_id+':'+c.game_no+'@'+Date.now(), code:c.code, match_id:c.match_id, game_no:c.game_no,
-    division:c.division, map:c.map, side_a:side, a:lastRead.a, b:lastRead.b, ts:new Date().toISOString() };
-  await idbPut(rec); document.getElementById('codenote').innerHTML='<span class="ok">saved '+c.code+' — '+lastRead.a.join('/')+' vs '+lastRead.b.join('/')+'</span>';
-  renderCaptured();
-}
-async function renderCaptured(){
-  const rows=await idbAll(); document.getElementById('capcount').textContent=rows.length;
-  const host=document.getElementById('caplist');
-  if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
-  host.innerHTML=''; rows.sort((a,b)=>b.ts.localeCompare(a.ts)).forEach(r=>{
-    const el=document.createElement('div'); el.className='cap';
-    el.innerHTML=`<span><b style="color:var(--fg)">${r.code}</b> <span class="status">${r.map||''} · ${r.division}</span><br><span class="status">${r.a.join('/')} <b>vs</b> ${r.b.join('/')}</span></span><button class="ghost" data-id="${r.id}">delete</button>`;
-    el.querySelector('button').onclick=async()=>{ await idbDel(r.id); renderCaptured(); };
-    host.appendChild(el);
-  });
-}
+    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
+  }catch(err){ alert('Pop-out failed: '+err); } }
 
 // ---------- wire ----------
 document.getElementById('share').onclick=share;
 document.getElementById('setL').onclick=()=>{drawMode='a';document.getElementById('calhint').textContent='Drag a box over the 5 BLUE (left) portraits.';};
 document.getElementById('setR').onclick=()=>{drawMode='b';document.getElementById('calhint').textContent='Drag a box over the 5 RED (right) portraits.';};
 document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owscout_cap_boxes');drawOverlay();updateBtns();};
-document.getElementById('read').onclick=read;
-document.getElementById('save').onclick=saveComp;
+document.getElementById('snap').onclick=()=>snapshot(false);
+document.getElementById('nextr').onclick=nextRound;
+document.getElementById('flip').onclick=flipAttack;
+document.getElementById('undo').onclick=undo;
+document.getElementById('finish').onclick=finishMap;
 document.getElementById('pop').onclick=popout;
-document.getElementById('auto').onchange=e=>{ if(e.target.checked){ autoTimer=setInterval(()=>{ if(boxes.a&&boxes.b&&vid.srcObject) read(); },1500);} else clearInterval(autoTimer); };
+document.getElementById('auto').onchange=e=>{ if(e.target.checked){ autoTimer=setInterval(()=>snapshot(true),1500);} else clearInterval(autoTimer); };
 updateBtns(); loadFeeds();
 </script></body></html>

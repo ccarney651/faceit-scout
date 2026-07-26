@@ -56,6 +56,7 @@ def main() -> None:
         small = cv2.resize(img, (REF_W, REF_H), interpolation=cv2.INTER_AREA)
         refs.append({
             "n": names.get(guid, guid[:6]),
+            "g": guid,                          # hero GUID — the contribution format uses guids
             "v": variant,
             "d": base64.b64encode(small.tobytes()).decode("ascii"),
         })

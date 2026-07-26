@@ -40,7 +40,8 @@ def main() -> None:
     rows = con.execute(
         """
         SELECT g.demo_code code, g.match_id, g.game_no,
-               mp.name map, m.finished_at, ch.name champ,
+               mp.name map, g.map_category cat, g.map_guid map_guid,
+               m.finished_at, ch.name champ,
                m.faction1_team_id t1, m.faction2_team_id t2,
                t1.name team_a, t2.name team_b
         FROM games g
@@ -65,7 +66,8 @@ def main() -> None:
         seen_divs.add(tier)
         codes.append({
             "code": r["code"], "match_id": r["match_id"], "game_no": r["game_no"],
-            "map": r["map"], "division": tier,
+            "map": r["map"], "map_category": r["cat"], "map_guid": r["map_guid"],
+            "division": tier,
             "team_a": r["team_a"], "team_b": r["team_b"],
             "t1": r["t1"], "t2": r["t2"], "finished_at": r["finished_at"],
         })
