@@ -266,9 +266,9 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 }
 /* At-a-glance band: four self-wrapping summary panels. */
 .glance{margin-top:10px}
-.glance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 22px}
-.glance-col+.glance-col{position:relative}
+.glance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px 34px}
 .glance-col>.eyebrow{margin-top:0}
+.glance-col .crow{padding:8px 0}
 /* A sub-map / phase separator is a heading; "then" is a note ON a row, so it must
    not read as one - it is inline, lighter, and lower-case. */
 .then{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
@@ -303,13 +303,16 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 /* Per-game opening comps on a match card: an aligned grid so both teams' comps
    line up per segment. Columns = segment label + one per team; width is bounded
    by the two comp columns (segments add rows, not columns), so it fits the rail. */
-.gamecomps{margin-top:8px;display:grid;grid-template-columns:auto auto auto;
-  gap:5px 14px;align-items:center;overflow-x:auto}
-.gamecomps.single{grid-template-columns:auto auto}
-.gamecomps .gchdr{font-size:11px;font-weight:650;color:var(--muted);white-space:nowrap}
-.gamecomps .gcseglab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+/* Both teams stacked (team over team) per segment, so each comp gets the full
+   rail width instead of two 5-hero rows colliding. Comps may wrap, never scroll. */
+.gamecomps{margin-top:9px;display:flex;flex-direction:column;gap:10px}
+.gcseg{display:flex;flex-direction:column;gap:4px}
+.gcseg .gcseglab{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
   color:var(--faint);white-space:nowrap}
-.gamecomps .gccell{min-width:0}
+.gcteam{display:flex;align-items:center;gap:9px;min-width:0}
+.gcname{font-size:11px;font-weight:650;color:var(--muted);flex:none;width:82px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gamecomps .comp{flex-wrap:wrap}
 .banstep{display:inline-flex;align-items:center;gap:5px;margin-right:16px}
 .ord{width:17px;height:17px;border-radius:50%;background:var(--accent-weak);color:var(--accent);
   font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -663,22 +666,24 @@ function matchCard(m){
     // (Escort/Hybrid), or the whole map (Push/Flashpoint). Only when captured.
     const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
     if(pg && Object.keys(pg).length){
-      // Aligned grid so both teams' comps line up per segment. Columns: segment
-      // label + one per team; rows: header (team names) then a row per segment.
-      // Push/Flashpoint has a single 'map' segment, so drop the label column.
+      // Both teams' opening comps per segment. In the narrow rail they STACK
+      // (team over team) so each comp gets the full width instead of two 5-hero
+      // rows colliding side by side and overflowing.
       const teams=Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)));
       const order=segOrder(pg);
-      const cell=c=>`<span class="gccell">${c&&c.length?compRow(c):'<span class="faint">—</span>'}</span>`;
       const single=order.length===1 && order[0]==='map';
-      const box=el(`<div class="gamecomps${single?' single':''}"></div>`);
+      const teamRow=(tn,c)=>`<div class="gcteam"><span class="gcname" title="${esc(tn)}">${esc(tn)}</span>`+
+        `${c&&c.length?compRow(c):'<span class="faint">—</span>'}</div>`;
+      const box=el(`<div class="gamecomps"></div>`);
       if(single){
-        teams.forEach(t=>{ box.appendChild(el(`<span class="gchdr">${esc(t)}</span>`));
-          box.appendChild(el(cell((pg[t]||{}).map))); });
+        const seg=el(`<div class="gcseg"></div>`);
+        teams.forEach(tn=>seg.appendChild(el(teamRow(tn,(pg[tn]||{}).map))));
+        box.appendChild(seg);
       } else {
-        box.appendChild(el(`<span></span>`));
-        teams.forEach(t=>box.appendChild(el(`<span class="gchdr">${esc(t)}</span>`)));
-        order.forEach(seg=>{ box.appendChild(el(`<span class="gcseglab">${esc(seg)}</span>`));
-          teams.forEach(t=>box.appendChild(el(cell((pg[t]||{})[seg])))); });
+        order.forEach(sg=>{ const seg=el(`<div class="gcseg"></div>`);
+          seg.appendChild(el(`<div class="gcseglab">${esc(sg)}</div>`));
+          teams.forEach(tn=>seg.appendChild(el(teamRow(tn,(pg[tn]||{})[sg]))));
+          box.appendChild(seg); });
       }
       gEl.appendChild(box);
     }
@@ -1767,7 +1772,7 @@ function renderScoutBody(t){
   // ==== MATCHES: a sticky right rail, not a bottom drawer — the receipts stay
   // in view while you read the analysis, and the list scrolls inside the rail.
   side.appendChild(el(sectionH('Matches',
-    `<span class="note">${t.matches.length} game${t.matches.length===1?'':'es'} · click a map for rosters · codes inline</span>`)));
+    `<span class="note">${t.matches.length} match${t.matches.length===1?'':'es'} · click a map for rosters · codes inline</span>`)));
   if(t.matches.length){
     const mbox=el(`<div class="scrollbox rail"></div>`);
     t.matches.forEach(m=>mbox.appendChild(matchCard(m)));
