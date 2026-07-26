@@ -1,0 +1,407 @@
+{
+  "format": 1,
+  "contributor": "gcbbrowsertest",
+  "tool_version": "browser-0.1",
+  "heroes": {},
+  "maps": [
+    {
+      "match_id": "1-c427bfd0-7f96-46ad-8305-97f2480fa5c2",
+      "game_no": 1,
+      "demo_code": "56K43K",
+      "map_guid": "0x080000000000069E",
+      "map_name": "Oasis",
+      "map_category": "Control",
+      "side_a_team_id": "971de35b-1c44-4efe-9591-38d6fa3f7a83",
+      "side_a_team": "ELMT Rock",
+      "side_b_team_id": "d329519e-01e7-44be-b565-5a68c5d0ffc6",
+      "side_b_team": "EMPR Spartana",
+      "winner_side": null,
+      "captured_at": "2026-07-26T16:11:17.997Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000052C",
+            "0x02E000000000007A",
+            "0x02E0000000000042",
+            "0x02E00000000004E3",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000052C",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Gardens",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000042",
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000003",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "City Center",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000052C",
+            "0x02E000000000007A",
+            "0x02E0000000000042",
+            "0x02E00000000004E3",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000052C",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "City Center",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000042",
+            "0x02E0000000000231",
+            "0x02E000000000007A",
+            "0x02E0000000000003",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-cc2fdd7d-0144-4465-8727-ab1cb10157bd",
+      "game_no": 1,
+      "demo_code": "3KWMYJ",
+      "map_guid": "0x0800000000000CF2",
+      "map_name": "Antarctica",
+      "map_category": "Control",
+      "side_a_team_id": "866c944c-b9a0-4c27-bc69-11a4a16310a5",
+      "side_a_team": "FXHND",
+      "side_b_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_b_team": "Qwiz Esports",
+      "winner_side": null,
+      "captured_at": "2026-07-26T16:19:30.717Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000009",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000009",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000362",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
