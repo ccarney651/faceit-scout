@@ -1,0 +1,1862 @@
+{
+  "format": 1,
+  "contributor": "pixels",
+  "tool_version": "browser-0.1",
+  "heroes": {},
+  "maps": [
+    {
+      "match_id": "1-2d28ca7e-784b-42fb-877a-d097545242f2",
+      "game_no": 1,
+      "demo_code": "2RG9BB",
+      "map_guid": "0x080000000000066D",
+      "map_name": "Ilios",
+      "map_category": "Control",
+      "side_a_team_id": "5ba3aeb4-faab-43ee-b6d6-ddabf332368a",
+      "side_a_team": "Telacy Prime",
+      "side_b_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_b_team": "Qwiz Esports",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:36:16.622Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000042",
+            "0x02E000000000007A",
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "Ruins",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000032A",
+            "0x02E000000000007A",
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "Ruins",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000052C",
+            "0x02E000000000000A",
+            "0x02E000000000023B",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ],
+            [
+              "0x02E000000000000A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": "Lighthouse",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E000000000032A",
+            "0x02E000000000007A",
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": "Lighthouse",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E000000000032A",
+            "0x02E000000000023B",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-2d28ca7e-784b-42fb-877a-d097545242f2",
+      "game_no": 2,
+      "demo_code": "PK9YD2",
+      "map_guid": "0x0800000000000827",
+      "map_name": "Circuit Royal",
+      "map_category": "Escort",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "5ba3aeb4-faab-43ee-b6d6-ddabf332368a",
+      "side_b_team": "Telacy Prime",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:40:14.920Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E00000000001EC",
+            "0x02E000000000007A",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E000000000007A",
+            "0x02E000000000031C",
+            "0x02E0000000000008",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E000000000031C",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E000000000000A",
+            "0x02E000000000007A",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E000000000000A",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E000000000007A",
+            "0x02E000000000031C",
+            "0x02E0000000000008",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E000000000031C",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-2d28ca7e-784b-42fb-877a-d097545242f2",
+      "game_no": 3,
+      "demo_code": "FS88ME",
+      "map_guid": "0x0800000000000E13",
+      "map_name": "New Junk City",
+      "map_category": "Flashpoint",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "5ba3aeb4-faab-43ee-b6d6-ddabf332368a",
+      "side_b_team": "Telacy Prime",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:41:03.360Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000472",
+            "0x02E000000000052C",
+            "0x02E000000000030A",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ],
+            [
+              "0x02E000000000030A",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000042",
+            "0x02E000000000007A",
+            "0x02E0000000000231",
+            "0x02E0000000000016",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-3252af83-4da1-41b8-b29a-83c3dbca7d0b",
+      "game_no": 1,
+      "demo_code": "1AYW1M",
+      "map_guid": "0x080000000000066D",
+      "map_name": "Ilios",
+      "map_category": "Control",
+      "side_a_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_a_team": "ELMT Thunder",
+      "side_b_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_b_team": "Qwiz Esports",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:43:56.926Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Well",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000032A",
+            "0x02E000000000023B",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "Ruins",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "Ruins",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000032A",
+            "0x02E000000000023B",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": "Lighthouse",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": "Lighthouse",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E000000000032A",
+            "0x02E000000000023B",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-3252af83-4da1-41b8-b29a-83c3dbca7d0b",
+      "game_no": 2,
+      "demo_code": "XVQSMS",
+      "map_guid": "0x0800000000000EB2",
+      "map_name": "Runasapi",
+      "map_category": "Push",
+      "side_a_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_a_team": "ELMT Thunder",
+      "side_b_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_b_team": "Qwiz Esports",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:44:48.796Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000472",
+            "0x02E000000000052C",
+            "0x02E000000000030A",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ],
+            [
+              "0x02E000000000030A",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E000000000052C",
+            "0x02E000000000023B",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-3252af83-4da1-41b8-b29a-83c3dbca7d0b",
+      "game_no": 3,
+      "demo_code": "TSCVSA",
+      "map_guid": "0x0800000000000E13",
+      "map_name": "New Junk City",
+      "map_category": "Flashpoint",
+      "side_a_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_a_team": "ELMT Thunder",
+      "side_b_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_b_team": "Qwiz Esports",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:45:19.752Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000472",
+            "0x02E00000000001EC",
+            "0x02E000000000030A",
+            "0x02E0000000000079"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000030A",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-3252af83-4da1-41b8-b29a-83c3dbca7d0b",
+      "game_no": 4,
+      "demo_code": "S36NY1",
+      "map_guid": "0x0800000000000827",
+      "map_name": "Circuit Royal",
+      "map_category": "Escort",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_b_team": "ELMT Thunder",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:50:07.225Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E0000000000206"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000206",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E000000000000A",
+            "0x02E000000000023B",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E000000000000A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000231",
+            "0x02E000000000032A",
+            "0x02E000000000023B",
+            "0x02E0000000000206"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000206",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000008",
+            "0x02E00000000001EC",
+            "0x02E000000000023B",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000231",
+            "0x02E000000000032A",
+            "0x02E000000000023B",
+            "0x02E0000000000206"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000206",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-3252af83-4da1-41b8-b29a-83c3dbca7d0b",
+      "game_no": 5,
+      "demo_code": "H891AM",
+      "map_guid": "0x08000000000000D4",
+      "map_name": "King's Row",
+      "map_category": "Hybrid",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_b_team": "ELMT Thunder",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:51:20.218Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000028D",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E00000000000DD",
+            "0x02E00000000001EC",
+            "0x02E000000000028D",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000003C3",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000003C3",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000028D",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000003C3",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000003C3",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000028D",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000003C3",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000003C3",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000028D",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000028D",
+            "0x02E0000000000365"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E000000000013E",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              null
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-cc2fdd7d-0144-4465-8727-ab1cb10157bd",
+      "game_no": 2,
+      "demo_code": "CTF68Z",
+      "map_guid": "0x08000000000002C3",
+      "map_name": "Dorado",
+      "map_category": "Escort",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "866c944c-b9a0-4c27-bc69-11a4a16310a5",
+      "side_b_team": "FXHND",
+      "winner_side": null,
+      "captured_at": "2026-07-26T20:32:11.995Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E0000000000200",
+            "0x02E000000000007A",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E0000000000200",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000362",
+            "0x02E0000000000231",
+            "0x02E000000000000A",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000000A",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E00000000001EC",
+            "0x02E000000000007A",
+            "0x02E00000000004E3"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ],
+            [
+              "0x02E00000000004E3",
+              null
+            ]
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000023B",
+            "0x02E0000000000231",
+            "0x02E0000000000042",
+            "0x02E0000000000006"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000006",
+              null
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
