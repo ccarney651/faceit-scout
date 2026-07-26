@@ -123,3 +123,10 @@ https://www.faceit.com/en/ow2/room/1-e85f00a4-5432-413a-97b1-c192d89281cc
 https://www.faceit.com/en/ow2/room/1-ebbb608b-cf33-4c86-9f3b-1fb5b3fd323e
 https://www.faceit.com/en/ow2/room/1-f1b2064f-18a3-4fe1-8789-1a5b31a03412
 https://www.faceit.com/en/ow2/room/1-fae02765-abea-4f2f-bec2-d977a3a1693c
+
+# --- tier seeds: one match per new championship bootstraps the keyless crawler,
+#     which then discovers the rest of that division via the team graph. ---
+# S9 EMEA Advanced Central - Regular Season
+https://www.faceit.com/en/ow2/room/1-8c961674-2cd4-481f-b8d7-d080b67761ea
+# S9 EMEA Open Central - Regular Season — HELD (big crawl; add to enable):
+# https://www.faceit.com/en/ow2/room/1-8e9e5c59-0385-40b2-a74b-f9068e32ade4
