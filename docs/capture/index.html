@@ -115,16 +115,21 @@
       <span class="pill" id="mapinfo">pick a replay</span>
       <span class="pill" id="roundpill">Round 1</span>
       <span class="pill" id="subpill" style="display:none">sub: —</span>
-      <span class="pill" id="atkpill" style="display:none">attack: —</span>
     </div>
     <div class="row" style="margin-top:8px" id="controls">
       <button id="snap" disabled>Snapshot</button>
       <button id="nextr" class="mk" disabled>Next round ▸</button>
       <span id="subbtns" class="row"></span>
-      <button id="flip" class="mk" style="display:none">Flip attack</button>
       <button id="undo" class="mk" disabled>Undo</button>
       <button id="pop" class="ghost">Pop out overlay ⇱</button>
       <span class="status" id="snapmsg"></span>
+    </div>
+    <!-- Escort/Hybrid: instead of a "flip" the operator has to reason about, just
+         ask who's attacking each round, by team name. Click what the HUD shows. -->
+    <div class="row" id="atkrow" style="display:none;margin-top:8px;align-items:center">
+      <span class="status" id="atklbl">Attacking now</span>
+      <span id="atkbtns" class="row"></span>
+      <span class="status faint" id="atkhint">— click the team on attack (as the HUD shows)</span>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
       <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD">⇄ Swap teams</button>
@@ -313,7 +318,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('autocal').disabled=!vid.srcObject;
   document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
-  document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready; document.getElementById('flip').disabled=!ready;
+  document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready;
   document.getElementById('undo').disabled=!(session&&session.history.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
@@ -356,17 +361,19 @@ function startMap(){ const c=selectedCode();
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
   const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
   document.getElementById('subpill').style.display=submaps.length?'':'none';
-  document.getElementById('flip').style.display=phased?'':'none';
-  document.getElementById('atkpill').style.display=phased?'':'none';
   if(submaps.length) submaps.forEach(s=>{ const b=document.createElement('button'); b.className='mk'; b.textContent=s; b.onclick=()=>pickSub(s); subbtns.appendChild(b); });
   refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
 }
-function relabelTeams(){ const c=selectedCode(); if(!c) return; const rs=(DATA.rosters||{})[c.match_id]||{};
+function sideNames(){ const c=selectedCode(); if(!c) return {leftName:'left',rightName:'right'};
+  const rs=(DATA.rosters||{})[c.match_id]||{};
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
   const leftName = sideId? ((rs[sideId]&&rs[sideId].name)||'?') : (c.team_a||'left');
   const rightName = sideId? (sideId===c.t1? (c.team_b||'?') : (c.team_a||'?')) : (c.team_b||'right');
+  return {leftName,rightName}; }
+function relabelTeams(){ if(!selectedCode()) return; const {leftName,rightName}=sideNames();
   document.getElementById('hA').textContent='Left / blue · '+leftName;
   document.getElementById('hB').textContent='Right / red · '+rightName;
+  renderAttack();
 }
 // Which FACEIT team the tool currently treats as the LEFT/blue box. There's no
 // auto side-detect in the browser yet (the exe OCRs the HUD names and matches
@@ -381,7 +388,7 @@ function swapSides(){ const c=selectedCode(); if(!c) return;
 function refreshSession(){ if(!session) return;
   document.getElementById('roundpill').textContent='Round '+session.round;
   if(session.submaps.length) document.getElementById('subpill').textContent='sub: '+(session.sub||'—');
-  if(session.phased) document.getElementById('atkpill').textContent='attack: '+(session.attacker==='a'?'left/blue':'right/red');
+  renderAttack();
   document.getElementById('obscount').textContent=session.snaps.length+' snapshot'+(session.snaps.length===1?'':'s');
   const ol=document.getElementById('obslist'); ol.innerHTML='';
   session.snaps.slice().reverse().forEach(s=>{ const el=document.createElement('div'); el.className='obs';
@@ -414,7 +421,23 @@ function nextRound(){ if(!session) return;
   if(session.submaps.length) snapMsg('round '+session.round+' — pick the sub-map ▸', true);
 }
 function pickSub(s){ if(!session) return; session.history.push({type:'sub', sub:session.sub}); session.sub=s; snapMsg(''); refreshSession(); }
-function flipAttack(){ if(!session||!session.phased) return; session.history.push({type:'flip', attacker:session.attacker}); session.attacker=(session.attacker==='a'?'b':'a'); refreshSession(); }
+// Set who's attacking this round directly (by side), from the team-name picker.
+// nextRound() still auto-alternates as a sensible default; this makes correcting
+// it a single click on the attacking team — no "flip" or round-parity to reason
+// about. Records a 'flip'-type history entry so Undo restores the prior attacker.
+function setAttacker(side){ if(!session||!session.phased||session.attacker===side) return;
+  session.history.push({type:'flip', attacker:session.attacker}); session.attacker=side; refreshSession(); }
+// The main-page attack picker: two team-name toggles, the current attacker lit.
+function renderAttack(){ const row=document.getElementById('atkrow'); if(!row) return;
+  if(!session||!session.phased){ row.style.display='none'; return; }
+  row.style.display='flex';
+  document.getElementById('atklbl').textContent='Attacking (R'+session.round+')';
+  const {leftName,rightName}=sideNames(), host=document.getElementById('atkbtns'); host.innerHTML='';
+  const mkb=(side,name,color)=>{ const b=document.createElement('button'); b.className='mk'; b.textContent=name;
+    b.style.borderColor=color;
+    if(session.attacker===side){ b.style.background=color; b.style.color='#0b1020'; b.style.fontWeight='700'; }
+    b.onclick=()=>setAttacker(side); host.appendChild(b); };
+  mkb('a',leftName,'#5a9bd8'); mkb('b',rightName,'#e9694f'); }
 // Undo the LAST action of any kind (snapshot / round / sub-map / attack flip), LIFO.
 function undo(){ if(!session||!session.history.length) return; const h=session.history.pop();
   if(h.type==='snap'){ session.snaps.pop(); session.lastKept=null; }
@@ -488,13 +511,15 @@ function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.
     const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
     session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
   else sub.className='prow';
-  // attack row (escort/hybrid) — tells you who attacks this round
+  // attack row (escort/hybrid) — click the team that's attacking this round
   atk.innerHTML='';
   if(session&&session.phased){ atk.className='prow';
     const l=d.createElement('span'); l.className='lbl'; l.textContent='Attack R'+session.round; atk.appendChild(l);
-    const who=d.createElement('span'); who.style.cssText='margin-right:6px;font-weight:700';
-    who.innerHTML=session.attacker==='a'?'<span style="color:#5a9bd8">LEFT / blue</span>':'<span style="color:#e9694f">RIGHT / red</span>'; atk.appendChild(who);
-    mk(atk,'⇄ Flip',flipAttack); }
+    const {leftName,rightName}=sideNames();
+    const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
+      if(session.attacker===side){ b.className='on'; } else { b.style.borderColor=color; }
+      b.onclick=()=>setAttacker(side); atk.appendChild(b); };
+    mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
   else atk.className='prow';
 }
 async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).'); return; }
@@ -606,7 +631,6 @@ document.getElementById('setR').onclick=()=>{drawMode='b';document.getElementByI
 document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owscout_cap_boxes');drawOverlay();updateBtns();};
 document.getElementById('snap').onclick=()=>snapshot(false);
 document.getElementById('nextr').onclick=nextRound;
-document.getElementById('flip').onclick=flipAttack;
 document.getElementById('undo').onclick=undo;
 document.getElementById('finish').onclick=finishMap;
 document.getElementById('swapsides').onclick=swapSides;
