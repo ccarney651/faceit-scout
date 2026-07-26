@@ -305,14 +305,16 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
    by the two comp columns (segments add rows, not columns), so it fits the rail. */
 /* Both teams stacked (team over team) per segment, so each comp gets the full
    rail width instead of two 5-hero rows colliding. Comps may wrap, never scroll. */
-.gamecomps{margin-top:9px;display:flex;flex-direction:column;gap:10px}
-.gcseg{display:flex;flex-direction:column;gap:4px}
+.gamecomps{margin-top:9px;display:flex;flex-direction:column;gap:11px}
+.gcseg{display:flex;flex-direction:column;gap:7px}
 .gcseg .gcseglab{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
   color:var(--faint);white-space:nowrap}
-.gcteam{display:flex;align-items:center;gap:9px;min-width:0}
-.gcname{font-size:11px;font-weight:650;color:var(--muted);flex:none;width:82px;
+/* Team name ABOVE its comp, so all 5 heroes get the full rail width and stay on
+   one row instead of the 5th wrapping. */
+.gcteam{display:flex;flex-direction:column;gap:3px;min-width:0}
+.gcname{font-size:11px;font-weight:650;color:var(--muted);max-width:100%;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gamecomps .comp{flex-wrap:wrap}
+.gamecomps .comp{flex-wrap:nowrap}
 .banstep{display:inline-flex;align-items:center;gap:5px;margin-right:16px}
 .ord{width:17px;height:17px;border-radius:50%;background:var(--accent-weak);color:var(--accent);
   font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
