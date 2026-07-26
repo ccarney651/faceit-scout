@@ -8,7 +8,13 @@
   body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,sans-serif}
   header{padding:12px 18px;border-bottom:1px solid var(--line)}
   h1{font-size:16px;margin:0} .sub{color:var(--muted);font-size:12.5px;max-width:900px}
-  main{padding:14px 18px;display:grid;gap:14px;max-width:1100px}
+  main{padding:14px 18px;display:grid;gap:12px;max-width:1500px}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,52%);gap:14px;align-items:start}
+  .appcol{display:grid;gap:12px;min-width:0}
+  .previewcol{position:sticky;top:12px;min-width:0}
+  .layout.nopreview{grid-template-columns:1fr}
+  .layout.nopreview .previewcol{display:none}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.previewcol{position:static}}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
   .card h2{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -21,7 +27,8 @@
   select#code{min-width:340px;flex:1}
   .lock{padding:8px 10px;border:1px solid var(--line);border-radius:7px;color:var(--muted);font-size:13px;background:var(--surface2)}
   .stage{position:relative;display:inline-block;max-width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000}
-  video{display:block;max-width:100%;height:auto} canvas.ov{position:absolute;left:0;top:0;cursor:crosshair}
+  video{display:block;max-width:100%;max-height:78vh;height:auto} canvas.ov{position:absolute;left:0;top:0;cursor:crosshair}
+  .stage{width:100%}
   .status{color:var(--muted);font-size:12.5px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:680px){.grid2{grid-template-columns:1fr}}
@@ -44,6 +51,8 @@
 </header>
 <main>
   <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 13px;font-size:13px"></div>
+  <div class="layout" id="layout">
+    <div class="appcol">
   <div class="card">
     <h2>1 · Set up (once)</h2>
     <div class="row">
@@ -53,11 +62,7 @@
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
       <button id="clearcal" class="ghost">reset boxes</button>
     </div>
-    <div class="status" id="calhint" style="margin-top:6px">Share your screen, then click <b>Auto-calibrate</b> (or drag the boxes by hand). Works best with Overwatch borderless/fullscreen at 16:9, default UI scale.</div>
-    <div class="stage" id="stage" style="margin-top:10px">
-      <video id="vid" autoplay muted playsinline></video>
-      <canvas id="ov" class="ov"></canvas>
-    </div>
+    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate ✨</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
   </div>
 
   <div class="card">
@@ -126,6 +131,23 @@
       <button id="download" class="ghost">Download JSON</button>
     </div>
     <div class="status" id="pubnote" style="margin-top:6px">First upload under a name claims it for this browser; the site rebuilds automatically (~2 min). Names: 2–24 of a–z 0–9 _ -</div>
+  </div>
+    </div>
+    <aside class="previewcol">
+      <div class="card" style="padding:8px">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px">
+          <span class="status">Live preview (for calibration)</span>
+          <span class="row" style="gap:6px">
+            <button id="hidep" class="ghost" disabled>Hide preview</button>
+            <button id="stopcap" class="ghost" disabled>Stop capture</button>
+          </span>
+        </div>
+        <div class="stage" id="stage">
+          <video id="vid" autoplay muted playsinline></video>
+          <canvas id="ov" class="ov"></canvas>
+        </div>
+      </div>
+    </aside>
   </div>
 </main>
 <script>
@@ -221,16 +243,38 @@ function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const comp=r
 // owscout/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
 // the captured resolution — no dragging. Self-test then confirms alignment.
 const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
+// Find the game render area inside the capture, stripping near-black letterbox /
+// pillarbox (odd aspect ratios / resolutions), capped at 20% per edge. Does NOT
+// strip a window title bar (it isn't black) — share the whole screen for that.
+function detectContentRect(){ const W=vid.videoWidth,H=vid.videoHeight; if(!W) return {x:0,y:0,w:W,h:H};
+  const sw=Math.min(320,W), sh=Math.max(1,Math.round(H*sw/W));
+  const cv=document.createElement('canvas'); cv.width=sw; cv.height=sh; const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(vid,0,0,sw,sh);
+  const d=cx.getImageData(0,0,sw,sh).data, BLACK=24;
+  const rowMax=y=>{let m=0;for(let x=0;x<sw;x++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
+  const colMax=x=>{let m=0;for(let y=0;y<sh;y++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
+  const cY=Math.floor(sh*0.2), cX=Math.floor(sw*0.2);
+  let t=0; while(t<cY&&rowMax(t)<BLACK)t++; let b=sh-1; while(b>sh-1-cY&&rowMax(b)<BLACK)b--;
+  let l=0; while(l<cX&&colMax(l)<BLACK)l++; let r=sw-1; while(r>sw-1-cX&&colMax(r)<BLACK)r--;
+  const sx=W/sw, sy=H/sh; return {x:l*sx,y:t*sy,w:(r-l+1)*sx,h:(b-t+1)*sy};
+}
 function autoCalibrate(){ if(!vid.videoWidth){ document.getElementById('calhint').innerHTML='<span class="warn">Share your screen first.</span>'; return; }
-  const W=vid.videoWidth, H=vid.videoHeight;
-  for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s]; boxes[s]={x:fx*W,y:fy*H,w:fw*W,h:fh*H}; }
+  const R=detectContentRect();
+  for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s]; boxes[s]={x:R.x+fx*R.w,y:R.y+fy*R.h,w:fw*R.w,h:fh*R.h}; }
   localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); drawOverlay(); updateBtns(); selfTest(); }
+function stopCapture(){ if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('auto').checked=false; }
+  drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
+function togglePreview(){ const L=document.getElementById('layout'); L.classList.toggle('nopreview');
+  document.getElementById('hidep').textContent=L.classList.contains('nopreview')?'Show preview':'Hide preview'; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
-    document.getElementById('calhint').textContent='Screen shared — set the two boxes over the portrait strips.'; updateBtns();
+    const trk=st.getVideoTracks()[0];
+    if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('auto').checked=false;} drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
+    document.getElementById('calhint').textContent='Screen shared — click Auto-calibrate ✨ (or set the boxes by hand).'; updateBtns();
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
   document.getElementById('autocal').disabled=!vid.srcObject;
+  document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready; document.getElementById('flip').disabled=!ready;
   document.getElementById('undo').disabled=!(session&&session.snaps.length);
@@ -426,6 +470,8 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
 document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('autocal').onclick=autoCalibrate;
+document.getElementById('stopcap').onclick=stopCapture;
+document.getElementById('hidep').onclick=togglePreview;
 document.getElementById('publish').onclick=publish;
 document.getElementById('download').onclick=downloadContrib;
 document.getElementById('share').onclick=share;
