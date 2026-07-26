@@ -111,6 +111,7 @@ HTML = r"""<!doctype html>
     <button id="setR" class="ghost" disabled>2b · Set RIGHT box (red)</button>
     <button id="read" disabled>3 · Read comp</button>
     <label class="status"><input type="checkbox" id="auto"> auto every 2s</label>
+    <button id="pop" class="ghost">Pop out overlay ⇱</button>
     <button id="clear" class="ghost">reset boxes</button>
   </div>
   <div class="status" id="hint">Click “Share my screen” and pick your Overwatch window/screen.</div>
@@ -144,6 +145,9 @@ const REFS = REFS_RAW.map(r=>{
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
 let boxes=JSON.parse(localStorage.getItem('owscout_poc_boxes')||'{}');   // {a:{x,y,w,h}, b:{...}} in VIDEO px
 let drawMode=null, dragStart=null, dragCur=null, autoTimer=null;
+// Where reads render — the main page, or a popped-out floating always-on-top
+// window (Document Picture-in-Picture) that sits over Overwatch so no alt-tab.
+let target={A:document.getElementById('outA'), B:document.getElementById('outB'), meta:document.getElementById('meta')};
 
 function scale(){ return vid.videoWidth ? vid.clientWidth/vid.videoWidth : 1; }
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
@@ -215,14 +219,14 @@ function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 function read(){
   if(!boxes.a||!boxes.b) return;
   const t0=performance.now(); const frame=grabFrame();
-  for(const side of ['a','b']){ const b=boxes[side]; const host=document.getElementById(side==='a'?'outA':'outB'); host.innerHTML='';
+  for(const side of ['a','b']){ const b=boxes[side]; const host=(side==='a'?target.A:target.B); host.innerHTML='';
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       const r=bestMatch(cellGrayPadded(frame,cell), side);
       const row=document.createElement('div'); row.className='slot';
       row.innerHTML=`<span>${r.score>=0.5?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`;
       host.appendChild(row);
     } }
-  document.getElementById('meta').textContent=`capturing ${vid.videoWidth}x${vid.videoHeight} · read in ${(performance.now()-t0).toFixed(0)} ms · ${REFS.length} refs`;
+  target.meta.textContent=`${vid.videoWidth}x${vid.videoHeight} · ${(performance.now()-t0).toFixed(0)} ms · updated ${new Date().toLocaleTimeString()}`;
 }
 
 document.getElementById('share').onclick=share;
@@ -230,7 +234,27 @@ document.getElementById('setL').onclick=()=>{drawMode='a';document.getElementByI
 document.getElementById('setR').onclick=()=>{drawMode='b';document.getElementById('hint').textContent='Drag a box over the 5 RED (right) portraits.';};
 document.getElementById('read').onclick=read;
 document.getElementById('clear').onclick=()=>{boxes={};localStorage.removeItem('owscout_poc_boxes');drawOverlay();updateButtons();document.getElementById('outA').innerHTML='';document.getElementById('outB').innerHTML='';};
-document.getElementById('auto').onchange=e=>{ if(e.target.checked){ autoTimer=setInterval(()=>{ if(boxes.a&&boxes.b&&vid.srcObject) read(); },2000);} else clearInterval(autoTimer); };
+document.getElementById('auto').onchange=e=>{ if(e.target.checked){ autoTimer=setInterval(()=>{ if(boxes.a&&boxes.b&&vid.srcObject) read(); },1500);} else clearInterval(autoTimer); };
+
+// Pop out a floating, always-on-top window (Document Picture-in-Picture) that
+// sits over Overwatch in borderless — the browser's answer to an in-game overlay.
+// Kicks on continuous auto-read so the comp updates with zero alt-tab.
+async function popout(){
+  if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture). Firefox has capture but not this.'); return; }
+  try{
+    const w=await documentPictureInPicture.requestWindow({width:300,height:300});
+    w.document.body.style.cssText='margin:0;background:#0d1015;color:#e7ebf2;font:13px system-ui,Segoe UI,sans-serif';
+    const st=w.document.createElement('style');
+    st.textContent='#pmeta{color:#98a2b2;font-size:11px;padding:5px 10px}.pteam{padding:5px 10px}.pteam h3{margin:0 0 4px;font-size:10.5px;color:#98a2b2;text-transform:uppercase;letter-spacing:.04em}.slot{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-top:1px solid #252c37}.slot:first-of-type{border-top:0}.sc{font-variant-numeric:tabular-nums;font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}';
+    w.document.head.appendChild(st);
+    w.document.body.innerHTML='<div id="pmeta">live</div><div class="pteam"><h3>Left / blue</h3><div id="poutA"></div></div><div class="pteam"><h3>Right / red</h3><div id="poutB"></div></div>';
+    target={A:w.document.getElementById('poutA'), B:w.document.getElementById('poutB'), meta:w.document.getElementById('pmeta')};
+    if(!document.getElementById('auto').checked){ document.getElementById('auto').checked=true; document.getElementById('auto').dispatchEvent(new Event('change')); }
+    if(boxes.a&&boxes.b&&vid.srcObject) read();
+    w.addEventListener('pagehide',()=>{ target={A:document.getElementById('outA'),B:document.getElementById('outB'),meta:document.getElementById('meta')}; });
+  }catch(err){ alert('Pop-out failed: '+err); }
+}
+document.getElementById('pop').onclick=popout;
 updateButtons();
 </script></body></html>
 """
