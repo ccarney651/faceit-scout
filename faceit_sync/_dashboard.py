@@ -1140,6 +1140,50 @@ function renderScoutBody(t){
     root.appendChild(rc);
   }
 
+  // ---- Tendencies: deterministic "what they reliably do" reads from FACEIT
+  // bans + map vetoes, each with a sample size and a field comparison. No model —
+  // pure aggregation (the honest version of a "pattern/AI coach"). Works for
+  // every team, scouted or not.
+  {
+    const team=t.team;
+    const tBan={}, tFirst={}, tPick={}; let tBanTot=0, tFirstG=0, tPickTot=0;
+    t.matches.forEach(m=>m.games.forEach(g=>{ if(!g.map) return;
+      const mine=(g.bans||[]).filter(b=>b.hero && b.team===team).sort((a,b)=>(a.order||9)-(b.order||9));
+      if(mine.length){ inc(tFirst, mine[0].hero); tFirstG++; }
+      mine.forEach(b=>{ inc(tBan,b.hero); tBanTot++; });
+      if(g.map_picked_by===team){ inc(tPick,g.map); tPickTot++; }
+    }));
+    const fBan={}, fPick={}; let fBanTot=0, fPickTot=0;
+    D().matches.forEach(m=>m.games.forEach(g=>{ if(!g.map) return;
+      (g.bans||[]).forEach(b=>{ if(b.hero){ inc(fBan,b.hero); fBanTot++; } });
+      if(g.map_picked_by){ inc(fPick,g.map); fPickTot++; }
+    }));
+    const reads=[];
+    const fb=rank(tFirst)[0];
+    if(fb && tFirstG>=3 && fb[1]>=2)
+      reads.push(`Opens with a <b>${esc(fb[0])}</b> first-ban in <b>${fb[1]}/${tFirstG}</b> games (${pctOf(fb[1],tFirstG)}%).`);
+    if(tBanTot>=6){
+      Object.keys(tBan).map(h=>({h,ts:tBan[h]/tBanTot,fs:(fBan[h]||0)/Math.max(1,fBanTot),n:tBan[h]}))
+        .filter(x=>x.n>=2 && x.ts>=x.fs*1.6 && (x.ts-x.fs)>=0.05)
+        .sort((a,b)=>(b.ts-b.fs)-(a.ts-a.fs)).slice(0,3)
+        .forEach(x=>reads.push(`Bans <b>${esc(x.h)}</b> far more than the field — ${Math.round(x.ts*100)}% of their bans vs ${Math.round(x.fs*100)}% league-wide.`));
+    }
+    if(tPickTot>=2){
+      Object.keys(tPick).map(mp=>({mp,tr:tPick[mp]/tPickTot,fr:(fPick[mp]||0)/Math.max(1,fPickTot),n:tPick[mp]}))
+        .filter(x=>x.tr>=x.fr*1.3).sort((a,b)=>(b.n-a.n)||((b.tr-b.fr)-(a.tr-a.fr))).slice(0,3)
+        .forEach(x=>reads.push(`Comfort pick <b>${esc(x.mp)}</b> — chose it ${x.n}/${tPickTot} of their map picks (field picks it ${Math.round(x.fr*100)}%).`));
+    }
+    const tc=el(`<div class="card"></div>`);
+    tc.appendChild(el(`<p class="eyebrow">Tendencies</p>`));
+    if(reads.length){
+      const box=el(`<div style="display:flex;flex-direction:column;gap:7px"></div>`);
+      reads.forEach(r=>box.appendChild(el(`<div style="font-size:13.5px;line-height:1.45">• ${r}</div>`)));
+      tc.appendChild(box);
+    } else tc.appendChild(el(`<p class="note" style="margin:2px 0 0">Not enough attributed games yet for reliable tendencies.</p>`));
+    tc.appendChild(el(`<p class="note" style="margin-top:8px">Deterministic reads from FACEIT bans + map vetoes in this division, with sample sizes — patterns, not predictions.</p>`));
+    root.appendChild(tc);
+  }
+
   // ---- At a glance: the prep headline before any scrolling. Four panels —
   // go-to comps, their bans, map pool, form/tempo. Degrades to the FACEIT-derived
   // bans/maps when no comps have been captured for this team yet.

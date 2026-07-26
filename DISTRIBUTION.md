@@ -90,6 +90,36 @@ The printed hash should equal the one in `owscout.exe.sha256`.
 The permanent fix (removes the warning entirely) is code signing — see
 *Signing the exe* below.
 
+## The app vanished from its folder (Defender quarantine)
+
+If OW Scout **disappears from where you saved it** — often right after first run,
+or while doing something else on the PC — Microsoft Defender (or another
+antivirus) **quarantined** it: it moved/deleted the file because it's an unsigned
+app that captures the screen. This is a **false positive**, not a real detection,
+and it is **not** caused by the Snipping Tool or anything you did — the timing is
+just a coincidence with Defender's background scan.
+
+**Get it back and stop it recurring:**
+
+1. Open **Windows Security → Virus & threat protection → Protection history**.
+   Find the recent **Quarantined**/**Removed** item for `owscout-testing.exe`,
+   open it, and choose **Restore** (then **Allow on device** if offered).
+2. Add its folder to the exclusion list so it can't happen again:
+   **Virus & threat protection → Manage settings → Exclusions → Add or remove
+   exclusions → Add an exclusion → Folder**, and pick the OW Scout folder
+   (e.g. `C:\OWScout\`). Keep the app in that folder.
+3. If it was already fully deleted, re-download it from the release, verify the
+   checksum (above), then do step 2 **before** running it.
+
+The permanent, no-exclusion fix is code signing (Azure Trusted Signing, ~$10/mo —
+see *Signing the exe* below); once signed, Defender stops quarantining it.
+
+> Curator note: an unpacked **one-directory** build (a folder + zip instead of a
+> single self-extracting exe) trips Defender far less often than the one-file exe,
+> because there's no runtime self-extraction to flag. If quarantine keeps hurting
+> testers before signing is in place, switch the build to `--onedir` and ship the
+> zip.
+
 ## Troubleshooting
 
 **"Self-protection failed. Error code: 4" (or similar security errors) when
