@@ -62,6 +62,8 @@ nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;b
   cursor:pointer;font-size:13.5px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
 nav button:hover{color:var(--fg)}
 nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+nav .navcap{margin-left:auto;align-self:center;background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
+nav .navcap:hover{background:var(--accent);color:#fff}
 nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
@@ -920,6 +922,12 @@ function renderOverview(){
   go.onclick=()=>gotoScout(sel.value);
   row.append(sel,go); launch.appendChild(row);
   wrap.appendChild(launch);
+
+  // Contribute callout: the browser capture tool lives at /capture/ — no install.
+  const contrib=el(`<div class="card" style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"></div>`);
+  contrib.appendChild(el(`<div><p class="eyebrow" style="margin:0 0 2px">Contribute</p><span class="note">Scout comps straight from your browser — no install, no exe. Every capture sharpens the data here.</span></div>`));
+  const cbtn=el(`<button class="btn">Capture comps →</button>`); cbtn.onclick=()=>{location.href='capture/';}; contrib.appendChild(cbtn);
+  wrap.appendChild(contrib);
 
   // current meta + standings
   const two=el(`<div class="grid cols-2" style="margin-top:20px"></div>`);
@@ -2215,6 +2223,7 @@ function init(){
   updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
+  nav.appendChild(el(`<a class="navcap" href="capture/" title="Scout comps in your browser — no install, no exe">＋ Capture comps</a>`));
   const start=decodeURIComponent((location.hash||'#overview').slice(1));
   if(start.startsWith('prep=')||start.startsWith('scout=')){
     SCOUT_PREP=start.startsWith('prep=');
