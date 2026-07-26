@@ -317,6 +317,7 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .roster .pl{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:3px 0;
   border-top:1px solid var(--line);font-size:12.5px}
 .roster .pl .st{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+.roster .subhd{margin:8px 0 2px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint)}
 .muted{color:var(--muted)} .faint{color:var(--faint)}
 .rc{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;
   background:var(--surface2);color:var(--fg);padding:1.5px 7px;border-radius:6px;cursor:pointer;
@@ -848,6 +849,29 @@ function renderOverview(){
      {k:'win_pct',label:'Win %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))}],
     D().teams));
   wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
+
+  // Rosters at a glance: the current lineup per team (whoever played the latest
+  // match), most-used first, with subs / departed players dimmed below. Straight
+  // from FACEIT round_players, so it's there even for un-scouted teams.
+  wrap.appendChild(el(sectionH('Rosters at a glance')));
+  const prow=(p,dim)=>`<div class="pl"${dim?' style="opacity:.5"':''}>`+
+    `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
+    `<span>${esc(p.nick)}</span>`+
+    `<span class="st">${p.games} map${p.games===1?'':'s'}</span></div>`;
+  const rg=el(`<div class="grid cols-3"></div>`);
+  D().teams.forEach(t=>{
+    const ros=t.roster||[], cur=ros.filter(p=>p.current), sub=ros.filter(p=>!p.current);
+    let body=cur.map(p=>prow(p,false)).join('');
+    if(sub.length) body+=`<div class="subhd">also played this season</div>`+sub.map(p=>prow(p,true)).join('');
+    const card=el(`<div class="card roster"></div>`);
+    card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
+      `<span style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>`+
+      pill(t.win_pct+'%',winVar(t.win_pct))+`</h4>`));
+    card.appendChild(el(`<div>${body||'<span class="faint">no roster data yet</span>'}</div>`));
+    rg.appendChild(card);
+  });
+  wrap.appendChild(rg);
+  wrap.appendChild(el(`<p class="note">Current lineup = players who appeared in the team's most recent match; “map” counts are games played this season. Roles and names are FACEIT's.</p>`));
   return wrap;
 }
 
@@ -1003,6 +1027,28 @@ function renderScoutBody(t){
   head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))} ${pill(`comps ${capMaps}/${_allMaps} maps`,capMaps?'var(--accent)':'var(--faint)')}</div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   root.appendChild(head);
+
+  // Current roster tile: who you're actually scouting. Current lineup (played
+  // the latest match) first, subs / departed dimmed below. From FACEIT round_players.
+  {
+    const ros=((D().teams.find(x=>x.name===t.team)||{}).roster)||[];
+    const cur=ros.filter(p=>p.current), sub=ros.filter(p=>!p.current);
+    const prow=(p,dim)=>`<div class="pl"${dim?' style="opacity:.5"':''}>`+
+      `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
+      `<span>${esc(p.nick)}</span><span class="st">${p.games} map${p.games===1?'':'s'}</span></div>`;
+    const rc=el(`<div class="card roster"></div>`);
+    rc.appendChild(el(`<p class="eyebrow">Current roster</p>`));
+    if(ros.length){
+      const grid=el(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0 20px"></div>`);
+      cur.forEach(p=>grid.appendChild(el(prow(p,false))));
+      if(sub.length){
+        grid.appendChild(el(`<div class="subhd" style="grid-column:1/-1">also played this season</div>`));
+        sub.forEach(p=>grid.appendChild(el(prow(p,true))));
+      }
+      rc.appendChild(grid);
+    } else rc.appendChild(el(`<p class="note" style="margin:2px 0 0">No roster data yet.</p>`));
+    root.appendChild(rc);
+  }
 
   // ---- At a glance: the prep headline before any scrolling. Four panels —
   // go-to comps, their bans, map pool, form/tempo. Degrades to the FACEIT-derived

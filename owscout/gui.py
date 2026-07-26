@@ -383,7 +383,9 @@ class _App:  # pragma: no cover - GUI runtime only
         refresh_btn.pack(side="left", padx=2)
         copy_btn = ttk.Button(crow, text="Copy code", command=self._copy_code)
         copy_btn.pack(side="left", padx=2)
-        self._gate_codes += [refresh_btn, copy_btn]
+        skip_btn = ttk.Button(crow, text="Skip ⏭", command=self._skip_next)
+        skip_btn.pack(side="left", padx=2)
+        self._gate_codes += [refresh_btn, copy_btn, skip_btn]
 
         # Left team: click whichever team is on the LEFT of the HUD (or leave it to
         # auto-detect).
@@ -406,9 +408,18 @@ class _App:  # pragma: no cover - GUI runtime only
         keys_btn.pack(side="right")
         self._gate_codes.append(keys_btn)
 
-        self.cap_btn = ttk.Button(cap, text="Start hotkey capture", command=self._capture)
-        self.cap_btn.pack(anchor="w", padx=6, pady=(6, 4))
-        self._gate_codes.append(self.cap_btn)
+        caprow = ttk.Frame(cap)
+        caprow.pack(fill="x", padx=6, pady=(6, 4))
+        self.cap_btn = ttk.Button(caprow, text="Start hotkey capture", command=self._capture)
+        self.cap_btn.pack(side="left")
+        # Auto-queue: when a capture finishes, jump to the next unscouted map and
+        # copy its code, so scouting becomes a tight paste-and-go loop.
+        self.autoqueue = tk.BooleanVar(value=True)
+        aq_cb = ttk.Checkbutton(
+            caprow, variable=self.autoqueue,
+            text="auto-queue the next unscouted map when a capture finishes")
+        aq_cb.pack(side="left", padx=12)
+        self._gate_codes += [self.cap_btn, aq_cb]
 
         # Code freshness. A stale faceit DB silently hides every code published
         # since the last sync, which looks identical to "no new matches".
@@ -495,6 +506,7 @@ class _App:  # pragma: no cover - GUI runtime only
         self._stop_capture: Optional[Callable[[], None]] = None
         self._code_rows: list[Any] = []
         self._claimed: set[str] = set()      # games already scouted by anyone
+        self._announce_next = False          # one-shot: copy+announce the next code
         self._keybinds: dict[str, str] = {}
         # Guided build: start everything on the Scout tab greyed and open on
         # Settings, where Calibrate is - the only thing a fresh user can do.
@@ -1063,6 +1075,14 @@ class _App:  # pragma: no cover - GUI runtime only
                      + (" and hidden" if self.hide_claimed.get() else ""))
         self._emit(note)
         self._update_guide()
+        # Auto-queue hand-off (set true after a capture finishes): copy the next
+        # code and make it the loud last line so the operator just pastes and goes.
+        if self._announce_next:
+            self._announce_next = False
+            if items:
+                self._copy_current("▶ Next up")
+            else:
+                self._emit("✓ queue empty — every map in this filter is scouted. Nice work.")
 
     def _on_code_selected(self) -> None:
         raw = self.code_var.get().strip()
@@ -1313,6 +1333,31 @@ class _App:  # pragma: no cover - GUI runtime only
         self.root.update()  # keep it on the clipboard after focus changes
         self._emit(f"copied '{code}' — paste it into the OW replay code field.")
 
+    def _copy_current(self, prefix: str = "copied") -> None:
+        """Copy the selected replay code to the clipboard and announce it."""
+        raw = self.code_var.get().strip()
+        if not raw:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(raw.split()[0])
+        self.root.update()   # keep it on the clipboard after focus changes
+        self._emit(f"{prefix}: {raw}  —  code copied, paste into OW then Start.")
+
+    def _skip_next(self) -> None:
+        """Advance to the next code in the list (wrapping) and copy it — for
+        skipping a map without capturing it."""
+        vals = list(self.code_box.cget("values"))
+        if not vals:
+            self._emit("no codes to skip to — click ↻ to load some.")
+            return
+        try:
+            i = vals.index(self.code_var.get())
+        except ValueError:
+            i = -1
+        self.code_var.set(vals[(i + 1) % len(vals)])
+        self._on_code_selected()
+        self._copy_current("⏭ next")
+
     def _capture(self) -> None:
         raw = self.code_var.get().strip()
         if not raw:
@@ -1321,6 +1366,7 @@ class _App:  # pragma: no cover - GUI runtime only
         code = raw.split()[0]
         side_a = self.side_a_var.get().strip() or None   # None = auto-detect
         req_div = self._division_param()   # guard: refuse a wrong-division code
+        auto_next = bool(self.autoqueue.get())   # read on the main thread
         binds = self._keybinds
         from .capture import CaptureControls, run_hotkey_capture
         controls = CaptureControls()
@@ -1358,6 +1404,10 @@ class _App:  # pragma: no cover - GUI runtime only
             finally:
                 if overlay is not None:
                     self.q.put(overlay.close)
+                # Auto-queue: refresh drops the just-captured map, then
+                # _apply_code_filter selects the next one and (seeing this flag)
+                # copies its code + announces it.
+                self._announce_next = auto_next
                 self.q.put(self._refresh_codes)
         self._run(go)
 

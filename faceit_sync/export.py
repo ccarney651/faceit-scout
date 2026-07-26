@@ -214,6 +214,7 @@ def _attack_first_panels(
 
 def _dashboard_data(db: Database, cid: str,
                     attack_cycles: "Optional[Mapping[str, Any]]" = None) -> dict[str, Any]:
+    from collections import Counter, defaultdict
     c = db.conn
 
     def _p(a: tuple[Any, ...]) -> Any:
@@ -263,6 +264,49 @@ def _dashboard_data(db: Database, cid: str,
              ROUND(100.0*SUM(win)/COUNT(*),1) win_pct
       FROM tm JOIN teams te ON te.id=tm.team GROUP BY tm.team
       ORDER BY win_pct DESC, wins DESC""", {"c": cid})
+
+    # Current roster per team, rolled up from round_players: who has played for
+    # each team, most-recent + most-used first, so a scout sees the squad at a
+    # glance. One row per game played, so `games` counts maps (a bo3 = up to 3).
+    # `last_seen` is the match date, used to sort and to flag the last lineup.
+    roster_rows = rows("""
+      SELECT te.name team, rp.player_id pid,
+             COALESCE(p.nickname, rp.player_id) nick, p.game_name gname,
+             rp.role role, m.finished_at fin
+      FROM round_players rp
+      JOIN matches m ON m.id=rp.match_id
+      JOIN teams te ON te.id=rp.team_id
+      LEFT JOIN players p ON p.id=rp.player_id
+      WHERE m.championship_id=:c AND rp.team_id IS NOT NULL""", {"c": cid})
+    _agg: dict[tuple[str, str], dict[str, Any]] = {}
+    _roles: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+    _last_match: dict[str, str] = {}          # team -> its most recent match date
+    for rr in roster_rows:
+        key = (rr["team"], rr["pid"])
+        a = _agg.setdefault(key, {"nick": rr["nick"], "game_name": rr["gname"],
+                                  "games": 0, "last_seen": ""})
+        a["games"] += 1
+        fin = rr["fin"] or ""
+        if fin > a["last_seen"]:
+            a["last_seen"] = fin
+        if fin > _last_match.get(rr["team"], ""):
+            _last_match[rr["team"]] = fin
+        if rr["role"]:
+            _roles[key][rr["role"]] += 1
+    team_rosters: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for (team, pid), a in _agg.items():
+        rc = _roles[(team, pid)]
+        team_rosters[team].append({
+            "nick": a["nick"], "game_name": a["game_name"], "games": a["games"],
+            "last_seen": a["last_seen"],
+            "role": rc.most_common(1)[0][0] if rc else None,
+            # Played in the team's most recent match = part of the current lineup.
+            "current": bool(a["last_seen"]) and a["last_seen"] == _last_match.get(team, ""),
+        })
+    for team, pls in team_rosters.items():
+        pls.sort(key=lambda x: (x["last_seen"], x["games"]), reverse=True)
+    for t in teams:
+        t["roster"] = team_rosters.get(t["name"], [])
 
     heroes = rows(f"""
       SELECT h.name, h.role, COUNT(*) bans
