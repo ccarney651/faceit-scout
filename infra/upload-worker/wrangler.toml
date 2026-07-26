@@ -9,6 +9,8 @@ REPO = "ccarney651/faceit-scout"
 # Discord login (scaffold - stays OFF until all four are present). Uncomment and
 # set this to the deployed callback URL when you create the Discord app:
 # DISCORD_REDIRECT_URI = "https://owscout-upload.owscout.workers.dev/auth/callback"
+# Admin roster access (/admin/contributors): comma-separated Discord user ids.
+# ADMIN_IDS = "your_discord_user_id"
 
 # After `wrangler kv namespace create NAMES`, paste the id here:
 [[kv_namespaces]]

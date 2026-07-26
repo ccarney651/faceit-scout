@@ -87,6 +87,9 @@ export default {
     if (url.pathname === "/auth/login") return authLogin(url, env);
     if (url.pathname === "/auth/callback") return authCallback(url, env);
 
+    // Admin roster: who is sending scout reports. Gated to ADMIN_IDS (Discord ids).
+    if (url.pathname === "/admin/contributors") return adminContributors(request, env);
+
     if (request.method !== "POST") {
       return json(405, { error: "POST a contribution with X-Owscout-Name and X-Owscout-Token" });
     }
@@ -99,14 +102,24 @@ export default {
     const sess = await verifySession(request.headers.get("x-owscout-session"), env);
     if (sess) token = "discord:" + sess.d;
     else if (token.startsWith("discord:")) return json(400, { error: "that token prefix is reserved for Discord login" });
-    if (!NAME_RE.test(name)) {
-      return json(400, { error: "name must be 2-24 chars of a-z 0-9 _ -" });
+    // Resolve identity. A Discord session is AUTHORITATIVE: the display name and
+    // ownership come from the verified account and are keyed by discord_id, so a
+    // logged-in scout's reports are always attributed to their account and can't
+    // be published under a spoofed name. Otherwise the classic first-come
+    // name-claim applies (name -> token hash).
+    let displayName, claimKey;
+    if (sess) {
+      displayName = sanitizeName(sess.n) || ("scout-" + String(sess.d).slice(-6));
+      claimKey = "u_" + sess.d;                    // stable per-account file + KV key
+    } else {
+      if (!NAME_RE.test(name)) return json(400, { error: "name must be 2-24 chars of a-z 0-9 _ -" });
+      if (token.length < 16 || token.length > 128) return json(400, { error: "malformed identity token" });
+      displayName = name;
+      claimKey = name;
     }
-    if (token.length < 16 || token.length > 128) {
-      return json(400, { error: "malformed identity token" });
-    }
-    if ((env.DENYLIST || "").split(",").map((x) => x.trim()).includes(name)) {
-      return json(403, { error: "this name is blocked - contact the curator" });
+    const denies = (env.DENYLIST || "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (denies.includes(displayName) || (sess && denies.includes(String(sess.d)))) {
+      return json(403, { error: "this account is blocked - contact the curator" });
     }
 
     const body = await request.text();
@@ -121,21 +134,24 @@ export default {
       }
     }
 
-    // First upload claims the name; afterwards only the claiming install may
-    // write it. Identity is a fact of the token, not a claim in the file.
-    const tokenHash = await sha256hex(token);
-    const rec = await env.NAMES.get(name, { type: "json" });
-    if (rec && rec.h !== tokenHash) {
-      return json(403, { error: `the name '${name}' is already used from another ` +
-                                 "install - pick a different name in the Publish box" });
+    // Ownership + rate limit on the claim key. Legacy uploads must match the token
+    // that first claimed the name; Discord uploads are already proven by the
+    // signed session, so the record just tracks them for the admin roster.
+    const rec = await env.NAMES.get(claimKey, { type: "json" });
+    if (!sess) {
+      const tokenHash = await sha256hex(token);
+      if (rec && rec.h && rec.h !== tokenHash) {
+        return json(403, { error: `the name '${displayName}' is already used from another ` +
+                                   "install - pick a different name in the Publish box" });
+      }
     }
     if (rec && Date.now() - (rec.t || 0) < MIN_INTERVAL_MS) {
       return json(429, { error: "uploading too fast - wait half a minute" });
     }
 
-    data.contributor = name;               // server-side identity, always
-    if (sess) data.discord_id = sess.d;    // contributor tracking when logged in
-    const path = `data/captures/${name}.json`;
+    data.contributor = displayName;        // server-side identity, always
+    if (sess) data.discord_id = sess.d;    // account attribution when logged in
+    const path = `data/captures/${claimKey}.json`;
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
 
     const gh = (url, init = {}) => fetch(`https://api.github.com/repos/${env.REPO}/${url}`, {
@@ -156,7 +172,7 @@ export default {
     const put = await gh(`contents/${path}`, {
       method: "PUT",
       body: JSON.stringify({
-        message: `contribution: ${name} (${data.maps.length} maps)`,
+        message: `contribution: ${displayName} (${data.maps.length} maps)`,
         content,
         ...(sha ? { sha } : {}),
       }),
@@ -164,8 +180,12 @@ export default {
     if (put.status !== 200 && put.status !== 201) {
       return json(502, { error: `github: HTTP ${put.status}` });
     }
-    await env.NAMES.put(name, JSON.stringify({ h: tokenHash, t: Date.now() }));
-    return json(200, { action: sha ? "updated" : "created", maps: data.maps.length });
+    // Roster record for the admin panel: who, their discord id, when, last size.
+    const newRec = sess
+      ? { d: sess.d, n: displayName, t: Date.now(), maps: data.maps.length }
+      : { h: await sha256hex(token), n: displayName, t: Date.now(), maps: data.maps.length };
+    await env.NAMES.put(claimKey, JSON.stringify(newRec));
+    return json(200, { action: sha ? "updated" : "created", maps: data.maps.length, as: displayName });
   },
 };
 
@@ -242,10 +262,48 @@ async function authCallback(url, env) {
   const uRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: "Bearer " + at } });
   if (!uRes.ok) return new Response("discord user fetch failed", { status: 502 });
   const u = await uRes.json();
+  const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
   const session = await signSession(
-    { d: u.id, n: u.global_name || u.username || "scout", exp: Date.now() + 30 * 86400000 }, env);   // 30 days
+    { d: u.id, n: u.global_name || u.username || "scout",
+      admin: admins.includes(String(u.id)), exp: Date.now() + 30 * 86400000 }, env);   // 30 days
   const back = st.r || "/";
   return Response.redirect(back + (back.includes("#") ? "&" : "#") + "session=" + encodeURIComponent(session), 302);
+}
+
+function sanitizeName(s) {
+  const x = String(s || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+  return x.length >= 2 ? x : "";
+}
+
+// The admin roster is the whole point of "who is sending reports": it walks the
+// KV claim records (one per contributor) and returns name + discord id + when
+// they last uploaded + last batch size. Gated server-side to ADMIN_IDS - the
+// session's own admin flag is only a UI hint, never the authority.
+async function adminContributors(request, env) {
+  const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+  const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!sess || !admins.includes(String(sess.d))) return json(403, { error: "admins only" });
+  const out = [];
+  let cursor;
+  do {
+    const page = await env.NAMES.list({ cursor });
+    for (const k of page.keys) {
+      if (k.name === "_refresh_at") continue;
+      const r = await env.NAMES.get(k.name, { type: "json" });
+      if (!r) continue;
+      out.push({
+        key: k.name,
+        name: r.n || k.name,
+        discord_id: r.d || null,
+        login: !!r.d,
+        last_upload: r.t || null,
+        last_maps: r.maps ?? null,
+      });
+    }
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  out.sort((a, b) => (b.last_upload || 0) - (a.last_upload || 0));
+  return json(200, { contributors: out, count: out.length });
 }
 
 function json(status, obj) {

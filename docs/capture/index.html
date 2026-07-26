@@ -49,7 +49,7 @@
   .obs:first-of-type{border-top:0}
   .cap{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
   .cap:first-of-type{border-top:0}
-  .warn{color:var(--bad)} .ok{color:var(--good)}
+  .warn{color:var(--bad)} .ok{color:var(--good)} .faint{color:var(--faint)}
 </style></head><body>
 <header>
   <h1>OW Scout — Capture <span class="status">· browser</span></h1>
@@ -152,6 +152,12 @@
       <button id="download" class="ghost">Download JSON</button>
     </div>
     <div class="status" id="pubnote" style="margin-top:6px">First upload under a name claims it for this browser; the site rebuilds automatically (~2 min). Names: 2–24 of a–z 0–9 _ -</div>
+  </div>
+
+  <div class="card" id="admincard" style="display:none">
+    <h2>Admin — who's contributing</h2>
+    <div class="row"><button id="adminrefresh" class="ghost" type="button">Refresh</button><span id="adminnote" class="status"></span></div>
+    <div id="adminlist" class="status" style="margin-top:8px;overflow-x:auto"></div>
   </div>
     </div>
     <aside class="previewcol">
@@ -513,7 +519,7 @@ function buildContribution(name, maps){ return {format:1, contributor:name, tool
 async function publish(){ const note=document.getElementById('pubnote'); const maps=await idbAll();
   if(!maps.length){ note.textContent='nothing captured yet.'; return; }
   const name=(document.getElementById('pubname').value||'').trim().toLowerCase();
-  if(!/^[a-z0-9_-]{2,24}$/.test(name)){ note.innerHTML='<span class="warn">name must be 2-24 chars: a-z 0-9 _ -</span>'; return; }
+  if(!sessionPayload() && !/^[a-z0-9_-]{2,24}$/.test(name)){ note.innerHTML='<span class="warn">name must be 2-24 chars: a-z 0-9 _ -, or log in with Discord</span>'; return; }
   localStorage.setItem('owscout_name',name); note.textContent='publishing…';
   const headers={'content-type':'application/json','X-Owscout-Name':name,'X-Owscout-Token':identity()};
   const sess=localStorage.getItem('owscout_session'); if(sess) headers['X-Owscout-Session']=sess;   // Discord login (optional)
@@ -532,12 +538,34 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 function sessionPayload(){ const t=localStorage.getItem('owscout_session'); if(!t) return null;
   try{ const j=decodeURIComponent(escape(atob(t.split('.')[0].replace(/-/g,'+').replace(/_/g,'/'))));
     const p=JSON.parse(j); return (p.exp && Date.now()<p.exp)?p:null; }catch(e){ return null; } }
+// Mirror the Worker's identity rule so the (locked) name field shows exactly what
+// the scout will be published under.
+function acctName(p){ const x=(''+(p.n||'')).toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24); return x.length>=2?x:('scout-'+String(p.d||'').slice(-6)); }
 function renderAcct(){ const a=document.getElementById('acct'); if(!a) return; const p=sessionPayload();
+  const pn=document.getElementById('pubname');
   if(p){ a.innerHTML=`<span class="ok">logged in as <b>${(''+p.n).replace(/[<>&]/g,'')}</b></span> · <a href="#" id="logout">log out</a>`;
-    document.getElementById('logout').onclick=e=>{ e.preventDefault(); localStorage.removeItem('owscout_session'); renderAcct(); };
-    const pn=document.getElementById('pubname'); if(pn && !pn.value) pn.value=(''+p.n).toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24);
-  } else { a.innerHTML=`<button id="dlogin" class="ghost" type="button">Log in with Discord</button> <span style="color:var(--faint)">optional — ties your publishes to your account</span>`;
-    document.getElementById('dlogin').onclick=()=>{ location.href=ENDPOINT+'/auth/login?redirect='+encodeURIComponent(location.href.split('#')[0]); }; } }
+    document.getElementById('logout').onclick=e=>{ e.preventDefault(); localStorage.removeItem('owscout_session');
+      if(pn){ pn.disabled=false; pn.value=localStorage.getItem('owscout_name')||''; } renderAcct(); };
+    // Discord account is the authoritative scout name: lock the field to it.
+    if(pn){ pn.value=acctName(p); pn.disabled=true; pn.title='your scouts publish under your Discord account'; }
+    renderAdmin(p);
+  } else { a.innerHTML=`<button id="dlogin" class="ghost" type="button">Log in with Discord</button> <span class="faint">optional — publishes your scouts under your account</span>`;
+    document.getElementById('dlogin').onclick=()=>{ location.href=ENDPOINT+'/auth/login?redirect='+encodeURIComponent(location.href.split('#')[0]); };
+    if(pn) pn.disabled=false; renderAdmin(null); } }
+// Admin roster (visible only to ADMIN_IDS): who is sending scout reports.
+async function renderAdmin(p){ const card=document.getElementById('admincard'); if(!card) return;
+  if(!(p&&p.admin)){ card.style.display='none'; return; } card.style.display='';
+  const note=document.getElementById('adminnote'), list=document.getElementById('adminlist'); note.textContent='loading…';
+  try{ const res=await fetch(ENDPOINT+'/admin/contributors',{headers:{'X-Owscout-Session':localStorage.getItem('owscout_session')||''}});
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok){ note.innerHTML='<span class="warn">'+(j.error||('HTTP '+res.status))+'</span>'; list.innerHTML=''; return; }
+    note.textContent=j.count+' contributor'+(j.count===1?'':'s');
+    list.innerHTML = (j.contributors||[]).length
+      ? '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr class="faint" style="text-align:left"><th style="padding:3px 6px">name</th><th>login</th><th>discord id</th><th>last upload</th><th>maps</th></tr>'+
+        j.contributors.map(c=>`<tr style="border-top:1px solid var(--line)"><td style="padding:3px 6px">${(''+c.name).replace(/[<>&]/g,'')}</td><td>${c.login?'✓':'—'}</td><td class="faint">${c.discord_id||'—'}</td><td>${c.last_upload?new Date(c.last_upload).toLocaleString():'—'}</td><td>${c.last_maps??'—'}</td></tr>`).join('')+
+        '</table>'
+      : '<span class="faint">no contributors yet</span>';
+  }catch(e){ note.innerHTML='<span class="warn">could not load ('+e+')</span>'; } }
 
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
@@ -551,6 +579,7 @@ document.getElementById('autofetch').checked=localStorage.getItem('owscout_autof
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();
 document.getElementById('autofetch').onchange=e=>localStorage.setItem('owscout_autofetch',e.target.checked?'1':'0');
+document.getElementById('adminrefresh').onclick=()=>renderAdmin(sessionPayload());
 document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('autocal').onclick=autoCalibrate;
 document.getElementById('stopcap').onclick=stopCapture;
