@@ -145,6 +145,7 @@
 
   <div class="card">
     <h2>Publish to the site</h2>
+    <div id="acct" class="status" style="margin-bottom:8px"></div>
     <div class="row">
       <label class="f">Publish as<input type="text" id="pubname" placeholder="your-name" style="width:170px"></label>
       <button id="publish" disabled>Publish my captures →</button>
@@ -514,7 +515,9 @@ async function publish(){ const note=document.getElementById('pubnote'); const m
   const name=(document.getElementById('pubname').value||'').trim().toLowerCase();
   if(!/^[a-z0-9_-]{2,24}$/.test(name)){ note.innerHTML='<span class="warn">name must be 2-24 chars: a-z 0-9 _ -</span>'; return; }
   localStorage.setItem('owscout_name',name); note.textContent='publishing…';
-  try{ const res=await fetch(ENDPOINT,{method:'POST',headers:{'content-type':'application/json','X-Owscout-Name':name,'X-Owscout-Token':identity()},body:JSON.stringify(buildContribution(name,maps))});
+  const headers={'content-type':'application/json','X-Owscout-Name':name,'X-Owscout-Token':identity()};
+  const sess=localStorage.getItem('owscout_session'); if(sess) headers['X-Owscout-Session']=sess;   // Discord login (optional)
+  try{ const res=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify(buildContribution(name,maps))});
     const j=await res.json().catch(()=>({}));
     if(res.ok) note.innerHTML=`<span class="ok">published as ${name}: ${j.action} · ${j.maps} maps. The site rebuilds automatically (~2 min).</span>`;
     else note.innerHTML='<span class="warn">publish failed: '+(j.error||('HTTP '+res.status))+'</span>';
@@ -523,8 +526,27 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
   const blob=new Blob([JSON.stringify(buildContribution(name,maps),null,2)],{type:'application/json'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name+'.json'; a.click(); }
 
+// ---------- Discord login (optional; ties publishes to a Discord account) ----------
+// The session token's payload is readable here just for display; the Worker
+// verifies its signature on publish, so this is cosmetic until you're logged in.
+function sessionPayload(){ const t=localStorage.getItem('owscout_session'); if(!t) return null;
+  try{ const j=decodeURIComponent(escape(atob(t.split('.')[0].replace(/-/g,'+').replace(/_/g,'/'))));
+    const p=JSON.parse(j); return (p.exp && Date.now()<p.exp)?p:null; }catch(e){ return null; } }
+function renderAcct(){ const a=document.getElementById('acct'); if(!a) return; const p=sessionPayload();
+  if(p){ a.innerHTML=`<span class="ok">logged in as <b>${(''+p.n).replace(/[<>&]/g,'')}</b></span> · <a href="#" id="logout">log out</a>`;
+    document.getElementById('logout').onclick=e=>{ e.preventDefault(); localStorage.removeItem('owscout_session'); renderAcct(); };
+    const pn=document.getElementById('pubname'); if(pn && !pn.value) pn.value=(''+p.n).toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24);
+  } else { a.innerHTML=`<button id="dlogin" class="ghost" type="button">Log in with Discord</button> <span style="color:var(--faint)">optional — ties your publishes to your account</span>`;
+    document.getElementById('dlogin').onclick=()=>{ location.href=ENDPOINT+'/auth/login?redirect='+encodeURIComponent(location.href.split('#')[0]); }; } }
+
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
+// Capture the signed session (or error flag) the login callback appends to the URL.
+(()=>{ const h=new URLSearchParams(location.hash.slice(1));
+  if(h.get('session')) localStorage.setItem('owscout_session', h.get('session'));
+  if(h.get('session')||h.get('login_error')) history.replaceState(null,'',location.pathname+location.search);
+  if(h.get('login_error')==='notconfigured'){ const a=document.getElementById('acct'); if(a) a.innerHTML='<span class="warn">Discord login isn\'t set up yet.</span>'; setTimeout(renderAcct,4000); }
+  else renderAcct(); })();
 document.getElementById('autofetch').checked=localStorage.getItem('owscout_autofetch')!=='0';   // default ON
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();

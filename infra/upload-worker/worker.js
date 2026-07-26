@@ -42,7 +42,7 @@ export default {
         headers: {
           "access-control-allow-origin": "*",
           "access-control-allow-methods": "POST, OPTIONS",
-          "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token",
+          "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
           "access-control-max-age": "86400",
         },
       });
@@ -81,11 +81,24 @@ export default {
       return json(200, { started: true });
     }
 
+    // Discord OAuth (scaffold). Inert until DISCORD_* + SESSION_SECRET are set:
+    // /auth/login then bounces back with ?#login_error=notconfigured instead of
+    // starting a flow. These are browser navigations (not fetch), so no CORS.
+    if (url.pathname === "/auth/login") return authLogin(url, env);
+    if (url.pathname === "/auth/callback") return authCallback(url, env);
+
     if (request.method !== "POST") {
       return json(405, { error: "POST a contribution with X-Owscout-Name and X-Owscout-Token" });
     }
     const name = (request.headers.get("x-owscout-name") || "").trim().toLowerCase();
-    const token = request.headers.get("x-owscout-token") || "";
+    let token = request.headers.get("x-owscout-token") || "";
+    // Optional Discord login: a valid signed session is an unforgeable identity,
+    // so it supplies a stable per-account token ("discord:<id>") that flows through
+    // the existing name-claim unchanged. That prefix is reserved for verified
+    // sessions, so a keyless upload can't hand-craft one to impersonate a login.
+    const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+    if (sess) token = "discord:" + sess.d;
+    else if (token.startsWith("discord:")) return json(400, { error: "that token prefix is reserved for Discord login" });
     if (!NAME_RE.test(name)) {
       return json(400, { error: "name must be 2-24 chars of a-z 0-9 _ -" });
     }
@@ -121,6 +134,7 @@ export default {
     }
 
     data.contributor = name;               // server-side identity, always
+    if (sess) data.discord_id = sess.d;    // contributor tracking when logged in
     const path = `data/captures/${name}.json`;
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
 
@@ -160,6 +174,80 @@ async function sha256hex(s) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// --- Discord OAuth + signed sessions (scaffold; inert until env is set) --------
+// A session token is base64url(JSON payload) + "." + base64url(HMAC-SHA256(body)).
+// The app can read the payload for display, but only the Worker (which holds
+// SESSION_SECRET) can mint or trust one, so a valid signature == a verified
+// Discord identity. Setup, when you're ready to turn it on:
+//   - create a Discord app; add redirect  <worker>/auth/callback
+//   - wrangler secret put DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET
+//   - wrangler secret put SESSION_SECRET            (any long random string)
+//   - set DISCORD_REDIRECT_URI in wrangler.toml [vars] to that callback URL
+function b64url(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlToBytes(s) {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+async function hmacB64(secret, msg) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return b64url(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg)));
+}
+async function signSession(payload, env) {
+  const body = b64url(new TextEncoder().encode(JSON.stringify(payload)));
+  return body + "." + (await hmacB64(env.SESSION_SECRET, body));
+}
+async function verifySession(tok, env) {
+  try {
+    if (!tok || !env.SESSION_SECRET) return null;
+    const [body, sig] = tok.split(".");
+    if (!body || !sig) return null;
+    if ((await hmacB64(env.SESSION_SECRET, body)) !== sig) return null;
+    const p = JSON.parse(new TextDecoder().decode(b64urlToBytes(body)));
+    return p.exp && Date.now() < p.exp ? p : null;
+  } catch { return null; }
+}
+function oauthReady(env) {
+  return !!(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET &&
+            env.DISCORD_REDIRECT_URI && env.SESSION_SECRET);
+}
+async function authLogin(url, env) {
+  const back = url.searchParams.get("redirect") || "/";
+  if (!oauthReady(env)) {   // inert: bounce back with a flag the app explains
+    return Response.redirect(back + (back.includes("#") ? "&" : "#") + "login_error=notconfigured", 302);
+  }
+  const state = await signSession({ r: back, exp: Date.now() + 600000 }, env);   // 10 min
+  const p = new URLSearchParams({
+    client_id: env.DISCORD_CLIENT_ID, redirect_uri: env.DISCORD_REDIRECT_URI,
+    response_type: "code", scope: "identify", state,
+  });
+  return Response.redirect("https://discord.com/oauth2/authorize?" + p.toString(), 302);
+}
+async function authCallback(url, env) {
+  const code = url.searchParams.get("code");
+  const st = await verifySession(url.searchParams.get("state"), env);
+  if (!oauthReady(env) || !code || !st) return new Response("login failed", { status: 400 });
+  const tokRes = await fetch("https://discord.com/api/oauth2/token", {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET,
+      grant_type: "authorization_code", code, redirect_uri: env.DISCORD_REDIRECT_URI,
+    }),
+  });
+  if (!tokRes.ok) return new Response("discord token exchange failed", { status: 502 });
+  const at = (await tokRes.json()).access_token;
+  const uRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: "Bearer " + at } });
+  if (!uRes.ok) return new Response("discord user fetch failed", { status: 502 });
+  const u = await uRes.json();
+  const session = await signSession(
+    { d: u.id, n: u.global_name || u.username || "scout", exp: Date.now() + 30 * 86400000 }, env);   // 30 days
+  const back = st.r || "/";
+  return Response.redirect(back + (back.includes("#") ? "&" : "#") + "session=" + encodeURIComponent(session), 302);
+}
+
 function json(status, obj) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -167,7 +255,7 @@ function json(status, obj) {
       "content-type": "application/json",
       // The dashboard calls /refresh from the Pages origin.
       "access-control-allow-origin": "*",
-      "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token",
+      "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
     },
   });
 }

@@ -6,10 +6,16 @@ compatibility_date = "2026-07-01"
 REPO = "ccarney651/faceit-scout"
 # DENYLIST = "somename,othername"   # optional, comma-separated
 
+# Discord login (scaffold - stays OFF until all four are present). Uncomment and
+# set this to the deployed callback URL when you create the Discord app:
+# DISCORD_REDIRECT_URI = "https://owscout-upload.owscout.workers.dev/auth/callback"
+
 # After `wrangler kv namespace create NAMES`, paste the id here:
 [[kv_namespaces]]
 binding = "NAMES"
 id = "8230bf3bec1d424da7d07a6e7eb4cb19"
 
-# Secret (set with `wrangler secret put GITHUB_TOKEN`):
-#   fine-grained PAT, Contents read/write, the site repo only
+# Secrets (set with `wrangler secret put <NAME>`):
+#   GITHUB_TOKEN     fine-grained PAT, Contents read/write, the site repo only
+#   DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET   from the Discord app (login scaffold)
+#   SESSION_SECRET   any long random string, signs the login session tokens
