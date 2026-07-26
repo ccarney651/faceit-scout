@@ -61,6 +61,8 @@
       <button id="setL" class="ghost" disabled>Set LEFT box (blue)</button>
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
       <button id="clearcal" class="ghost">reset boxes</button>
+      <button id="hidep" class="ghost" disabled>Hide preview</button>
+      <button id="stopcap" class="ghost" disabled>Stop capture</button>
     </div>
     <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate ✨</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
   </div>
@@ -135,13 +137,7 @@
     </div>
     <aside class="previewcol">
       <div class="card" style="padding:8px">
-        <div class="row" style="justify-content:space-between;margin-bottom:6px">
-          <span class="status">Live preview (for calibration)</span>
-          <span class="row" style="gap:6px">
-            <button id="hidep" class="ghost" disabled>Hide preview</button>
-            <button id="stopcap" class="ghost" disabled>Stop capture</button>
-          </span>
-        </div>
+        <div class="status" style="margin-bottom:6px">Live preview (for calibration)</div>
         <div class="stage" id="stage">
           <video id="vid" autoplay muted playsinline></video>
           <canvas id="ov" class="ov"></canvas>
