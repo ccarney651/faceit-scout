@@ -277,7 +277,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready; document.getElementById('flip').disabled=!ready;
-  document.getElementById('undo').disabled=!(session&&session.snaps.length);
+  document.getElementById('undo').disabled=!(session&&session.history.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
   if(!vid.srcObject) m='① Click <b>Share my screen</b> and pick your Overwatch window (borderless/windowed).';
@@ -314,7 +314,7 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
 let session=null, pipWin=null;
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
-  session={code:c, submaps, phased, round:1, sub: submaps.length?null:null, attacker: phased?'b':null, snaps:[], lastKept:null};
+  session={code:c, submaps, phased, round:1, sub: submaps.length?null:null, attacker: phased?'b':null, snaps:[], lastKept:null, history:[]};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
   const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
   document.getElementById('subpill').style.display=submaps.length?'':'none';
@@ -354,13 +354,27 @@ function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
   if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)){ if(!auto) snapMsg('unchanged — nothing new'); return; }
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
     a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name), ts:session.snaps.length*1000};
-  session.snaps.push(snap); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
+  session.snaps.push(snap); session.history.push({type:'snap'}); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
   refreshSession(); snapMsg('✓ snapshot '+session.snaps.length+' kept');
 }
-function nextRound(){ if(!session) return; session.round++; if(session.phased) session.attacker=(session.attacker==='a'?'b':'a'); session.lastKept=null; refreshSession(); }
-function pickSub(s){ if(!session) return; session.sub=s; refreshSession(); }
-function flipAttack(){ if(!session||!session.phased) return; session.attacker=(session.attacker==='a'?'b':'a'); refreshSession(); }
-function undo(){ if(!session||!session.snaps.length) return; session.snaps.pop(); session.lastKept=null; refreshSession(); }
+function nextRound(){ if(!session) return;
+  session.history.push({type:'round', round:session.round, sub:session.sub, attacker:session.attacker});
+  session.round++;
+  if(session.submaps.length) session.sub=null;                        // control: a new sub-map each round → re-prompt
+  if(session.phased) session.attacker=(session.attacker==='a'?'b':'a');
+  session.lastKept=null; refreshSession();
+  if(session.submaps.length) snapMsg('round '+session.round+' — pick the sub-map ▸', true);
+}
+function pickSub(s){ if(!session) return; session.history.push({type:'sub', sub:session.sub}); session.sub=s; snapMsg(''); refreshSession(); }
+function flipAttack(){ if(!session||!session.phased) return; session.history.push({type:'flip', attacker:session.attacker}); session.attacker=(session.attacker==='a'?'b':'a'); refreshSession(); }
+// Undo the LAST action of any kind (snapshot / round / sub-map / attack flip), LIFO.
+function undo(){ if(!session||!session.history.length) return; const h=session.history.pop();
+  if(h.type==='snap'){ session.snaps.pop(); session.lastKept=null; }
+  else if(h.type==='round'){ session.round=h.round; session.sub=h.sub; session.attacker=h.attacker; session.lastKept=null; }
+  else if(h.type==='sub'){ session.sub=h.sub; }
+  else if(h.type==='flip'){ session.attacker=h.attacker; }
+  snapMsg('undid '+h.type); refreshSession();
+}
 
 // ---------- save map -> IndexedDB (keyed match:game, replace) ----------
 function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',2);
@@ -402,7 +416,7 @@ function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.
   const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
   main.className='prow'; main.innerHTML='';
   mk(main,'◉ Snapshot',()=>snapshot(false),'go');
-  mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin'); mk(main,'⏭ Next',nextCode);
+  mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
   // sub-map row (control maps) — warn colour until one is picked; active highlighted
   sub.innerHTML='';
   if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
