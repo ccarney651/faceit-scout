@@ -2078,6 +2078,22 @@ function renderMeta(){
 function renderMatches(){
   const wrap=el(`<div></div>`);
   const bar=el(`<div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap"></div>`);
+  // Region + Division filters (FACEIT-style). They drive the shared division
+  // view, so the rest of the page follows and the header switcher stays in sync.
+  const suffix=(v)=> v.region? v.label.slice(v.region.length+1) : v.label;   // "Master"/"Combined"
+  const regions=[...new Set(VIEWS.map(v=>v.region).filter(Boolean))];
+  const curRegion=(viewOf(CURRENT_VIEW).region)||regions[0];
+  const regSel=el(`<select title="Region" style="font-size:15px;padding:11px 13px"></select>`);
+  regions.forEach(r=>regSel.appendChild(el(`<option${r===curRegion?' selected':''}>${esc(r)}</option>`)));
+  const divSel=el(`<select title="Division" style="font-size:15px;padding:11px 13px"></select>`);
+  const fillDivs=()=>{ divSel.innerHTML='';
+    VIEWS.filter(v=>v.region===regSel.value).forEach(v=>
+      divSel.appendChild(el(`<option value="${v.id}"${v.id===CURRENT_VIEW?' selected':''}>${esc(suffix(v))}</option>`))); };
+  fillDivs();
+  regSel.onchange=()=>{ const f=VIEWS.find(v=>v.region===regSel.value); if(f) setDivision(f.id); };
+  divSel.onchange=()=>setDivision(divSel.value);
+  if(regions.length) bar.appendChild(regSel);
+  if(VIEWS.length>1) bar.appendChild(divSel);
   const search=el(`<input placeholder="search team, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
   const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
   bar.append(search,sort);
@@ -2141,6 +2157,7 @@ function updateHeader(){
 }
 function setDivision(id){
   CURRENT_VIEW=id; recomputeDivision(); updateHeader();
+  const dsel=document.getElementById('division'); if(dsel) dsel.value=id;   // keep header in sync
   const cur=document.querySelector('nav button.active');
   show(cur?cur.dataset.id:'overview');
 }
