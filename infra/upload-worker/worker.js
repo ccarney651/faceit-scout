@@ -113,6 +113,11 @@ export default {
       claimKey = "u_" + sess.d;                    // stable per-account file + KV key
     } else {
       if (!NAME_RE.test(name)) return json(400, { error: "name must be 2-24 chars of a-z 0-9 _ -" });
+      // "u_<id>" is the file/KV namespace for verified Discord accounts. A keyless
+      // upload must not be able to pick that name, or it could claim - and, because
+      // Discord-written records carry no token hash, overwrite - a logged-in
+      // scout's file. Reserve the prefix for real sessions.
+      if (name.startsWith("u_")) return json(400, { error: "names starting with 'u_' are reserved for Discord logins" });
       if (token.length < 16 || token.length > 128) return json(400, { error: "malformed identity token" });
       displayName = name;
       claimKey = name;
@@ -151,6 +156,7 @@ export default {
 
     data.contributor = displayName;        // server-side identity, always
     if (sess) data.discord_id = sess.d;    // account attribution when logged in
+    else delete data.discord_id;           // never let a keyless upload assert one
     const path = `data/captures/${claimKey}.json`;
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
 

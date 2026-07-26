@@ -203,9 +203,9 @@ table.blocks thead th:hover{color:var(--faint)}
 .crow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
 .crow.thin{opacity:.55}                      /* n=1: present, but visibly weak evidence */
 .csrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
-.wl{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;font-weight:800;font-size:11px;flex:none}
-.wl.w{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)}
-.wl.l{background:color-mix(in srgb,var(--bad) 20%,transparent);color:var(--bad)}
+.wlsq{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;font-weight:800;font-size:11px;flex:none}
+.wlsq.w{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)}
+.wlsq.l{background:color-mix(in srgb,var(--bad) 20%,transparent);color:var(--bad)}
 details.mapblk{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:8px}
 details.mapblk>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;
   align-items:center;justify-content:space-between;gap:10px;font-weight:650}
@@ -322,13 +322,20 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 @media (max-width:640px){.rosters{grid-template-columns:1fr}}
 /* ---- mobile pass: prep links get opened from Discord on phones ---- */
 @media (max-width:640px){
-  main{padding:12px 10px 48px}               /* reclaim edge gutters */
+  main{padding:12px 10px 48px;overflow-x:clip}  /* reclaim gutters; clip (not hidden) keeps sticky working */
   .topbar-in{padding:10px 10px 0}
   nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   nav::-webkit-scrollbar{display:none}
   nav button{white-space:nowrap;padding:9px 10px;font-size:13px}
   .card{padding:10px}
-  .controls{flex-wrap:wrap;row-gap:8px}
+  /* Let flex/grid children shrink below their content width so nothing pushes the
+     page wider than the phone viewport (min-width:auto is the usual culprit). */
+  .controls{flex-wrap:wrap;row-gap:8px;min-width:0}
+  .controls>*{min-width:0;max-width:100%}
+  .controls select{min-width:0!important}
+  .recency{flex-wrap:wrap;gap:6px 10px}
+  input[type=range]{width:100%;max-width:220px;min-width:0}
+  .scoutgrid,.scoutgrid>*,.glance-col{min-width:0}
   .game-hd{flex-wrap:wrap;row-gap:4px}       /* map + score + code stack cleanly */
   .game-hd>span[style*="margin-left:auto"]{margin-left:0!important;width:100%}
   th,td{padding:6px 7px;font-size:12.5px}
@@ -1567,7 +1574,7 @@ function renderScoutBody(t){
         // Thin data degrades gracefully: step the overlap requirement down until
         // something matches, and SAY which tier is being shown - a weak match
         // labelled as weak beats an empty section.
-        const scored=mus.map(m=>({m,ov:signal.filter(h=>m.vs.includes(h))}));
+        const scored=mus.map(m=>({m,ov:signal.filter(h=>(m.vs||[]).includes(h))}));
         let need=Math.min(signal.length,3), sim=[];
         for(; need>=1; need--){
           sim=scored.filter(x=>x.ov.length>=need).sort((a,b)=>b.ov.length-a.ov.length);
@@ -1585,8 +1592,8 @@ function renderScoutBody(t){
             : `<p class="note" style="margin-top:0">Only ${sim.length} game${sim.length>1?'s':''} where the opponent shared ${q} — too thin to call a record, but here's what they did:</p>`));
           sim.slice(0,6).forEach(({m,ov})=>{
             resBox.appendChild(el(`<div class="crow${ov.length<2?' thin':''}">`+
-              `<span class="csrow"><span class="wl ${m.won?'w':'l'}">${m.won?'W':'L'}</span>`+
-              `<b>${esc(m.map)}</b><span class="faint">ran</span>${compRow(m.open)}</span>`+
+              `<span class="csrow"><span class="wlsq ${m.won?'w':'l'}">${m.won?'W':'L'}</span>`+
+              `<b>${esc(m.map)}</b><span class="faint">ran</span>${compRow(m.open||[])}</span>`+
               `<span class="rec">matched ${ov.length}/${signal.length}</span></div>`));
           });
         } else {
@@ -1852,7 +1859,7 @@ function renderPlayers(){
     });
   });
   if(!Object.keys(byHero).length){
-    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No ranked players yet. A player earns a rank once a hero has <b>3+ captured players</b> — capture more games to fill this in.</p>`));
+    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No ranked players yet. Player rankings appear once a division has <b>enough captured games</b> — capture more to fill this in.</p>`));
     return wrap;
   }
   wrap.appendChild(el(sectionH('Players',
