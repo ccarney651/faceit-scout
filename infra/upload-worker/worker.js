@@ -33,7 +33,20 @@ const FORMAT = 1;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === "OPTIONS") return json(204, {});   // CORS preflight
+    // CORS preflight. Must be a 204 with NO body (a 204 carrying a body is
+    // illegal and the runtime 500s it, which breaks the browser capture app's
+    // preflight even though keyless clients like the exe never preflight).
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "POST, OPTIONS",
+          "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token",
+          "access-control-max-age": "86400",
+        },
+      });
+    }
 
     // /refresh - anyone may ask the site to pull new FACEIT matches NOW rather
     // than waiting for the 9pm build. It fires a repository_dispatch (which the
