@@ -48,11 +48,12 @@
     <h2>1 · Set up (once)</h2>
     <div class="row">
       <button id="share">Share my screen</button>
+      <button id="autocal" disabled>Auto-calibrate ✨</button>
       <button id="setL" class="ghost" disabled>Set LEFT box (blue)</button>
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
       <button id="clearcal" class="ghost">reset boxes</button>
-      <span class="status" id="calhint">Share your screen, then drag a box over the 5 blue and 5 red portraits.</span>
     </div>
+    <div class="status" id="calhint" style="margin-top:6px">Share your screen, then click <b>Auto-calibrate</b> (or drag the boxes by hand). Works best with Overwatch borderless/fullscreen at 16:9, default UI scale.</div>
     <div class="stage" id="stage" style="margin-top:10px">
       <video id="vid" autoplay muted playsinline></video>
       <canvas id="ov" class="ov"></canvas>
@@ -215,19 +216,28 @@ function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const comp=r
   const ok=[...comp.a,...comp.b].filter(s=>s.score>=0.55).length; const el=document.getElementById('calhint');
   el.innerHTML = ok>=8?`<span class="ok">calibration looks good — ${ok}/10 portraits recognised.</span>`
     : ok>=5?`calibration: ${ok}/10 recognised — usable; nudge the boxes if some read ??.`
-    : `<span class="warn">only ${ok}/10 recognised — boxes look misaligned; redraw them right on the portraits.</span>`; }
+    : `<span class="warn">only ${ok}/10 recognised — boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`; }
+// Auto-calibrate: the HUD sits at fixed fractions of the screen (mirror of
+// owscout/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
+// the captured resolution — no dragging. Self-test then confirms alignment.
+const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
+function autoCalibrate(){ if(!vid.videoWidth){ document.getElementById('calhint').innerHTML='<span class="warn">Share your screen first.</span>'; return; }
+  const W=vid.videoWidth, H=vid.videoHeight;
+  for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s]; boxes[s]={x:fx*W,y:fy*H,w:fw*W,h:fh*H}; }
+  localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); drawOverlay(); updateBtns(); selfTest(); }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     document.getElementById('calhint').textContent='Screen shared — set the two boxes over the portrait strips.'; updateBtns();
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
+  document.getElementById('autocal').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready; document.getElementById('flip').disabled=!ready;
   document.getElementById('undo').disabled=!(session&&session.snaps.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
   if(!vid.srcObject) m='① Click <b>Share my screen</b> and pick your Overwatch window (borderless/windowed).';
-  else if(!(boxes.a&&boxes.b)) m='② Drag the <b>LEFT</b> and <b>RIGHT</b> boxes over the two 5-portrait strips.';
+  else if(!(boxes.a&&boxes.b)) m='② Click <b>Auto-calibrate ✨</b> (or drag the LEFT/RIGHT boxes by hand).';
   else if(!selectedCode()) m='③ Pick a replay code in step 2.';
   else m='④ <b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.';
   g.innerHTML=m; }
@@ -390,6 +400,7 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
 document.getElementById('refresh').onclick=refreshFeeds;
+document.getElementById('autocal').onclick=autoCalibrate;
 document.getElementById('publish').onclick=publish;
 document.getElementById('download').onclick=downloadContrib;
 document.getElementById('share').onclick=share;
