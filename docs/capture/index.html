@@ -16,6 +16,12 @@
   .layout.nopreview .previewcol{display:none}
   @media(max-width:900px){.layout{grid-template-columns:1fr}.previewcol{position:static}}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .howto{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px}
+  .howto summary{cursor:pointer;font-weight:700;color:var(--accent);list-style:none}
+  .howto summary::-webkit-details-marker{display:none}
+  .howto summary::before{content:'▸ ';color:var(--muted)}
+  .howto[open] summary::before{content:'▾ '}
+  .howto ol{margin:8px 0 0;padding-left:20px;line-height:1.6} .howto li{margin:2px 0}
   .card h2{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   label.f{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}
@@ -51,6 +57,18 @@
 </header>
 <main>
   <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 13px;font-size:13px"></div>
+  <details id="howto" class="howto">
+    <summary>How it works — 30-second guide</summary>
+    <ol>
+      <li>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</li>
+      <li><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</li>
+      <li><b>Auto-calibrate ✨</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</li>
+      <li><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch's replay-code box, and load it.</li>
+      <li><b>Snapshot</b> each distinct comp (spawn + key fights). Use <b>Next round</b>, <b>Sub-map</b> (control maps), <b>Flip attack</b> (escort/hybrid) as it changes — or <b>Pop out overlay</b> and do it all without alt-tabbing.</li>
+      <li><b>Finish + save</b> the map → it auto-fetches the next code. <b>Publish</b> when you're done; the site updates in ~2 min.</li>
+    </ol>
+    <p class="status" style="margin:4px 0 2px">Tips: snapshot at real moments (there's no auto-spam); use borderless, not exclusive fullscreen; re-scouting an already-covered map still adds player data.</p>
+  </details>
   <div class="layout" id="layout">
     <div class="appcol">
   <div class="card">
@@ -154,8 +172,15 @@ const CONTROL_SUBMAPS={ilios:["Lighthouse","Ruins","Well"],"lijiang tower":["Con
 const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
 function submapsFor(m){ if(!m) return []; let k=m.trim().toLowerCase(); k=MAP_ALIASES[k]||k; return CONTROL_SUBMAPS[k]||[]; }
 
-if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
-  document.getElementById('ctxwarn').textContent="Screen capture may be blocked here. Use the hosted site (https) or a localhost server.";
+// Capture is desktop-only: getDisplayMedia is absent on phones, and you scout
+// while watching Overwatch on a PC anyway. Gate + steer people to the desktop.
+const HAS_CAPTURE = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+if(!HAS_CAPTURE){
+  const noApi = !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  document.getElementById('ctxwarn').innerHTML = noApi
+    ? "📵 <b>Capture needs a desktop browser.</b> You scout while watching Overwatch on a PC — open this page on your computer. (You can still browse all the scouting data on the main site from mobile.)"
+    : "⚠ This page isn't a secure context, so screen capture is blocked — open it from the site (https) or a localhost server.";
+  const sb=document.getElementById('share'); if(sb) sb.disabled=true;
 }
 function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 
@@ -169,7 +194,13 @@ async function loadFeeds(){
   }catch(e){ document.getElementById('ctxwarn').textContent='Could not load refs.json ('+e+').'; }
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
-  buildDivisions(); refreshCodes(); renderCaptured(); setFeedMeta();
+  buildDivisions();
+  // Deep-link from the dashboard's "Capture this team" prompts: ?team=&division=
+  const q=new URLSearchParams(location.search);
+  const dv=q.get('division'); if(dv && [...document.getElementById('div').options].some(o=>o.value===dv)) document.getElementById('div').value=dv;
+  refreshCodes();
+  const tm=q.get('team'); if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
+  renderCaptured(); setFeedMeta();
 }
 function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(el) el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
 async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(el) el.textContent='refreshing…';
@@ -275,6 +306,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('undo').disabled=!(session&&session.history.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
+  if(!HAS_CAPTURE){ g.innerHTML='📵 <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
   if(!vid.srcObject) m='① Click <b>Share my screen</b> and pick your Overwatch window (borderless/windowed).';
   else if(!(boxes.a&&boxes.b)) m='② Click <b>Auto-calibrate ✨</b> (or drag the LEFT/RIGHT boxes by hand).';
   else if(!selectedCode()) m='③ Pick a replay code in step 2.';
@@ -494,6 +526,8 @@ async function downloadContrib(){ const maps=await idbAll(); const name=((docume
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
 document.getElementById('autofetch').checked=localStorage.getItem('owscout_autofetch')!=='0';   // default ON
+(()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
+  ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();
 document.getElementById('autofetch').onchange=e=>localStorage.setItem('owscout_autofetch',e.target.checked?'1':'0');
 document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('autocal').onclick=autoCalibrate;

@@ -69,6 +69,8 @@ main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
 .eyebrow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
+.opener{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:4px;padding:0 4px;margin-left:3px;vertical-align:middle}
+.bvs{display:block;font-size:10.5px;font-weight:400;line-height:1.2;color:var(--faint)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
 .grid{display:grid;gap:10px}
 .cols-2{grid-template-columns:1fr 1fr}
@@ -200,6 +202,10 @@ table.blocks thead th:hover{color:var(--faint)}
 .crow+.crow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 .crow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
 .crow.thin{opacity:.55}                      /* n=1: present, but visibly weak evidence */
+.csrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.wl{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;font-weight:800;font-size:11px;flex:none}
+.wl.w{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)}
+.wl.l{background:color-mix(in srgb,var(--bad) 20%,transparent);color:var(--bad)}
 details.mapblk{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:8px}
 details.mapblk>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;
   align-items:center;justify-content:space-between;gap:10px;font-weight:650}
@@ -223,6 +229,15 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   .mapcol.swaps{border-left:none;padding-left:0;border-top:1px solid var(--line);margin-top:10px}}
 .seg{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);margin:10px 0 2px}
+.segrec{font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);font-size:11px;margin-left:7px}
+.sighint{margin:9px 0 2px;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sighint .sigk{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:4px;padding:1px 5px}
+.sighint .sigk-ban{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.mbchip{display:inline-flex;align-items:center;gap:3px}
+.pickpill{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:4px;padding:0 4px;margin-right:2px}
+.side{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:4px}
+.side.atk{color:var(--damage);background:color-mix(in srgb,var(--damage) 15%,transparent)}
+.side.def{color:var(--tank);background:color-mix(in srgb,var(--tank) 15%,transparent)}
 /* Mode heading over a run of map blocks - the same break the tables get. */
 .modeh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
@@ -805,6 +820,8 @@ function aggregate(matches,team){
 // into a 32-slot bracket, so the top 8 draw byes automatically — no special case.
 const PLAYOFF_QUALIFIERS={Master:8,Expert:16,Advanced:24,Open:32};
 const tierOf=(name)=>['Master','Expert','Advanced','Open'].find(t=>(name||'').includes(t))||null;
+// Deep-link into the browser capture tool, pre-filtered to a team (+ its tier).
+const captureUrl=(team)=>{ const t=tierOf(String((D().summary||{}).championship||''))||''; return 'capture/?team='+encodeURIComponent(team)+(t?'&division='+encodeURIComponent(t):''); };
 const nextPow2=(n)=>{let k=1;while(k<n)k*=2;return k;};
 // Standard bracket seed order so 1 & 2 can only meet in the final:
 // seeds(4)=[1,4,2,3]; seeds(8)=[1,8,4,5,2,7,3,6].
@@ -1148,68 +1165,6 @@ function renderScoutBody(t){
     root.appendChild(rc);
   }
 
-  // ---- Tendencies: deterministic "what they reliably do" reads from FACEIT
-  // bans + map vetoes, each with a sample size and a field comparison. No model —
-  // pure aggregation (the honest version of a "pattern/AI coach"). Works for
-  // every team, scouted or not.
-  {
-    const team=t.team;
-    const tBan={}, tFirst={}, tPick={}; let tBanTot=0, tFirstG=0, tPickTot=0;
-    t.matches.forEach(m=>m.games.forEach(g=>{ if(!g.map) return;
-      const mine=(g.bans||[]).filter(b=>b.hero && b.team===team).sort((a,b)=>(a.order||9)-(b.order||9));
-      if(mine.length){ inc(tFirst, mine[0].hero); tFirstG++; }
-      mine.forEach(b=>{ inc(tBan,b.hero); tBanTot++; });
-      if(g.map_picked_by===team){ inc(tPick,g.map); tPickTot++; }
-    }));
-    const fBan={}, fPick={}; let fBanTot=0, fPickTot=0;
-    D().matches.forEach(m=>m.games.forEach(g=>{ if(!g.map) return;
-      (g.bans||[]).forEach(b=>{ if(b.hero){ inc(fBan,b.hero); fBanTot++; } });
-      if(g.map_picked_by){ inc(fPick,g.map); fPickTot++; }
-    }));
-    const reads=[];
-    const fb=rank(tFirst)[0];
-    if(fb && tFirstG>=3 && fb[1]>=2)
-      reads.push(`Opens with a <b>${esc(fb[0])}</b> first-ban in <b>${fb[1]}/${tFirstG}</b> games (${pctOf(fb[1],tFirstG)}%).`);
-    if(tBanTot>=6){
-      Object.keys(tBan).map(h=>({h,ts:tBan[h]/tBanTot,fs:(fBan[h]||0)/Math.max(1,fBanTot),n:tBan[h]}))
-        .filter(x=>x.n>=2 && x.ts>=x.fs*1.6 && (x.ts-x.fs)>=0.05)
-        .sort((a,b)=>(b.ts-b.fs)-(a.ts-a.fs)).slice(0,3)
-        .forEach(x=>reads.push(`Bans <b>${esc(x.h)}</b> far more than the field — ${Math.round(x.ts*100)}% of their bans vs ${Math.round(x.fs*100)}% league-wide.`));
-    }
-    if(tPickTot>=2){
-      Object.keys(tPick).map(mp=>({mp,tr:tPick[mp]/tPickTot,fr:(fPick[mp]||0)/Math.max(1,fPickTot),n:tPick[mp]}))
-        .filter(x=>x.tr>=x.fr*1.3).sort((a,b)=>(b.n-a.n)||((b.tr-b.fr)-(a.tr-a.fr))).slice(0,3)
-        .forEach(x=>reads.push(`Comfort pick <b>${esc(x.mp)}</b> — chose it ${x.n}/${tPickTot} of their map picks (field picks it ${Math.round(x.fr*100)}%).`));
-    }
-    // Capture-based reads (only where this team has actually been scouted).
-    const sc=((DATA.owscout_comps||{})[t.team]||{}).scout;
-    if(sc){
-      // Best PROVEN comp: highest win% among comps with a real sample (>=3 maps),
-      // so a single-map fluke can never pose as their "best".
-      const proven=(sc.overall||[]).filter(c=>c.maps>=3).sort((a,b)=>(b.win_rate-a.win_rate)||(b.maps-a.maps))[0];
-      if(proven) reads.push(`Best proven comp — ${compRow(proven.heroes)} <span class="faint">${proven.wins}W-${proven.losses}L over ${proven.maps} maps (${Math.round(proven.win_rate*100)}%)</span>.`);
-      // Map -> hero: heroes they almost always bring on a given map (captured openings).
-      const mh=[];
-      Object.entries(sc.maps||{}).forEach(([mp,md])=>{ const hc={}; let tot=0;
-        Object.values(md.segments||{}).forEach(seg=>(seg.open||[]).forEach(f=>{ tot+=f.maps; (f.heroes||[]).forEach(h=>hc[h]=(hc[h]||0)+f.maps); }));
-        if(tot<2) return;
-        const locks=Object.entries(hc).filter(([,n])=>n/tot>=0.6).sort((a,b)=>b[1]-a[1]).map(([h])=>h);
-        if(locks.length) mh.push({mp,tot,locks});
-      });
-      mh.sort((a,b)=>b.tot-a.tot).slice(0,4).forEach(x=>
-        reads.push(`On <b>${esc(x.mp)}</b> almost always runs ${x.locks.map(h=>heroChip(h)).join(' ')} <span class="faint">(${x.tot} games)</span>.`));
-    }
-    const tc=el(`<div class="card"></div>`);
-    tc.appendChild(el(`<p class="eyebrow">Tendencies</p>`));
-    if(reads.length){
-      const box=el(`<div style="display:flex;flex-direction:column;gap:7px"></div>`);
-      reads.forEach(r=>box.appendChild(el(`<div style="font-size:13.5px;line-height:1.45">• ${r}</div>`)));
-      tc.appendChild(box);
-    } else tc.appendChild(el(`<p class="note" style="margin:2px 0 0">Not enough attributed games yet for reliable tendencies.</p>`));
-    tc.appendChild(el(`<p class="note" style="margin-top:8px">Deterministic reads from FACEIT drafts + captured comps, with sample sizes (best-comp needs 3+ maps; map picks 60%+ of games) — patterns, not predictions.</p>`));
-    root.appendChild(tc);
-  }
-
   // ---- At a glance: the prep headline before any scrolling. Four panels —
   // go-to comps, their bans, map pool, form/tempo. Degrades to the FACEIT-derived
   // bans/maps when no comps have been captured for this team yet.
@@ -1230,9 +1185,25 @@ function renderScoutBody(t){
 
     const c2=el(`<div class="glance-col"></div>`);
     c2.appendChild(el(`<p class="eyebrow">Their bans</p>`));
-    const tb=rank(t.bans).slice(0,4);
-    if(tb.length) tb.forEach(([h,n])=>c2.appendChild(el(
-      `<div class="crow"><span>${heroChip(h)}</span><span class="rec">${n}x</span></div>`)));
+    // Recount from the drafts so the opening ban + field comparison line up with
+    // the shown counts (these two reads were folded in from the old Tendencies card).
+    const tBan={}, tFirst={}; let tBanTot=0, tFirstG=0;
+    t.matches.forEach(m=>m.games.forEach(gm=>{ if(!gm.map) return;
+      const mine=(gm.bans||[]).filter(b=>b.hero&&b.team===t.team).sort((a,b)=>(a.order||9)-(b.order||9));
+      if(mine.length){ inc(tFirst,mine[0].hero); tFirstG++; }
+      mine.forEach(b=>{ inc(tBan,b.hero); tBanTot++; }); }));
+    const fBan={}; let fBanTot=0;
+    D().matches.forEach(m=>m.games.forEach(gm=>{ if(!gm.map) return;
+      (gm.bans||[]).forEach(b=>{ if(b.hero){ inc(fBan,b.hero); fBanTot++; } }); }));
+    const feb=rank(tFirst)[0], opener=(feb&&tFirstG>=3&&feb[1]>=2)?feb[0]:null;
+    let tb=rank(tBan).slice(0,4);
+    if(opener && !tb.some(([h])=>h===opener)) tb=[[opener,tBan[opener]||0],...tb].slice(0,4);
+    if(tb.length) tb.forEach(([h,n])=>{
+      const ts=tBanTot?n/tBanTot:0, fs=fBanTot?(fBan[h]||0)/fBanTot:0;
+      const over=n>=2 && ts>=fs*1.6 && (ts-fs)>=0.05;   // a real team-specific tell, not the meta
+      c2.appendChild(el(`<div class="crow"><span>${heroChip(h)}${opener===h?` <span class="opener" title="their most common opening ban">1st</span>`:''}</span>`+
+        `<span class="rec">${n}x${over?`<span class="bvs">${Math.round(ts*100)}% vs ${Math.round(fs*100)}% field</span>`:''}</span></div>`));
+    });
     else c2.appendChild(el(`<p class="note" style="margin:2px 0 0">No bans in window.</p>`));
     cols.appendChild(c2);
 
@@ -1288,6 +1259,7 @@ function renderScoutBody(t){
         row.appendChild(chip);
       });
       if(todo.length>8) row.appendChild(el(`<span class="faint">+${todo.length-8} more</span>`));
+      row.appendChild(el(`<a class="btn" href="${captureUrl(t.team)}" style="text-decoration:none;padding:4px 10px;font-size:12px;margin-left:auto;white-space:nowrap">Capture →</a>`));
       cov.appendChild(row);
     } else {
       cov.appendChild(el(`<p class="note" style="margin:0">Fully scouted - every replay-coded game is captured.</p>`));
@@ -1310,8 +1282,11 @@ function renderScoutBody(t){
   // Honest degrade: don't let the hero sections silently vanish for an uncaptured
   // team - say so, and point at the rail so they get scouted.
   if(!scout){
-    w.appendChild(el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Not scouted yet</p>`+
-      `<p class="note" style="margin:0">No captured comps for ${esc(t.team)} <b>(0 of ${t.games} maps played)</b>. Everything below is FACEIT draft data only — grab their replay codes from the Matches rail to scout their comps.</p></div>`));
+    const ns=el(`<div class="card" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"></div>`);
+    ns.appendChild(el(`<div><p class="eyebrow" style="margin:0 0 2px">Not scouted yet</p>`+
+      `<span class="note">No captured comps for ${esc(t.team)} <b>(0 of ${t.games} maps played)</b>. Everything below is FACEIT draft data only.</span></div>`));
+    const cb=el(`<a class="btn" href="${captureUrl(t.team)}" style="text-decoration:none;white-space:nowrap">Capture ${esc(t.team)} →</a>`);
+    ns.appendChild(cb); w.appendChild(ns);
   }
 
   // Scouting tells: a scannable TL;DR of the team's strongest, data-backed
@@ -1435,10 +1410,19 @@ function renderScoutBody(t){
         const mode=MAP_CAT[mp]||'Other';
         if(mode!==lastMode){ lastMode=mode; w.appendChild(el(`<p class="modeh">${esc(mode)}</p>`)); }
         const entry=maps[mp]||{}, segs=entry.segments||{};
-        let mw=0, ml=0;
-        Object.values(segs).forEach(b=>(b.open||[]).forEach(c=>{mw+=c.wins; ml+=c.losses;}));
+        // Complete per-map record + opponents + this team's bans, straight from
+        // FACEIT (every game on the map, not only captured ones). The captured
+        // comps below supply the "what"; FACEIT supplies the "who / when / result".
+        const fh=[], mapBans={};
+        t.matches.forEach(m=>m.games.forEach(g=>{ if(g.map!==mp) return;
+          const us=m.f1===t.team;
+          fh.push({opp:us?m.f2:m.f1, won:g.winner_team===t.team, when:m.finished_at,
+                   score:us?`${g.f1}-${g.f2}`:`${g.f2}-${g.f1}`, pick:g.map_picked_by===t.team});
+          (g.bans||[]).filter(b=>b.hero&&b.team===t.team).forEach(b=>{ mapBans[b.hero]=(mapBans[b.hero]||0)+1; }); }));
+        fh.sort((a,b)=>(b.when||'').localeCompare(a.when||''));
+        const fw=fh.filter(x=>x.won).length;
         const d=el(`<details class="mapblk"><summary><span>${esc(mp)}</span>`+
-          `<span class="rec">${mw}W-${ml}L</span></summary>`+
+          `<span class="rec">${fh.length?`${fw}W-${fh.length-fw}L`:'&mdash;'}</span></summary>`+
           `<div class="mapbody"><div class="mapcol opens"></div>`+
           `<div class="mapcol swaps"></div></div></details>`);
         const body=d.querySelector('.mapcol.opens');
@@ -1455,17 +1439,44 @@ function renderScoutBody(t){
             body.appendChild(el(`<div class="crow${thin(mod.of)}"><span>${compRow(mod.heroes)}</span>`+
               `<span class="rec">${lab} · ${w3}W-${last3.length-w3}L</span></div>`));
           }
-          const hd=el(`<details class="hist"><summary>history &middot; ${hist.length} game${hist.length===1?'':'s'} vs teams</summary></details>`);
-          hist.forEach(g=>hd.appendChild(el(
-            `<div class="crow"><span>${compRow(g.heroes)} <span class="faint">vs ${esc(g.opp||'?')}</span></span>`+
-            `<span class="rec">${g.when?dshort(g.when)+' &middot; ':''}${g.won?'<b class="wlw">W</b>':'<b class="wll">L</b>'}</span></div>`)));
+          // Signature: heroes they bring on this map no matter which comp - the
+          // non-negotiables, distinct from the "current comp" modal above.
+          const sigc={}; hist.forEach(g=>(g.heroes||[]).forEach(h=>sigc[h]=(sigc[h]||0)+1));
+          const sig=Object.entries(sigc).filter(([,n])=>hist.length>=3 && n/hist.length>=0.6)
+            .sort((a,b)=>b[1]-a[1]).map(([h])=>h);
+          if(sig.length) body.appendChild(el(`<p class="sighint"><span class="sigk">always here</span>`+
+            `${sig.map(h=>heroChip(h)).join('')} <span class="faint">in most of ${hist.length} games</span></p>`));
+        }
+        // Their bans on THIS map (FACEIT drafts, complete) - a map-specific ban
+        // tell that the "at a glance" panel's all-map bans can't show.
+        const topMB=rank(mapBans).slice(0,5);
+        if(topMB.length) body.appendChild(el(`<p class="sighint"><span class="sigk sigk-ban">bans here</span>`+
+          topMB.map(([h,n])=>`<span class="mbchip">${heroChip(h)}<span class="faint">${n}&times;</span></span>`).join('')+`</p>`));
+        // Real opponents on this map from FACEIT: names, dates, map score, who
+        // picked it, and the result - the "who did they play" the captures lack.
+        if(fh.length){
+          const hd=el(`<details class="hist"><summary>history &middot; ${fh.length} game${fh.length===1?'':'s'} &middot; ${fw}W-${fh.length-fw}L</summary></details>`);
+          fh.forEach(x=>hd.appendChild(el(
+            `<div class="crow"><span>${x.pick?`<span class="pickpill" title="they picked this map">pick</span> `:''}<span class="faint">vs</span> ${esc(x.opp||'?')}</span>`+
+            `<span class="rec">${x.when?dshort(x.when)+' &middot; ':''}<span class="faint">${esc(x.score)}</span> ${x.won?'<b class="wlw">W</b>':'<b class="wll">L</b>'}</span></div>`)));
           body.appendChild(hd);
         }
         Object.keys(segs).forEach(seg=>{
           const both=segs[seg]||{};
           // "all captured" heads the single-geometry block so it reads distinctly
           // from the "last 3 games" above it; phased/control maps use their seg name.
-          body.appendChild(el(`<p class="seg" style="margin-top:12px">${seg==='all'?'all captured':esc(seg)}</p>`));
+          // A per-segment record makes attack-vs-defend (and each sub-map) legible
+          // at a glance; shown only when the segment holds more than one comp, so
+          // it doesn't just echo a lone comp row.
+          let sgw=0,sgl=0,sgm=0; (both.open||[]).forEach(c=>{sgw+=c.wins;sgl+=c.losses;sgm+=c.maps;});
+          const segRec=((both.open||[]).length>1)
+            ? ` <span class="segrec">${sgm>=3?`${sgm} maps &middot; ${sgw}W-${sgl}L`:`${sgm} map${sgm===1?'':'s'}`}</span>` : '';
+          // Escort/Hybrid segments are the attack and defend halves - badge them so
+          // the asymmetry reads at a glance; sub-maps/single blocks keep their name.
+          const segTitle=/^attack$/i.test(seg)?`<span class="side atk">&#9650; attack</span>`
+                        :/^defend$/i.test(seg)?`<span class="side def">&#9660; defend</span>`
+                        :(seg==='all'?'all captured':esc(seg));
+          body.appendChild(el(`<p class="seg" style="margin-top:12px">${segTitle}${segRec}</p>`));
           (both.open||[]).slice(0,3).forEach(c=>body.appendChild(el(compLine(c))));
           // Only show "settled" when they actually changed off the opener - and
           // only the heroes that changed, since the rest is the row above it.
@@ -1555,15 +1566,21 @@ function renderScoutBody(t){
           sim=scored.filter(x=>x.ov.length>=need).sort((a,b)=>b.ov.length-a.ov.length);
           if(sim.length) break;
         }
-        const tier=need>=3?'':need===2?' · loose match (2 of your heroes)'
-                                      :' · weak match (1 of your heroes)';
-        resBox.appendChild(el(`<p class="eyebrow">Games vs comps like yours (${sim.length})${tier?`<span style="text-transform:none;letter-spacing:0;color:var(--mid)">${tier}</span>`:''}</p>`));
+        const q=need>=3?`${need} of your heroes`:need===2?'2 of your heroes':'1 of your heroes';
+        resBox.appendChild(el(`<p class="eyebrow" style="margin-bottom:3px">Vs comps like yours (${sim.length})</p>`));
         if(sim.length){
-          const wins=sim.filter(x=>x.m.won).length;
-          resBox.appendChild(el(`<p class="note" style="margin-top:0">They went <b>${wins}W-${sim.length-wins}L</b> in those games.</p>`));
+          const wins=sim.filter(x=>x.m.won).length, losses=sim.length-wins;
+          // A stated W-L record needs a real, tight sample. A lone loosely-matched
+          // game gets shown as-is, never summarised into a fake "0W-1L" trend.
+          const solid=need>=3 && sim.length>=3;
+          resBox.appendChild(el(solid
+            ? `<p class="note" style="margin-top:0">They went <b class="${wins>=losses?'wlw':'wll'}">${wins}W-${losses}L</b> when the opponent shared ${q}.</p>`
+            : `<p class="note" style="margin-top:0">Only ${sim.length} game${sim.length>1?'s':''} where the opponent shared ${q} — too thin to call a record, but here's what they did:</p>`));
           sim.slice(0,6).forEach(({m,ov})=>{
-            resBox.appendChild(el(`<div class="crow"><span>${esc(m.map)}: opened ${compRow(m.open)} <span class="faint">vs ${ov.map(h=>heroIcon(h)).join('')}${ov.length<m.vs.length?'…':''}</span></span>`+
-              `<span class="rec">${m.won?'they won':'they lost'}</span></div>`));
+            resBox.appendChild(el(`<div class="crow${ov.length<2?' thin':''}">`+
+              `<span class="csrow"><span class="wl ${m.won?'w':'l'}">${m.won?'W':'L'}</span>`+
+              `<b>${esc(m.map)}</b><span class="faint">ran</span>${compRow(m.open)}</span>`+
+              `<span class="rec">matched ${ov.length}/${signal.length}</span></div>`));
           });
         } else {
           resBox.appendChild(el(`<p class="note">No captured game where they faced any of those heroes yet.</p>`));
