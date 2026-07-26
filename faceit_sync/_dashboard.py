@@ -1181,6 +1181,24 @@ function renderScoutBody(t){
         .filter(x=>x.tr>=x.fr*1.3).sort((a,b)=>(b.n-a.n)||((b.tr-b.fr)-(a.tr-a.fr))).slice(0,3)
         .forEach(x=>reads.push(`Comfort pick <b>${esc(x.mp)}</b> — chose it ${x.n}/${tPickTot} of their map picks (field picks it ${Math.round(x.fr*100)}%).`));
     }
+    // Capture-based reads (only where this team has actually been scouted).
+    const sc=((DATA.owscout_comps||{})[t.team]||{}).scout;
+    if(sc){
+      // Best PROVEN comp: highest win% among comps with a real sample (>=3 maps),
+      // so a single-map fluke can never pose as their "best".
+      const proven=(sc.overall||[]).filter(c=>c.maps>=3).sort((a,b)=>(b.win_rate-a.win_rate)||(b.maps-a.maps))[0];
+      if(proven) reads.push(`Best proven comp — ${compRow(proven.heroes)} <span class="faint">${proven.wins}W-${proven.losses}L over ${proven.maps} maps (${Math.round(proven.win_rate*100)}%)</span>.`);
+      // Map -> hero: heroes they almost always bring on a given map (captured openings).
+      const mh=[];
+      Object.entries(sc.maps||{}).forEach(([mp,md])=>{ const hc={}; let tot=0;
+        Object.values(md.segments||{}).forEach(seg=>(seg.open||[]).forEach(f=>{ tot+=f.maps; (f.heroes||[]).forEach(h=>hc[h]=(hc[h]||0)+f.maps); }));
+        if(tot<2) return;
+        const locks=Object.entries(hc).filter(([,n])=>n/tot>=0.6).sort((a,b)=>b[1]-a[1]).map(([h])=>h);
+        if(locks.length) mh.push({mp,tot,locks});
+      });
+      mh.sort((a,b)=>b.tot-a.tot).slice(0,4).forEach(x=>
+        reads.push(`On <b>${esc(x.mp)}</b> almost always runs ${x.locks.map(h=>heroChip(h)).join(' ')} <span class="faint">(${x.tot} games)</span>.`));
+    }
     const tc=el(`<div class="card"></div>`);
     tc.appendChild(el(`<p class="eyebrow">Tendencies</p>`));
     if(reads.length){
@@ -1188,7 +1206,7 @@ function renderScoutBody(t){
       reads.forEach(r=>box.appendChild(el(`<div style="font-size:13.5px;line-height:1.45">• ${r}</div>`)));
       tc.appendChild(box);
     } else tc.appendChild(el(`<p class="note" style="margin:2px 0 0">Not enough attributed games yet for reliable tendencies.</p>`));
-    tc.appendChild(el(`<p class="note" style="margin-top:8px">Deterministic reads from FACEIT bans + map vetoes in this division, with sample sizes — patterns, not predictions.</p>`));
+    tc.appendChild(el(`<p class="note" style="margin-top:8px">Deterministic reads from FACEIT drafts + captured comps, with sample sizes (best-comp needs 3+ maps; map picks 60%+ of games) — patterns, not predictions.</p>`));
     root.appendChild(tc);
   }
 
