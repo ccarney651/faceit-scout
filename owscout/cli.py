@@ -1111,7 +1111,7 @@ def build_parser() -> argparse.ArgumentParser:
     cap.add_argument("--confidence-floor", type=float, default=DEFAULT_CONFIDENCE_FLOOR,
                      help=f"below this a slot is left unresolved (default: {DEFAULT_CONFIDENCE_FLOOR})")
     cap.add_argument("--division", default=DEFAULT_DIVISION,
-                     help="only capture this division: master (default), expert, or all")
+                     help="only capture this division: master (default), expert, advanced, open, or all")
     cap.add_argument("--hotkey", default=None, metavar="KEY",
                      help="snapshot mode: press this key (e.g. f8) to grab the comp at "
                           "bookmarked moments, instead of the continuous loop")
@@ -1129,7 +1129,7 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--uncaptured", action="store_true", help="only codes not yet captured")
     cl.add_argument("--include-wiped", action="store_true", help="include dead (pre-wipe) codes")
     cl.add_argument("--division", default=DEFAULT_DIVISION,
-                    help="skill division: master (default), expert, or all")
+                    help="skill division: master (default), expert, advanced, open, or all")
     cl.add_argument("--limit", type=int, default=None, help="cap the number shown")
     cl.set_defaults(func=cmd_codes_list)
     cm = csub.add_parser("mark", help="record operator intent/outcome for a code")
@@ -1139,7 +1139,7 @@ def build_parser() -> argparse.ArgumentParser:
     cm.set_defaults(func=cmd_codes_mark)
     ca = csub.add_parser("age", help="wipe date and alive/dead code counts")
     ca.add_argument("--division", default=DEFAULT_DIVISION,
-                    help="skill division: master (default), expert, or all")
+                    help="skill division: master (default), expert, advanced, open, or all")
     ca.set_defaults(func=cmd_codes_age)
 
     rev = sub.add_parser("review", help="the unresolved-observation queue (SPEC appendix)")

@@ -412,11 +412,17 @@ def _dashboard_data(db: Database, cid: str,
     }
 
 
+# The FACEIT League skill tiers, strongest to weakest. Championship names carry
+# the tier word ("S9 EMEA Master Central …", "… Expert …", "… Advanced …",
+# "… Open …"). Order drives the site's division switcher (strongest first).
+TIERS: tuple[str, ...] = ("Master", "Expert", "Advanced", "Open")
+
+
 def _tier_of(name: Optional[str]) -> Optional[str]:
-    """The skill tier a championship name encodes ('Master' | 'Expert' | None)."""
+    """The skill tier a championship name encodes, or None (see :data:`TIERS`)."""
     if not name:
         return None
-    return "Master" if "Master" in name else "Expert" if "Expert" in name else None
+    return next((t for t in TIERS if t in name), None)
 
 
 def _region_of(name: Optional[str]) -> Optional[str]:
@@ -433,14 +439,14 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
-    ('master'/'expert') and ``only_region`` ('emea'/'na') restrict the dashboard -
-    the site ships EMEA Master only for now, though the DB holds every division.
+    (master/expert/advanced/open) and ``only_region`` ('emea'/'na') restrict the
+    dashboard; the DB may hold several divisions across tiers and regions.
     Returns the number of divisions with data.
     """
     want_tier: Optional[str] = None
     if only_tier:
         w = only_tier.strip().lower()
-        want_tier = "Master" if w.startswith("m") else "Expert" if w.startswith("e") else None
+        want_tier = next((t for t in TIERS if t.lower() == w), None)
     want_region: Optional[str] = None
     if only_region:
         w = only_region.strip().lower()
@@ -496,9 +502,10 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     if not divisions:
         return 0
 
-    # Build the switcher "views": each real division, plus a merged "Combined"
-    # per region (Master + Expert), in the order EMEA Master/Expert/Combined then
-    # NA Master/Expert/Combined. Region/tier are read from the championship name.
+    # Build the switcher "views": every division present in a region (tiers
+    # strongest-first, see TIERS), then a merged "Combined" of all of them — so
+    # EMEA Master/Expert/Advanced/Open/Combined, then the same for NA. Region and
+    # tier are read from the championship name.
     by_region_tier: dict[tuple[str, str], str] = {}
     for cid, d in divisions.items():
         nm = str(d["summary"]["championship"])
@@ -509,16 +516,15 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     views: list[dict[str, Any]] = []
     used: set[str] = set()
     for region in ("EMEA", "NA"):
-        m, e = by_region_tier.get((region, "Master")), by_region_tier.get((region, "Expert"))
-        if m:
-            views.append({"id": m, "label": f"{region} Master", "divisions": [m], "region": region})
-            used.add(m)
-        if e:
-            views.append({"id": e, "label": f"{region} Expert", "divisions": [e], "region": region})
-            used.add(e)
-        if m and e:
+        present = [(t, by_region_tier[(region, t)]) for t in TIERS
+                   if (region, t) in by_region_tier]
+        for t, cid in present:
+            views.append({"id": cid, "label": f"{region} {t}",
+                          "divisions": [cid], "region": region})
+            used.add(cid)
+        if len(present) > 1:
             views.append({"id": f"{region.lower()}-combined", "label": f"{region} Combined",
-                          "divisions": [m, e], "region": region})
+                          "divisions": [cid for _, cid in present], "region": region})
     # Any division whose name didn't classify still gets a plain view (fallback).
     for name, cid in sorted(ordered):
         if cid not in used:

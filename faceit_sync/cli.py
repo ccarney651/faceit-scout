@@ -223,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--championship", default=None,
                    help="championship id (optional; auto-detected when only one is stored)")
     e.add_argument("--format", choices=("csv", "json", "html"), required=True)
-    e.add_argument("--tier", choices=("master", "expert"), default=None,
+    e.add_argument("--tier", choices=("master", "expert", "advanced", "open"), default=None,
                    help="restrict the HTML dashboard to one skill tier (default: all)")
     e.add_argument("--region", choices=("emea", "na"), default=None,
                    help="restrict the HTML dashboard to one region (default: all)")

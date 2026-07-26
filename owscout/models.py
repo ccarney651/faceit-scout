@@ -81,8 +81,10 @@ SIDE_LEFT = "a"
 SIDE_RIGHT = "b"
 
 # FACEIT championships split into skill divisions named in the championship title
-# ("... Master Central ...", "... Expert Central ..."). owscout defaults to Master.
+# ("... Master Central ...", "... Expert/Advanced/Open ..."). owscout defaults to
+# Master. Tiers strongest-to-weakest, kept in sync with faceit_sync.export.TIERS.
 DEFAULT_DIVISION = "master"
+DIVISIONS: tuple[str, ...] = ("master", "expert", "advanced", "open")
 
 # The league's regions, as they appear in championship names ("S9 EMEA Master
 # Central"). The championships table HAS a region column, but every row says
@@ -96,11 +98,7 @@ def division_of(championship_name: str | None) -> str | None:
     if not championship_name:
         return None
     low = championship_name.lower()
-    if "master" in low:
-        return "master"
-    if "expert" in low:
-        return "expert"
-    return None
+    return next((d for d in DIVISIONS if d in low), None)
 
 # A hero portrait is captured in two visual states (SPEC §6). "dead" is a
 # greyed/desaturated STATE of the same hero, not a different hero — the

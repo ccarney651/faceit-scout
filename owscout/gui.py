@@ -342,9 +342,10 @@ class _App:  # pragma: no cover - GUI runtime only
         # both divisions are scoutable out of the box.
         ttk.Label(filt, text="Division").pack(side="left")
         self.division_var = tk.StringVar(value=ALL_DIVISIONS)
-        division_box = ttk.Combobox(filt, textvariable=self.division_var, width=8,
+        division_box = ttk.Combobox(filt, textvariable=self.division_var, width=9,
                                     state="readonly",
-                                    values=[ALL_DIVISIONS, "Master", "Expert"])
+                                    values=[ALL_DIVISIONS, "Master", "Expert",
+                                            "Advanced", "Open"])
         division_box.pack(side="left", padx=(4, 12))
         division_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
         self._gate_codes.append(division_box)

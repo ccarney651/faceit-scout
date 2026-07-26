@@ -71,7 +71,9 @@ def test_tier_and_region_classify_championship_names() -> None:
 
     assert _tier_of("S9 EMEA Master Central - Regular Season") == "Master"
     assert _tier_of("S9 NA Expert Central - Regular Season") == "Expert"
-    assert _tier_of("Some Open Qualifier") is None
+    assert _tier_of("S9 EMEA Advanced Central - Regular Season") == "Advanced"
+    assert _tier_of("S9 EMEA Open - Regular Season") == "Open"
+    assert _tier_of("Regular Season Group A") is None
     assert _tier_of(None) is None
     assert _region_of("S9 EMEA Master Central - Regular Season") == "EMEA"
     assert _region_of("S9 NA Expert Central - Regular Season") == "NA"
