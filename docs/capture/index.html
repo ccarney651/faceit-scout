@@ -126,6 +126,10 @@
       <button id="pop" class="ghost">Pop out overlay ⇱</button>
       <span class="status" id="snapmsg"></span>
     </div>
+    <div class="row" style="margin-top:10px;align-items:center;gap:10px">
+      <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD">⇄ Swap teams</button>
+      <span class="status" id="sidehint">Check each team matches the HUD before saving — the browser tool can't auto-detect sides yet.</span>
+    </div>
     <div class="grid2" style="margin-top:10px">
       <div class="team"><h3 id="hA">Left / blue</h3><div id="outA"></div></div>
       <div class="team"><h3 id="hB">Right / red</h3><div id="outB"></div></div>
@@ -364,6 +368,16 @@ function relabelTeams(){ const c=selectedCode(); if(!c) return; const rs=(DATA.r
   document.getElementById('hA').textContent='Left / blue · '+leftName;
   document.getElementById('hB').textContent='Right / red · '+rightName;
 }
+// Which FACEIT team the tool currently treats as the LEFT/blue box. There's no
+// auto side-detect in the browser yet (the exe OCRs the HUD names and matches
+// rosters); until there is, the default is a guess (faction1 = left) and the
+// operator confirms/flips it with Swap teams so mis-sided comps aren't published.
+function currentLeftId(){ const c=selectedCode(); if(!c) return null;
+  return ((document.querySelector('input[name=side]:checked')||{}).value||'') || c.t1; }
+function swapSides(){ const c=selectedCode(); if(!c) return;
+  const newLeft = currentLeftId()===c.t1 ? c.t2 : c.t1;
+  document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked = (r.value===newLeft); });
+  relabelTeams(); }
 function refreshSession(){ if(!session) return;
   document.getElementById('roundpill').textContent='Round '+session.round;
   if(session.submaps.length) document.getElementById('subpill').textContent='sub: '+(session.sub||'—');
@@ -595,6 +609,7 @@ document.getElementById('nextr').onclick=nextRound;
 document.getElementById('flip').onclick=flipAttack;
 document.getElementById('undo').onclick=undo;
 document.getElementById('finish').onclick=finishMap;
+document.getElementById('swapsides').onclick=swapSides;
 document.getElementById('pop').onclick=popout;
 updateBtns(); loadFeeds();
 </script></body></html>
