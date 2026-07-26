@@ -26,6 +26,7 @@ from .models import REGIONS
 # Sentinel for "don't filter the code list by team".
 ALL_TEAMS = "(all teams)"
 ALL_REGIONS = "(all regions)"
+ALL_DIVISIONS = "(all)"
 
 # Light/dark palettes. ttk widgets are themed via ttk.Style; the handful of tk
 # widgets (Text logs, banners, Toplevels) read these directly. Muted/Link labels
@@ -310,10 +311,10 @@ class _App:  # pragma: no cover - GUI runtime only
         # expanding widget in a shared grid column shoved the right-hand controls
         # off-screen when the window widened. Here each row owns its packing, so
         # controls stay put at any width.
-        cap = ttk.LabelFrame(main_parent, text="Scout a replay (Master division)")
+        cap = ttk.LabelFrame(main_parent, text="Scout a replay")
         cap.pack(fill="x", **pad)
 
-        # Filters: pick one opponent at a time - 40 codes across every Master team
+        # Filters: pick one opponent at a time - 40 codes across every team
         # is a lot to scan for the four you care about.
         filt = ttk.Frame(cap)
         filt.pack(fill="x", padx=6, pady=(6, 2))
@@ -325,6 +326,17 @@ class _App:  # pragma: no cover - GUI runtime only
         self.team_filter_box.bind("<<ComboboxSelected>>",
                                   lambda _e: self._apply_code_filter())
         self._gate_codes.append(self.team_filter_box)
+        # Division: Master and Expert are separate skill pools. Like Region it
+        # changes WHICH codes are fetched, so it re-queries. Defaults to all so
+        # both divisions are scoutable out of the box.
+        ttk.Label(filt, text="Division").pack(side="left")
+        self.division_var = tk.StringVar(value=ALL_DIVISIONS)
+        division_box = ttk.Combobox(filt, textvariable=self.division_var, width=8,
+                                    state="readonly",
+                                    values=[ALL_DIVISIONS, "Master", "Expert"])
+        division_box.pack(side="left", padx=(4, 12))
+        division_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_codes())
+        self._gate_codes.append(division_box)
         ttk.Label(filt, text="Region").pack(side="left")
         self.region_var = tk.StringVar(value=ALL_REGIONS)
         region_box = ttk.Combobox(filt, textvariable=self.region_var, width=12,
@@ -605,6 +617,12 @@ class _App:  # pragma: no cover - GUI runtime only
     def _open_db(self) -> Database:
         return Database(self.db_var.get())
 
+    def _division_param(self) -> Optional[str]:
+        """The division filter as list_codes/capture expect it: a lowercase
+        championship-name fragment ('master'/'expert'), or None for all."""
+        d = self.division_var.get()
+        return None if d == ALL_DIVISIONS else d.lower()
+
     # --- actions ------------------------------------------------------------
 
     def _calibrate(self) -> None:
@@ -850,6 +868,7 @@ class _App:  # pragma: no cover - GUI runtime only
                     # scouted" filter trims the list to what's actually free.
                     rows = db.list_codes(
                         self.faceit_var.get(), uncaptured=True,
+                        division=self._division_param(),
                         region=None if region == ALL_REGIONS else region)
             except Exception as exc:  # noqa: BLE001
                 rows = []
@@ -1260,10 +1279,11 @@ class _App:  # pragma: no cover - GUI runtime only
     def _capture(self) -> None:
         raw = self.code_var.get().strip()
         if not raw:
-            self._emit("pick a code first (click ↻ to load Master codes).")
+            self._emit("pick a code first (click ↻ to load codes).")
             return
         code = raw.split()[0]
         side_a = self.side_a_var.get().strip() or None   # None = auto-detect
+        req_div = self._division_param()   # guard: refuse a wrong-division code
         binds = self._keybinds
         from .capture import CaptureControls, run_hotkey_capture
         self._emit(f"capture: {code} — {_keys_summary(binds)}. Watch the overlay.")
@@ -1288,7 +1308,7 @@ class _App:  # pragma: no cover - GUI runtime only
                                        undo_hotkey=binds["undo"],
                                        attack_toggle_hotkey=binds["attack"],
                                        done_hotkey=binds["done"],
-                                       require_division="master", emit=emit,
+                                       require_division=req_div, emit=emit,
                                        controls=controls)
                 self._emit("capture: finished (saved as a draft — review to finalize).")
             finally:
