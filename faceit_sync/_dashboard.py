@@ -318,6 +318,19 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   border-top:1px solid var(--line);font-size:12.5px}
 .roster .pl .st{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 .roster .subhd{margin:8px 0 2px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint)}
+/* ---- playoffs bracket ---- */
+.bracket{overflow-x:auto;padding-bottom:6px}
+.br-flow{display:flex;gap:16px;align-items:stretch;min-width:min-content}
+.br-col{display:flex;flex-direction:column;min-width:160px}
+.br-col h4{margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);white-space:nowrap}
+.br-col-body{display:flex;flex-direction:column;justify-content:space-around;gap:10px;flex:1}
+.br-match{border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface2)}
+.br-team{display:flex;align-items:center;gap:7px;padding:5px 8px;font-size:12.5px;border-top:1px solid var(--line);white-space:nowrap}
+.br-team:first-child{border-top:0}
+.br-seed{color:var(--faint);font-variant-numeric:tabular-nums;min-width:15px;font-size:11px;text-align:right}
+.br-nm{overflow:hidden;text-overflow:ellipsis}
+.br-wp{margin-left:auto;color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums}
+.br-team.tbd,.br-team.bye{color:var(--faint)}
 .muted{color:var(--muted)} .faint{color:var(--faint)}
 .rc{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;
   background:var(--surface2);color:var(--fg);padding:1.5px 7px;border-radius:6px;cursor:pointer;
@@ -784,6 +797,82 @@ function aggregate(matches,team){
   return a;
 }
 
+/* ============================================================ PLAYOFFS */
+// Qualifier count per tier (FACEIT League S8 EMEA; update when S9 formats post).
+// Every division is double elimination, Ft3, Grand Final Ft4. 24 (Advanced) seeds
+// into a 32-slot bracket, so the top 8 draw byes automatically — no special case.
+const PLAYOFF_QUALIFIERS={Master:8,Expert:16,Advanced:24,Open:32};
+const tierOf=(name)=>['Master','Expert','Advanced','Open'].find(t=>(name||'').includes(t))||null;
+const nextPow2=(n)=>{let k=1;while(k<n)k*=2;return k;};
+// Standard bracket seed order so 1 & 2 can only meet in the final:
+// seeds(4)=[1,4,2,3]; seeds(8)=[1,8,4,5,2,7,3,6].
+function seedOrder(k){let s=[1];while(s.length<k){const m=s.length*2+1,t=[];for(const x of s)t.push(x,m-x);s=t;}return s;}
+const ubRoundName=(m)=> m===1?'Final':m===2?'Semifinals':m===4?'Quarterfinals':'Round of '+(2*m);
+
+function renderPlayoffs(){
+  const wrap=el(`<div></div>`);
+  const tier=tierOf(String((D().summary||{}).championship||''));
+  if(!tier){
+    wrap.appendChild(el(`<div class="card"><p class="eyebrow">Playoffs</p>`+
+      `<p class="note">Pick a single division (Master / Expert / Advanced / Open) from the switcher above — a Combined view has no single bracket.</p></div>`));
+    return wrap;
+  }
+  const N=PLAYOFF_QUALIFIERS[tier]||8, teams=D().teams||[], k=nextPow2(N);
+  const ubRounds=Math.round(Math.log2(k)), order=seedOrder(k);
+
+  const hd=el(`<div class="card"></div>`);
+  hd.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — projected</p>`));
+  hd.appendChild(el(`<p style="margin:2px 0 0;font-size:14px">Top <b>${N}</b> · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
+  hd.appendChild(el(`<p class="note" style="margin-top:6px">Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches have been played yet. Format from FACEIT League S8; will re-confirm when S9 brackets are posted.</p>`));
+  wrap.appendChild(hd);
+
+  // Projected seeds
+  const seedCard=el(`<div class="card" style="margin-top:14px"></div>`);
+  seedCard.appendChild(el(`<p class="eyebrow">Projected seeds (top ${N})</p>`));
+  const sg=el(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1px 20px"></div>`);
+  for(let i=0;i<N;i++){const t=teams[i];
+    sg.appendChild(el(`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:12.5px">`+
+      `<span class="br-seed">${i+1}</span>`+
+      `<span style="flex:1;overflow:hidden;text-overflow:ellipsis">${t?esc(t.name):'<span class="faint">— not enough teams yet —</span>'}</span>`+
+      `<span class="st">${t?t.win_pct+'%':''}</span></div>`));
+  }
+  seedCard.appendChild(sg); wrap.appendChild(seedCard);
+
+  // Bracket
+  const teamCell=(seed)=>{
+    if(seed==null) return `<div class="br-team tbd">TBD</div>`;
+    if(seed>N) return `<div class="br-team bye"><span class="br-seed">${seed}</span>— bye —</div>`;
+    const t=teams[seed-1];
+    return t? `<div class="br-team"><span class="br-seed">${seed}</span><span class="br-nm">${esc(t.name)}</span><span class="br-wp">${t.win_pct}%</span></div>`
+            : `<div class="br-team tbd"><span class="br-seed">${seed}</span>—</div>`;
+  };
+  const tbd=`<div class="br-match"><div class="br-team tbd">TBD</div><div class="br-team tbd">TBD</div></div>`;
+  const col=(title,inner)=>{const c=el(`<div class="br-col"></div>`);c.appendChild(el(`<h4>${esc(title)}</h4>`));c.appendChild(el(`<div class="br-col-body">${inner}</div>`));return c;};
+  const flow=()=>{const b=el(`<div class="bracket"><div class="br-flow"></div></div>`);return[b,b.querySelector('.br-flow')];};
+
+  const brCard=el(`<div class="card" style="margin-top:14px"></div>`);
+  brCard.appendChild(el(`<p class="eyebrow">Bracket</p>`));
+
+  brCard.appendChild(el(`<p class="note" style="margin:0 0 4px"><b>Upper bracket</b></p>`));
+  const [ub,ubFlow]=flow();
+  let r1=''; for(let i=0;i<k/2;i++) r1+=`<div class="br-match">${teamCell(order[2*i])}${teamCell(order[2*i+1])}</div>`;
+  ubFlow.appendChild(col(ubRoundName(k/2), r1));
+  for(let m=k/4;m>=1;m/=2){ let inner=''; for(let i=0;i<m;i++) inner+=tbd; ubFlow.appendChild(col(ubRoundName(m), inner)); }
+  brCard.appendChild(ub);
+
+  brCard.appendChild(el(`<p class="note" style="margin:14px 0 4px"><b>Lower bracket</b> <span class="faint">— filled by upper-bracket losers</span></p>`));
+  const [lb,lbFlow]=flow();
+  const lbRounds=2*(ubRounds-1);
+  for(let j=1;j<=lbRounds;j++){ const cnt=Math.pow(2,(ubRounds-1)-Math.ceil(j/2)); let inner=''; for(let i=0;i<cnt;i++) inner+=tbd; lbFlow.appendChild(col('LB round '+j, inner)); }
+  brCard.appendChild(lb);
+
+  brCard.appendChild(el(`<p class="note" style="margin:14px 0 4px"><b>Grand Final</b></p>`));
+  const [gf,gfFlow]=flow(); gfFlow.appendChild(col('Grand Final (Ft4)', tbd)); brCard.appendChild(gf);
+
+  wrap.appendChild(brCard);
+  return wrap;
+}
+
 /* ============================================================= VIEWS */
 const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
@@ -791,6 +880,7 @@ const TABS=[
  {id:'players',label:'Players',render:renderPlayers},
  {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
+ {id:'playoffs',label:'Playoffs',render:renderPlayoffs},
  {id:'matches',label:'Matches',render:renderMatches},
 ];
 
