@@ -63,7 +63,8 @@
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;background:var(--surface2);border:1px solid var(--line);font-size:12px;margin-right:6px}
   .obs{font-size:12px;color:var(--muted);padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
   .obs:first-of-type{border-top:0}
-  .cap{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
+  .cap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
+  .capbtns{display:flex;gap:6px}.cap .review{flex-basis:100%;margin-top:4px;padding:6px 8px;background:var(--surface2);border-radius:8px}
   .cap:first-of-type{border-top:0}
   .warn{color:var(--bad)} .ok{color:var(--good)} .faint{color:var(--faint)}
 </style></head><body>
@@ -614,22 +615,55 @@ function fixReads(){ const host=document.getElementById('refpanel');
       sel.onchange=()=>onFixPick(sel); row.appendChild(sel); grp.appendChild(row); }
     host.appendChild(grp); }
 }
+// Register a hero the library has never seen (name + role -> custom: guid),
+// persisted so the picker offers it everywhere. Returns {guid,name} or null.
+async function promptNewHero(){ const nm=(prompt('New hero name (a hero not in the library yet):')||'').trim();
+  if(!nm) return null;
+  let role=(prompt('Role — Tank, Damage or Support:','Damage')||'Damage').trim();
+  if(!/^(tank|damage|support)$/i.test(role)) role='Damage';
+  const guid='custom:'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')+'-'+Math.random().toString(36).slice(2,6);
+  CUSTOM_HEROES[guid]={name:nm, role:role.charAt(0).toUpperCase()+role.slice(1).toLowerCase()};
+  try{ await idbPutIn('heroes',{g:guid, ...CUSTOM_HEROES[guid]}); }catch(e){}
+  return {guid, name:nm}; }
 async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i; let guid=sel.value, name;
   if(!guid){ return; }
-  if(guid==='__new__'){ const nm=(prompt('New hero name (a hero not in the library yet):')||'').trim();
-    if(!nm){ sel.value=''; return; }
-    let role=(prompt('Role — Tank, Damage or Support:','Damage')||'Damage').trim();
-    if(!/^(tank|damage|support)$/i.test(role)) role='Damage';
-    guid='custom:'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')+'-'+Math.random().toString(36).slice(2,6);
-    CUSTOM_HEROES[guid]={name:nm, role:role.charAt(0).toUpperCase()+role.slice(1).toLowerCase()};
-    try{ await idbPutIn('heroes',{g:guid, ...CUSTOM_HEROES[guid]}); }catch(e){}
-    name=nm;
-  } else { name=(heroCatalog().find(h=>h.g===guid)||{}).n||guid; }
+  if(guid==='__new__'){ const nh=await promptNewHero(); if(!nh){ sel.value=''; return; } guid=nh.guid; name=nh.name; }
+  else { name=(heroCatalog().find(h=>h.g===guid)||{}).n||guid; }
   const rec={n:name, g:guid, v:side, d:learnCrop(side,i), added_at:Date.now()};
   await addRef(rec);
   refMsg('✓ learned <b>'+esc(name)+'</b> ('+(side==='a'?'blue':'red')+') — re-reading…','ok');
   setTimeout(fixReads, 250);    // re-run so the operator sees the improved read (and can fix another)
 }
+// ---------- review & correct a captured map before publish (Phase 5) ----------
+// The saved record stores each observation's heroes as guids (+ player pairs).
+// Recognition can misread; here the operator fixes a whole map's comp before it
+// goes out — remap a wrong hero to the right one, or drop a spurious read, across
+// every observation of that map (player attribution is carried along).
+function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
+function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
+  const opts='<option value="">— fix to… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ new hero…</option>';
+  for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
+    const counts={}; for(const o of rec.observations||[]){ if(o.side!==side) continue; for(const g of o.heroes||[]) counts[g]=(counts[g]||0)+1; }
+    const grp=document.createElement('div'); grp.className='refgrp';
+    grp.innerHTML=`<h3 class="rlbl">${esc(label)} — ${side==='a'?'blue':'red'}</h3>`;
+    const guids=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+    if(!guids.length){ const p=document.createElement('p'); p.className='status'; p.textContent='no heroes captured'; grp.appendChild(p); }
+    for(const g of guids){ const row=document.createElement('div'); row.className='refrow';
+      row.innerHTML=`<span class="refread"><b>${esc(heroName(g))}</b> <span class="status">${counts[g]} obs</span></span>`;
+      const sel=document.createElement('select'); sel.innerHTML=opts; sel.onchange=()=>remapHero(rec,side,g,sel.value,host);
+      const del=document.createElement('button'); del.className='ghost'; del.textContent='remove'; del.onclick=()=>remapHero(rec,side,g,'__remove__',host);
+      row.appendChild(sel); row.appendChild(del); grp.appendChild(row); }
+    host.appendChild(grp); } }
+async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
+  if(toG==='__new__'){ const nh=await promptNewHero(); if(!nh) return; toG=nh.guid; }
+  const remove = toG==='__remove__';
+  for(const o of rec.observations||[]){ if(o.side!==side) continue;
+    const nh=[], np=[], pairs=o.pairs||[];
+    for(let i=0;i<(o.heroes||[]).length;i++){ let g=o.heroes[i]; const pid=pairs[i]?pairs[i][1]:null;
+      if(g===fromG){ if(remove) continue; g=toG; }
+      nh.push(g); np.push([g, pid!=null?pid:null]); }
+    o.heroes=nh; o.pairs=np; }
+  await idbPut(rec); renderReview(rec, host); }
 function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
   const payload={format:'owscout-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
     refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
@@ -801,10 +835,13 @@ async function renderCaptured(){ const rows=await idbAll(); document.getElementB
   const pub=document.getElementById('publish'); if(pub) pub.disabled=!rows.length;
   const host=document.getElementById('caplist'); if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
   host.innerHTML=''; rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at)).forEach(r=>{ const el=document.createElement('div'); el.className='cap';
-    el.innerHTML=`<span><b style="color:var(--fg)">${r.code}</b> <span class="status">${r.map_name||''} · ${r.division} · ${r.observations.length} obs</span><br><span class="status">${r.side_a_team} vs ${r.side_b_team}</span></span><button class="ghost" data-id="${r.id}">delete</button>`;
-    el.querySelector('button').onclick=async()=>{ await idbDel(r.id); await renderCaptured();
+    el.innerHTML=`<span><b style="color:var(--fg)">${esc(r.code)}</b> <span class="status">${esc(r.map_name||'')} · ${esc(r.division)} · ${r.observations.length} obs</span><br><span class="status">${esc(r.side_a_team)} vs ${esc(r.side_b_team)}</span></span>`+
+      `<span class="capbtns"><button class="ghost rev">review</button><button class="ghost del">delete</button></span>`;
+    const rev=document.createElement('div'); rev.className='review'; rev.style.display='none';
+    el.querySelector('.del').onclick=async()=>{ await idbDel(r.id); await renderCaptured();
       if(!syncCodeOptions()) refreshCodes(); };   // un-captured map re-appears in the picker (hide on); keep the session if it survived
-    host.appendChild(el); }); }
+    el.querySelector('.rev').onclick=()=>{ const open=rev.style.display!=='none'; rev.style.display=open?'none':'block'; if(!open) renderReview(r, rev); };
+    el.appendChild(rev); host.appendChild(el); }); }
 
 // ---------- pop-out overlay (Document PiP): full scouting console over OW ----------
 // Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
