@@ -425,6 +425,7 @@ async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMed
     const trk=st.getVideoTracks()[0];
     if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
     document.getElementById('calhint').textContent='Screen shared — click Auto-calibrate ✨ (or set the boxes by hand).'; updateBtns();
+    fetchClaims(); maybeClaim();   // pull latest locks + claim now if a returning scout is already calibrated on a code
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
   document.getElementById('autocal').disabled=!vid.srcObject;
@@ -1070,5 +1071,5 @@ document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
 window.addEventListener('pagehide',releaseClaim);            // best-effort; the KV TTL frees it anyway
 updateBtns(); loadFeeds();
-fetchClaims(); setInterval(fetchClaims, 45000);             // keep others' claims fresh in the picker
+fetchClaims(); setInterval(fetchClaims, 12000);             // keep others' claims fresh (KV eventual-consistency is the remaining floor, ~up to 60s)
 </script></body></html>
