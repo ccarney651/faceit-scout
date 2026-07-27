@@ -225,6 +225,7 @@
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
 let LOCAL_REFS=[], CUSTOM_HEROES={};   // operator-learned hero refs + heroes not in refs.json (persisted in IndexedDB)
+let CLAIMS={}, myClaimKey=null, claimHb=null;   // live scouting claims (match:game -> {by,at}); myClaimKey = the one I hold
 // control-map sub-maps (mirror of owscout/maps.py)
 const CONTROL_SUBMAPS={ilios:["Lighthouse","Ruins","Well"],"lijiang tower":["Control Center","Garden","Night Market"],nepal:["Sanctum","Shrine","Village"],oasis:["City Center","Gardens","University"],"antarctic peninsula":["Icebreaker","Labs","Sublevel"],samoa:["Beach","Downtown","Volcano"],busan:["Downtown","Sanctuary","MEKA Base"]};
 const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
@@ -277,8 +278,10 @@ function codeKey(c){ return c.match_id+':'+c.game_no; }
 // A map is "done" if scouted by anyone (captured.json) OR captured locally in this
 // browser (savedKeys) — both count for "hide already-scouted".
 function isDone(c){ const k=codeKey(c); return CLAIMED.has(k)||savedKeys.has(k); }
+function claimedByOther(c){ const k=codeKey(c); return !!CLAIMS[k] && k!==myClaimKey; }
 function codeOption(c,i){ const k=codeKey(c);
-  const tag = savedKeys.has(k)?'  [captured here]' : (CLAIMED.has(k)?'  [scouted]':'');
+  let tag = savedKeys.has(k)?'  [captured here]' : (CLAIMED.has(k)?'  [scouted]':'');
+  if(claimedByOther(c)) tag += '  🔒 '+CLAIMS[k].by;
   return `<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${tag}</option>`; }
 function currentCodes(){ let cs=DATA.codes.slice();
   const dv=document.getElementById('div').value, op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
@@ -312,7 +315,7 @@ function onCode(){ const c=selectedCode(); if(!c) return;
   sr.innerHTML=`<label class="status"><input type="radio" name="side" value="" checked> auto/blank</label>`+
     [[c.t1,c.team_a],[c.t2,c.team_b]].map(([id,nm])=>`<label class="status"><input type="radio" name="side" value="${id||''}"> ${nm||'?'}</label>`).join('');
   sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=onSideChange);
-  startMap();
+  startMap(); showClaimNote(); maybeClaim();   // reflect + take a live claim on the new code
 }
 document.getElementById('div').onchange=refreshCodes;
 document.getElementById('opp').onchange=refreshCodes;
@@ -350,7 +353,7 @@ function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const comp=r
   const msg = ok>=8?`<span class="ok">calibration looks good — ${ok}/10 portraits recognised.</span>`
     : ok>=5?`calibration: ${ok}/10 recognised — usable; nudge the boxes if some read ??.`
     : `<span class="warn">only ${ok}/10 recognised — boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`;
-  document.getElementById('calhint').innerHTML=msg; setStageHint(msg); }
+  document.getElementById('calhint').innerHTML=msg; setStageHint(msg); maybeClaim(); }
 // Auto-calibrate: the HUD sits at fixed fractions of the screen (mirror of
 // owscout/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
 // the captured resolution — no dragging. Self-test then confirms alignment.
@@ -391,7 +394,7 @@ function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share
       if(sc>bestScore){ bestScore=sc; best=cand; } } }
   boxes=best; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); drawOverlay(); updateBtns(); selfTest(); }
 function stopCapture(){ if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
-  drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
+  releaseClaim(); drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
 // Set which box we're about to draw, updating the hint in both the page and the
 // (fullscreen) stage. Used by the setup buttons and the in-stage buttons alike.
 function pickBox(side){ drawMode=side;
@@ -731,6 +734,7 @@ function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
 function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
   if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
+  if(!auto) maybeClaim();   // a manual snapshot is a definite "I'm scouting this map"
   const comp=readComp(); if(!comp) return;
   const aG=comp.a.map(s=>s.guid), bG=comp.b.map(s=>s.guid);
   // dedup: same round+sub and only-lost-known both sides => skip (a worse read, not new info)
@@ -820,7 +824,11 @@ function advanceAfterSave(savedMsg, auto){
   const sel=document.getElementById('code'), oldIdx=+sel.value;
   const cs=currentCodes(); sel._codes=cs; sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
   document.getElementById('codenote').textContent=`${cs.length} codes shown`;
-  let idx=-1; for(let k=0;k<cs.length;k++){ const j=(oldIdx+k)%cs.length; if(!savedKeys.has(codeKey(cs[j]))){ idx=j; break; } }
+  // Prefer the next un-captured AND unclaimed map (steer scouts apart); fall back
+  // to a claimed one only if every remaining map is already being scouted.
+  let idx=-1, fallback=-1; for(let k=0;k<cs.length;k++){ const j=(oldIdx+k)%cs.length; if(savedKeys.has(codeKey(cs[j]))) continue;
+    if(fallback<0) fallback=j; if(!claimedByOther(cs[j])){ idx=j; break; } }
+  if(idx<0) idx=fallback;
   if(idx<0){ startMap(); document.getElementById('codenote').innerHTML='<span class="ok">'+(savedMsg?savedMsg+' · ':'')+'all maps in this filter are captured. Nice.</span>';
     if(pipWin&&!pipWin.closed) pipWin.close(); return; }
   sel.value=String(idx); onCode();                            // -> startMap(new session) -> renderPipControls
@@ -898,6 +906,33 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
 // ---------- publish (Phase 2): build contribution + upload to the worker ----------
 const ENDPOINT='https://owscout-upload.owscout.workers.dev';
 function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
+
+// ---------- live scouting claims (advisory soft-lock; needs the worker's claim
+// endpoints — degrades to a no-op if they 404, so the page works pre-deploy) ----
+function claimHeaders(){ const h={'content-type':'application/json','X-Owscout-Token':identity()};
+  const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) h['X-Owscout-Name']=nm;
+  const s=localStorage.getItem('owscout_session'); if(s) h['X-Owscout-Session']=s; return h; }
+async function fetchClaims(){ try{ const r=await fetch(ENDPOINT+'/claims',{cache:'no-store'}); if(!r.ok) return;
+  const j=await r.json(); CLAIMS=j.claims||{}; syncCodeOptions(); showClaimNote(); }catch(e){} }
+function startClaimHb(){ clearInterval(claimHb); claimHb=setInterval(()=>{ if(myClaimKey)
+  fetch(ENDPOINT+'/claim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:myClaimKey})}).catch(()=>{}); }, 150000); }
+// Claim the map we're set up to capture; release the previous. Advisory: if
+// someone else already holds it the server says so and we just surface it.
+async function claimCode(c){ if(!c) return; const k=codeKey(c); if(k===myClaimKey) return;
+  const prev=myClaimKey; myClaimKey=k;
+  if(prev) fetch(ENDPOINT+'/unclaim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:prev})}).catch(()=>{});
+  startClaimHb();
+  try{ const r=await fetch(ENDPOINT+'/claim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:k})});
+    const j=await r.json().catch(()=>({})); if(j&&j.ok===false) myClaimKey=null;   // held by someone else
+  }catch(e){}
+  fetchClaims(); }
+function releaseClaim(){ if(!myClaimKey) return; const k=myClaimKey; myClaimKey=null; clearInterval(claimHb);
+  fetch(ENDPOINT+'/unclaim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:k})}).catch(()=>{}); }
+// Claim the selected code once we're actually set up to capture it (shared +
+// calibrated) — the earliest honest "I'm starting this map" signal.
+function maybeClaim(){ if(!(vid.srcObject&&boxes.a&&boxes.b)) return; const c=selectedCode(); if(c) claimCode(c); }
+function showClaimNote(){ const c=selectedCode(); if(!c) return; const k=codeKey(c); const note=document.getElementById('codenote');
+  if(note && CLAIMS[k] && k!==myClaimKey) note.innerHTML='<span class="warn">🔒 '+esc(CLAIMS[k].by)+' is scouting this now — Skip ⏭ to another (re-scouting still adds player data if you want it).</span>'; }
 function buildContribution(name, maps){
   // Custom (operator-added) heroes referenced by these maps travel WITH the
   // contribution so the merge can name a guid it's never seen (owscout does the same).
@@ -999,5 +1034,7 @@ document.getElementById('imprefsbtn').onclick=()=>document.getElementById('impre
 document.getElementById('imprefs').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
 document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
+window.addEventListener('pagehide',releaseClaim);            // best-effort; the KV TTL frees it anyway
 updateBtns(); loadFeeds();
+fetchClaims(); setInterval(fetchClaims, 45000);             // keep others' claims fresh in the picker
 </script></body></html>

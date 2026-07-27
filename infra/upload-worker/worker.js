@@ -29,6 +29,8 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const MIN_INTERVAL_MS = 30_000;
 const REFRESH_COOLDOWN_MS = 10 * 60_000;   // a site rebuild takes ~2 minutes
 const FORMAT = 1;
+const CLAIM_TTL_S = 300;                    // a live scouting claim auto-expires in KV after 5 min
+const CLAIM_TTL_MS = CLAIM_TTL_S * 1000;   // (the capture page heartbeats well inside this)
 
 export default {
   async fetch(request, env) {
@@ -41,7 +43,7 @@ export default {
         status: 204,
         headers: {
           "access-control-allow-origin": "*",
-          "access-control-allow-methods": "POST, OPTIONS",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
           "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
           "access-control-max-age": "86400",
         },
@@ -79,6 +81,57 @@ export default {
       }
       await env.NAMES.put("_refresh_at", String(Date.now()));
       return json(200, { started: true });
+    }
+
+    // Live scouting claims - an advisory soft-lock so two scouts don't capture the
+    // same map at once (first-wins at merge means duplicates only waste effort, but
+    // steering people apart is better). A scout claims match:game when they start;
+    // the capture page shows others' claims and its auto-fetch skips them. Claims
+    // are KV rows under a "claim:" prefix with a short TTL, refreshed by a
+    // heartbeat, so a closed tab frees the map on its own. All advisory - the page
+    // still lets you scout a claimed map (re-scouts add player data).
+    if (url.pathname === "/claims") {
+      if (request.method !== "GET") return json(405, { error: "GET /claims" });
+      const out = {};
+      let cursor;
+      do {
+        const page = await env.NAMES.list({ prefix: "claim:", cursor });
+        for (const k of page.keys) {
+          const r = await env.NAMES.get(k.name, { type: "json" });
+          if (r) out[k.name.slice(6)] = { by: r.by, at: r.at };
+        }
+        cursor = page.list_complete ? null : page.cursor;
+      } while (cursor);
+      return json(200, { claims: out });
+    }
+    if (url.pathname === "/claim" || url.pathname === "/unclaim") {
+      if (request.method !== "POST") return json(405, { error: "POST" });
+      let body;
+      try { body = JSON.parse((await request.text()) || "{}"); } catch { return json(400, { error: "body is not JSON" }); }
+      const key = String(body.key || "");
+      if (!/^[\w-]+:\d+$/.test(key)) return json(400, { error: "bad claim key" });   // match_id:game_no
+      const csess = await verifySession(request.headers.get("x-owscout-session"), env);
+      const cnm = (request.headers.get("x-owscout-name") || "").trim().toLowerCase();
+      const ctok = request.headers.get("x-owscout-token") || "";
+      // Owner identity (who may release/refresh): the account when logged in, else a
+      // hash of the anon identity token, else "anon". Display name is best-effort.
+      const owner = csess ? "u_" + csess.d
+                          : (ctok ? "t_" + (await sha256hex(ctok)).slice(0, 16) : "anon");
+      const by = csess ? (sanitizeName(csess.n) || "scout-" + String(csess.d).slice(-6))
+                       : (NAME_RE.test(cnm) ? cnm : "a scout");
+      const kvKey = "claim:" + key;
+      const cur = await env.NAMES.get(kvKey, { type: "json" });
+      if (url.pathname === "/unclaim") {
+        if (!cur || cur.owner === owner) await env.NAMES.delete(kvKey);   // only the holder releases
+        return json(200, { ok: true });
+      }
+      // Held by someone else and still fresh -> report it; the page keeps them apart
+      // but may still let the user scout it. Otherwise (re)claim with a fresh TTL.
+      if (cur && cur.owner !== owner && Date.now() - (cur.at || 0) < CLAIM_TTL_MS) {
+        return json(200, { ok: false, held_by: cur.by });
+      }
+      await env.NAMES.put(kvKey, JSON.stringify({ owner, by, at: Date.now() }), { expirationTtl: CLAIM_TTL_S });
+      return json(200, { ok: true, by });
     }
 
     // Discord OAuth (scaffold). Inert until DISCORD_* + SESSION_SECRET are set:
@@ -294,7 +347,7 @@ async function adminContributors(request, env) {
   do {
     const page = await env.NAMES.list({ cursor });
     for (const k of page.keys) {
-      if (k.name === "_refresh_at") continue;
+      if (k.name === "_refresh_at" || k.name.startsWith("claim:")) continue;
       const r = await env.NAMES.get(k.name, { type: "json" });
       if (!r) continue;
       out.push({
