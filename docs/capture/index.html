@@ -309,7 +309,8 @@ function refreshCodes(){ refreshOpponents(); const cs=currentCodes(), sel=docume
 // session — keeps the same code selected if it's still shown. Used after a local
 // capture is saved/deleted so the list stays in sync mid-loop. Returns whether
 // the previously-selected code survived.
-function syncCodeOptions(){ const sel=document.getElementById('code'), cur=selectedCode();
+function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   // feed not loaded yet — don't blank the picker
+  const sel=document.getElementById('code'), cur=selectedCode();
   const cs=currentCodes(); sel._codes=cs; sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
   document.getElementById('codenote').textContent=`${cs.length} codes shown`;
   if(cur){ const idx=cs.findIndex(c=>codeKey(c)===codeKey(cur)); if(idx>=0){ sel.value=String(idx); return true; } }
