@@ -379,7 +379,12 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 </div></div>
 <main id="content"></main>
 <script>
-const DATA = __DATA__;
+// __DATA_INLINE__
+// The whole app runs inside bootApp(DATA); DATA arrives either inlined above
+// (single-file/offline builds) or fetched from data.json (the shell build). This
+// split is what lets next-season gating be a config change — point the fetch at
+// the authenticated Worker — rather than a rewrite.
+function bootApp(DATA){
 const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined views
 let CURRENT_VIEW = VIEWS[0].id;
 const viewOf = (id)=> VIEWS.find(v=>v.id===id);
@@ -2348,6 +2353,18 @@ function init(){
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 init();
+}
+// Data delivery: an inlined blob when present (offline / single-file builds),
+// otherwise fetch the sibling data.json (the shell build). Next season this fetch
+// is the single place gating hooks in.
+(function(){
+  if(typeof __OWSCOUT_DATA__!=='undefined' && __OWSCOUT_DATA__) return bootApp(__OWSCOUT_DATA__);
+  fetch('data.json',{cache:'no-store'})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(bootApp)
+    .catch(function(err){ var c=document.getElementById('content');
+      if(c) c.innerHTML='<p class="note" style="padding:24px">Could not load scouting data ('+err+'). Refresh to retry.</p>'; });
+})();
 </script>
 </body>
 </html>

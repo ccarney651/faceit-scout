@@ -116,9 +116,18 @@ def cmd_export(args: argparse.Namespace) -> int:
         # HTML is the multi-division dashboard (all divisions unless one is named).
         if args.format == "html":
             out_path = args.out or "dashboard.html"
+            # --external-data: write the payload to a sibling data.json the page
+            # fetches (shell build), instead of inlining it. The seam for future
+            # gating; default stays a self-contained single file.
+            data_path = None
+            if getattr(args, "external_data", False):
+                data_path = os.path.join(os.path.dirname(out_path) or ".", "data.json")
             with open(out_path, "w", newline="", encoding="utf-8") as out:
                 n = export_html(db, out, championship_id=args.championship,
-                                only_tier=args.tier, only_region=args.region)
+                                only_tier=args.tier, only_region=args.region,
+                                data_path=data_path)
+            if data_path:
+                log.info("wrote shell data to %s", data_path)
             if n == 0:
                 print("no data to export yet", file=sys.stderr)
                 return 1
@@ -229,6 +238,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="restrict the HTML dashboard to one region (default: all)")
     e.add_argument("--out", default=None,
                    help="output file (csv/json default: stdout; html default: dashboard-<id>.html)")
+    e.add_argument("--external-data", action="store_true",
+                   help="html only: write the data to a sibling data.json the page fetches "
+                        "(shell build) instead of inlining it — the seam for future access gating")
     e.set_defaults(func=cmd_export)
 
     s = sub.add_parser("stats", help="team ban tendencies, map picks, win rates")

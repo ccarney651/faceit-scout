@@ -442,7 +442,8 @@ def _is_playoff(name: Optional[str]) -> bool:
 
 
 def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,
-                only_tier: Optional[str] = None, only_region: Optional[str] = None) -> int:
+                only_tier: Optional[str] = None, only_region: Optional[str] = None,
+                data_path: Optional[str] = None) -> int:
     """Render the multi-division dashboard.
 
     With ``championship_id`` set, only that division is included; otherwise every
@@ -606,5 +607,17 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     }
     title = "FACEIT OW2 — League Scouting"
     payload = json.dumps(data).replace("</", "<\\/")
-    out.write(HTML_TEMPLATE.replace("__TITLE__", html.escape(title)).replace("__DATA__", payload))
+    if data_path:
+        # Shell build: the data lives in a sibling file the page fetches. This is
+        # the seam next-season gating hooks into (serve data.json from the
+        # authenticated Worker instead of Pages). The page stays a static shell.
+        with open(data_path, "w", encoding="utf-8") as dh:
+            dh.write(payload)
+        inline = "// data.json is fetched at runtime (shell build)"
+    else:
+        # Single-file build (default): data inlined, so index.html works offline
+        # and from file:// with nothing else to serve.
+        inline = f"var __OWSCOUT_DATA__={payload};"
+    out.write(HTML_TEMPLATE.replace("__TITLE__", html.escape(title))
+                           .replace("// __DATA_INLINE__", inline))
     return len(divisions)
