@@ -788,7 +788,7 @@ function makeRecency(total, currentN, onChange, sliderMax){
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
   const a={bans:{},banRoles:{},mapsPicked:{},perMapPick:{},counter:{},mapStats:{},
-           firstBans:{},firstBanGames:0,pickFirstBan:{},banHeroWin:{},games:0,gwins:0,results:[],replays:[]};
+           firstBans:{},firstBanGames:0,pickFirstBan:{},banHeroWin:{},banOpen:{},games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
     if(team && !side) return;
@@ -822,6 +822,17 @@ function aggregate(matches,team){
           // counter-ban = the team's RESPONSE, i.e. only when the opponent
           // banned first (order 1) and this team banned second (order 2).
           if(oc && oc.order===1 && mine.order===2){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero); } }
+        // Ban -> opening comp: pair each hero THIS team banned (FACEIT bans are
+        // complete + team-attributed) with the comp they OPENED that game (their
+        // captured first-segment). Reliable ban side; opening side fills in with
+        // captures. Count each opening hero once per game so a hero's tally = the
+        // number of "banned X" games it appeared in.
+        const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+        const myOpen=(pg&&team&&pg[team])?Object.values(pg[team])[0]:null;   // first segment = the opening comp
+        if(myOpen&&myOpen.length){ const gk=m.id+':'+g.game_no;
+          g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{
+            const bo=a.banOpen[b.hero]||(a.banOpen[b.hero]={gk:new Set(),heroes:{}});
+            if(!bo.gk.has(gk)){ bo.gk.add(gk); myOpen.forEach(h=>inc(bo.heroes,h)); } }); }
       } else { inc(a.mapsPicked,g.map); g.bans.forEach(b=>{ inc(a.bans,b.hero); if(b.role)inc(a.banRoles,b.role); }); }
     });
   });
@@ -1729,18 +1740,19 @@ function renderScoutBody(t){
      {k:'resp',label:`${esc(t.team)} replied with`,html:r=>r.resp}], cRows)
    :el(`<p class="note">No counter-bans in this window (needs the opponent to have banned first with both bans attributed).</p>`));
 
-    if(scout){
-    // 5. Ban response - how their opener shifts when a hero is banned.
-    const banresp=(scout.ban_response||[]).slice(0,6);
-    if(banresp.length){
-          dv.body.appendChild(el(sectionH('When a hero is banned',`<span class="note">how their opening comp shifts</span>`)));
-      const card=el(`<div class="card"></div>`);
-      banresp.forEach(b=>{
-        card.appendChild(el(`<p class="seg">${esc(b.banned)} banned · ${b.games} game${b.games===1?'':'s'}</p>`));
-        (b.opens||[]).slice(0,2).forEach(c=>card.appendChild(el(compLine(c))));
-      });
-          dv.body.appendChild(card);
-    }
+    // Ban -> opening: when THIS team bans a hero (FACEIT, complete), the heroes
+    // they open with in those games. A hero shown in most of the "banned X" games
+    // is the tell ("bans Sigma -> opens Ramattra"). Needs captured openings, so it
+    // fills in as more of their games are scouted.
+    const boRows=Object.entries(t.banOpen||{})
+      .map(([ban,v])=>({ban, n:v.gk.size,
+        opens:Object.entries(v.heroes).sort((x,y)=>y[1]-x[1]).filter(([h,c])=>c/v.gk.size>=0.6).slice(0,5)}))
+      .filter(r=>r.n>=2 && r.opens.length).sort((x,y)=>y.n-x.n).slice(0,8);
+    if(boRows.length){
+      dv.body.appendChild(el(sectionH('When they ban a hero → what they open',`<span class="note">their ban paired with the comp they opened that game · captured games only</span>`)));
+      dv.body.appendChild(table(
+        [{k:'ban',label:'They ban',html:r=>heroChip(r.ban)},{k:'n',label:'Games',num:true},
+         {k:'opens',label:'They open with',html:r=>r.opens.map(([h,c])=>`${heroChip(h)}${c<r.n?`<span class="faint"> ${c}/${r.n}</span>`:''}`).join(' ')}], boRows));
     }
     w.appendChild(dv.root);
   }
