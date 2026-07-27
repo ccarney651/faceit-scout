@@ -65,6 +65,7 @@
   .obs:first-of-type{border-top:0}
   .cap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
   .capbtns{display:flex;gap:6px}.cap .review{flex-basis:100%;margin-top:4px;padding:6px 8px;background:var(--surface2);border-radius:8px}
+  .cap.done{opacity:.55}.pubdone{margin-top:6px}.pubdone summary{cursor:pointer;padding:6px 0;color:var(--muted)}
   .cap:first-of-type{border-top:0}
   .warn{color:var(--bad)} .ok{color:var(--good)} .faint{color:var(--faint)}
 </style></head><body>
@@ -680,7 +681,9 @@ async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
       if(g===fromG){ if(remove) continue; g=toG; }
       nh.push(g); np.push([g, pid!=null?pid:null]); }
     o.heroes=nh; o.pairs=np; }
-  await idbPut(rec); renderReview(rec, host); }
+  rec.published=false;   // an edited map needs re-publishing; keep the review open, just re-enable Publish
+  await idbPut(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
+  renderReview(rec, host); }
 function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
   const payload={format:'owscout-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
     refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
@@ -852,18 +855,33 @@ function advanceAfterSave(savedMsg, auto){
     if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML='<span class="ok">▶ next: '+c.code+' — copied</span>'; }
   } else { document.getElementById('codenote').innerHTML='<span class="ok">'+savedMsg+'</span>'; if(pipWin&&!pipWin.closed) pipWin.close(); }
 }
+// One captured-map row (used for both new and uploaded lists).
+function capRow(r, done){ const el=document.createElement('div'); el.className='cap'+(done?' done':'');
+  el.innerHTML=`<span><b style="color:var(--fg)">${esc(r.code)}</b> <span class="status">${esc(r.map_name||'')} · ${esc(r.division)} · ${r.observations.length} obs${done?' · ✓ uploaded':''}</span><br><span class="status">${esc(r.side_a_team)} vs ${esc(r.side_b_team)}</span></span>`+
+    `<span class="capbtns"><button class="ghost rev">review</button><button class="ghost del">delete</button></span>`;
+  const rev=document.createElement('div'); rev.className='review'; rev.style.display='none';
+  el.querySelector('.del').onclick=async()=>{ await idbDel(r.id); await renderCaptured();
+    if(!syncCodeOptions()) refreshCodes(); };   // removing it re-opens the map in the picker (hide on) and drops it from your next publish
+  el.querySelector('.rev').onclick=()=>{ const open=rev.style.display!=='none'; rev.style.display=open?'none':'block'; if(!open) renderReview(r, rev); };
+  el.appendChild(rev); return el; }
+// After a publish the maps are marked `published` and collapse into an "uploaded"
+// section so the active list clears — but they STAY in this browser because each
+// publish OVERWRITES your whole contribution file on the server, so they must be
+// re-sent every time (delete one only if you want it out of your contribution).
 async function renderCaptured(){ const rows=await idbAll(); document.getElementById('capcount').textContent=rows.length;
   savedKeys=new Set(rows.map(r=>r.match_id+':'+r.game_no));
-  const pub=document.getElementById('publish'); if(pub) pub.disabled=!rows.length;
-  const host=document.getElementById('caplist'); if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
-  host.innerHTML=''; rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at)).forEach(r=>{ const el=document.createElement('div'); el.className='cap';
-    el.innerHTML=`<span><b style="color:var(--fg)">${esc(r.code)}</b> <span class="status">${esc(r.map_name||'')} · ${esc(r.division)} · ${r.observations.length} obs</span><br><span class="status">${esc(r.side_a_team)} vs ${esc(r.side_b_team)}</span></span>`+
-      `<span class="capbtns"><button class="ghost rev">review</button><button class="ghost del">delete</button></span>`;
-    const rev=document.createElement('div'); rev.className='review'; rev.style.display='none';
-    el.querySelector('.del').onclick=async()=>{ await idbDel(r.id); await renderCaptured();
-      if(!syncCodeOptions()) refreshCodes(); };   // un-captured map re-appears in the picker (hide on); keep the session if it survived
-    el.querySelector('.rev').onclick=()=>{ const open=rev.style.display!=='none'; rev.style.display=open?'none':'block'; if(!open) renderReview(r, rev); };
-    el.appendChild(rev); host.appendChild(el); }); }
+  rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at));
+  const fresh=rows.filter(r=>!r.published), done=rows.filter(r=>r.published);
+  const pub=document.getElementById('publish'); if(pub) pub.disabled=!fresh.length;   // enabled when there's new work to push
+  const host=document.getElementById('caplist');
+  if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
+  host.innerHTML='';
+  if(fresh.length) fresh.forEach(r=>host.appendChild(capRow(r,false)));
+  else host.appendChild(el('<div class="status">All captures uploaded — capture more to publish again.</div>'));
+  if(done.length){ const d=document.createElement('details'); d.className='pubdone';
+    d.innerHTML=`<summary class="status">✓ ${done.length} uploaded — kept so they stay in your published set (re-sent each publish; editing one re-queues it)</summary>`;
+    const box=document.createElement('div'); done.forEach(r=>box.appendChild(capRow(r,true))); d.appendChild(box); host.appendChild(d); } }
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 
 // ---------- pop-out overlay (Document PiP): full scouting console over OW ----------
 // Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
@@ -994,9 +1012,11 @@ async function publish(){ const note=document.getElementById('pubnote'); const m
   const sess=localStorage.getItem('owscout_session'); if(sess) headers['X-Owscout-Session']=sess;   // Discord login (optional)
   try{ const res=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify(buildContribution(name,maps))});
     const j=await res.json().catch(()=>({}));
-    if(res.ok) note.innerHTML=`<span class="ok">published as ${name}: ${j.action} · ${j.maps} maps. The site rebuilds automatically (~2 min).</span>`;
-    else note.innerHTML='<span class="warn">publish failed: '+(j.error||('HTTP '+res.status))+'</span>';
-  }catch(e){ note.innerHTML='<span class="warn">publish failed ('+e+'). Use Download JSON and send it to the curator.</span>'; } }
+    if(res.ok){ for(const m of maps){ if(!m.published){ m.published=true; m.published_at=Date.now(); await idbPut(m); } }
+      await renderCaptured();   // uploaded maps collapse into the "uploaded" section (kept for re-send)
+      note.innerHTML=`<span class="ok">published as ${esc(name)}: ${j.action} · ${j.maps} maps — moved to “uploaded” below. Site rebuilds in ~2 min.</span>`; }
+    else note.innerHTML='<span class="warn">publish failed: '+esc(j.error||('HTTP '+res.status))+'</span>';
+  }catch(e){ note.innerHTML='<span class="warn">publish failed ('+esc(e.message||e)+'). Use Download JSON and send it to the curator.</span>'; } }
 async function downloadContrib(){ const maps=await idbAll(); const name=((document.getElementById('pubname').value||'operator').trim().toLowerCase())||'operator';
   const blob=new Blob([JSON.stringify(buildContribution(name,maps),null,2)],{type:'application/json'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name+'.json'; a.click(); }
