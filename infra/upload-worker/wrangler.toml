@@ -17,6 +17,17 @@ REPO = "ccarney651/faceit-scout"
 binding = "NAMES"
 id = "8230bf3bec1d424da7d07a6e7eb4cb19"
 
+# Live scouting claims - one global Durable Object holds the claim room and each
+# scout's WebSocket. SQLite-backed = available on the Workers Free plan (no
+# duration charge while sockets hibernate; free-plan SQLite storage isn't billed).
+[[durable_objects.bindings]]
+name = "CLAIM_ROOM"
+class_name = "ClaimRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ClaimRoom"]
+
 # Secrets (set with `wrangler secret put <NAME>`):
 #   GITHUB_TOKEN     fine-grained PAT, Contents read/write, the site repo only
 #   DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET   from the Discord app (login scaffold)

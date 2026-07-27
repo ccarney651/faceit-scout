@@ -425,7 +425,7 @@ async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMed
     const trk=st.getVideoTracks()[0];
     if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
     document.getElementById('calhint').textContent='Screen shared — click Auto-calibrate ✨ (or set the boxes by hand).'; updateBtns();
-    fetchClaims(); maybeClaim();   // pull latest locks + claim now if a returning scout is already calibrated on a code
+    maybeClaim();   // claim now if a returning scout is already calibrated on a code (the WS keeps locks live)
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
   document.getElementById('autocal').disabled=!vid.srcObject;
@@ -922,27 +922,54 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
 const ENDPOINT='https://owscout-upload.owscout.workers.dev';
 function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
 
-// ---------- live scouting claims (advisory soft-lock; needs the worker's claim
-// endpoints — degrades to a no-op if they 404, so the page works pre-deploy) ----
+// ---------- live scouting claims — real-time via a Durable Object WebSocket ----
+// Every scout holds one WS to the claim room; claim/release is pushed to everyone
+// instantly and a dropped socket frees that scout's maps at once. If the socket
+// can't be established it falls back to HTTP polling; everything degrades to a
+// no-op if the endpoints aren't deployed, so the page always works.
+let claimWS=null, wsRetry=0, wsPollTimer=null;
 function claimHeaders(){ const h={'content-type':'application/json','X-Owscout-Token':identity()};
   const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) h['X-Owscout-Name']=nm;
   const s=localStorage.getItem('owscout_session'); if(s) h['X-Owscout-Session']=s; return h; }
+function claimWsUrl(){ const u=new URL(ENDPOINT.replace(/^http/,'ws')+'/claims/ws');
+  u.searchParams.set('token', identity());
+  const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) u.searchParams.set('name', nm);
+  const s=localStorage.getItem('owscout_session'); if(s) u.searchParams.set('session', s);
+  return u.toString(); }
+function connectClaims(){ let ws; try{ ws=new WebSocket(claimWsUrl()); }catch(e){ scheduleReconnect(); return; }
+  claimWS=ws;
+  ws.onopen=()=>{ wsRetry=0; stopWsPoll(); if(myClaimKey) wsSend({type:'claim',key:myClaimKey}); };   // re-assert on reconnect
+  ws.onmessage=ev=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onClaimMsg(m); };
+  ws.onclose=()=>{ if(claimWS===ws) claimWS=null; scheduleReconnect(); };
+  ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
+function scheduleReconnect(){ startWsPoll(); const d=Math.min(30000, 1000*Math.pow(2, wsRetry++));
+  setTimeout(()=>{ if(!claimWS) connectClaims(); }, d); }
+function onClaimMsg(m){ if(m.type==='snapshot') CLAIMS=m.claims||{};
+  else if(m.type==='set') CLAIMS[m.key]=m.claim;
+  else if(m.type==='del') delete CLAIMS[m.key];
+  else if(m.type==='claimresult'){ if(!m.ok){ if(myClaimKey===m.key) myClaimKey=null; CLAIMS[m.key]={by:m.by, at:Date.now()}; } }
+  else return;
+  syncCodeOptions(); showClaimNote(); }
+function wsSend(o){ if(claimWS && claimWS.readyState===1){ try{ claimWS.send(JSON.stringify(o)); return true; }catch(e){} } return false; }
+// Prefer the live socket; fall back to an HTTP POST (same DO) if it's not open.
+function claimOp(wsMsg, path, body){ if(wsSend(wsMsg)) return;
+  fetch(ENDPOINT+path,{method:'POST',headers:claimHeaders(),body:JSON.stringify(body)}).catch(()=>{}); }
+// HTTP poll — only runs while the WS is down (a safety net, not the primary path).
 async function fetchClaims(){ try{ const r=await fetch(ENDPOINT+'/claims',{cache:'no-store'}); if(!r.ok) return;
   const j=await r.json(); CLAIMS=j.claims||{}; syncCodeOptions(); showClaimNote(); }catch(e){} }
-function startClaimHb(){ clearInterval(claimHb); claimHb=setInterval(()=>{ if(myClaimKey)
-  fetch(ENDPOINT+'/claim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:myClaimKey})}).catch(()=>{}); }, 150000); }
+function startWsPoll(){ if(wsPollTimer) return; fetchClaims(); wsPollTimer=setInterval(fetchClaims, 15000); }
+function stopWsPoll(){ clearInterval(wsPollTimer); wsPollTimer=null; }
+// Heartbeat bumps the claim's timestamp so the room's zombie-prune never drops an
+// active claim (clean disconnects release instantly on their own).
+function startClaimHb(){ clearInterval(claimHb); claimHb=setInterval(()=>{ if(myClaimKey) claimOp({type:'claim',key:myClaimKey},'/claim',{key:myClaimKey}); }, 90000); }
 // Claim the map we're set up to capture; release the previous. Advisory: if
-// someone else already holds it the server says so and we just surface it.
-async function claimCode(c){ if(!c) return; const k=codeKey(c); if(k===myClaimKey) return;
+// someone else holds it, the room replies and we surface their lock instead.
+function claimCode(c){ if(!c) return; const k=codeKey(c); if(k===myClaimKey) return;
   const prev=myClaimKey; myClaimKey=k;
-  if(prev) fetch(ENDPOINT+'/unclaim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:prev})}).catch(()=>{});
-  startClaimHb();
-  try{ const r=await fetch(ENDPOINT+'/claim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:k})});
-    const j=await r.json().catch(()=>({})); if(j&&j.ok===false) myClaimKey=null;   // held by someone else
-  }catch(e){}
-  fetchClaims(); }
+  if(prev) claimOp({type:'unclaim',key:prev},'/unclaim',{key:prev});
+  claimOp({type:'claim',key:k},'/claim',{key:k}); startClaimHb(); }
 function releaseClaim(){ if(!myClaimKey) return; const k=myClaimKey; myClaimKey=null; clearInterval(claimHb);
-  fetch(ENDPOINT+'/unclaim',{method:'POST',headers:claimHeaders(),body:JSON.stringify({key:k})}).catch(()=>{}); }
+  claimOp({type:'unclaim',key:k},'/unclaim',{key:k}); }
 // Claim the selected code once we're actually set up to capture it (shared +
 // calibrated) — the earliest honest "I'm starting this map" signal.
 function maybeClaim(){ if(!(vid.srcObject&&boxes.a&&boxes.b)) return; const c=selectedCode(); if(c) claimCode(c); }
@@ -1069,7 +1096,7 @@ document.getElementById('imprefsbtn').onclick=()=>document.getElementById('impre
 document.getElementById('imprefs').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
 document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
-window.addEventListener('pagehide',releaseClaim);            // best-effort; the KV TTL frees it anyway
+window.addEventListener('pagehide',releaseClaim);            // clean release; the room also frees it when the socket drops
 updateBtns(); loadFeeds();
-fetchClaims(); setInterval(fetchClaims, 12000);             // keep others' claims fresh (KV eventual-consistency is the remaining floor, ~up to 60s)
+connectClaims();                                            // real-time claims over a Durable Object WebSocket (HTTP-polls as fallback)
 </script></body></html>

@@ -29,8 +29,6 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const MIN_INTERVAL_MS = 30_000;
 const REFRESH_COOLDOWN_MS = 10 * 60_000;   // a site rebuild takes ~2 minutes
 const FORMAT = 1;
-const CLAIM_TTL_S = 300;                    // a live scouting claim auto-expires in KV after 5 min
-const CLAIM_TTL_MS = CLAIM_TTL_S * 1000;   // (the capture page heartbeats well inside this)
 
 export default {
   async fetch(request, env) {
@@ -85,53 +83,18 @@ export default {
 
     // Live scouting claims - an advisory soft-lock so two scouts don't capture the
     // same map at once (first-wins at merge means duplicates only waste effort, but
-    // steering people apart is better). A scout claims match:game when they start;
-    // the capture page shows others' claims and its auto-fetch skips them. Claims
-    // are KV rows under a "claim:" prefix with a short TTL, refreshed by a
-    // heartbeat, so a closed tab frees the map on its own. All advisory - the page
-    // still lets you scout a claimed map (re-scouts add player data).
-    if (url.pathname === "/claims") {
-      if (request.method !== "GET") return json(405, { error: "GET /claims" });
-      const out = {};
-      let cursor;
-      do {
-        const page = await env.NAMES.list({ prefix: "claim:", cursor });
-        for (const k of page.keys) {
-          const r = await env.NAMES.get(k.name, { type: "json" });
-          if (r) out[k.name.slice(6)] = { by: r.by, at: r.at };
-        }
-        cursor = page.list_complete ? null : page.cursor;
-      } while (cursor);
-      return json(200, { claims: out });
-    }
-    if (url.pathname === "/claim" || url.pathname === "/unclaim") {
-      if (request.method !== "POST") return json(405, { error: "POST" });
-      let body;
-      try { body = JSON.parse((await request.text()) || "{}"); } catch { return json(400, { error: "body is not JSON" }); }
-      const key = String(body.key || "");
-      if (!/^[\w-]+:\d+$/.test(key)) return json(400, { error: "bad claim key" });   // match_id:game_no
-      const csess = await verifySession(request.headers.get("x-owscout-session"), env);
-      const cnm = (request.headers.get("x-owscout-name") || "").trim().toLowerCase();
-      const ctok = request.headers.get("x-owscout-token") || "";
-      // Owner identity (who may release/refresh): the account when logged in, else a
-      // hash of the anon identity token, else "anon". Display name is best-effort.
-      const owner = csess ? "u_" + csess.d
-                          : (ctok ? "t_" + (await sha256hex(ctok)).slice(0, 16) : "anon");
-      const by = csess ? (sanitizeName(csess.n) || "scout-" + String(csess.d).slice(-6))
-                       : (NAME_RE.test(cnm) ? cnm : "a scout");
-      const kvKey = "claim:" + key;
-      const cur = await env.NAMES.get(kvKey, { type: "json" });
-      if (url.pathname === "/unclaim") {
-        if (!cur || cur.owner === owner) await env.NAMES.delete(kvKey);   // only the holder releases
-        return json(200, { ok: true });
-      }
-      // Held by someone else and still fresh -> report it; the page keeps them apart
-      // but may still let the user scout it. Otherwise (re)claim with a fresh TTL.
-      if (cur && cur.owner !== owner && Date.now() - (cur.at || 0) < CLAIM_TTL_MS) {
-        return json(200, { ok: false, held_by: cur.by });
-      }
-      await env.NAMES.put(kvKey, JSON.stringify({ owner, by, at: Date.now() }), { expirationTtl: CLAIM_TTL_S });
-      return json(200, { ok: true, by });
+    // steering people apart is better). Backed by a single Durable Object (the
+    // "claim room"): a WebSocket per scout gives instant, strongly-consistent
+    // claim/release across everyone, and a dropped connection frees that scout's
+    // maps at once. GET /claims + POST /claim|/unclaim stay as HTTP fallbacks that
+    // hit the same DO. The Worker resolves identity, then forwards to the DO.
+    if (url.pathname === "/claims" || url.pathname === "/claim" || url.pathname === "/unclaim" || url.pathname === "/claims/ws") {
+      const { owner, by } = await claimIdentity(request, env);
+      const stub = env.CLAIM_ROOM.get(env.CLAIM_ROOM.idFromName("global"));
+      const fwd = new Request(request.url, request);   // preserves method/body and the Upgrade header for WS
+      fwd.headers.set("x-owner", owner);
+      fwd.headers.set("x-by", by);
+      return stub.fetch(fwd);
     }
 
     // Discord OAuth (scaffold). Inert until DISCORD_* + SESSION_SECRET are set:
@@ -334,6 +297,22 @@ function sanitizeName(s) {
   return x.length >= 2 ? x : "";
 }
 
+// Resolve who is claiming, from headers (HTTP fallback) or query string (the
+// WebSocket upgrade, which a browser can't send headers on). owner = who may
+// release/refresh a claim (account when logged in, else a hash of the anon
+// identity token); by = best-effort display name.
+async function claimIdentity(request, env) {
+  const url = new URL(request.url);
+  const pick = (h, q) => request.headers.get(h) || url.searchParams.get(q) || "";
+  const sess = await verifySession(pick("x-owscout-session", "session"), env);
+  const nm = pick("x-owscout-name", "name").trim().toLowerCase();
+  const tok = pick("x-owscout-token", "token");
+  const owner = sess ? "u_" + sess.d : (tok ? "t_" + (await sha256hex(tok)).slice(0, 16) : "anon");
+  const by = sess ? (sanitizeName(sess.n) || "scout-" + String(sess.d).slice(-6))
+                  : (NAME_RE.test(nm) ? nm : "a scout");
+  return { owner, by };
+}
+
 // The admin roster is the whole point of "who is sending reports": it walks the
 // KV claim records (one per contributor) and returns name + discord id + when
 // they last uploaded + last batch size. Gated server-side to ADMIN_IDS - the
@@ -375,4 +354,103 @@ function json(status, obj) {
       "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// ClaimRoom - the live scouting-claims Durable Object (one global instance).
+// Holds { "match:game": {owner, by, at} }, persisted to SQLite-backed storage.
+// Each scout keeps a hibernatable WebSocket; claim/release is broadcast to all
+// instantly, and a dropped socket frees that scout's maps at once (no TTL wait).
+// An alarm prunes zombie claims from half-open sockets as a backstop.
+// ---------------------------------------------------------------------------
+const CLAIM_STALE_MS = 6 * 60_000;   // prune a claim not refreshed within this (heartbeat is ~90s)
+const CLAIM_PRUNE_EVERY_MS = 5 * 60_000;
+
+export class ClaimRoom {
+  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.claims = null; }
+
+  async load() { if (this.claims === null) this.claims = (await this.ctx.storage.get("claims")) || {}; return this.claims; }
+  persist() { return this.ctx.storage.put("claims", this.claims); }
+  publicClaims() { const o = {}; for (const k in this.claims) o[k] = { by: this.claims[k].by, at: this.claims[k].at }; return o; }
+  broadcast(msg, except) { const s = JSON.stringify(msg); for (const ws of this.ctx.getWebSockets()) { if (ws === except) continue; try { ws.send(s); } catch (e) {} } }
+
+  // key must be match_id:game_no
+  ok(key) { return /^[\w-]+:\d+$/.test(key); }
+  doClaim(key, owner, by) {
+    const cur = this.claims[key];
+    if (cur && cur.owner !== owner) return { ok: false, by: cur.by };   // someone else holds it (advisory)
+    this.claims[key] = { owner, by, at: Date.now() };
+    this.broadcast({ type: "set", key, claim: { by, at: this.claims[key].at } });
+    return { ok: true, by };
+  }
+  doRelease(key, owner) {
+    const cur = this.claims[key];
+    if (cur && cur.owner === owner) { delete this.claims[key]; this.broadcast({ type: "del", key }); return true; }
+    return false;
+  }
+
+  async fetch(request) {
+    await this.load();
+    const url = new URL(request.url);
+    const owner = request.headers.get("x-owner") || "anon";
+    const by = request.headers.get("x-by") || "a scout";
+
+    if (request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.ctx.acceptWebSocket(server);                 // hibernatable: no duration charge while idle
+      server.serializeAttachment({ owner, by });
+      server.send(JSON.stringify({ type: "snapshot", claims: this.publicClaims() }));
+      await this.ensureAlarm();
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    if (url.pathname.endsWith("/claims")) return json(200, { claims: this.publicClaims() });
+    if (url.pathname.endsWith("/claim") || url.pathname.endsWith("/unclaim")) {
+      let body; try { body = JSON.parse((await request.text()) || "{}"); } catch { return json(400, { error: "body is not JSON" }); }
+      const key = String(body.key || "");
+      if (!this.ok(key)) return json(400, { error: "bad claim key" });
+      if (url.pathname.endsWith("/unclaim")) { this.doRelease(key, owner); await this.persist(); return json(200, { ok: true }); }
+      const r = this.doClaim(key, owner, by); await this.persist(); await this.ensureAlarm();
+      return json(200, r);
+    }
+    return json(404, { error: "not found" });
+  }
+
+  webSocketMessage(ws, raw) {
+    let m; try { m = JSON.parse(raw); } catch { return; }
+    const { owner, by } = ws.deserializeAttachment() || {};
+    if (m.type === "claim" && this.ok(m.key)) {
+      const r = this.doClaim(m.key, owner, by);
+      try { ws.send(JSON.stringify({ type: "claimresult", key: m.key, ok: r.ok, by: r.by })); } catch (e) {}
+      this.persist();
+    } else if (m.type === "unclaim" && this.ok(m.key)) {
+      this.doRelease(m.key, owner); this.persist();
+    } else if (m.type === "ping") {
+      try { ws.send(JSON.stringify({ type: "pong" })); } catch (e) {}
+    }
+  }
+  webSocketClose(ws) { this.releaseAllOwned(ws); }
+  webSocketError(ws) { this.releaseAllOwned(ws); }
+
+  // Free every claim held by a departing socket's owner - unless another of that
+  // owner's tabs is still open (so a second tab doesn't drop the first's locks).
+  releaseAllOwned(ws) {
+    const { owner } = ws.deserializeAttachment() || {};
+    if (!owner) return;
+    const stillHere = this.ctx.getWebSockets().some((s) => s !== ws && (s.deserializeAttachment() || {}).owner === owner);
+    if (stillHere) return;
+    let changed = false;
+    for (const k in this.claims) if (this.claims[k].owner === owner) { delete this.claims[k]; this.broadcast({ type: "del", key: k }); changed = true; }
+    if (changed) this.persist();
+  }
+
+  async ensureAlarm() { if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + CLAIM_PRUNE_EVERY_MS); }
+  async alarm() {
+    await this.load();
+    const now = Date.now(); let changed = false;
+    for (const k in this.claims) if (now - (this.claims[k].at || 0) > CLAIM_STALE_MS) { delete this.claims[k]; this.broadcast({ type: "del", key: k }); changed = true; }
+    if (changed) await this.persist();
+    if (Object.keys(this.claims).length) await this.ctx.storage.setAlarm(now + CLAIM_PRUNE_EVERY_MS);   // keep pruning while claims exist
+  }
 }
