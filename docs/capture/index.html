@@ -235,12 +235,13 @@ async function loadFeeds(){
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
   buildDivisions();
+  await renderCaptured();   // populate savedKeys BEFORE the picker filters, so locally-captured maps are hidden on load
   // Deep-link from the dashboard's "Capture this team" prompts: ?team=&division=
   const q=new URLSearchParams(location.search);
   const dv=q.get('division'); if(dv && [...document.getElementById('div').options].some(o=>o.value===dv)) document.getElementById('div').value=dv;
   refreshCodes();
   const tm=q.get('team'); if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
-  renderCaptured(); setFeedMeta();
+  setFeedMeta();
 }
 function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(el) el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
 async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(el) el.textContent='refreshing…';
@@ -249,20 +250,36 @@ async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(
 
 // ---------- pick a replay ----------
 function buildDivisions(){ document.getElementById('div').innerHTML='<option value="all">all</option>'+(DATA.divisions||[]).map(t=>`<option>${t}</option>`).join(''); }
+function codeKey(c){ return c.match_id+':'+c.game_no; }
+// A map is "done" if scouted by anyone (captured.json) OR captured locally in this
+// browser (savedKeys) — both count for "hide already-scouted".
+function isDone(c){ const k=codeKey(c); return CLAIMED.has(k)||savedKeys.has(k); }
+function codeOption(c,i){ const k=codeKey(c);
+  const tag = savedKeys.has(k)?'  [captured here]' : (CLAIMED.has(k)?'  [scouted]':'');
+  return `<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${tag}</option>`; }
 function currentCodes(){ let cs=DATA.codes.slice();
   const dv=document.getElementById('div').value, op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
   if(dv!=='all') cs=cs.filter(c=>c.division===dv);
   if(op&&op!=='all') cs=cs.filter(c=>c.team_a===op||c.team_b===op);
-  if(hide) cs=cs.filter(c=>!CLAIMED.has(c.match_id+':'+c.game_no));
+  if(hide) cs=cs.filter(c=>!isDone(c));
   return cs; }
 function refreshOpponents(){ const dv=document.getElementById('div').value; let cs=DATA.codes.slice(); if(dv!=='all') cs=cs.filter(c=>c.division===dv);
   const teams=[...new Set(cs.flatMap(c=>[c.team_a,c.team_b]).filter(Boolean))].sort();
   const sel=document.getElementById('opp'), cur=sel.value;
   sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join(''); }
 function refreshCodes(){ refreshOpponents(); const cs=currentCodes(), sel=document.getElementById('code');
-  sel.innerHTML=cs.map((c,i)=>`<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${CLAIMED.has(c.match_id+':'+c.game_no)?'  [scouted]':''}</option>`).join('');
+  sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
   sel._codes=cs; document.getElementById('codenote').textContent=`${cs.length} codes shown`;
   if(cs.length){ sel.value='0'; onCode(); } else { document.getElementById('roster').innerHTML=''; document.getElementById('sideradios').innerHTML=''; startMap(); } }
+// Rebuild the picker's options from the current filter WITHOUT resetting the
+// session — keeps the same code selected if it's still shown. Used after a local
+// capture is saved/deleted so the list stays in sync mid-loop. Returns whether
+// the previously-selected code survived.
+function syncCodeOptions(){ const sel=document.getElementById('code'), cur=selectedCode();
+  const cs=currentCodes(); sel._codes=cs; sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
+  document.getElementById('codenote').textContent=`${cs.length} codes shown`;
+  if(cur){ const idx=cs.findIndex(c=>codeKey(c)===codeKey(cur)); if(idx>=0){ sel.value=String(idx); return true; } }
+  return false; }
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
@@ -511,10 +528,16 @@ async function autoDetect(){ const c=selectedCode();
     else sideMsg='sides unclear — set the left team by hand';
     // Attribute against whichever teams are now on each side.
     const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
-    const aIds=attribute(names.a,teamRoster(leftId)), bIds=attribute(names.b,teamRoster(rightId));
+    const lRoster=teamRoster(leftId), rRoster=teamRoster(rightId);
+    const aIds=attribute(names.a,lRoster), bIds=attribute(names.b,rRoster);
     if(session) session.players={a:aIds,b:bIds};
     const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
-    setDetectMsg(`✨ ${sideMsg} · ${hit}/10 players tagged`+(left?'':' — check sides'), left?'ok':'warn');
+    // No ids in the feed for this match yet = the data feed hasn't rebuilt since
+    // player-ids were added; sides still work, tags fill in after the next update.
+    const feedHasIds=lRoster.some(p=>p.id)||rRoster.some(p=>p.id);
+    const tagMsg = feedHasIds ? `${hit}/10 players tagged`
+      : 'player tags pending — roster ids for this match are still rebuilding (sides are set; retry after the site updates)';
+    setDetectMsg(`✨ ${sideMsg} · ${tagMsg}`+(left?'':' — check sides'), left?'ok':'warn');
   }catch(e){ setDetectMsg('auto-detect failed: '+(e.message||e)+' — use manual sides / Swap teams.','warn'); }
   finally{ updateBtns(); }
 }
@@ -641,23 +664,28 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
     winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
     captured_at:new Date().toISOString(), bans:[], observations };
   await idbPut(rec);
-  savedKeys.add(c.match_id+':'+c.game_no); renderCaptured();
+  savedKeys.add(c.match_id+':'+c.game_no); await renderCaptured();
   const savedMsg=`saved ${c.code} — ${session.snaps.length} snapshots`;
-  if(document.getElementById('autofetch').checked){ advanceToNext(savedMsg); }
-  else { document.getElementById('codenote').innerHTML='<span class="ok">'+savedMsg+'</span>'; startMap(); if(pipWin&&!pipWin.closed) pipWin.close(); }
+  advanceAfterSave(savedMsg, document.getElementById('autofetch').checked);
 }
-// Auto-fetch: move to the next code in the CURRENT filtered list that isn't
-// already captured locally, copy its replay code, and carry the overlay onto it.
-function advanceToNext(savedMsg){
-  const sel=document.getElementById('code'), codes=sel._codes||[], cur=+sel.value;
-  let idx=-1; for(let i=1;i<=codes.length;i++){ const j=(cur+i)%codes.length; const c=codes[j]; if(!savedKeys.has(c.match_id+':'+c.game_no)){ idx=j; break; } }
-  if(idx<0){ startMap(); const m='<span class="ok">'+(savedMsg?savedMsg+' · ':'')+'all maps in this filter are captured. Nice.</span>';
-    document.getElementById('codenote').innerHTML=m; if(pipWin&&!pipWin.closed) pipWin.close(); return; }
-  sel.value=idx; onCode();                                  // -> startMap(new session) -> renderPipControls
-  const c=codes[idx]; try{ navigator.clipboard.writeText(c.code); }catch(e){}
-  const m=`${savedMsg?savedMsg+' · ':''}▶ next: ${c.code} ${c.map||''} — code copied, paste into OW`;
-  document.getElementById('codenote').innerHTML='<span class="ok">'+m+'</span>';
-  if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML='<span class="ok">▶ next: '+c.code+' — copied</span>'; }
+// After saving a map: rebuild the picker (the just-saved map drops out when
+// "hide already-scouted" is on) and move to the next map that isn't captured
+// yet, continuing FORWARD from where we were. With auto-fetch on, also copy the
+// next code + carry the overlay; off, just land on it. Rebuilding the options is
+// what keeps captured maps from lingering in the dropdown mid-loop.
+function advanceAfterSave(savedMsg, auto){
+  const sel=document.getElementById('code'), oldIdx=+sel.value;
+  const cs=currentCodes(); sel._codes=cs; sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
+  document.getElementById('codenote').textContent=`${cs.length} codes shown`;
+  let idx=-1; for(let k=0;k<cs.length;k++){ const j=(oldIdx+k)%cs.length; if(!savedKeys.has(codeKey(cs[j]))){ idx=j; break; } }
+  if(idx<0){ startMap(); document.getElementById('codenote').innerHTML='<span class="ok">'+(savedMsg?savedMsg+' · ':'')+'all maps in this filter are captured. Nice.</span>';
+    if(pipWin&&!pipWin.closed) pipWin.close(); return; }
+  sel.value=String(idx); onCode();                            // -> startMap(new session) -> renderPipControls
+  if(auto){ const c=cs[idx]; try{ navigator.clipboard.writeText(c.code); }catch(e){}
+    const m=`${savedMsg?savedMsg+' · ':''}▶ next: ${c.code} ${c.map||''} — code copied, paste into OW`;
+    document.getElementById('codenote').innerHTML='<span class="ok">'+m+'</span>';
+    if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML='<span class="ok">▶ next: '+c.code+' — copied</span>'; }
+  } else { document.getElementById('codenote').innerHTML='<span class="ok">'+savedMsg+'</span>'; if(pipWin&&!pipWin.closed) pipWin.close(); }
 }
 async function renderCaptured(){ const rows=await idbAll(); document.getElementById('capcount').textContent=rows.length;
   savedKeys=new Set(rows.map(r=>r.match_id+':'+r.game_no));
@@ -665,7 +693,9 @@ async function renderCaptured(){ const rows=await idbAll(); document.getElementB
   const host=document.getElementById('caplist'); if(!rows.length){ host.textContent='Nothing captured yet.'; return; }
   host.innerHTML=''; rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at)).forEach(r=>{ const el=document.createElement('div'); el.className='cap';
     el.innerHTML=`<span><b style="color:var(--fg)">${r.code}</b> <span class="status">${r.map_name||''} · ${r.division} · ${r.observations.length} obs</span><br><span class="status">${r.side_a_team} vs ${r.side_b_team}</span></span><button class="ghost" data-id="${r.id}">delete</button>`;
-    el.querySelector('button').onclick=async()=>{ await idbDel(r.id); renderCaptured(); }; host.appendChild(el); }); }
+    el.querySelector('button').onclick=async()=>{ await idbDel(r.id); await renderCaptured();
+      if(!syncCodeOptions()) refreshCodes(); };   // un-captured map re-appears in the picker (hide on); keep the session if it survived
+    host.appendChild(el); }); }
 
 // ---------- pop-out overlay (Document PiP): full scouting console over OW ----------
 // Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
