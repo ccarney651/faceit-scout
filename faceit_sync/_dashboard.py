@@ -852,11 +852,31 @@ function renderPlayoffs(){
   }
   const N=PLAYOFF_QUALIFIERS[tier]||8, teams=D().teams||[], k=nextPow2(N);
   const ubRounds=Math.round(Math.log2(k)), order=seedOrder(k);
+  const po=D().playoffs||[];   // real played series, attached from the playoff championship (empty until it exists)
 
-  const hd=el(`<div class="card"></div>`);
+  // Real results (once the playoff championship is ingested): each played series,
+  // grouped by bracket round, winner highlighted. Shown above the projection.
+  if(po.length){
+    const rc=el(`<div class="card"></div>`);
+    rc.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — results</p>`));
+    rc.appendChild(el(`<p class="note" style="margin:2px 0 8px">${po.length} series played · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
+    const byRound={}; po.forEach(m=>{const r=m.round||0;(byRound[r]=byRound[r]||[]).push(m);});
+    Object.keys(byRound).map(Number).sort((a,b)=>a-b).forEach(rd=>{
+      rc.appendChild(el(`<p class="note" style="margin:8px 0 2px"><b>Round ${rd||'—'}</b></p>`));
+      byRound[rd].sort((a,b)=>String(a.finished_at||'').localeCompare(String(b.finished_at||''))).forEach(m=>{
+        const w1=m.winner_team&&m.winner_team===m.f1, w2=m.winner_team&&m.winner_team===m.f2;
+        rc.appendChild(el(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:12.5px">`+
+          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis"><b style="color:${w1?'var(--good)':'var(--fg)'}">${esc(m.f1||'TBD')}</b> <span class="faint">vs</span> <b style="color:${w2?'var(--good)':'var(--fg)'}">${esc(m.f2||'TBD')}</b>${m.forfeit?' <span class="faint">(FF)</span>':''}</span>`+
+          `<span class="st">${esc(m.series||'')}</span></div>`));
+      });
+    });
+    wrap.appendChild(rc);
+  }
+
+  const hd=el(`<div class="card"${po.length?' style="margin-top:14px"':''}></div>`);
   hd.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — projected</p>`));
   hd.appendChild(el(`<p style="margin:2px 0 0;font-size:14px">Top <b>${N}</b> · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
-  hd.appendChild(el(`<p class="note" style="margin-top:6px">Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches have been played yet. Format from FACEIT League S8; will re-confirm when S9 brackets are posted.</p>`));
+  hd.appendChild(el(`<p class="note" style="margin-top:6px">${po.length?'Real results are shown above; the seeds and bracket below are the standings-based projection.':'Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches have been played yet.'} Format from FACEIT League S8; will re-confirm when S9 brackets are posted.</p>`));
   wrap.appendChild(hd);
 
   // Projected seeds

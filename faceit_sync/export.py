@@ -433,6 +433,14 @@ def _region_of(name: Optional[str]) -> Optional[str]:
     return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
 
 
+def _is_playoff(name: Optional[str]) -> bool:
+    """A playoff/knockout championship, separate from the '... - Regular Season'
+    divisions. Its matches feed the Playoffs tab as real results but must NOT
+    enter regular-season standings/meta — so it's classified out of the tier
+    views and attached to the matching division instead."""
+    return bool(name) and ("playoff" in name.lower() or "knockout" in name.lower())
+
+
 def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,
                 only_tier: Optional[str] = None, only_region: Optional[str] = None) -> int:
     """Render the multi-division dashboard.
@@ -461,6 +469,13 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         if want_region:
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
         cids = [str(r["id"]) for r in rows]
+
+    # Split off playoff championships: they become the Playoffs tab's real results
+    # (attached to their region+tier division below), never their own view/standings.
+    name_by_cid = {str(r["id"]): r["name"] for r in
+                   db.conn.execute("SELECT id, name FROM championships").fetchall()}
+    playoff_cids = [cid for cid in cids if _is_playoff(name_by_cid.get(cid))]
+    cids = [cid for cid in cids if cid not in set(playoff_cids)]
 
     # Captured comps synced in from owscout (if present). Loaded once, up front, so
     # the per-game deciding-cycle data (attack_cycles) can feed each division's
@@ -501,6 +516,31 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
 
     if not divisions:
         return 0
+
+    # Attach each playoff championship's played series to the matching region+tier
+    # division, so the Playoffs tab shows real results the moment those matches are
+    # ingested — without polluting regular-season standings/meta (separate
+    # championship). A no-op until a "... - Playoffs" championship exists.
+    if playoff_cids:
+        rt_reg = {}
+        for cid, d in divisions.items():
+            r, t = _region_of(str(d["summary"]["championship"])), _tier_of(str(d["summary"]["championship"]))
+            if r and t:
+                rt_reg[(r, t)] = cid
+        for pcid in playoff_cids:
+            pnm = name_by_cid.get(pcid)
+            reg_cid = rt_reg.get((_region_of(pnm), _tier_of(pnm)))
+            if not reg_cid:
+                continue
+            pd = _dashboard_data(db, pcid, attack_cycles=owscout_cycles)
+            series = [
+                {"round": m["round"], "group": m["group"], "f1": m["f1"], "f2": m["f2"],
+                 "series": m["series"], "winner_team": m["winner_team"],
+                 "finished_at": m["finished_at"], "best_of": m["best_of"], "forfeit": m["forfeit"]}
+                for m in pd["matches"] if not m["walkover"]
+            ]
+            if series:
+                divisions[reg_cid].setdefault("playoffs", []).extend(series)
 
     # Build the switcher "views": every division present in a region (tiers
     # strongest-first, see TIERS), then a merged "Combined" of all of them — so
