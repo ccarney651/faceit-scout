@@ -485,6 +485,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     owscout_wipe: object = None
     owscout_cycles: dict[str, object] = {}
     owscout_pergame: dict[str, object] = {}
+    owscout_contributors: list[object] = []
     oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
     if os.path.exists(oc_path):
         try:
@@ -495,6 +496,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             owscout_wipe = oc.get("code_wipe_date")
             owscout_cycles = oc.get("attack_cycles", {})
             owscout_pergame = oc.get("per_game_comps", {})
+            owscout_contributors = oc.get("contributor_stats", [])
         except (json.JSONDecodeError, OSError):
             owscout_comps = {}
 
@@ -588,6 +590,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         "owscout_comps": owscout_comps,
         "owscout_captured": owscout_captured,
         "owscout_pergame": owscout_pergame,
+        "owscout_contributors": owscout_contributors,
         "code_wipe": owscout_wipe,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.

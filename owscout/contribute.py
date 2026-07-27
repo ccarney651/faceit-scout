@@ -497,6 +497,15 @@ def merged_payload(
         r["players"] = pools.get(team, [])
         teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
     payload["contributors"] = sorted({str(c["contributor"]) for c in contributions})
+    # Per-contributor credit = maps they OWN after first-wins (the same notion the
+    # future contribute-or-pay threshold uses). Powers the site's scout leaderboard.
+    _owned: dict[str, int] = {}
+    for who in merged.owner.values():
+        _owned[str(who)] = _owned.get(str(who), 0) + 1
+    payload["contributor_stats"] = [
+        {"name": n, "maps": c}
+        for n, c in sorted(_owned.items(), key=lambda kv: (-kv[1], kv[0]))
+    ]
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
     payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)

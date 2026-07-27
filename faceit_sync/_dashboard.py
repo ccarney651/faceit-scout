@@ -991,6 +991,19 @@ function renderOverview(){
   const cbtn=el(`<button class="btn">Capture comps →</button>`); cbtn.onclick=()=>{location.href='capture/';}; contrib.appendChild(cbtn);
   wrap.appendChild(contrib);
 
+  // Scout leaderboard — maps each contributor owns (first-wins credited), the
+  // same count the future contribute-or-pay threshold will use. League-wide.
+  const contribs=DATA.owscout_contributors||[];
+  if(contribs.length){
+    const lc=el(`<div class="card" style="margin-top:14px"></div>`);
+    lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
+    lc.appendChild(el(`<p class="note" style="margin:0 0 8px">Maps each scout has contributed this season — every capture sharpens the data here. 🙏</p>`));
+    lc.appendChild(el(barList(contribs.slice(0,15).map(c=>({label:esc(c.name),value:c.maps})))));
+    const total=contribs.reduce((x,c)=>x+(c.maps||0),0);
+    lc.appendChild(el(`<p class="note" style="margin-top:8px">${contribs.length} scout${contribs.length===1?'':'s'} · ${nf(total)} maps captured league-wide.</p>`));
+    wrap.appendChild(lc);
+  }
+
   // current meta + standings
   const two=el(`<div class="grid cols-2" style="margin-top:20px"></div>`);
   const win=recent(MATCHES_RECENT,20), a=aggregate(win,null), {from,to}=dateRange(win);
