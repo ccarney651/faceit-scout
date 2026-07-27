@@ -142,6 +142,11 @@
       <button id="pop" class="ghost">Pop out overlay ⇱</button>
       <span class="status" id="snapmsg"></span>
     </div>
+    <div class="row" style="margin-top:6px;align-items:center;gap:12px">
+      <label class="status" title="Read the comp automatically on a timer — deduped, so it only keeps real changes"><input type="checkbox" id="autosnap"> auto-snapshot every
+        <select id="autosnapint" style="width:auto"><option value="3000">3s</option><option value="5000" selected>5s</option><option value="8000">8s</option></select></label>
+      <span class="status faint" title="Shortcuts work when this page or the overlay is focused (not while Overwatch has focus)">keys: <b>S</b> snapshot · <b>R</b> round · <b>Z</b> undo · <b>F</b> finish · <b>D</b> auto-detect</span>
+    </div>
     <!-- Escort/Hybrid: instead of a "flip" the operator has to reason about, just
          ask who's attacking each round, by team name. Click what the HUD shows. -->
     <div class="row" id="atkrow" style="display:none;margin-top:8px;align-items:center">
@@ -259,12 +264,15 @@ async function loadFeeds(){
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
   buildDivisions();
+  restorePrefs();           // saved division + hide-scouted preference (a ?division deep-link overrides below)
   await renderCaptured();   // populate savedKeys BEFORE the picker filters, so locally-captured maps are hidden on load
   // Deep-link from the dashboard's "Capture this team" prompts: ?team=&division=
   const q=new URLSearchParams(location.search);
   const dv=q.get('division'); if(dv && [...document.getElementById('div').options].some(o=>o.value===dv)) document.getElementById('div').value=dv;
   refreshCodes();
-  const tm=q.get('team'); if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
+  const tm=q.get('team'), po=localStorage.getItem('owscout_pref_opp');
+  if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
+  else if(po){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===po)){ opp.value=po; refreshCodes(); } }   // restore saved opponent filter
   setFeedMeta();
 }
 function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(el) el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
@@ -317,9 +325,12 @@ function onCode(){ const c=selectedCode(); if(!c) return;
   sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=onSideChange);
   startMap(); showClaimNote(); maybeClaim();   // reflect + take a live claim on the new code
 }
-document.getElementById('div').onchange=refreshCodes;
-document.getElementById('opp').onchange=refreshCodes;
-document.getElementById('hide').onchange=refreshCodes;
+function savePref(id){ const el=document.getElementById(id); localStorage.setItem('owscout_pref_'+id, el.type==='checkbox'?(el.checked?'1':'0'):el.value); }
+function restorePrefs(){ const h=localStorage.getItem('owscout_pref_hide'); if(h!=null) document.getElementById('hide').checked=h==='1';
+  const d=localStorage.getItem('owscout_pref_div'); if(d!=null && [...document.getElementById('div').options].some(o=>o.value===d)) document.getElementById('div').value=d; }
+document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); };
+document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
+document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };
 document.getElementById('code').onchange=onCode;
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
 function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`⏭ ${c.code} — copied`;} }
@@ -897,6 +908,7 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
     w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
     target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
     renderPipControls();
+    w.document.addEventListener('keydown',handleKey);          // shortcuts work from the overlay too
     const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
       if(el) el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; };
     w._tick=setInterval(tick,600); tick();
@@ -1006,6 +1018,26 @@ document.getElementById('autofetch').checked=localStorage.getItem('owscout_autof
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();
 document.getElementById('autofetch').onchange=e=>localStorage.setItem('owscout_autofetch',e.target.checked?'1':'0');
+// Auto-snapshot: read the comp on a timer (deduped by snapshot(true)), so a whole
+// map can be captured hands-free — pairs with auto-fetch for a no-click loop.
+let autoSnapTimer=null;
+function setAutoSnap(){ clearInterval(autoSnapTimer); autoSnapTimer=null;
+  const on=document.getElementById('autosnap').checked; localStorage.setItem('owscout_pref_autosnap', on?'1':'0');
+  if(on){ const ms=+document.getElementById('autosnapint').value||5000;
+    autoSnapTimer=setInterval(()=>{ if(session&&boxes.a&&boxes.b&&vid.srcObject) snapshot(true); }, ms); } }
+document.getElementById('autosnap').onchange=setAutoSnap;
+document.getElementById('autosnapint').onchange=()=>{ localStorage.setItem('owscout_pref_autosnapint',document.getElementById('autosnapint').value); if(document.getElementById('autosnap').checked) setAutoSnap(); };
+(()=>{ const iv=localStorage.getItem('owscout_pref_autosnapint'); if(iv) document.getElementById('autosnapint').value=iv;
+  document.getElementById('autosnap').checked=localStorage.getItem('owscout_pref_autosnap')==='1'; setAutoSnap(); })();
+// Keyboard shortcuts — active only when THIS page (or the pop-out) has focus; a
+// browser can't see keys while Overwatch is focused (that's what auto-snapshot is
+// for). Ignore keys while typing in a field. Actions self-guard on session state.
+function isTyping(el){ return el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable); }
+function handleKey(e){ if(e.ctrlKey||e.metaKey||e.altKey||isTyping(e.target)) return; const k=e.key.toLowerCase(); let hit=true;
+  if(k==='s'||k===' ') snapshot(false); else if(k==='r') nextRound(); else if(k==='z') undo();
+  else if(k==='f') finishMap(); else if(k==='d'){ if(!document.getElementById('autodetect').disabled) autoDetect(); }
+  else hit=false; if(hit) e.preventDefault(); }
+document.addEventListener('keydown',handleKey);
 document.getElementById('adminrefresh').onclick=()=>renderAdmin(sessionPayload());
 document.getElementById('refresh').onclick=refreshFeeds;
 document.getElementById('autocal').onclick=autoCalibrate;
