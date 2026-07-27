@@ -57,6 +57,9 @@
   .slot:first-of-type{border-top:0}.sc{font-variant-numeric:tabular-nums;font-size:12px}
   .hi{color:var(--good)}.mid{color:var(--mid)}.lo{color:var(--bad)}
   .rosterline{font-size:12.5px;color:var(--muted);padding:2px 0}
+  .refgrp{margin-top:8px}.rlbl{margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .refrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line)}
+  .refrow:first-of-type{border-top:0}.refread{font-size:12.5px}.refrow select{max-width:190px}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;background:var(--surface2);border:1px solid var(--line);font-size:12px;margin-right:6px}
   .obs{font-size:12px;color:var(--muted);padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
   .obs:first-of-type{border-top:0}
@@ -168,6 +171,19 @@
   </div>
 
   <div class="card">
+    <h2>Hero recognition — teach it a miss · <span id="refcount" class="status" style="text-transform:none;letter-spacing:0">0 learned</span></h2>
+    <p class="status" style="margin:0 0 8px">If a portrait reads wrong, or a brand-new hero isn't in the library yet, fix it here — it learns the current portrait so future reads improve. Share your screen &amp; calibrate with a comp on screen first; learned refs are saved in this browser and exportable.</p>
+    <div class="row">
+      <button id="fixreads" class="ghost" disabled title="Read the 10 portraits now and correct any misreads">🔧 Fix current reads</button>
+      <button id="exprefs" class="ghost" type="button">Export learned</button>
+      <button id="imprefsbtn" class="ghost" type="button">Import…</button>
+      <input id="imprefs" type="file" accept="application/json" style="display:none">
+      <button id="clearrefs" class="ghost" type="button">Clear learned</button>
+    </div>
+    <div id="refpanel" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
     <h2>Publish to the site</h2>
     <div id="acct" class="status" style="margin-bottom:8px"></div>
     <div class="row">
@@ -207,6 +223,7 @@
 <script>
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
+let LOCAL_REFS=[], CUSTOM_HEROES={};   // operator-learned hero refs + heroes not in refs.json (persisted in IndexedDB)
 // control-map sub-maps (mirror of owscout/maps.py)
 const CONTROL_SUBMAPS={ilios:["Lighthouse","Ruins","Well"],"lijiang tower":["Control Center","Garden","Night Market"],nepal:["Sanctum","Shrine","Village"],oasis:["City Center","Gardens","University"],"antarctic peninsula":["Icebreaker","Labs","Sublevel"],samoa:["Beach","Downtown","Volcano"],busan:["Downtown","Sanctuary","MEKA Base"]};
 const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
@@ -223,6 +240,7 @@ if(!HAS_CAPTURE){
   const sb=document.getElementById('share'); if(sb) sb.disabled=true;
 }
 function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 // ---------- load feeds ----------
 async function loadFeeds(){
@@ -232,6 +250,10 @@ async function loadFeeds(){
       const c=new Float32Array(px.length);let ss=0;for(let i=0;i<px.length;i++){c[i]=px[i]-m;ss+=c[i]*c[i];}
       return {n:r.n,g:r.g,v:r.v,c,norm:Math.sqrt(ss)||1};});
   }catch(e){ document.getElementById('ctxwarn').textContent='Could not load refs.json ('+e+').'; }
+  // Operator-learned refs + heroes (this browser) merge on top of the baked library.
+  try{ LOCAL_REFS=await idbGetAll('refs'); for(const rec of LOCAL_REFS){ const t=refTemplate(rec); if(t) REFS.push(t); }
+    for(const h of await idbGetAll('heroes')) CUSTOM_HEROES[h.g]={name:h.name, role:h.role};
+    const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; }catch(e){}
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
   buildDivisions();
@@ -394,6 +416,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('fscal').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready;
   document.getElementById('autodetect').disabled=!ready;
+  document.getElementById('fixreads').disabled=!(vid.srcObject&&boxes.a&&boxes.b);
   document.getElementById('undo').disabled=!(session&&session.history.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
@@ -542,6 +565,86 @@ async function autoDetect(){ const c=selectedCode();
   finally{ updateBtns(); }
 }
 
+// ---------- hero recognition: learn a miss / add a new hero (Phase 4) ----------
+// A ref = a 64x36 grayscale portrait template. The built-in library is refs.json
+// (curator-baked); operators can LEARN more from the live frame here — a fix when
+// a portrait reads wrong, or a brand-new hero the library has never seen. Learned
+// refs persist in IndexedDB, merge into REFS on load, and export as JSON so the
+// curator can fold the good ones back into refs.json.
+function bytesToB64(u8){ let s=''; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s); }
+// Mirror of loadFeeds' refs.json decode: center + L2-normalise so bestMatch's
+// cosine similarity is comparable to the baked refs. Tagged local for Clear.
+function refTemplate(rec){ const px=b64bytes(rec.d); if(px.length!==REF_W*REF_H) return null;
+  let m=0; for(let i=0;i<px.length;i++) m+=px[i]; m/=px.length;
+  const c=new Float32Array(px.length); let ss=0; for(let i=0;i<px.length;i++){ c[i]=px[i]-m; ss+=c[i]*c[i]; }
+  return {n:rec.n, g:rec.g, v:rec.v, c, norm:Math.sqrt(ss)||1, local:true}; }
+async function addRef(rec){ if(!rec.id) rec.id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
+  const t=refTemplate(rec); if(!t) return false;
+  LOCAL_REFS.push(rec); REFS.push(t); try{ await idbPutIn('refs',rec); }catch(e){}
+  const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; return true; }
+// The 64x36 grayscale icon crop for slot i on a side — the SAME icon region the
+// matcher reads (right 1-LF width, top TF height of the cell), so a learned ref
+// lines up with future reads.
+function learnCrop(side,i){ const b=boxes[side]; const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
+  const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
+  const cv=document.createElement('canvas'); cv.width=REF_W; cv.height=REF_H;
+  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(grabFrame(), fx,fy,fw,fh, 0,0,REF_W,REF_H);
+  const d=cx.getImageData(0,0,REF_W,REF_H).data, px=new Uint8Array(REF_W*REF_H);
+  for(let j=0,k=0;j<d.length;j+=4,k++) px[k]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
+  return bytesToB64(px); }
+// Every hero the picker offers = unique guids in REFS (built-in + learned) plus
+// operator-added heroes, by name.
+function heroCatalog(){ const m={}; for(const r of REFS) if(r.g) m[r.g]=r.n;
+  for(const g in CUSTOM_HEROES) m[g]=CUSTOM_HEROES[g].name;
+  return Object.keys(m).map(g=>({g, n:m[g]})).sort((a,b)=>a.n.localeCompare(b.n)); }
+function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
+function fixReads(){ const host=document.getElementById('refpanel');
+  if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
+  const frame=grabFrame(), cat=heroCatalog();
+  const opts='<option value="">— correct hero… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ add a new hero…</option>';
+  host.innerHTML='<p class="status" id="refpanel-msg">Pick the right hero on any wrong row — it learns that portrait for next time.</p>';
+  for(const side of ['a','b']){ const b=boxes[side];
+    const grp=document.createElement('div'); grp.className='refgrp';
+    grp.innerHTML=`<h3 class="rlbl">${side==='a'?'Left / blue':'Right / red'}</h3>`;
+    for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
+      const ok=r.score>=0.5; const row=document.createElement('div'); row.className='refrow';
+      row.innerHTML=`<span class="refread">${side.toUpperCase()}${i+1}: <b>${ok?esc(r.name):'??'}</b> <span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span></span>`;
+      const sel=document.createElement('select'); sel.innerHTML=opts; sel.dataset.side=side; sel.dataset.i=i;
+      sel.onchange=()=>onFixPick(sel); row.appendChild(sel); grp.appendChild(row); }
+    host.appendChild(grp); }
+}
+async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i; let guid=sel.value, name;
+  if(!guid){ return; }
+  if(guid==='__new__'){ const nm=(prompt('New hero name (a hero not in the library yet):')||'').trim();
+    if(!nm){ sel.value=''; return; }
+    let role=(prompt('Role — Tank, Damage or Support:','Damage')||'Damage').trim();
+    if(!/^(tank|damage|support)$/i.test(role)) role='Damage';
+    guid='custom:'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')+'-'+Math.random().toString(36).slice(2,6);
+    CUSTOM_HEROES[guid]={name:nm, role:role.charAt(0).toUpperCase()+role.slice(1).toLowerCase()};
+    try{ await idbPutIn('heroes',{g:guid, ...CUSTOM_HEROES[guid]}); }catch(e){}
+    name=nm;
+  } else { name=(heroCatalog().find(h=>h.g===guid)||{}).n||guid; }
+  const rec={n:name, g:guid, v:side, d:learnCrop(side,i), added_at:Date.now()};
+  await addRef(rec);
+  refMsg('✓ learned <b>'+esc(name)+'</b> ('+(side==='a'?'blue':'red')+') — re-reading…','ok');
+  setTimeout(fixReads, 250);    // re-run so the operator sees the improved read (and can fix another)
+}
+function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
+  const payload={format:'owscout-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
+    refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
+  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='owscout-learned-refs.json'; a.click(); }
+async function importRefs(file){ try{ const j=JSON.parse(await file.text());
+  if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size — skipped.','warn'); return; }
+  for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
+  let n=0; for(const r of (j.refs||[])){ if(r.d && r.g && r.v){ await addRef({n:r.n, g:r.g, v:r.v, d:r.d, added_at:Date.now()}); n++; } }
+  refMsg('imported '+n+' refs.','ok');
+ }catch(e){ refMsg('import failed: '+(e.message||e),'warn'); } }
+async function clearLearnedRefs(){ if(!confirm('Remove all learned refs? (The built-in library stays; operator-added heroes are kept.)')) return;
+  REFS=REFS.filter(t=>!t.local); LOCAL_REFS=[]; try{ await idbClear('refs'); }catch(e){}
+  const rc=document.getElementById('refcount'); if(rc) rc.textContent='0 learned'; refMsg('cleared learned refs.','ok'); }
+
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
 function startMap(){ const c=selectedCode();
@@ -640,9 +743,15 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 }
 
 // ---------- save map -> IndexedDB (keyed match:game, replace) ----------
-function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',2);
-  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('maps')) db.createObjectStore('maps',{keyPath:'id'}); };
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',3);
+  r.onupgradeneeded=()=>{ const db=r.result;
+    if(!db.objectStoreNames.contains('maps')) db.createObjectStore('maps',{keyPath:'id'});
+    if(!db.objectStoreNames.contains('refs')) db.createObjectStore('refs',{keyPath:'id'});      // learned hero refs
+    if(!db.objectStoreNames.contains('heroes')) db.createObjectStore('heroes',{keyPath:'g'}); };  // operator-added heroes
   r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+function idbGetAll(store){ return idb().then(db=>new Promise(res=>{ const rq=db.transaction(store,'readonly').objectStore(store).getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); })); }
+function idbPutIn(store,rec){ return idb().then(db=>new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); })); }
+function idbClear(store){ return idb().then(db=>new Promise(res=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).clear(); tx.oncomplete=res; })); }
 async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('maps','readonly').objectStore('maps').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
 async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }
@@ -752,7 +861,12 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
 // ---------- publish (Phase 2): build contribution + upload to the worker ----------
 const ENDPOINT='https://owscout-upload.owscout.workers.dev';
 function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
-function buildContribution(name, maps){ return {format:1, contributor:name, tool_version:'browser-0.1', heroes:{},
+function buildContribution(name, maps){
+  // Custom (operator-added) heroes referenced by these maps travel WITH the
+  // contribution so the merge can name a guid it's never seen (owscout does the same).
+  const used=new Set(); maps.forEach(r=>(r.observations||[]).forEach(o=>(o.heroes||[]).forEach(g=>used.add(g))));
+  const heroes={}; used.forEach(g=>{ if(CUSTOM_HEROES[g]) heroes[g]={name:CUSTOM_HEROES[g].name, role:CUSTOM_HEROES[g].role}; });
+  return {format:1, contributor:name, tool_version:'browser-0.2', heroes,
   maps: maps.map(r=>({ match_id:r.match_id, game_no:r.game_no, demo_code:r.code,
     map_guid:r.map_guid, map_name:r.map_name, map_category:r.map_category,
     side_a_team_id:r.side_a_team_id, side_a_team:r.side_a_team, side_b_team_id:r.side_b_team_id, side_b_team:r.side_b_team,
@@ -842,6 +956,11 @@ document.getElementById('undo').onclick=undo;
 document.getElementById('finish').onclick=finishMap;
 document.getElementById('swapsides').onclick=swapSides;
 document.getElementById('autodetect').onclick=autoDetect;
+document.getElementById('fixreads').onclick=fixReads;
+document.getElementById('exprefs').onclick=exportRefs;
+document.getElementById('imprefsbtn').onclick=()=>document.getElementById('imprefs').click();
+document.getElementById('imprefs').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
+document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
 updateBtns(); loadFeeds();
 </script></body></html>
