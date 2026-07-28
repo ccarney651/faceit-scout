@@ -189,6 +189,7 @@ table.blocks thead th:hover{color:var(--faint)}
 .snhd{font-weight:680;font-size:13px;margin-bottom:5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .snrow{display:flex;gap:7px;align-items:center;margin:5px 0;flex-wrap:wrap}
 .snrow .rl2{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:88px;flex:none;font-weight:700}
+.mbtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
 .skids{position:relative;margin:7px 0 0 9px;padding-left:17px;border-left:2px solid var(--line2)}
 .sbranch{margin-top:7px}
 /* connector tick from the vertical guide to the nested node's card */
@@ -2118,7 +2119,7 @@ function renderSim(){
   const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset edits</span>`); reset.onclick=()=>{SIM_TREE={};draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
-  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from recent form: the team on the clock <b>picks the map</b> and <b>bans first</b>. Change any map or ban from its dropdown and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
+  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from recent form: the team on the clock <b>picks the map</b> and <b>bans first</b>. Game 1 is Control; later games pick a map <b>type</b> first. Change any map or ban and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
   // Division map tendencies — the fallback when a team has no pick history for a
@@ -2127,11 +2128,27 @@ function renderSim(){
   // team window means "we don't know THEIR preference", not "nobody picks here".
   const divPick={}, divPlay={};
   D().matches.forEach(m=>m.games.forEach(g=>{ if(!g.map)return; inc(divPlay,g.map); if(g.map_picked_by) inc(divPick,g.map); }));
-  // Rank a map for a picker: their recent picks, then their season picks, then the
-  // division's picks, then raw plays — so the top suggestion is always meaningful.
-  const mapKey=(mp,mw,mf)=>[(mw.pick[mp]||0),(mf.pick[mp]||0),(divPick[mp]||0),(divPlay[mp]||0)];
-  const cmpMap=(a,b,mw,mf)=>{ const ka=mapKey(a,mw,mf),kb=mapKey(b,mw,mf);
+  // Map picks are a stable, season-long tendency (maps don't get buffed/nerfed
+  // like heroes), so we rank and count them over the WHOLE season — the recent
+  // window governs bans only. Season picks, then division picks, then raw plays.
+  const mapKey=(mp,mf)=>[(mf.pick[mp]||0),(divPick[mp]||0),(divPlay[mp]||0)];
+  const cmpMap=(a,b,mf)=>{ const ka=mapKey(a,mf),kb=mapKey(b,mf);
     for(let i=0;i<ka.length;i++){ if(kb[i]!==ka[i]) return kb[i]-ka[i]; } return a.localeCompare(b); };
+  // League-wide type popularity (how often each non-Control mode is the pick).
+  const divModePick={}; let divModeTot=0;
+  Object.keys(divPick).forEach(mp=>{ const c=pool[mp]; if(c&&c!=='Control'){ divModePick[c]=(divModePick[c]||0)+divPick[mp]; divModeTot+=divPick[mp]; } });
+  const modeShare=cat=>divModeTot? Math.round(100*(divModePick[cat]||0)/divModeTot) : 0;
+  // Map choices as buttons (one per available map in a mode), each labelled with
+  // how many times the picking team has chosen it this season. Selected highlighted.
+  function mapButtons(cat, used, mf, current, onPick){
+    const wrap=el(`<div class="mbtns"></div>`);
+    Object.keys(pool).filter(mp=>pool[mp]===cat&&(!used.has(mp)||mp===current))
+      .sort((a,b)=>cmpMap(a,b,mf))
+      .forEach(mp=>{ const n=mf.pick[mp]||0;
+        const o=el(`<span class="opt${mp===current?' sel':''}">${esc(mp)} <span class="pp">${n}×</span></span>`);
+        o.onclick=()=>onPick(mp); wrap.appendChild(o); });
+    return wrap;
+  }
   // Modes are one-per-series (validated in-data: 0/984 series repeat a mode). G1
   // is Control; afterwards any non-Control mode not yet played this line — and if
   // all are used (a deep Bo7), a repeat is allowed.
@@ -2141,9 +2158,9 @@ function renderSim(){
     const nc=MODES.filter(x=>x!=='Control'), fresh=nc.filter(x=>!usedCats.has(x));
     return fresh.length? fresh : nc;
   }
-  function autoMap(mw, mf, cats, used){
+  function autoMap(mf, cats, used){
     const avail=Object.keys(pool).filter(mp=>!used.has(mp)&&cats.includes(pool[mp]));
-    avail.sort((a,b)=>cmpMap(a,b,mw,mf));
+    avail.sort((a,b)=>cmpMap(a,b,mf));
     return avail[0]||null;
   }
   const autoBan=(model,map,illegal)=>{ const s=banSuggest(model,map,illegal); return s.length?s[0].hero:null; };
@@ -2152,20 +2169,6 @@ function renderSim(){
     const tot=Object.values(model.bansAll).reduce((a,b)=>a+b,0)||1;
     const lift=dbase.all[hero]?((model.bansAll[hero]||0)/tot)/dbase.all[hero]:0;
     return lift>=1.5?`<span class="pp" style="color:var(--good)">★×${lift.toFixed(1)}</span>`:''; }
-  // Compact map <select>, grouped by allowed mode, ranked by the same tiers,
-  // excludes modes/maps already used up the line.
-  function mapSelect(cats, used, mw, mf, current, onPick){
-    const s=el(`<select class="herosel" style="min-width:170px"></select>`);
-    cats.forEach(cat=>{
-      const maps=Object.keys(pool).filter(mp=>pool[mp]===cat&&(!used.has(mp)||mp===current)).sort((a,b)=>cmpMap(a,b,mw,mf));
-      if(!maps.length) return;
-      const og=el(`<optgroup label="${esc(cat)}"></optgroup>`);
-      maps.forEach(mp=>{ const n=mw.pick[mp]||0; og.appendChild(el(`<option value="${esc(mp)}" ${mp===current?'selected':''}>${esc(mp)}${n?` · ${n}×`:''}</option>`)); });
-      s.appendChild(og);
-    });
-    s.onchange=()=>onPick(s.value||null);
-    return s;
-  }
   function setOv(path,patch){ SIM_TREE[path]=Object.assign({},SIM_TREE[path],patch); draw(); }
 
   function draw(){
@@ -2175,8 +2178,8 @@ function renderSim(){
     // Full-season models back the suggestion when the recent window is silent.
     const Af=simModel(SIM_A,0), Bf=simModel(SIM_B,0), modelFull=ab=>ab==='A'?Af:Bf;
     // Transparent about the window: show how many recent maps actually informed each side.
-    const win=SIM_RECENT>0?`most recent ${SIM_RECENT} maps`:'the full season';
-    body.appendChild(el(`<p class="note" style="margin:4px 2px 0">Pre-fills use ${win} — <b>${esc(SIM_A)}</b> ${A.ngames} map${A.ngames===1?'':'s'} · <b>${esc(SIM_B)}</b> ${B.ngames} map${B.ngames===1?'':'s'}.</p>`));
+    const win=SIM_RECENT>0?`the most recent ${SIM_RECENT} maps`:'the full season';
+    body.appendChild(el(`<p class="note" style="margin:4px 2px 0"><b>Ban</b> pre-fills use ${win} — <b>${esc(SIM_A)}</b> ${A.ngames} map${A.ngames===1?'':'s'} · <b>${esc(SIM_B)}</b> ${B.ngames}. <b>Map</b> counts are each team's full-season picks.</p>`));
 
     // Recursively draw the draft at `path` (string of prior winners) plus its two branches.
     // used = maps already taken on this line; banned = {A:Set,B:Set} of each team's earlier bans.
@@ -2192,7 +2195,7 @@ function renderSim(){
       // Resolve the map + both bans first — the compact view needs them too, and
       // they feed the child branches (one map per mode; no repeat bans down a line).
       const allowedCats=allowedCatsFor(g1,used);
-      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mw,mf,allowedCats,used);
+      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mf,allowedCats,used);
       const ill1=banned[picker], ill2=banned[other];
       let b1=null,b2=null;
       if(map){
@@ -2208,15 +2211,26 @@ function renderSim(){
         const card=el(`<div class="snode focus${g1?' g1':''}"></div>`); stn.appendChild(card);
         card.appendChild(el(`<div class="snhd"><span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b> pick &amp; ban first`+
           `<span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}${g1?' · G1 Control':''}</span></div>`));
-        const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
-        mrow.appendChild(mapSelect(allowedCats,used,mw,mf,map,mp=>setOv(path,{map:mp,b1:null,b2:null})));
-        if(map){
-          const tp=mw.pick[map]||0, tpf=mf.pick[map]||0, dp=divPick[map]||0;
-          const basis = tp? `picked ${tp}× in window` : tpf? `picked ${tpf}× this season`
-            : dp? `${esc(nameOf(picker))} hasn't — league default` : 'no pick history';
-          mrow.appendChild(el(`<span class="pp">${esc(pool[map]||'')} · ${basis}</span>`));
+        if(g1){
+          // Game 1 is always Control: pick straight from the three maps, each
+          // labelled with how many times this team has chosen it.
+          const mrow=el(`<div class="snrow"><span class="rl2">Map · Control</span></div>`);
+          mrow.appendChild(mapButtons('Control', used, mf, map, mp=>setOv(path,{map:mp,b1:null,b2:null})));
+          card.appendChild(mrow);
+        } else {
+          // Later games: choose the map TYPE first (with league popularity), then
+          // the specific map from that type's buttons.
+          const curCat = map? pool[map] : allowedCats[0];
+          const trow=el(`<div class="snrow"><span class="rl2">Map type</span></div>`);
+          const tsel=el(`<select class="herosel" style="min-width:170px" title="How often teams pick each type"></select>`);
+          allowedCats.forEach(cat=>tsel.appendChild(el(`<option value="${esc(cat)}" ${cat===curCat?'selected':''}>${esc(cat)} · ${modeShare(cat)}% of picks</option>`)));
+          tsel.onchange=()=>{ const top=autoMap(mf,[tsel.value],used); if(top) setOv(path,{map:top,b1:null,b2:null}); };
+          trow.appendChild(tsel);
+          card.appendChild(trow);
+          const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
+          mrow.appendChild(mapButtons(curCat, used, mf, map, mp=>setOv(path,{map:mp,b1:null,b2:null})));
+          card.appendChild(mrow);
         }
-        card.appendChild(mrow);
         if(map){
           const r1=el(`<div class="snrow"><span class="rl2">${esc(nameOf(picker))} ban</span></div>`);
           r1.appendChild(heroSelect(b1, ill1, h=>setOv(path,{b1:h})));
