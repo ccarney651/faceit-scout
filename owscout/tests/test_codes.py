@@ -34,9 +34,9 @@ def _faceit(path: Path) -> str:
     c.execute("INSERT INTO championships VALUES('cm','S9 Master Central'),('ce','S9 Expert Central')")
     c.execute("INSERT INTO teams VALUES('tA','Alpha'),('tB','Bravo'),('tC','Cabra')")
     c.execute("INSERT INTO maps VALUES('m-ilios','Ilios','Control')")
-    # pre-wipe match (2026-07-08) and post-wipe match (2026-07-15), both Master
+    # pre-wipe match (2026-07-08) and post-wipe match (2026-07-29), both Master
     c.execute("INSERT INTO matches VALUES('OLD','tA','tB','2026-07-08T20:00:00Z','cm')")
-    c.execute("INSERT INTO matches VALUES('NEW','tA','tC','2026-07-15T20:00:00Z','cm')")
+    c.execute("INSERT INTO matches VALUES('NEW','tA','tC','2026-07-29T20:00:00Z','cm')")
     c.executemany("INSERT INTO games VALUES(?,?,?,?)", [
         ("OLD", 1, "m-ilios", "OLD111"),
         ("NEW", 1, "m-ilios", "NEW111"),
@@ -53,7 +53,7 @@ def test_list_codes_hides_wiped_by_default(db: Database, tmp_path: Path) -> None
     fp = _faceit(tmp_path / "faceit.sqlite3")
     rows = db.list_codes(fp)
     codes = {r.demo_code for r in rows}
-    assert codes == {"NEW111", "NEW222"}          # OLD111 pre-dates 2026-07-14 wipe
+    assert codes == {"NEW111", "NEW222"}          # OLD111 pre-dates the latest wipe
     assert all(not r.wiped for r in rows)
 
 
@@ -105,7 +105,7 @@ def test_list_codes_skips_empty_code(db: Database, tmp_path: Path) -> None:
 def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
     fp = _faceit(tmp_path / "faceit.sqlite3")
     con = sqlite3.connect(fp)
-    con.execute("INSERT INTO matches VALUES('EXP','tA','tB','2026-07-15T20:00:00Z','ce')")
+    con.execute("INSERT INTO matches VALUES('EXP','tA','tB','2026-07-29T20:00:00Z','ce')")
     con.execute("INSERT INTO games VALUES('EXP',1,'m-ilios','EXP111')")
     con.commit(); con.close()
     assert "EXP111" not in {r.demo_code for r in db.list_codes(fp)}          # master default
@@ -116,7 +116,7 @@ def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
 def test_code_age_summary(db: Database, tmp_path: Path) -> None:
     fp = _faceit(tmp_path / "faceit.sqlite3")
     s = db.code_age_summary(fp)
-    assert s["latest_wipe"] == "2026-07-14"
+    assert s["latest_wipe"] == "2026-07-28"
     assert s["total_codes"] == 3
     assert s["alive_codes"] == 2 and s["dead_codes"] == 1
 

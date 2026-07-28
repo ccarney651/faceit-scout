@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
 OUT = os.path.join("docs", "capture", "data.json")
 REGION = "EMEA"
-CODE_WIPE_DATE = "2026-07-14"          # league-wide replay-code wipe (SPEC §2)
+CODE_WIPE_DATE = "2026-07-28"          # league-wide replay-code wipe (SPEC §2); bump each patch
 TIERS = ("Master", "Expert", "Advanced", "Open")
 
 
