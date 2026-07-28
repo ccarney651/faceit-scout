@@ -658,6 +658,18 @@ async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i; le
 // goes out — remap a wrong hero to the right one, or drop a spurious read, across
 // every observation of that map (player attribution is carried along).
 function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
+// Re-run the matcher on a stored 64x36 grayscale crop (centre it in the padded buffer).
+function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
+  for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
+  return bestMatch(gp, side); }
+// Render a stored grayscale crop to a (scaled) canvas for the review portraits.
+function grayCanvas(b64, scale){ scale=scale||2; const px=b64bytes(b64);
+  const tmp=document.createElement('canvas'); tmp.width=REF_W; tmp.height=REF_H;
+  const im=tmp.getContext('2d').createImageData(REF_W,REF_H);
+  for(let i=0,j=0;i<px.length;i++,j+=4){ im.data[j]=im.data[j+1]=im.data[j+2]=px[i]; im.data[j+3]=255; }
+  tmp.getContext('2d').putImageData(im,0,0);
+  const cv=document.createElement('canvas'); cv.width=REF_W*scale; cv.height=REF_H*scale;
+  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false; cx.drawImage(tmp,0,0,cv.width,cv.height); return cv; }
 function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
   const opts='<option value="">— fix to… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ new hero…</option>';
   for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
@@ -671,7 +683,29 @@ function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
       const sel=document.createElement('select'); sel.innerHTML=opts; sel.onchange=()=>remapHero(rec,side,g,sel.value,host);
       const del=document.createElement('button'); del.className='ghost'; del.textContent='remove'; del.onclick=()=>remapHero(rec,side,g,'__remove__',host);
       row.appendChild(sel); row.appendChild(del); grp.appendChild(row); }
-    host.appendChild(grp); } }
+    host.appendChild(grp); }
+  // Teach recognition from this map's opening portraits: correct a slot and it
+  // learns that exact crop as a ref (the live "Fix current reads", but post-hoc).
+  if(rec.crops){
+    const tg=document.createElement('div'); tg.className='refgrp';
+    tg.innerHTML=`<h3 class="rlbl">Teach recognition — from the opening portraits</h3>`;
+    const topts='<option value="">— correct + teach… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ new hero…</option>';
+    for(const side of ['a','b']){ const cb=rec.crops[side]||[];
+      for(let i=0;i<cb.length;i++){ if(!cb[i]) continue;
+        const r=matchCrop(cb[i],side), row=document.createElement('div'); row.className='refrow';
+        const cv=grayCanvas(cb[i],2); cv.style.cssText='border:1px solid var(--line);border-radius:3px;flex:none';
+        const lbl=document.createElement('span'); lbl.className='refread'; lbl.style.flex='1';
+        lbl.innerHTML=`${side.toUpperCase()}${i+1}: <b>${r.score>=0.5?esc(r.name):'??'}</b> <span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`;
+        const sel=document.createElement('select'); sel.innerHTML=topts;
+        sel.onchange=async()=>{ let g=sel.value,nm; if(!g) return;
+          if(g==='__new__'){ const nh=await promptNewHero(); if(!nh){ sel.value=''; return; } g=nh.guid; nm=nh.name; }
+          else nm=(heroCatalog().find(h=>h.g===g)||{}).n||g;
+          await addRef({n:nm,g:g,v:side,d:cb[i],added_at:Date.now()});
+          snapMsg('learned '+nm+' — future reads improved'); renderReview(rec,host); };
+        row.append(cv,lbl,sel); tg.appendChild(row); } }
+    host.appendChild(tg);
+  }
+}
 async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
   if(toG==='__new__'){ const nh=await promptNewHero(); if(!nh) return; toG=nh.guid; }
   const remove = toG==='__remove__';
@@ -759,6 +793,9 @@ function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
   if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)){ if(!auto) snapMsg('unchanged — nothing new'); return; }
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
     a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name), ts:session.snaps.length*1000};
+  // Keep the opening portraits (10 grayscale crops) so a misread can be corrected
+  // AND taught from Review later, not just live — closes the correction→learning loop.
+  if(!session.crops){ const cr={a:[],b:[]}; for(const s of ['a','b']) for(let i=0;i<5;i++) cr[s].push(learnCrop(s,i)); session.crops=cr; }
   session.snaps.push(snap); session.history.push({type:'snap'}); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
   refreshSession(); snapMsg('✓ snapshot '+session.snaps.length+' kept');
 }
@@ -826,7 +863,7 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
     winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
-    captured_at:new Date().toISOString(), bans:[], observations };
+    captured_at:new Date().toISOString(), bans:[], observations, crops:session.crops||null };
   await idbPut(rec);
   savedKeys.add(c.match_id+':'+c.game_no); await renderCaptured();
   const savedMsg=`saved ${c.code} — ${session.snaps.length} snapshots`;
