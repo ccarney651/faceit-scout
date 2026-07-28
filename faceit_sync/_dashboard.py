@@ -178,12 +178,22 @@ table.blocks thead th:hover{color:var(--faint)}
 .stree{margin-top:12px}
 .stnode{min-width:0}
 .snode{border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--surface)}
+.snode.focus{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
 .snode.g1{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent) inset}
+/* condensed (out-of-focus) node — one glance-able, clickable row */
+.snode.mini{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:7px 11px;font-size:12.5px;border-color:transparent;background:transparent;cursor:pointer;transition:background .12s,border-color .12s}
+.snode.mini:hover{background:var(--surface2);border-color:var(--line)}
+.snode.mini .mmap{font-weight:660}
+.snode.mini .mbans{display:inline-flex;gap:5px;align-items:center}
+.snode.mini .mini-x{font-size:11px;letter-spacing:.02em}
 .snhd{font-weight:680;font-size:13px;margin-bottom:5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .snrow{display:flex;gap:7px;align-items:center;margin:5px 0;flex-wrap:wrap}
 .snrow .rl2{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:88px;flex:none;font-weight:700}
-.skids{margin:7px 0 0 9px;padding-left:15px;border-left:2px solid var(--line2)}
+.skids{position:relative;margin:7px 0 0 9px;padding-left:17px;border-left:2px solid var(--line2)}
 .sbranch{margin-top:7px}
+/* connector tick from the vertical guide to the nested node's card */
+.skids > .stnode{position:relative}
+.skids > .stnode::before{content:"";position:absolute;left:-17px;top:17px;width:14px;height:2px;background:var(--line2)}
 /* collapsible win/lose fork toggle */
 .btgl{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;cursor:pointer;border:1px solid transparent;line-height:1.4;font-variant-numeric:tabular-nums;transition:filter .12s,border-color .12s}
 .btgl .cv{opacity:.7;font-size:10px;width:9px;text-align:center}
@@ -997,6 +1007,7 @@ let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) ->
 let SIM_BO=3;       // wins needed: 2 = Bo3, 3 = Bo5 (default), 4 = Bo7 (playoff)
 let SIM_RECENT=6;   // draft-sim form window: use each team's most recent N maps (0 = full season)
 let SIM_OPEN=new Set();   // scenario tree: which branches (child paths) are expanded
+let SIM_FOCUS='';         // scenario tree: the one node shown full-size (others condense)
 
 function gotoScout(team){
   // If the team isn't in the active view (e.g. click from a combined view),
@@ -2087,17 +2098,17 @@ function renderSim(){
   const ctl=el(`<div class="card controls" style="flex-wrap:wrap;gap:12px 16px"></div>`);
   const mkSel=(val,on)=>{ const s=el(`<select style="min-width:170px"></select>`); tn.forEach(n=>s.appendChild(el(`<option ${n===val?'selected':''}>${esc(n)}</option>`))); s.onchange=()=>on(s.value); return s; };
   ctl.appendChild(el(`<label>Team A</label>`));
-  ctl.appendChild(mkSel(SIM_A,v=>{SIM_A=v;SIM_TREE={};draw();}));
+  ctl.appendChild(mkSel(SIM_A,v=>{SIM_A=v;SIM_TREE={};SIM_FOCUS='';draw();}));
   ctl.appendChild(el(`<span class="faint" style="font-weight:800">vs</span>`));
   ctl.appendChild(el(`<label>Team B</label>`));
-  ctl.appendChild(mkSel(SIM_B,v=>{SIM_B=v;SIM_TREE={};draw();}));
+  ctl.appendChild(mkSel(SIM_B,v=>{SIM_B=v;SIM_TREE={};SIM_FOCUS='';draw();}));
   ctl.appendChild(el(`<label title="This team picks the Game 1 map and takes the first ban.">First pick &amp; ban</label>`));
   const fb=el(`<div class="wsel"></div>`);
-  const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_TREE={};draw();}; return b; };
+  const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_TREE={};SIM_FOCUS='';draw();}; return b; };
   fb.append(fbBtn('A'),fbBtn('B')); ctl.appendChild(fb);
   ctl.appendChild(el(`<label title="Wins needed to take the series. Bo5 is the FACEIT default; playoff finals can be Bo7.">Format</label>`));
   const bo=el(`<div class="wsel"></div>`);
-  [['Bo3',2],['Bo5',3],['Bo7',4]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}" title="${lbl==='Bo7'?'Best of 7 — playoff finals':lbl==='Bo5'?'Best of 5 — regular default':'Best of 3'}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;draw();}; bo.append(b); });
+  [['Bo3',2],['Bo5',3],['Bo7',4]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}" title="${lbl==='Bo7'?'Best of 7 — playoff finals':lbl==='Bo5'?'Best of 5 — regular default':'Best of 3'}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;SIM_FOCUS='';draw();}; bo.append(b); });
   ctl.appendChild(bo);
   ctl.appendChild(el(`<label title="Only use each team's most recent maps, so a shifting meta isn't drowned out by stale games.">Form window</label>`));
   const rw=el(`<select style="min-width:132px" title="Only use each team's most recent maps."></select>`);
@@ -2176,47 +2187,59 @@ function renderSim(){
       const other = opp(picker);
       const ov = SIM_TREE[path]||{};
       const g1 = (k===0);
-
-      const stn=el(`<div class="stnode"></div>`);
-      const card=el(`<div class="snode${g1?' g1':''}"></div>`); stn.appendChild(card);
-      card.appendChild(el(`<div class="snhd"><span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b> pick &amp; ban first`+
-        `<span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}${g1?' · G1 Control':''}</span></div>`));
-
-      // map (auto unless a legal override exists), one map per mode down the line
       const mw=modelOf(picker), mf=modelFull(picker);
+
+      // Resolve the map + both bans first — the compact view needs them too, and
+      // they feed the child branches (one map per mode; no repeat bans down a line).
       const allowedCats=allowedCatsFor(g1,used);
       const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mw,mf,allowedCats,used);
-      const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
-      mrow.appendChild(mapSelect(allowedCats,used,mw,mf,map,mp=>setOv(path,{map:mp,b1:null,b2:null})));
-      if(map){
-        const tp=mw.pick[map]||0, tpf=mf.pick[map]||0, dp=divPick[map]||0;
-        // Say WHY this map is the suggestion, cascading to the league default so a
-        // silent recent window never reads as "never picked".
-        const basis = tp? `picked ${tp}× in window` : tpf? `picked ${tpf}× this season`
-          : dp? `${esc(nameOf(picker))} hasn't — league default` : 'no pick history';
-        mrow.appendChild(el(`<span class="pp">${esc(pool[map]||'')} · ${basis}</span>`));
-      }
-      card.appendChild(mrow);
-
+      const ill1=banned[picker], ill2=banned[other];
       let b1=null,b2=null;
       if(map){
-        const ill1=banned[picker];
         b1 = (ov.b1 && !ill1.has(ov.b1)) ? ov.b1 : autoBan(modelOf(picker),map,ill1);
-        const r1=el(`<div class="snrow"><span class="rl2">${esc(nameOf(picker))} ban</span></div>`);
-        r1.appendChild(heroSelect(b1, ill1, h=>setOv(path,{b1:h})));
-        if(sigMark(modelOf(picker),b1)) r1.appendChild(el(sigMark(modelOf(picker),b1)));
-        card.appendChild(r1);
-        const ill2=banned[other];
         b2 = (ov.b2 && !ill2.has(ov.b2)) ? ov.b2 : autoBan(modelOf(other),map,ill2);
-        const r2=el(`<div class="snrow"><span class="rl2">${esc(nameOf(other))} ban</span></div>`);
-        r2.appendChild(heroSelect(b2, ill2, h=>setOv(path,{b2:h})));
-        if(sigMark(modelOf(other),b2)) r2.appendChild(el(sigMark(modelOf(other),b2)));
-        card.appendChild(r2);
       }
 
-      // branches: win / lose
-      // Win/lose fork — collapsed by default; click a toggle to drill into that
-      // line (the child subtree appears under it). Bans made here carry into both.
+      const focused = (path===SIM_FOCUS);
+      const stn=el(`<div class="stnode"></div>`);
+
+      if(focused){
+        // Full, editable card — the game you're actively planning.
+        const card=el(`<div class="snode focus${g1?' g1':''}"></div>`); stn.appendChild(card);
+        card.appendChild(el(`<div class="snhd"><span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b> pick &amp; ban first`+
+          `<span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}${g1?' · G1 Control':''}</span></div>`));
+        const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
+        mrow.appendChild(mapSelect(allowedCats,used,mw,mf,map,mp=>setOv(path,{map:mp,b1:null,b2:null})));
+        if(map){
+          const tp=mw.pick[map]||0, tpf=mf.pick[map]||0, dp=divPick[map]||0;
+          const basis = tp? `picked ${tp}× in window` : tpf? `picked ${tpf}× this season`
+            : dp? `${esc(nameOf(picker))} hasn't — league default` : 'no pick history';
+          mrow.appendChild(el(`<span class="pp">${esc(pool[map]||'')} · ${basis}</span>`));
+        }
+        card.appendChild(mrow);
+        if(map){
+          const r1=el(`<div class="snrow"><span class="rl2">${esc(nameOf(picker))} ban</span></div>`);
+          r1.appendChild(heroSelect(b1, ill1, h=>setOv(path,{b1:h})));
+          if(sigMark(modelOf(picker),b1)) r1.appendChild(el(sigMark(modelOf(picker),b1)));
+          card.appendChild(r1);
+          const r2=el(`<div class="snrow"><span class="rl2">${esc(nameOf(other))} ban</span></div>`);
+          r2.appendChild(heroSelect(b2, ill2, h=>setOv(path,{b2:h})));
+          if(sigMark(modelOf(other),b2)) r2.appendChild(el(sigMark(modelOf(other),b2)));
+          card.appendChild(r2);
+        }
+      } else {
+        // Condensed — one glance-able row. Click to bring it into focus.
+        const mini=el(`<div class="snode mini" title="Click to edit this game"></div>`);
+        mini.innerHTML=`<span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b>`+
+          `<span class="mmap">${esc(map||'—')}</span>`+(map?` <span class="tag">${esc(pool[map]||'')}</span>`:'')+
+          (map?`<span class="mbans">${heroChip(b1)}${heroChip(b2)}</span>`:'')+
+          `<span class="faint mini-x" style="margin-left:auto">${sa}–${sb} · edit ✎</span>`;
+        mini.onclick=()=>{ SIM_FOCUS=path; draw(); };
+        stn.appendChild(mini);
+      }
+
+      // Win/lose fork. Expanding drills into that line AND focuses the new game;
+      // collapsing hands focus back to this node. Bans made here carry into both.
       if(map){
         const childUsed=new Set(used); childUsed.add(map);
         const nb={A:new Set(banned.A),B:new Set(banned.B)};
@@ -2230,7 +2253,7 @@ function renderSim(){
           } else {
             const open=SIM_OPEN.has(cp);
             const tog=el(`<button type="button" class="btgl ${cls}${open?' open':''}"><span class="cv">${open?'▾':'▸'}</span> ${esc(nameOf(w))} win · ${nsa}–${nsb}</button>`);
-            tog.onclick=()=>{ open?SIM_OPEN.delete(cp):SIM_OPEN.add(cp); draw(); };
+            tog.onclick=()=>{ if(open){ SIM_OPEN.delete(cp); if(SIM_FOCUS.startsWith(cp)) SIM_FOCUS=path; } else { SIM_OPEN.add(cp); SIM_FOCUS=cp; } draw(); };
             br.appendChild(tog);
             if(open){ const kids=el(`<div class="skids"></div>`); kids.appendChild(node(cp, childUsed, nb)); br.appendChild(kids); }
           }
@@ -2245,10 +2268,20 @@ function renderSim(){
       const a=[...p].filter(c=>c==='A').length, b=p.length-a;
       ['A','B'].forEach(w=>{ const cp=p+w, na=a+(w==='A'?1:0), nb=b+(w==='B'?1:0);
         if(na<target&&nb<target){ out.add(cp); q.push(cp); } }); } return out; }
+    // Keep focus on a reachable node: every step of its path must be an open
+    // branch (root '' is always shown). Trims a stale focus after collapses.
+    { let f=''; for(const ch of SIM_FOCUS){ const nx=f+ch; if(SIM_OPEN.has(nx)) f=nx; else break; } SIM_FOCUS=f; }
+
+    // Expand-all / collapse-all: every openable branch is a binary string of
+    // winners whose A- and B-counts are both still below target.
+    function allOpen(){ const out=new Set(), q=['']; while(q.length){ const p=q.shift();
+      const a=[...p].filter(c=>c==='A').length, b=p.length-a;
+      ['A','B'].forEach(w=>{ const cp=p+w, na=a+(w==='A'?1:0), nb=b+(w==='B'?1:0);
+        if(na<target&&nb<target){ out.add(cp); q.push(cp); } }); } return out; }
     const hdr=el(`<div style="display:flex;align-items:center;gap:10px;margin:12px 2px 2px"><span class="eyebrow" style="margin:0">Series scenarios · Bo${target*2-1}</span><span style="margin-left:auto;display:flex;gap:6px"></span></div>`);
     const acts=hdr.lastChild;
     const bExp=el(`<span class="wbtn" style="font-size:11.5px;padding:4px 10px">Expand all</span>`); bExp.onclick=()=>{SIM_OPEN=allOpen();draw();};
-    const bCol=el(`<span class="wbtn" style="font-size:11.5px;padding:4px 10px">Collapse all</span>`); bCol.onclick=()=>{SIM_OPEN=new Set();draw();};
+    const bCol=el(`<span class="wbtn" style="font-size:11.5px;padding:4px 10px">Collapse all</span>`); bCol.onclick=()=>{SIM_OPEN=new Set();SIM_FOCUS='';draw();};
     acts.append(bExp,bCol); body.appendChild(hdr);
 
     const tree=el(`<div class="stree"></div>`);
