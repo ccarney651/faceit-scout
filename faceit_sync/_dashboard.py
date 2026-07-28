@@ -957,8 +957,8 @@ let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
-let PLAYERS_ROLE='All';        // Players tab: By hero role filter
-let PLAYERS_VIEW='hero';        // Players tab mode: 'hero' | 'role'
+let PLAYERS_ROLE='All';        // (unused since the Players tab became a directory)
+let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
 function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
@@ -1887,130 +1887,99 @@ function renderScoutBody(t){
 // scoped, role-weighted, deaths heavy). Two modes: "By hero" (rank within one
 // hero) and "By role" (aggregate a player across the heroes of a competitive seat
 // — Tank / Hitscan / Flex DPS / Main Support / Flex Support).
-const PLAYER_STAT_FIELDS=['damage','elims','deaths','healing','mitigation'];
-// Per seat, each player on their MAIN seat with their captured heroes + raw
-// per-game averages, ordered by games played. Deliberately NOT a skill ranking:
-// captured samples are tiny (often 1-2 games) and scoreboard stats are a poor
-// proxy for OW impact, so a computed rank would misrepresent real players. This
-// is a factual "who plays what, and their numbers" reference instead.
-function seatLeaderboards(){
-  const ocs=DATA.owscout_comps||{}, byPlayer={};
-  D().team_names.forEach(team=>{
-    (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
-      (p.heroes||[]).forEach(h=>{
-        if(!h.games) return;
-        const seat=HERO_SEAT[h.hero]; if(!seat) return;
-        const key=team+'|'+p.player;
-        const pe=byPlayer[key]||(byPlayer[key]={player:p.player,team,seats:{}});
-        const e=pe.seats[seat]||(pe.seats[seat]={g:0,heroes:{},
-          st:{damage:0,elims:0,deaths:0,healing:0,mitigation:0}});
-        e.g+=h.games;
-        PLAYER_STAT_FIELDS.forEach(k=>e.st[k]+=((h.stats&&h.stats[k])||0)*h.games);
-        e.heroes[h.hero]=(e.heroes[h.hero]||0)+h.games;
-      });
-    });
-  });
-  // Each player appears ONLY on their primary (most-played) seat, so a hitscan
-  // main doesn't also clutter the Flex DPS board.
-  const bySeat={};
-  Object.values(byPlayer).forEach(pe=>{
-    const seats=Object.entries(pe.seats).sort((a,b)=>b[1].g-a[1].g);
-    if(!seats.length) return;
-    const seat=seats[0][0], e=seats[0][1];
-    (bySeat[seat]=bySeat[seat]||[]).push(Object.assign({player:pe.player,team:pe.team},e));
-  });
-  const out={};
-  SEATS.forEach(seat=>{
-    const players=bySeat[seat]; if(!players) return;
-    out[seat]=players.map(e=>{ const kd=e.st.elims/Math.max(e.st.deaths,0.5);
-      return {player:e.player,team:e.team,games:e.g,
-        stats:{damage:Math.round(e.st.damage/e.g),healing:Math.round(e.st.healing/e.g),
-          mitigation:Math.round(e.st.mitigation/e.g),
-          elims:Math.round(e.st.elims/e.g*10)/10,deaths:Math.round(e.st.deaths/e.g*10)/10,
-          kd:Math.round(kd*100)/100},
-        heroes:Object.entries(e.heroes).sort((a,b)=>b[1]-a[1]).map(x=>x[0])}; })
-      .sort((a,b)=>b.games-a.games);
-  });
-  return out;
-}
+// ---- Players tab: a league player DIRECTORY (not a ranking — captured samples
+// are too small and scoreboard stats too crude to rank fairly). Roster, role and
+// team come from FACEIT (covers everyone); top heroes + averages come from
+// captures (present once a player is scouted, blank otherwise).
+function playerCaptures(){ const ocs=DATA.owscout_comps||{}, out={};
+  D().team_names.forEach(team=>{ (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
+    out[team+'|'+p.player]={rounds:p.rounds||0, heroes:(p.heroes||[]).slice()}; }); });
+  return out; }
+function topHeroes(cap,n){ return cap&&cap.heroes&&cap.heroes.length
+  ? cap.heroes.slice().sort((a,b)=>(b.rounds||0)-(a.rounds||0)).slice(0,n||3) : []; }
+// Games-weighted average across a player's captured heroes (per-hero stats are
+// already per-game averages), for the Role view's stat line.
+function playerAvg(cap){ if(!cap||!cap.heroes) return null; let g=0,e=0,d=0,dm=0,h=0,mi=0;
+  cap.heroes.forEach(x=>{ const gg=x.games||0, s=x.stats; if(!gg||!s) return;
+    g+=gg; e+=(s.elims||0)*gg; d+=(s.deaths||0)*gg; dm+=(s.damage||0)*gg; h+=(s.healing||0)*gg; mi+=(s.mitigation||0)*gg; });
+  if(!g) return null;
+  return {games:g, kd:Math.round(e/Math.max(d,0.5)*100)/100, deaths:Math.round(d/g*10)/10,
+    damage:Math.round(dm/g), healing:Math.round(h/g), mitigation:Math.round(mi/g), elims:Math.round(e/g*10)/10}; }
+const roleOf=r=>/tank/i.test(r||'')?'Tank':/support/i.test(r||'')?'Support':/dam|dps/i.test(r||'')?'Damage':null;
+function playerStatLine(role,s){ if(!s) return ''; const kd=s.kd!=null?`${s.kd} k/d`:'';
+  if(role==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
+  if(role==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
+  return `${kd?kd+' · ':''}${nf(s.damage)} dmg · ${s.deaths} d`; }
 function renderPlayers(){
   const wrap=el(`<div></div>`);
-  const ocs=DATA.owscout_comps||{}, byHero={};
-  D().team_names.forEach(team=>{
-    (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
-      (p.heroes||[]).forEach(h=>{ if(!h.games) return;
-        (byHero[h.hero]=byHero[h.hero]||[]).push({player:p.player, team, ...h}); });
-    });
-  });
-  if(!Object.keys(byHero).length){
-    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No captured player data yet — this fills in as games are scouted (it shows who plays what, from HUD attribution).</p>`));
+  const cap=playerCaptures();
+  // Every known player from the FACEIT rosters, captured heroes/stats joined by nick.
+  const players=[];
+  D().teams.forEach(t=>{ (t.roster||[]).forEach(p=>{
+    players.push({nick:p.nick, team:t.name, role:p.role||'', maps:p.games||0, current:!!p.current,
+      cap:cap[t.name+'|'+p.nick]||null}); }); });
+  if(!players.length){
+    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No roster data yet.</p>`));
     return wrap;
   }
   wrap.appendChild(el(sectionH('Players',
-    `<span class="note">who plays what in ${esc(D().summary.championship||'the division')}, with raw per-game averages from captured games — a reference, not a skill ranking (samples are small) · By role groups each player on their main seat · hover for full stats${capSince()}</span>`)));
-  const modebar=el(`<div class="wsel" style="margin:2px 2px 10px"></div>`);   // By hero | By role
-  const bar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);       // hero-role sub-filter
+    `<span class="note">every known player in ${esc(D().summary.championship||'the division')} · roles, teams &amp; names from FACEIT · top heroes &amp; averages from captured games (blank until scouted)${capSince()}</span>`)));
+  const modebar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);
   const body=el(`<div></div>`);
-  wrap.append(modebar, bar, body);
+  wrap.append(modebar, body);
 
-  // Stats shown in the blend's priority order per role: tank k/d>deaths>dmg,
-  // dps k/d>dmg>deaths, support heal>deaths>k/d.
-  const statLine=(base,s)=>{
-    const kd=s.kd!=null?`${s.kd} k/d`:'';
-    if(base==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
-    if(base==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
-    return `${kd?kd+' · ':''}${nf(s.damage)} dmg · ${s.deaths} d`;
-  };
-  // A factual row: player · team · raw per-game averages · games captured. No rank,
-  // no colour — one-game rows are just dimmed so the sample size reads at a glance.
-  const rowHtml=(base,r,extra)=>{
-    const s=r.stats||{}, g=r.games||0;
-    return `<div class="crow${g<=1?' thin':''}" title="${g} game${g===1?'':'s'} avg · ${s.kd!=null?s.kd+' k/d · ':''}${nf(s.damage)} dmg · ${s.elims} elim · ${s.deaths} deaths · ${nf(s.healing)} heal · ${nf(s.mitigation)} mit">`+
-      `<span><b>${esc(r.player)}</b> <span class="faint">${esc(r.team)}</span>${extra||''}</span>`+
-      `<span class="rec">${statLine(base,s)} <span class="faint">· ${g}g</span></span></div>`;
-  };
-  const makeCard=(titleHtml,rows,base,extraFn)=>{
-    const card=el(`<div class="card"></div>`);
-    card.appendChild(el(`<p class="eyebrow">${titleHtml}</p>`));
-    rows.forEach(r=>card.appendChild(el(rowHtml(base,r,extraFn&&extraFn(r)))));
-    return card;
-  };
+  const icons=(c)=>{ const hs=topHeroes(c,3); return hs.length
+    ? `<span title="${hs.map(x=>esc(x.hero)+' ('+(x.rounds||0)+'r)').join(', ')}">${hs.map(x=>heroIcon(x.hero)).join('')}</span>`
+    : `<span class="faint" style="font-size:11px">not scouted</span>`; };
 
-  function drawHero(){
-    body.innerHTML=''; bar.style.display='';
-    [...bar.children].forEach(b=>b.classList.toggle('selA', b.textContent===PLAYERS_ROLE));
-    const heroes=Object.keys(byHero).filter(h=>PLAYERS_ROLE==='All'||HERO_ROLE[h]===PLAYERS_ROLE)
-      .sort((a,b)=>byHero[b].length-byHero[a].length||a.localeCompare(b));
-    if(!heroes.length){ body.appendChild(el(`<p class="note">No captured ${esc(PLAYERS_ROLE)} players yet.</p>`)); return; }
-    const grid=el(`<div class="grid cols-2"></div>`);
-    heroes.forEach(hero=>{
-      const all=byHero[hero].slice().sort((a,b)=>(b.games||0)-(a.games||0)), base=HERO_ROLE[hero];
-      grid.appendChild(makeCard(`${heroChip(hero)} <span class="note" style="text-transform:none;letter-spacing:0">${all.length} player${all.length===1?'':'s'} · most games first</span>`, all, base));
+  // Team view: each roster (main 5 first, subs dimmed) with each player's top 3 heroes.
+  function drawTeam(){
+    body.innerHTML='';
+    const grid=el(`<div class="grid cols-3"></div>`);
+    D().teams.forEach(t=>{
+      const ros=t.roster||[];
+      const card=el(`<div class="card roster"></div>`);
+      card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
+        `<span style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
+      const line=(p,dim)=>`<div class="pl"${dim?' style="opacity:.55"':''} title="${p.games} maps this season">`+
+        `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
+        `<span>${esc(p.nick)}</span>`+
+        `<span class="st">${icons(cap[t.name+'|'+p.nick])}</span></div>`;
+      const curP=ros.filter(p=>p.current), subP=ros.filter(p=>!p.current);
+      let b=curP.map(p=>line(p,false)).join('');
+      if(subP.length) b+=`<div class="subhd">subs / also played</div>`+subP.map(p=>line(p,true)).join('');
+      card.appendChild(el(`<div>${b||'<span class="faint">no roster data yet</span>'}</div>`));
+      grid.appendChild(card);
     });
     body.appendChild(grid);
   }
+  // Role view: every player grouped by role, with top 3 heroes + their average
+  // stats on captured games (un-captured players listed by name at the foot).
   function drawRole(){
-    body.innerHTML=''; bar.style.display='none';
-    const seats=seatLeaderboards();
-    const grid=el(`<div class="grid cols-2"></div>`); let any=false;
-    SEATS.forEach(seat=>{
-      const list=seats[seat]; if(!list||!list.length) return; any=true;
-      const base=/Support/.test(seat)?'Support':(seat==='Tank'?'Tank':'Damage');
-      const heroesOf=r=> r.heroes&&r.heroes.length?` <span class="faint" style="font-size:11px">${r.heroes.slice(0,3).map(esc).join(', ')}</span>`:'';
-      grid.appendChild(makeCard(`${esc(seat)} <span class="note" style="text-transform:none;letter-spacing:0">${list.length} player${list.length===1?'':'s'} · most games first</span>`, list, base, heroesOf));
+    body.innerHTML='';
+    const byRole={Tank:[],Damage:[],Support:[]};
+    players.forEach(p=>{ const r=roleOf(p.role); if(r) byRole[r].push(p); });
+    const grid=el(`<div class="grid cols-3"></div>`); let any=false;
+    ['Tank','Damage','Support'].forEach(role=>{
+      const list=byRole[role]||[]; if(!list.length) return; any=true;
+      const capped=list.filter(p=>topHeroes(p.cap).length).sort((a,b)=>b.maps-a.maps);
+      const bare=list.filter(p=>!topHeroes(p.cap).length).sort((a,b)=>b.maps-a.maps);
+      const card=el(`<div class="card"></div>`);
+      card.appendChild(el(`<p class="eyebrow role-${role}">${role} <span class="note" style="text-transform:none;letter-spacing:0">${list.length} player${list.length===1?'':'s'}</span></p>`));
+      capped.forEach(p=>{ const av=playerAvg(p.cap), hs=topHeroes(p.cap,3);
+        card.appendChild(el(`<div class="crow" title="${av?av.games+'g avg · '+(av.kd!=null?av.kd+' k/d · ':'')+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':'no stats'}">`+
+          `<span><b>${esc(p.nick)}</b> <span class="faint">${esc(p.team)}</span> ${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
+          `<span class="rec">${av?playerStatLine(role,av)+` <span class="faint">· ${av.games}g</span>`:''}</span></div>`)); });
+      if(bare.length) card.appendChild(el(`<p class="note" style="margin-top:8px">Not scouted yet: ${bare.map(p=>esc(p.nick)).join(', ')}</p>`));
+      grid.appendChild(card);
     });
-    body.appendChild(any?grid:el(`<p class="note">No captured players in any seat yet.</p>`));
+    body.appendChild(any?grid:el(`<p class="note">No players with a known role yet.</p>`));
   }
   const draw=()=>{ [...modebar.children].forEach(b=>b.classList.toggle('selA', b.dataset.v===PLAYERS_VIEW));
-    if(PLAYERS_VIEW==='role') drawRole(); else drawHero(); };
-
-  [['hero','By hero'],['role','By role']].forEach(([v,label])=>{
+    if(PLAYERS_VIEW==='role') drawRole(); else drawTeam(); };
+  [['team','By team'],['role','By role']].forEach(([v,label])=>{
     const b=el(`<span class="wbtn" data-v="${v}">${esc(label)}</span>`);
     b.onclick=()=>{ PLAYERS_VIEW=v; draw(); }; modebar.appendChild(b);
-  });
-  ['All','Tank','Damage','Support'].forEach(role=>{
-    const b=el(`<span class="wbtn">${role}</span>`);
-    b.onclick=()=>{ PLAYERS_ROLE=role; drawHero(); }; bar.appendChild(b);
   });
   draw();
   return wrap;
