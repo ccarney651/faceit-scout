@@ -1264,8 +1264,8 @@ function renderScoutBody(t){
     if(tb.length) tb.forEach(([h,n])=>{
       const ts=tBanTot?n/tBanTot:0, fs=fBanTot?(fBan[h]||0)/fBanTot:0;
       const over=n>=2 && ts>=fs*1.6 && (ts-fs)>=0.05;   // a real team-specific tell, not the meta
-      c2.appendChild(el(`<div class="crow"><span>${heroChip(h)}${opener===h?` <span class="opener" title="their most common opening ban">1st</span>`:''}</span>`+
-        `<span class="rec">${n}x${over?`<span class="bvs">${Math.round(ts*100)}% vs ${Math.round(fs*100)}% field</span>`:''}</span></div>`));
+      c2.appendChild(el(`<div class="crow"><span>${heroChip(h)}${opener===h?` <span class="opener" title="their most common first ban">1st ban</span>`:''}</span>`+
+        `<span class="rec">${n}x${over?`<span class="bvs" title="${esc(t.team)} bans this in ${Math.round(ts*100)}% of their games; the league average is ${Math.round(fs*100)}%">▲ ${Math.round(ts*100)}% vs ${Math.round(fs*100)}% league</span>`:''}</span></div>`));
     });
     else c2.appendChild(el(`<p class="note" style="margin:2px 0 0">No bans in window.</p>`));
     cols.appendChild(c2);
@@ -1286,11 +1286,11 @@ function renderScoutBody(t){
     c4.appendChild(el(`<div class="wl" style="margin:2px 0 7px">${form||'<span class="faint">no maps</span>'}</div>`));
     if(scoutG&&scoutG.adapt){
       const ad=scoutG.adapt;
-      const bits=[`<b>${ad.swaps_per_map}</b> swaps/map`,
-                  `<b>${ad.families}</b> comp famil${ad.families===1?'y':'ies'}`];
-      if(ad.loss_followups>0) bits.push(`changed after loss <b>${ad.changed_after_loss}/${ad.loss_followups}</b>`);
+      const bits=[`<b>${ad.swaps_per_map}</b> hero swaps mid-map`,
+                  `<b>${ad.families}</b> different comp${ad.families===1?'':'s'}`];
+      if(ad.loss_followups>0) bits.push(`reworked their comp after <b>${ad.changed_after_loss}</b> of <b>${ad.loss_followups}</b> losses`);
       c4.appendChild(el(`<p class="note" style="margin:0;font-size:12.5px">${bits.join(' · ')}</p>`));
-      c4.appendChild(el(`<p class="note" style="margin:4px 0 0;font-size:11.5px">${ad.families<=2?'rigid — preppable':'flexible — outplay live'}</p>`));
+      c4.appendChild(el(`<p class="note" style="margin:4px 0 0;font-size:11.5px">${ad.families<=2?'<b>Predictable</b> — runs the same few comps, easy to prep for.':'<b>Varied</b> — mixes comps, so be ready to adapt in-game.'}</p>`));
     } else {
       c4.appendChild(el(`<p class="note" style="margin:0;font-size:12px">No captured comps for a tempo read.</p>`));
     }
@@ -1298,6 +1298,28 @@ function renderScoutBody(t){
 
     g.appendChild(cols);
     root.appendChild(g);
+  }
+
+  // The short version — plain counts, like the League meta tab: what this team
+  // bans most and plays most, no jargon. (Requested: a simple by-the-numbers read
+  // that doesn't need decoding.)
+  {
+    const sc=((DATA.owscout_comps||{})[t.team]||{}).scout;
+    const banRows=rank(t.bans).slice(0,8).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])}));
+    const pool=((sc&&sc.hero_pool)||[]).slice().sort((a,b)=>(b.rounds||0)-(a.rounds||0)).slice(0,8);
+    const playRows=pool.map(h=>({label:heroChip(h.hero),value:h.rounds||0,color:roleVar(h.role||HERO_ROLE[h.hero])}));
+    if(banRows.length||playRows.length){
+      const two=el(`<div class="grid cols-2" style="margin-top:14px"></div>`);
+      const bc=el(`<div class="card"></div>`);
+      bc.appendChild(el(`<p class="eyebrow">Most-banned heroes</p>`));
+      bc.appendChild(el(`<p class="note" style="margin:0 0 8px">How many times ${esc(t.team)} banned each hero${capSince()}.</p>`));
+      bc.appendChild(el(banRows.length?barList(banRows):`<p class="note">No bans in window.</p>`));
+      const pc=el(`<div class="card"></div>`);
+      pc.appendChild(el(`<p class="eyebrow">Most-played heroes</p>`));
+      pc.appendChild(el(`<p class="note" style="margin:0 0 8px">Rounds played across their captured comps.</p>`));
+      pc.appendChild(el(playRows.length?barList(playRows):`<p class="note">No captured comps yet — scout some to fill this in.</p>`));
+      two.append(bc,pc); root.appendChild(two);
+    }
   }
 
   // Scouting coverage - the capture work-list. Every replay-coded game either
@@ -1359,8 +1381,8 @@ function renderScoutBody(t){
     const tells=[];
     const bb=divBanBaseline();
     const sigBan=banLiftRows(t.bans, bb.all, 3).filter(r=>r.lift&&r.lift>=1.5)[0];
-    if(sigBan) tells.push(`<span class="then">ban</span> leans on banning ${heroChip(sigBan.hero)} `+
-      `<span class="faint">×${sigBan.lift.toFixed(1)} the field rate · ${sigBan.n} bans</span>`);
+    if(sigBan) tells.push(`<span class="then">ban</span> bans ${heroChip(sigBan.hero)} far more than most `+
+      `<span class="faint">${sigBan.lift.toFixed(1)}× the league average · ${sigBan.n} bans</span>`);
     const br=((scout&&scout.ban_response)||[]).filter(b=>b.games>=2 && (b.opens||[]).length)[0];
     if(br) tells.push(`<span class="then">when ${esc(br.banned)} banned</span> opens ${compRow(br.opens[0].heroes)} `+
       `<span class="faint">${br.games} games</span>`);
