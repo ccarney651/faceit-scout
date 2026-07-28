@@ -982,7 +982,7 @@ function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[
 // instantly and a dropped socket frees that scout's maps at once. If the socket
 // can't be established it falls back to HTTP polling; everything degrades to a
 // no-op if the endpoints aren't deployed, so the page always works.
-let claimWS=null, wsRetry=0, wsPollTimer=null;
+let claimWS=null, wsRetry=0;
 function claimHeaders(){ const h={'content-type':'application/json','X-Owscout-Token':identity()};
   const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) h['X-Owscout-Name']=nm;
   const s=localStorage.getItem('owscout_session'); if(s) h['X-Owscout-Session']=s; return h; }
@@ -993,11 +993,11 @@ function claimWsUrl(){ const u=new URL(ENDPOINT.replace(/^http/,'ws')+'/claims/w
   return u.toString(); }
 function connectClaims(){ let ws; try{ ws=new WebSocket(claimWsUrl()); }catch(e){ scheduleReconnect(); return; }
   claimWS=ws;
-  ws.onopen=()=>{ wsRetry=0; stopWsPoll(); if(myClaimKey) wsSend({type:'claim',key:myClaimKey}); };   // re-assert on reconnect
+  ws.onopen=()=>{ wsRetry=0; if(myClaimKey) wsSend({type:'claim',key:myClaimKey}); };   // re-assert on reconnect
   ws.onmessage=ev=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onClaimMsg(m); };
   ws.onclose=()=>{ if(claimWS===ws) claimWS=null; scheduleReconnect(); };
   ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
-function scheduleReconnect(){ startWsPoll(); const d=Math.min(30000, 1000*Math.pow(2, wsRetry++));
+function scheduleReconnect(){ const d=Math.min(30000, 1000*Math.pow(2, wsRetry++));
   setTimeout(()=>{ if(!claimWS) connectClaims(); }, d); }
 function onClaimMsg(m){ if(m.type==='snapshot') CLAIMS=m.claims||{};
   else if(m.type==='set') CLAIMS[m.key]=m.claim;
@@ -1019,11 +1019,12 @@ function claimOp(wsMsg, path, body){ if(wsSend(wsMsg)) return;
         CLAIMS[body.key]={by:j.by, at:Date.now()}; syncCodeOptions(); showClaimNote();
       }
     }).catch(()=>{}); }
-// HTTP poll — only runs while the WS is down (a safety net, not the primary path).
+// Authoritative claims snapshot. Runs on a slow always-on backstop timer (not
+// only when the WS is down): the WS gives instant updates, and this guarantees a
+// page that stays open keeps its locks current within ~15s even if a push is
+// missed or the socket is flaky — so users don't have to refresh to see a lock.
 async function fetchClaims(){ try{ const r=await fetch(ENDPOINT+'/claims',{cache:'no-store'}); if(!r.ok) return;
   const j=await r.json(); CLAIMS=j.claims||{}; syncCodeOptions(); showClaimNote(); }catch(e){} }
-function startWsPoll(){ if(wsPollTimer) return; fetchClaims(); wsPollTimer=setInterval(fetchClaims, 15000); }
-function stopWsPoll(){ clearInterval(wsPollTimer); wsPollTimer=null; }
 // Heartbeat bumps the claim's timestamp so the room's zombie-prune never drops an
 // active claim (clean disconnects release instantly on their own).
 function startClaimHb(){ clearInterval(claimHb); claimHb=setInterval(()=>{ if(myClaimKey) claimOp({type:'claim',key:myClaimKey},'/claim',{key:myClaimKey}); }, 90000); }
@@ -1165,5 +1166,5 @@ document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
 window.addEventListener('pagehide',releaseClaim);            // clean release; the room also frees it when the socket drops
 updateBtns(); loadFeeds();
-connectClaims();                                            // real-time claims over a Durable Object WebSocket (HTTP-polls as fallback)
+connectClaims(); fetchClaims(); setInterval(fetchClaims, 15000);   // WS = instant; always-on 15s poll keeps an open page current without a refresh
 </script></body></html>
