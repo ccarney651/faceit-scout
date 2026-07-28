@@ -52,9 +52,9 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
                 if u.split("/")[2] not in allowed_hosts} if urls else set()
     assert not external, f"unexpected external URLs in the dashboard: {external}"
 
-    # Embedded data parses back to JSON and reflects the ingest.
-    # (DATA is emitted on a single line, so match without DOTALL.)
-    m = re.search(r"const DATA = (\{.*\});", doc)
+    # Embedded data parses back to JSON and reflects the ingest. The default build
+    # inlines it as `var __OWSCOUT_DATA__={...};` (single line, so no DOTALL).
+    m = re.search(r"var __OWSCOUT_DATA__=(\{.*\});", doc)
     assert m is not None
     data = json.loads(m.group(1).replace("<\\/", "</"))
     assert len(data["divisions"]) == 1
@@ -63,6 +63,36 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert div["summary"]["matches"] == 1
     assert div["summary"]["dc_games"] == 1          # hazard A game present
     assert div["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy
+
+
+@responses.activate
+def test_external_data_build_is_a_shell_plus_datajson(db: Database, tmp_path) -> None:
+    """--external-data: the page becomes a shell that fetches data.json (the seam
+    for future gating), instead of inlining the payload."""
+    _ingest(db)
+    dp = tmp_path / "data.json"
+    buf = io.StringIO()
+    count = export_html(db, buf, data_path=str(dp))
+    doc = buf.getvalue()
+    assert count == 1
+    # Shell: NO inline blob, but the fetch bootstrap is present.
+    assert "var __OWSCOUT_DATA__=" not in doc
+    assert "fetch('data.json'" in doc
+    # data.json is written and parses back to the same payload shape.
+    assert dp.is_file()
+    data = json.loads(dp.read_text(encoding="utf-8").replace("<\\/", "</"))
+    assert len(data["divisions"]) == 1 and data["views"]
+
+
+def test_is_playoff_classifies_championships() -> None:
+    """Playoff championships are split out of the tier views/standings and attached
+    to their division as results; regular-season ones are not."""
+    from faceit_sync.export import _is_playoff
+
+    assert _is_playoff("S9 EMEA Master Central - Playoffs")
+    assert _is_playoff("S9 NA Expert Central - Knockout Stage")
+    assert not _is_playoff("S9 EMEA Master Central - Regular Season")
+    assert not _is_playoff(None)
 
 
 def test_tier_and_region_classify_championship_names() -> None:
@@ -98,8 +128,9 @@ def test_dashboard_javascript_is_syntactically_valid(tmp_path):
     from faceit_sync._dashboard import HTML_TEMPLATE
 
     html = HTML_TEMPLATE.replace("__TITLE__", "t").replace(
-        "__DATA__", '{"divisions":{},"views":[],"heroes":[],"roster":{},'
-                    '"maps":[],"owscout_comps":{},"hero_icons":{}}')
+        "// __DATA_INLINE__",
+        'var __OWSCOUT_DATA__={"divisions":{},"views":[],"heroes":[],"roster":{},'
+        '"maps":[],"owscout_comps":{},"hero_icons":{}};')
     js = re.search(r"<script>(.*)</script>", html, re.S)
     assert js, "no <script> block found in the dashboard template"
     script = tmp_path / "dash.js"
