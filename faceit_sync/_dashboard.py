@@ -278,6 +278,8 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .role-Tank{color:var(--tank)} .role-Damage{color:var(--damage)} .role-Support{color:var(--support)}
 .bg-Tank{background:var(--tank)} .bg-Damage{background:var(--damage)} .bg-Support{background:var(--support)}
 .pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:7px}
+.tlink{cursor:pointer;border-bottom:1px dotted color-mix(in srgb,var(--accent) 55%,transparent);transition:color .12s}
+.tlink:hover{color:var(--accent)}
 .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
   padding:1px 6px;border-radius:5px;background:var(--surface2);color:var(--faint)}
 .tag.warn{background:color-mix(in srgb,var(--mid) 20%,transparent);color:var(--mid)}
@@ -607,6 +609,10 @@ function swapLine(s){
 }
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
+// A team name rendered as a click-to-scout link (jumps to that team's scout page).
+function teamLink(name,extra){ return name?`<span class="tlink" data-scout="${esc(name)}" title="Scout ${esc(name)}">${esc(name)}</span>${extra||''}`:'<span class="faint">—</span>'; }
+document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
+  if(t&&t.dataset.scout){ e.preventDefault(); gotoScout(t.dataset.scout); } });
 // Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
 function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Copy replay code — paste in Overwatch → Watch">${esc(code)}</code>`; }
 function copyText(t){
@@ -1023,7 +1029,7 @@ function renderOverview(){
 
   wrap.appendChild(el(sectionH('Standings')));
   wrap.appendChild(table(
-    [{k:'name',label:'Team'},{k:'matches',label:'Matches',num:true},{k:'wins',label:'Wins',num:true},
+    [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},{k:'wins',label:'Wins',num:true},
      {k:'win_pct',label:'Win %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))}],
     D().teams));
   wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
@@ -1043,7 +1049,7 @@ function renderOverview(){
     if(sub.length) body+=`<div class="subhd">also played this season</div>`+sub.map(p=>prow(p,true)).join('');
     const card=el(`<div class="card roster"></div>`);
     card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
-      `<span style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>`+
+      `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>`+
       pill(t.win_pct+'%',winVar(t.win_pct))+`</h4>`));
     card.appendChild(el(`<div>${body||'<span class="faint">no roster data yet</span>'}</div>`));
     rg.appendChild(card);
@@ -1202,7 +1208,7 @@ function renderScoutBody(t){
   // all-time maps played too - windowing it (t.games) could show capMaps > total.
   const _allMaps=MATCHES_RECENT.filter(m=>m.f1===t.team||m.f2===t.team)
     .reduce((s,m)=>s+m.games.filter(g=>g.map).length,0);
-  head.appendChild(el(`<div style="text-align:right"><div>${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))} ${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))} ${pill(`comps ${capMaps}/${_allMaps} maps`,capMaps?'var(--accent)':'var(--faint)')}</div>`+
+  head.appendChild(el(`<div style="text-align:right"><div><span title="matches won / played">${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))}</span> <span title="maps won / played">${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</span> <span title="maps with captured comps (scouted)">${pill(`${capMaps}/${_allMaps} scouted`,capMaps?'var(--accent)':'var(--faint)')}</span></div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
   root.appendChild(head);
 
@@ -1940,7 +1946,7 @@ function renderPlayers(){
       const ros=t.roster||[];
       const card=el(`<div class="card roster"></div>`);
       card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
-        `<span style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
+        `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
       const line=(p,dim)=>`<div class="pl"${dim?' style="opacity:.55"':''} title="${p.games} maps this season">`+
         `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
         `<span>${esc(p.nick)}</span>`+
