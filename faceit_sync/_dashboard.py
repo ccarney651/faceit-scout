@@ -177,7 +177,7 @@ table.blocks thead th:hover{color:var(--faint)}
 /* scenario tree */
 .stree{margin-top:12px}
 .stnode{min-width:0}
-.snode{border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--surface)}
+.snode{border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--surface);max-width:940px}
 .snode.focus{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
 .snode.g1{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent) inset}
 /* condensed (out-of-focus) node — one glance-able, clickable row */
@@ -2149,6 +2149,21 @@ function renderSim(){
         o.onclick=()=>onPick(mp); wrap.appendChild(o); });
     return wrap;
   }
+  // Ban choices as buttons — the team's most-banned heroes (recent window), each
+  // with its ban count and ★ signature; a compact "any hero" dropdown covers the
+  // long tail so the giant list isn't the primary interface.
+  function banButtons(model, map, illegal, current, onPick){
+    const wrap=el(`<div class="mbtns"></div>`);
+    const sugg=banSuggest(model, map, illegal), shown=new Set();
+    sugg.forEach(s=>{ shown.add(s.hero);
+      const sig=sigMark(model,s.hero);
+      const o=el(`<span class="opt${s.hero===current?' sel':''}" title="${esc(s.hero)} — banned ${s.all}× recently${s.onMap?`, ${s.onMap}× on ${esc(map)}`:''}">${heroChip(s.hero)}<span class="pp">${s.all}×</span>${sig}</span>`);
+      o.onclick=()=>onPick(s.hero); wrap.appendChild(o); });
+    if(current && !shown.has(current))
+      wrap.appendChild(el(`<span class="opt sel">${heroChip(current)}<span class="pp">manual</span></span>`));
+    wrap.appendChild(heroSelect(null, illegal, h=>{ if(h) onPick(h); }));
+    return wrap;
+  }
   // Modes are one-per-series (validated in-data: 0/984 series repeat a mode). G1
   // is Control; afterwards any non-Control mode not yet played this line — and if
   // all are used (a deep Bo7), a repeat is allowed.
@@ -2233,12 +2248,10 @@ function renderSim(){
         }
         if(map){
           const r1=el(`<div class="snrow"><span class="rl2">${esc(nameOf(picker))} ban</span></div>`);
-          r1.appendChild(heroSelect(b1, ill1, h=>setOv(path,{b1:h})));
-          if(sigMark(modelOf(picker),b1)) r1.appendChild(el(sigMark(modelOf(picker),b1)));
+          r1.appendChild(banButtons(modelOf(picker), map, ill1, b1, h=>setOv(path,{b1:h})));
           card.appendChild(r1);
           const r2=el(`<div class="snrow"><span class="rl2">${esc(nameOf(other))} ban</span></div>`);
-          r2.appendChild(heroSelect(b2, ill2, h=>setOv(path,{b2:h})));
-          if(sigMark(modelOf(other),b2)) r2.appendChild(el(sigMark(modelOf(other),b2)));
+          r2.appendChild(banButtons(modelOf(other), map, ill2, b2, h=>setOv(path,{b2:h})));
           card.appendChild(r2);
         }
       } else {
