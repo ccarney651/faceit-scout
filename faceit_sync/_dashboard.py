@@ -1006,7 +1006,7 @@ let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
 let SIM_A=null, SIM_B=null, SIM_FIRST='A';  // draft simulator state
 let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) -> {map,b1,b2} overrides
 let SIM_BO=3;       // wins needed: 2 = Bo3, 3 = Bo5 (default), 4 = Bo7 (playoff)
-let SIM_RECENT=6;   // draft-sim form window: use each team's most recent N maps (0 = full season)
+let SIM_RECENT=0;   // ban window: use each team's most recent N maps for BANS (0 = full season, default — a short window is too sparse to read ban tendencies)
 let SIM_OPEN=new Set();   // scenario tree: which branches (child paths) are expanded
 let SIM_FOCUS='';         // scenario tree: the one node shown full-size (others condense)
 
@@ -2066,12 +2066,15 @@ function simModel(team, limitGames){
   return {team,pick,banByMap,bansAll,ngames:use.length};
 }
 function divMaps(){ const s={}; D().matches.forEach(m=>m.games.forEach(g=>{ if(g.map) s[g.map]=g.map_category||MAP_CAT[g.map]||''; })); return s; }
-// Ranked ban suggestions for a team on a map: on-map history first, then overall; skip illegal heroes.
+// Ranked ban suggestions for a team on a map. Blend on-map ("in this situation")
+// with overall tendency, weighting on-map so a hero they clearly target here
+// leads — but a single on-map ban doesn't outrank a strong overall staple.
 function banSuggest(model, map, illegal){
   const onMap=model.banByMap[map]||{}, all=model.bansAll||{}, keys=new Set([...Object.keys(onMap),...Object.keys(all)]);
+  const score=x=>x.onMap*2+x.all;
   return [...keys].filter(h=>!illegal.has(h))
     .map(h=>({hero:h,onMap:onMap[h]||0,all:all[h]||0}))
-    .sort((a,b)=>(b.onMap-a.onMap)||(b.all-a.all)).slice(0,7);
+    .sort((a,b)=>(score(b)-score(a))||(b.onMap-a.onMap)).slice(0,7);
 }
 const ROLE_ORDER=['Tank','Damage','Support'];
 // Full-roster hero picker (grouped by role), excluding heroes already banned by this team.
@@ -2111,15 +2114,15 @@ function renderSim(){
   const bo=el(`<div class="wsel"></div>`);
   [['Bo3',2],['Bo5',3],['Bo7',4]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}" title="${lbl==='Bo7'?'Best of 7 — playoff finals':lbl==='Bo5'?'Best of 5 — regular default':'Best of 3'}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;SIM_FOCUS='';draw();}; bo.append(b); });
   ctl.appendChild(bo);
-  ctl.appendChild(el(`<label title="Only use each team's most recent maps, so a shifting meta isn't drowned out by stale games.">Form window</label>`));
-  const rw=el(`<select style="min-width:132px" title="Only use each team's most recent maps."></select>`);
-  [['Last 6 games',6],['Last 12 games',12],['Full season',0]].forEach(([lbl,v])=>rw.appendChild(el(`<option value="${v}" ${SIM_RECENT===v?'selected':''}>${lbl}</option>`)));
+  ctl.appendChild(el(`<label title="How far back to read each team's BANS. Full season is most reliable; narrow it only to catch a very recent meta shift (a short window is sparse). Map picks always use the full season.">Ban window</label>`));
+  const rw=el(`<select style="min-width:132px" title="How far back to read each team's bans."></select>`);
+  [['Full season',0],['Last 12 games',12],['Last 6 games',6]].forEach(([lbl,v])=>rw.appendChild(el(`<option value="${v}" ${SIM_RECENT===v?'selected':''}>${lbl}</option>`)));
   rw.onchange=()=>{SIM_RECENT=+rw.value;draw();};
   ctl.appendChild(rw);
   const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset edits</span>`); reset.onclick=()=>{SIM_TREE={};draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
-  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from recent form: the team on the clock <b>picks the map</b> and <b>bans first</b>. Game 1 is Control; later games pick a map <b>type</b> first. Change any map or ban and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
+  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from each team's record: the team on the clock <b>picks the map</b> and <b>bans first</b>. Game 1 is Control; later games pick a map <b>type</b> first. Change any map or ban and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one they ban repeatedly and well above the division rate.</p>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
   // Division map tendencies — the fallback when a team has no pick history for a
@@ -2157,7 +2160,10 @@ function renderSim(){
     const sugg=banSuggest(model, map, illegal), shown=new Set();
     sugg.forEach(s=>{ shown.add(s.hero);
       const sig=sigMark(model,s.hero);
-      const o=el(`<span class="opt${s.hero===current?' sel':''}" title="${esc(s.hero)} — banned ${s.all}× recently${s.onMap?`, ${s.onMap}× on ${esc(map)}`:''}">${heroChip(s.hero)}<span class="pp">${s.all}×</span>${sig}</span>`);
+      // On-map count (their bans in this same situation) leads when present; the
+      // total is their overall tendency. Both feed the "commonly banned here" read.
+      const cnt = s.onMap>0 ? `${s.onMap}× here · ${s.all} total` : `${s.all}×`;
+      const o=el(`<span class="opt${s.hero===current?' sel':''}" title="${esc(s.hero)} — banned ${s.all}× overall${s.onMap?`, ${s.onMap}× on ${esc(map)}`:''}">${heroChip(s.hero)}<span class="pp">${cnt}</span>${sig}</span>`);
       o.onclick=()=>onPick(s.hero); wrap.appendChild(o); });
     if(current && !shown.has(current))
       wrap.appendChild(el(`<span class="opt sel">${heroChip(current)}<span class="pp">manual</span></span>`));
@@ -2179,11 +2185,16 @@ function renderSim(){
     return avail[0]||null;
   }
   const autoBan=(model,map,illegal)=>{ const s=banSuggest(model,map,illegal); return s.length?s[0].hero:null; };
-  // Signature marker for a team's ban: banned well above the division baseline.
+  // Signature ban: a hero this team bans REPEATEDLY and well above the field.
+  // Qualitative on purpose — a raw "lift" explodes on tiny samples (one ban of a
+  // rarely-touched hero looks like ×40), which reads as noise, not signal. So we
+  // require a real sample (≥3 bans) and show a plain ★; the count is on the chip.
+  const SIG_MIN=3;
   function sigMark(model,hero){ if(!hero)return '';
+    const bans=model.bansAll[hero]||0; if(bans<SIG_MIN) return '';
     const tot=Object.values(model.bansAll).reduce((a,b)=>a+b,0)||1;
-    const lift=dbase.all[hero]?((model.bansAll[hero]||0)/tot)/dbase.all[hero]:0;
-    return lift>=1.5?`<span class="pp" style="color:var(--good)">★×${lift.toFixed(1)}</span>`:''; }
+    const lift=dbase.all[hero]?((bans/tot)/dbase.all[hero]):0;
+    return lift>=2?`<span class="pp" style="color:var(--good)" title="Signature ban — ${bans}× banned, well above the division rate">★</span>`:''; }
   function setOv(path,patch){ SIM_TREE[path]=Object.assign({},SIM_TREE[path],patch); draw(); }
 
   function draw(){
@@ -2193,8 +2204,10 @@ function renderSim(){
     // Full-season models back the suggestion when the recent window is silent.
     const Af=simModel(SIM_A,0), Bf=simModel(SIM_B,0), modelFull=ab=>ab==='A'?Af:Bf;
     // Transparent about the window: show how many recent maps actually informed each side.
-    const win=SIM_RECENT>0?`the most recent ${SIM_RECENT} maps`:'the full season';
-    body.appendChild(el(`<p class="note" style="margin:4px 2px 0"><b>Ban</b> pre-fills use ${win} — <b>${esc(SIM_A)}</b> ${A.ngames} map${A.ngames===1?'':'s'} · <b>${esc(SIM_B)}</b> ${B.ngames}. <b>Map</b> counts are each team's full-season picks.</p>`));
+    const status = SIM_RECENT>0
+      ? `<b>Ban</b> reads use the most recent ${SIM_RECENT} maps — <b>${esc(SIM_A)}</b> ${A.ngames} · <b>${esc(SIM_B)}</b> ${B.ngames}. Map picks stay full-season.`
+      : `Reads use each team's <b>full-season</b> record — <b>${esc(SIM_A)}</b> ${A.ngames} maps · <b>${esc(SIM_B)}</b> ${B.ngames}.`;
+    body.appendChild(el(`<p class="note" style="margin:4px 2px 0">${status}</p>`));
 
     // Recursively draw the draft at `path` (string of prior winners) plus its two branches.
     // used = maps already taken on this line; banned = {A:Set,B:Set} of each team's earlier bans.
