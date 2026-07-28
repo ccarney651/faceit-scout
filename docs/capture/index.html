@@ -1007,8 +1007,18 @@ function onClaimMsg(m){ if(m.type==='snapshot') CLAIMS=m.claims||{};
   syncCodeOptions(); showClaimNote(); }
 function wsSend(o){ if(claimWS && claimWS.readyState===1){ try{ claimWS.send(JSON.stringify(o)); return true; }catch(e){} } return false; }
 // Prefer the live socket; fall back to an HTTP POST (same DO) if it's not open.
+// Prefer the live socket; else HTTP. On the HTTP claim path we MUST read the
+// reply — if the map is held by someone else the server says so, and (unlike the
+// WS claimresult) a fire-and-forget POST would otherwise leave us thinking we own
+// it and never show the lock.
 function claimOp(wsMsg, path, body){ if(wsSend(wsMsg)) return;
-  fetch(ENDPOINT+path,{method:'POST',headers:claimHeaders(),body:JSON.stringify(body)}).catch(()=>{}); }
+  fetch(ENDPOINT+path,{method:'POST',headers:claimHeaders(),body:JSON.stringify(body)})
+    .then(r=>r.json()).then(j=>{
+      if(path.endsWith('/claim') && j && j.ok===false){       // held by someone else
+        if(myClaimKey===body.key) myClaimKey=null;
+        CLAIMS[body.key]={by:j.by, at:Date.now()}; syncCodeOptions(); showClaimNote();
+      }
+    }).catch(()=>{}); }
 // HTTP poll — only runs while the WS is down (a safety net, not the primary path).
 async function fetchClaims(){ try{ const r=await fetch(ENDPOINT+'/claims',{cache:'no-store'}); if(!r.ok) return;
   const j=await r.json(); CLAIMS=j.claims||{}; syncCodeOptions(); showClaimNote(); }catch(e){} }
