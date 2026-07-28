@@ -183,10 +183,14 @@ table.blocks thead th:hover{color:var(--faint)}
 .snrow{display:flex;gap:7px;align-items:center;margin:5px 0;flex-wrap:wrap}
 .snrow .rl2{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:88px;flex:none;font-weight:700}
 .skids{margin:7px 0 0 9px;padding-left:15px;border-left:2px solid var(--line2)}
-.sbranch{margin-top:9px}
-.blab{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:750;padding:2px 10px;border-radius:999px;margin-bottom:6px;font-variant-numeric:tabular-nums}
-.blab.awin{background:var(--accent-weak);color:var(--accent)}
-.blab.bwin{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.sbranch{margin-top:7px}
+/* collapsible win/lose fork toggle */
+.btgl{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;cursor:pointer;border:1px solid transparent;line-height:1.4;font-variant-numeric:tabular-nums;transition:filter .12s,border-color .12s}
+.btgl .cv{opacity:.7;font-size:10px;width:9px;text-align:center}
+.btgl.awin{background:var(--accent-weak);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.btgl.bwin{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}
+.btgl:hover{filter:brightness(1.1);border-color:currentColor}
+.btgl.open{border-color:currentColor}
 .sterm{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:720;padding:6px 12px;border-radius:9px;border:1px solid var(--line2);background:var(--surface2);font-variant-numeric:tabular-nums}
 .sterm.awin{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
 .sterm.bwin{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
@@ -990,8 +994,9 @@ let PLAYERS_ROLE='All';        // (unused since the Players tab became a directo
 let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
 let SIM_A=null, SIM_B=null, SIM_FIRST='A';  // draft simulator state
 let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) -> {map,b1,b2} overrides
-let SIM_BO=2;       // wins needed: 2 = Bo3 (default), 3 = Bo5
+let SIM_BO=3;       // wins needed: 2 = Bo3, 3 = Bo5 (default), 4 = Bo7 (playoff)
 let SIM_RECENT=6;   // draft-sim form window: use each team's most recent N maps (0 = full season)
+let SIM_OPEN=new Set();   // scenario tree: which branches (child paths) are expanded
 
 function gotoScout(team){
   // If the team isn't in the active view (e.g. click from a combined view),
@@ -2090,9 +2095,9 @@ function renderSim(){
   const fb=el(`<div class="wsel"></div>`);
   const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_TREE={};draw();}; return b; };
   fb.append(fbBtn('A'),fbBtn('B')); ctl.appendChild(fb);
-  ctl.appendChild(el(`<label title="Wins needed to take the series.">Format</label>`));
+  ctl.appendChild(el(`<label title="Wins needed to take the series. Bo5 is the FACEIT default; playoff finals can be Bo7.">Format</label>`));
   const bo=el(`<div class="wsel"></div>`);
-  [['Bo3',2],['Bo5',3]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;draw();}; bo.append(b); });
+  [['Bo3',2],['Bo5',3],['Bo7',4]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}" title="${lbl==='Bo7'?'Best of 7 — playoff finals':lbl==='Bo5'?'Best of 5 — regular default':'Best of 3'}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;draw();}; bo.append(b); });
   ctl.appendChild(bo);
   ctl.appendChild(el(`<label title="Only use each team's most recent maps, so a shifting meta isn't drowned out by stale games.">Form window</label>`));
   const rw=el(`<select style="min-width:132px" title="Only use each team's most recent maps."></select>`);
@@ -2102,7 +2107,7 @@ function renderSim(){
   const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset edits</span>`); reset.onclick=()=>{SIM_TREE={};draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
-  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Every map <b>branches</b> into who wins it, so you see the whole series at once — win → 2 lines, then 4, then 8. Each node is <b>pre-filled</b> from the teams' tendencies: the team on the clock <b>picks the map</b> (the loser picks next) and <b>bans first</b>. Change any map or ban from its dropdown and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
+  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from recent form: the team on the clock <b>picks the map</b> and <b>bans first</b>. Change any map or ban from its dropdown and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
   // Most-picked available map for a team in the allowed modes (Control on G1, never after).
@@ -2184,26 +2189,41 @@ function renderSim(){
       }
 
       // branches: win / lose
+      // Win/lose fork — collapsed by default; click a toggle to drill into that
+      // line (the child subtree appears under it). Bans made here carry into both.
       if(map){
         const childUsed=new Set(used); childUsed.add(map);
+        const nb={A:new Set(banned.A),B:new Set(banned.B)};
+        if(b1) nb[picker].add(b1);
+        if(b2) nb[other].add(b2);
         ['A','B'].forEach(w=>{
-          const nsa=sa+(w==='A'?1:0), nsb=sb+(w==='B'?1:0), cls=w==='A'?'awin':'bwin';
+          const cp=path+w, nsa=sa+(w==='A'?1:0), nsb=sb+(w==='B'?1:0), cls=w==='A'?'awin':'bwin';
           const br=el(`<div class="sbranch"></div>`); stn.appendChild(br);
           if(nsa>=target||nsb>=target){
             br.appendChild(el(`<div class="sterm ${cls}">🏆 ${esc(nameOf(w))} win the series ${Math.max(nsa,nsb)}–${Math.min(nsa,nsb)}</div>`));
           } else {
-            br.appendChild(el(`<div class="blab ${cls}">${esc(nameOf(w))} win · ${nsa}–${nsb}</div>`));
-            const nb={A:new Set(banned.A),B:new Set(banned.B)};
-            if(b1) nb[picker].add(b1);
-            if(b2) nb[other].add(b2);
-            const kids=el(`<div class="skids"></div>`);
-            kids.appendChild(node(path+w, childUsed, nb));
-            br.appendChild(kids);
+            const open=SIM_OPEN.has(cp);
+            const tog=el(`<button type="button" class="btgl ${cls}${open?' open':''}"><span class="cv">${open?'▾':'▸'}</span> ${esc(nameOf(w))} win · ${nsa}–${nsb}</button>`);
+            tog.onclick=()=>{ open?SIM_OPEN.delete(cp):SIM_OPEN.add(cp); draw(); };
+            br.appendChild(tog);
+            if(open){ const kids=el(`<div class="skids"></div>`); kids.appendChild(node(cp, childUsed, nb)); br.appendChild(kids); }
           }
         });
       }
       return stn;
     }
+
+    // Expand-all / collapse-all: every openable branch is a binary string of
+    // winners whose A- and B-counts are both still below target.
+    function allOpen(){ const out=new Set(), q=['']; while(q.length){ const p=q.shift();
+      const a=[...p].filter(c=>c==='A').length, b=p.length-a;
+      ['A','B'].forEach(w=>{ const cp=p+w, na=a+(w==='A'?1:0), nb=b+(w==='B'?1:0);
+        if(na<target&&nb<target){ out.add(cp); q.push(cp); } }); } return out; }
+    const hdr=el(`<div style="display:flex;align-items:center;gap:10px;margin:12px 2px 2px"><span class="eyebrow" style="margin:0">Series scenarios · Bo${target*2-1}</span><span style="margin-left:auto;display:flex;gap:6px"></span></div>`);
+    const acts=hdr.lastChild;
+    const bExp=el(`<span class="wbtn" style="font-size:11.5px;padding:4px 10px">Expand all</span>`); bExp.onclick=()=>{SIM_OPEN=allOpen();draw();};
+    const bCol=el(`<span class="wbtn" style="font-size:11.5px;padding:4px 10px">Collapse all</span>`); bCol.onclick=()=>{SIM_OPEN=new Set();draw();};
+    acts.append(bExp,bCol); body.appendChild(hdr);
 
     const tree=el(`<div class="stree"></div>`);
     tree.appendChild(node('', new Set(), {A:new Set(),B:new Set()}));
