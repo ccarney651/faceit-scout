@@ -1696,6 +1696,17 @@ function renderScoutBody(t){
       Object.values(bySeat).forEach(a=>a.sort((x,y)=>y.rounds-x.rounds));
       const brByHero={}; (scout.ban_response||[]).forEach(b=>brByHero[b.banned]=b);
 
+      // Division-wide (meta) pick rate per hero = rounds featuring it / all captured
+      // rounds across every team. Lets the planner separate a team's SIGNATURE hero
+      // (they run it far more than the field) from a MUST-PLAY meta staple everyone
+      // runs — banning a staple hurts both sides equally, so it's a wash, not a
+      // targeted ban. A ban only disrupts THEM specifically when it's distinctive.
+      const metaRate=(()=>{ const tot={}; let allR=0;
+        Object.values(DATA.owscout_comps||{}).forEach(oc=>{ const sc=oc&&oc.scout; if(!sc||!sc.hero_pool) return;
+          const r=sc.rounds||0; if(!r) return; allR+=r;
+          sc.hero_pool.forEach(x=>{ tot[x.hero]=(tot[x.hero]||0)+((x.pick_rate||0)*r); }); });
+        const out={}; if(allR) for(const k in tot) out[k]=tot[k]/allR; return out; })();
+
       const rows=pool.filter(h=>(h.pick_rate||0)>=0.25).map(h=>{
         const seat=HERO_SEAT[h.hero]||h.role||'?';
         const backup=(bySeat[seat]||[]).find(x=>x.hero!==h.hero)||null;
@@ -1705,24 +1716,30 @@ function renderScoutBody(t){
           let w=0,l=0; (br.opens||[]).forEach(o=>{w+=o.wins;l+=o.losses;});
           banned={games:br.games,w,l};
         }
-        // Transparent verdict: they lean on it AND the same seat has no strong
-        // captured backup -> expensive. Backup nearly as played -> cheap.
         const share=h.pick_rate||0, bshare=backup?(backup.pick_rate||0):0;
-        const verdict=(share>=0.6&&bshare<0.3)?['expensive','var(--good)']
-                     :(bshare>=share*0.7)?['cheap','var(--bad)']
-                     :['moderate','var(--mid)'];
-        return {h,seat,backup,banned,share,verdict};
+        const meta=metaRate[h.hero]||0;
+        const lift= meta>0 ? share/meta : (share>0?99:1);   // how much MORE than the field they run it
+        const staple= meta>=0.5;                            // run by ~half+ of the division = must-play
+        // A ban is worth it only if they lean on it DISTINCTIVELY (far above the
+        // field) and the seat has no practiced fallback. A must-play staple they
+        // don't run more than anyone else is a wash — banning denies it to us too.
+        let verdict;
+        if(staple && lift<1.3)                          verdict=['meta','var(--faint)'];
+        else if(share>=0.5 && bshare<0.3 && lift>=1.3)  verdict=['expensive','var(--good)'];
+        else if(bshare>=share*0.7)                      verdict=['cheap','var(--bad)'];
+        else                                            verdict=['moderate','var(--mid)'];
+        return {h,seat,backup,banned,share,meta,lift,verdict};
       }).sort((a,b)=>{
-        const rank=v=>v==='expensive'?0:v==='moderate'?1:2;
-        return rank(a.verdict[0])-rank(b.verdict[0])||b.share-a.share;
+        const rank=v=>v==='expensive'?0:v==='moderate'?1:v==='meta'?2:3;
+        return rank(a.verdict[0])-rank(b.verdict[0])||b.lift-a.lift||b.share-a.share;
       });
 
       if(rows.length){
         w.appendChild(el(sectionH('Ban planner',
-          `<span class="note">what a ban would cost them - lean + same-seat backup + history</span>`)));
+          `<span class="note">bans that hurt THEM specifically — heroes they run far more than the field, with a weak fallback. Meta staples everyone runs rank last (banning them is a wash).</span>`)));
         const card=el(`<div class="card"></div>`);
-        rows.slice(0,8).forEach(({h,seat,backup,banned,share,verdict})=>{
-          const parts=[`${Math.round(share*100)}% of rounds`,
+        rows.slice(0,8).forEach(({h,seat,backup,banned,share,meta,verdict})=>{
+          const parts=[`${Math.round(share*100)}% of their rounds <span class="faint">· league ${Math.round(meta*100)}%</span>`,
                        `<span class="faint">${esc(seat)}</span>`];
           parts.push(backup
             ?`backup: ${heroIcon(backup.hero)} ${esc(backup.hero)} <span class="faint">${Math.round((backup.pick_rate||0)*100)}%</span>`
@@ -1731,7 +1748,7 @@ function renderScoutBody(t){
           card.appendChild(el(`<div class="crow"><span>${heroChip(h.hero)} <span class="faint">·</span> ${parts.join(' <span class="faint">·</span> ')}</span>`+
             `<span class="rec">${pill('ban: '+verdict[0],verdict[1])}</span></div>`));
         });
-        card.appendChild(el(`<p class="note" style="margin:8px 0 0">"expensive" = they lean on it and the seat has no practiced fallback. Verdicts summarise the shown numbers - check the components on thin data.</p>`));
+        card.appendChild(el(`<p class="note" style="margin:8px 0 0">"expensive" = they run it far more than the division AND have no practiced fallback, so banning disrupts them specifically. "meta" = everyone runs it, so banning is a wash. Verdicts summarise the shown numbers — check them on thin data.</p>`));
         w.appendChild(card);
       }
     }
