@@ -2110,13 +2110,30 @@ function renderSim(){
   wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from recent form: the team on the clock <b>picks the map</b> and <b>bans first</b>. Change any map or ban from its dropdown and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
-  // Most-picked available map for a team in the allowed modes (Control on G1, never after).
-  function autoMap(model, g1, used){
-    const allowed=g1?['Control']:MODES.filter(x=>x!=='Control');
-    let best=null,bestN=-1;
-    Object.keys(pool).forEach(mp=>{ if(used.has(mp)||!allowed.includes(pool[mp]))return;
-      const n=model.pick[mp]||0; if(n>bestN){bestN=n;best=mp;} });
-    return best;
+  // Division map tendencies — the fallback when a team has no pick history for a
+  // mode (common on G1 Control in a short window). Every game IS map-picked by a
+  // team (the loser of the previous map; G1 by the first-pick team), so an empty
+  // team window means "we don't know THEIR preference", not "nobody picks here".
+  const divPick={}, divPlay={};
+  D().matches.forEach(m=>m.games.forEach(g=>{ if(!g.map)return; inc(divPlay,g.map); if(g.map_picked_by) inc(divPick,g.map); }));
+  // Rank a map for a picker: their recent picks, then their season picks, then the
+  // division's picks, then raw plays — so the top suggestion is always meaningful.
+  const mapKey=(mp,mw,mf)=>[(mw.pick[mp]||0),(mf.pick[mp]||0),(divPick[mp]||0),(divPlay[mp]||0)];
+  const cmpMap=(a,b,mw,mf)=>{ const ka=mapKey(a,mw,mf),kb=mapKey(b,mw,mf);
+    for(let i=0;i<ka.length;i++){ if(kb[i]!==ka[i]) return kb[i]-ka[i]; } return a.localeCompare(b); };
+  // Modes are one-per-series (validated in-data: 0/984 series repeat a mode). G1
+  // is Control; afterwards any non-Control mode not yet played this line — and if
+  // all are used (a deep Bo7), a repeat is allowed.
+  function allowedCatsFor(g1, used){
+    if(g1) return ['Control'];
+    const usedCats=new Set([...used].map(mp=>pool[mp]));
+    const nc=MODES.filter(x=>x!=='Control'), fresh=nc.filter(x=>!usedCats.has(x));
+    return fresh.length? fresh : nc;
+  }
+  function autoMap(mw, mf, cats, used){
+    const avail=Object.keys(pool).filter(mp=>!used.has(mp)&&cats.includes(pool[mp]));
+    avail.sort((a,b)=>cmpMap(a,b,mw,mf));
+    return avail[0]||null;
   }
   const autoBan=(model,map,illegal)=>{ const s=banSuggest(model,map,illegal); return s.length?s[0].hero:null; };
   // Signature marker for a team's ban: banned well above the division baseline.
@@ -2124,16 +2141,15 @@ function renderSim(){
     const tot=Object.values(model.bansAll).reduce((a,b)=>a+b,0)||1;
     const lift=dbase.all[hero]?((model.bansAll[hero]||0)/tot)/dbase.all[hero]:0;
     return lift>=1.5?`<span class="pp" style="color:var(--good)">★×${lift.toFixed(1)}</span>`:''; }
-  // Compact map <select>, grouped by mode, counts shown, excludes maps used up the line.
-  function mapSelect(g1, used, model, current, onPick){
-    const allowed=g1?['Control']:MODES.filter(x=>x!=='Control');
+  // Compact map <select>, grouped by allowed mode, ranked by the same tiers,
+  // excludes modes/maps already used up the line.
+  function mapSelect(cats, used, mw, mf, current, onPick){
     const s=el(`<select class="herosel" style="min-width:170px"></select>`);
-    allowed.forEach(cat=>{
-      const maps=Object.keys(pool).filter(mp=>pool[mp]===cat&&(!used.has(mp)||mp===current))
-        .map(mp=>({mp,n:model.pick[mp]||0})).sort((a,b)=>b.n-a.n||a.mp.localeCompare(b.mp));
+    cats.forEach(cat=>{
+      const maps=Object.keys(pool).filter(mp=>pool[mp]===cat&&(!used.has(mp)||mp===current)).sort((a,b)=>cmpMap(a,b,mw,mf));
       if(!maps.length) return;
       const og=el(`<optgroup label="${esc(cat)}"></optgroup>`);
-      maps.forEach(d=>og.appendChild(el(`<option value="${esc(d.mp)}" ${d.mp===current?'selected':''}>${esc(d.mp)}${d.n?` · ${d.n}×`:''}</option>`)));
+      maps.forEach(mp=>{ const n=mw.pick[mp]||0; og.appendChild(el(`<option value="${esc(mp)}" ${mp===current?'selected':''}>${esc(mp)}${n?` · ${n}×`:''}</option>`)); });
       s.appendChild(og);
     });
     s.onchange=()=>onPick(s.value||null);
@@ -2145,6 +2161,8 @@ function renderSim(){
     body.innerHTML='';
     if(SIM_A===SIM_B){ body.appendChild(el(`<p class="note" style="margin-top:14px">Pick two different teams.</p>`)); return; }
     const A=simModel(SIM_A,SIM_RECENT), B=simModel(SIM_B,SIM_RECENT), modelOf=ab=>ab==='A'?A:B, target=SIM_BO;
+    // Full-season models back the suggestion when the recent window is silent.
+    const Af=simModel(SIM_A,0), Bf=simModel(SIM_B,0), modelFull=ab=>ab==='A'?Af:Bf;
     // Transparent about the window: show how many recent maps actually informed each side.
     const win=SIM_RECENT>0?`most recent ${SIM_RECENT} maps`:'the full season';
     body.appendChild(el(`<p class="note" style="margin:4px 2px 0">Pre-fills use ${win} — <b>${esc(SIM_A)}</b> ${A.ngames} map${A.ngames===1?'':'s'} · <b>${esc(SIM_B)}</b> ${B.ngames} map${B.ngames===1?'':'s'}.</p>`));
@@ -2164,12 +2182,20 @@ function renderSim(){
       card.appendChild(el(`<div class="snhd"><span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b> pick &amp; ban first`+
         `<span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}${g1?' · G1 Control':''}</span></div>`));
 
-      // map (auto unless a legal override exists)
-      const allowedCats=g1?['Control']:MODES.filter(x=>x!=='Control');
-      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(modelOf(picker),g1,used);
+      // map (auto unless a legal override exists), one map per mode down the line
+      const mw=modelOf(picker), mf=modelFull(picker);
+      const allowedCats=allowedCatsFor(g1,used);
+      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mw,mf,allowedCats,used);
       const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
-      mrow.appendChild(mapSelect(g1,used,modelOf(picker),map,mp=>setOv(path,{map:mp,b1:null,b2:null})));
-      if(map) mrow.appendChild(el(`<span class="pp">${esc(pool[map]||'')}${modelOf(picker).pick[map]?` · picked ${modelOf(picker).pick[map]}×`:' · never picked'}</span>`));
+      mrow.appendChild(mapSelect(allowedCats,used,mw,mf,map,mp=>setOv(path,{map:mp,b1:null,b2:null})));
+      if(map){
+        const tp=mw.pick[map]||0, tpf=mf.pick[map]||0, dp=divPick[map]||0;
+        // Say WHY this map is the suggestion, cascading to the league default so a
+        // silent recent window never reads as "never picked".
+        const basis = tp? `picked ${tp}× in window` : tpf? `picked ${tpf}× this season`
+          : dp? `${esc(nameOf(picker))} hasn't — league default` : 'no pick history';
+        mrow.appendChild(el(`<span class="pp">${esc(pool[map]||'')} · ${basis}</span>`));
+      }
       card.appendChild(mrow);
 
       let b1=null,b2=null;
