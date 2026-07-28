@@ -991,6 +991,7 @@ let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
 let SIM_A=null, SIM_B=null, SIM_FIRST='A';  // draft simulator state
 let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) -> {map,b1,b2} overrides
 let SIM_BO=2;       // wins needed: 2 = Bo3 (default), 3 = Bo5
+let SIM_RECENT=6;   // draft-sim form window: use each team's most recent N maps (0 = full season)
 
 function gotoScout(team){
   // If the team isn't in the active view (e.g. click from a combined view),
@@ -2029,16 +2030,23 @@ function renderPlayers(){
   return wrap;
 }
 
-function simModel(team){
+// Map-pick and ban tendencies for a team. limitGames>0 windows to that many of
+// the team's MOST RECENT maps (newest match first, then latest map in it) so a
+// shifting meta isn't buried under stale games; 0/undefined uses the full season.
+function simModel(team, limitGames){
   const pick={}, banByMap={}, bansAll={};
+  const games=[];
   D().matches.forEach(m=>{
     const side=m.f1===team?'faction1':(m.f2===team?'faction2':null); if(!side)return;
-    m.games.forEach(g=>{ if(!g.map)return;
-      if(g.map_picked_by===team) inc(pick,g.map);
-      g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{ (banByMap[g.map]=banByMap[g.map]||{}); inc(banByMap[g.map],b.hero); inc(bansAll,b.hero); });
-    });
+    m.games.forEach(g=>{ if(g.map) games.push({g,at:m.finished_at||'',gno:g.game_no||0}); });
   });
-  return {team,pick,banByMap,bansAll};
+  games.sort((a,b)=> (a.at<b.at?1:a.at>b.at?-1:0) || (b.gno-a.gno));   // newest first
+  const use = (limitGames>0)? games.slice(0,limitGames) : games;
+  use.forEach(({g})=>{
+    if(g.map_picked_by===team) inc(pick,g.map);
+    g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{ (banByMap[g.map]=banByMap[g.map]||{}); inc(banByMap[g.map],b.hero); inc(bansAll,b.hero); });
+  });
+  return {team,pick,banByMap,bansAll,ngames:use.length};
 }
 function divMaps(){ const s={}; D().matches.forEach(m=>m.games.forEach(g=>{ if(g.map) s[g.map]=g.map_category||MAP_CAT[g.map]||''; })); return s; }
 // Ranked ban suggestions for a team on a map: on-map history first, then overall; skip illegal heroes.
@@ -2086,6 +2094,11 @@ function renderSim(){
   const bo=el(`<div class="wsel"></div>`);
   [['Bo3',2],['Bo5',3]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;draw();}; bo.append(b); });
   ctl.appendChild(bo);
+  ctl.appendChild(el(`<label title="Only use each team's most recent maps, so a shifting meta isn't drowned out by stale games.">Form window</label>`));
+  const rw=el(`<select style="min-width:132px" title="Only use each team's most recent maps."></select>`);
+  [['Last 6 games',6],['Last 12 games',12],['Full season',0]].forEach(([lbl,v])=>rw.appendChild(el(`<option value="${v}" ${SIM_RECENT===v?'selected':''}>${lbl}</option>`)));
+  rw.onchange=()=>{SIM_RECENT=+rw.value;draw();};
+  ctl.appendChild(rw);
   const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset edits</span>`); reset.onclick=()=>{SIM_TREE={};draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
@@ -2126,7 +2139,10 @@ function renderSim(){
   function draw(){
     body.innerHTML='';
     if(SIM_A===SIM_B){ body.appendChild(el(`<p class="note" style="margin-top:14px">Pick two different teams.</p>`)); return; }
-    const A=simModel(SIM_A), B=simModel(SIM_B), modelOf=ab=>ab==='A'?A:B, target=SIM_BO;
+    const A=simModel(SIM_A,SIM_RECENT), B=simModel(SIM_B,SIM_RECENT), modelOf=ab=>ab==='A'?A:B, target=SIM_BO;
+    // Transparent about the window: show how many recent maps actually informed each side.
+    const win=SIM_RECENT>0?`most recent ${SIM_RECENT} maps`:'the full season';
+    body.appendChild(el(`<p class="note" style="margin:4px 2px 0">Pre-fills use ${win} — <b>${esc(SIM_A)}</b> ${A.ngames} map${A.ngames===1?'':'s'} · <b>${esc(SIM_B)}</b> ${B.ngames} map${B.ngames===1?'':'s'}.</p>`));
 
     // Recursively draw the draft at `path` (string of prior winners) plus its two branches.
     // used = maps already taken on this line; banned = {A:Set,B:Set} of each team's earlier bans.
