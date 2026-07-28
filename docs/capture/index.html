@@ -1167,4 +1167,9 @@ document.getElementById('pop').onclick=popout;
 window.addEventListener('pagehide',releaseClaim);            // clean release; the room also frees it when the socket drops
 updateBtns(); loadFeeds();
 connectClaims(); fetchClaims(); setInterval(fetchClaims, 15000);   // WS = instant; always-on 15s poll keeps an open page current without a refresh
+// Self-correcting claim: every few seconds ensure the lock follows the selected
+// code (no-op once it matches). Event-based claims (select/share/snapshot) are
+// instant on the happy path; this guarantees the lock tracks the current code
+// even if an event is missed — so you never have to restart the share to lock it.
+setInterval(maybeClaim, 3000);
 </script></body></html>
