@@ -1265,7 +1265,7 @@ function renderScoutBody(t){
       const ts=tBanTot?n/tBanTot:0, fs=fBanTot?(fBan[h]||0)/fBanTot:0;
       const over=n>=2 && ts>=fs*1.6 && (ts-fs)>=0.05;   // a real team-specific tell, not the meta
       c2.appendChild(el(`<div class="crow"><span>${heroChip(h)}${opener===h?` <span class="opener" title="their most common first ban">1st ban</span>`:''}</span>`+
-        `<span class="rec">${n}x${over?`<span class="bvs" title="${esc(t.team)} bans this in ${Math.round(ts*100)}% of their games; the league average is ${Math.round(fs*100)}%">▲ ${Math.round(ts*100)}% vs ${Math.round(fs*100)}% league</span>`:''}</span></div>`));
+        `<span class="rec">${n}x${over?`<span class="bvs" title="A ban that's distinctive to ${esc(t.team)} — they ban it in ${Math.round(ts*100)}% of their games, vs ${Math.round(fs*100)}% for most teams">signature</span>`:''}</span></div>`));
     });
     else c2.appendChild(el(`<p class="note" style="margin:2px 0 0">No bans in window.</p>`));
     cols.appendChild(c2);
@@ -1381,8 +1381,8 @@ function renderScoutBody(t){
     const tells=[];
     const bb=divBanBaseline();
     const sigBan=banLiftRows(t.bans, bb.all, 3).filter(r=>r.lift&&r.lift>=1.5)[0];
-    if(sigBan) tells.push(`<span class="then">ban</span> bans ${heroChip(sigBan.hero)} far more than most `+
-      `<span class="faint">${sigBan.lift.toFixed(1)}× the league average · ${sigBan.n} bans</span>`);
+    if(sigBan) tells.push(`<span class="then">ban</span> bans ${heroChip(sigBan.hero)} far more than most teams `+
+      `<span class="faint" title="${sigBan.lift.toFixed(1)}× as often as the average team">${sigBan.n} bans</span>`);
     const br=((scout&&scout.ban_response)||[]).filter(b=>b.games>=2 && (b.opens||[]).length)[0];
     if(br) tells.push(`<span class="then">when ${esc(br.banned)} banned</span> opens ${compRow(br.opens[0].heroes)} `+
       `<span class="faint">${br.games} games</span>`);
