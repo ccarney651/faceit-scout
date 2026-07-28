@@ -280,6 +280,8 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:7px}
 .tlink{cursor:pointer;border-bottom:1px dotted color-mix(in srgb,var(--accent) 55%,transparent);transition:color .12s}
 .tlink:hover{color:var(--accent)}
+.tscout{cursor:pointer}
+.tscout:hover{text-decoration:underline;text-underline-offset:2px}
 .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
   padding:1px 6px;border-radius:5px;background:var(--surface2);color:var(--faint)}
 .tag.warn{background:color-mix(in srgb,var(--mid) 20%,transparent);color:var(--mid)}
@@ -662,8 +664,13 @@ function segOrder(pg){
 function matchCard(m){
   const c=el(`<div class="card match"></div>`);
   const w1=m.winner==='faction1',w2=m.winner==='faction2';
-  c.appendChild(el(`<div class="hd"><div class="teams"><span class="${w1?'win':'lose'}">${esc(m.f1||'?')}</span>`+
-    `<span class="score">${esc(m.series)}</span><span class="${w2?'win':'lose'}">${esc(m.f2||'?')}</span></div>`+
+  // Team names double as click-to-scout links (hover-only underline — a resting
+  // dotted line under every name would clutter this dense list).
+  const teamName=(name,cls)=> name
+    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${esc(name)}</span>`
+    : `<span class="${cls}">?</span>`;
+  c.appendChild(el(`<div class="hd"><div class="teams">${teamName(m.f1,w1?'win':'lose')}`+
+    `<span class="score">${esc(m.series)}</span>${teamName(m.f2,w2?'win':'lose')}</div>`+
     `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
     // When it was played: a comp read from a 6-week-old match is weaker evidence
     // than last week's, and nothing else on the card says how old it is.
@@ -967,7 +974,20 @@ let PLAYERS_ROLE='All';        // (unused since the Players tab became a directo
 let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
 let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
 
-function gotoScout(team){ SCOUT_TEAM=team; show('scout'); }
+function gotoScout(team){
+  // If the team isn't in the active view (e.g. click from a combined view),
+  // switch to the single division that knows it — same lookup the hash nav uses.
+  if(!(D().team_names||[]).includes(team)){
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        const dsel=document.getElementById('division'); if(dsel) dsel.value=v.id;
+        break;
+      }
+    }
+  }
+  SCOUT_TEAM=team; show('scout');
+}
 
 function renderOverview(){
   const s=D().summary, wrap=el(`<div></div>`);
