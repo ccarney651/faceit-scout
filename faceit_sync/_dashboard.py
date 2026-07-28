@@ -174,6 +174,22 @@ table.blocks thead th:hover{color:var(--faint)}
 .wbtn.selB{background:color-mix(in srgb,var(--bad) 82%,#000);color:#fff;border-color:transparent}
 .simnext{font-size:11.5px;color:var(--faint);margin-top:8px}
 .simscore{font-variant-numeric:tabular-nums;font-weight:750}
+/* scenario tree */
+.stree{margin-top:12px}
+.stnode{min-width:0}
+.snode{border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--surface)}
+.snode.g1{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent) inset}
+.snhd{font-weight:680;font-size:13px;margin-bottom:5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.snrow{display:flex;gap:7px;align-items:center;margin:5px 0;flex-wrap:wrap}
+.snrow .rl2{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:88px;flex:none;font-weight:700}
+.skids{margin:7px 0 0 9px;padding-left:15px;border-left:2px solid var(--line2)}
+.sbranch{margin-top:9px}
+.blab{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:750;padding:2px 10px;border-radius:999px;margin-bottom:6px;font-variant-numeric:tabular-nums}
+.blab.awin{background:var(--accent-weak);color:var(--accent)}
+.blab.bwin{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.sterm{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:720;padding:6px 12px;border-radius:9px;border:1px solid var(--line2);background:var(--surface2);font-variant-numeric:tabular-nums}
+.sterm.awin{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.sterm.bwin{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
 
 /* chips / badges */
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
@@ -484,7 +500,7 @@ function recomputeDivision(){
   MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
   SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
   const tn=D().team_names;
-  SIM_A=tn[0]||null; SIM_B=tn[1]||tn[0]||null; SIM_FIRST='A'; SIM_PATH=[];
+  SIM_A=tn[0]||null; SIM_B=tn[1]||tn[0]||null; SIM_FIRST='A'; SIM_TREE={};
   DIV_BAN_BASE=null;                        // ban-lift baseline is per division
 }
 const recent=(arr,lim)=> (lim && lim<arr.length)? arr.slice(0,lim) : arr;
@@ -972,7 +988,9 @@ const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 let PLAYERS_ROLE='All';        // (unused since the Players tab became a directory)
 let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
-let SIM_A=null, SIM_B=null, SIM_FIRST='A', SIM_PATH=[];  // draft simulator state
+let SIM_A=null, SIM_B=null, SIM_FIRST='A';  // draft simulator state
+let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) -> {map,b1,b2} overrides
+let SIM_BO=2;       // wins needed: 2 = Bo3 (default), 3 = Bo5
 
 function gotoScout(team){
   // If the team isn't in the active view (e.g. click from a combined view),
@@ -2049,108 +2067,132 @@ function heroSelect(current, illegal, onPick){
 function renderSim(){
   const wrap=el(`<div></div>`), tn=D().team_names, pool=divMaps();
   if(SIM_A==null){ SIM_A=tn[0]; SIM_B=tn[1]||tn[0]; }
-  const nameOf=ab=>ab==='A'?SIM_A:SIM_B;
+  const nameOf=ab=>ab==='A'?SIM_A:SIM_B, opp=ab=>ab==='A'?'B':'A';
+  const MODES=['Control','Escort','Flashpoint','Hybrid','Push'];
+  const dbase=divBanBaseline();
 
   const ctl=el(`<div class="card controls" style="flex-wrap:wrap;gap:12px 16px"></div>`);
   const mkSel=(val,on)=>{ const s=el(`<select style="min-width:170px"></select>`); tn.forEach(n=>s.appendChild(el(`<option ${n===val?'selected':''}>${esc(n)}</option>`))); s.onchange=()=>on(s.value); return s; };
   ctl.appendChild(el(`<label>Team A</label>`));
-  ctl.appendChild(mkSel(SIM_A,v=>{SIM_A=v;SIM_PATH=[];draw();}));
+  ctl.appendChild(mkSel(SIM_A,v=>{SIM_A=v;SIM_TREE={};draw();}));
   ctl.appendChild(el(`<span class="faint" style="font-weight:800">vs</span>`));
   ctl.appendChild(el(`<label>Team B</label>`));
-  ctl.appendChild(mkSel(SIM_B,v=>{SIM_B=v;SIM_PATH=[];draw();}));
+  ctl.appendChild(mkSel(SIM_B,v=>{SIM_B=v;SIM_TREE={};draw();}));
   ctl.appendChild(el(`<label title="This team picks the Game 1 map and takes the first ban.">First pick &amp; ban</label>`));
   const fb=el(`<div class="wsel"></div>`);
-  const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_PATH=[];draw();}; return b; };
+  const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_TREE={};draw();}; return b; };
   fb.append(fbBtn('A'),fbBtn('B')); ctl.appendChild(fb);
-  const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset draft</span>`); reset.onclick=()=>{SIM_PATH=[];draw();};
+  ctl.appendChild(el(`<label title="Wins needed to take the series.">Format</label>`));
+  const bo=el(`<div class="wsel"></div>`);
+  [['Bo3',2],['Bo5',3]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;draw();}; bo.append(b); });
+  ctl.appendChild(bo);
+  const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset edits</span>`); reset.onclick=()=>{SIM_TREE={};draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
-  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Plan a Bo5 draft by hand. Each map, the team on the clock <b>picks the map</b> and <b>bans first</b>, then the other team bans. Click a suggested hero (from that team's history) or choose <b>any hero</b> from the dropdown — e.g. ban a pocket pick so the enemy can't take it. Mark who wins each map to continue (the loser picks next). A team can't repeat its own bans across the series; used heroes drop out of its list automatically. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
+  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Every map <b>branches</b> into who wins it, so you see the whole series at once — win → 2 lines, then 4, then 8. Each node is <b>pre-filled</b> from the teams' tendencies: the team on the clock <b>picks the map</b> (the loser picks next) and <b>bans first</b>. Change any map or ban from its dropdown and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one this team bans well above the division rate.</p>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
+
+  // Most-picked available map for a team in the allowed modes (Control on G1, never after).
+  function autoMap(model, g1, used){
+    const allowed=g1?['Control']:MODES.filter(x=>x!=='Control');
+    let best=null,bestN=-1;
+    Object.keys(pool).forEach(mp=>{ if(used.has(mp)||!allowed.includes(pool[mp]))return;
+      const n=model.pick[mp]||0; if(n>bestN){bestN=n;best=mp;} });
+    return best;
+  }
+  const autoBan=(model,map,illegal)=>{ const s=banSuggest(model,map,illegal); return s.length?s[0].hero:null; };
+  // Signature marker for a team's ban: banned well above the division baseline.
+  function sigMark(model,hero){ if(!hero)return '';
+    const tot=Object.values(model.bansAll).reduce((a,b)=>a+b,0)||1;
+    const lift=dbase.all[hero]?((model.bansAll[hero]||0)/tot)/dbase.all[hero]:0;
+    return lift>=1.5?`<span class="pp" style="color:var(--good)">★×${lift.toFixed(1)}</span>`:''; }
+  // Compact map <select>, grouped by mode, counts shown, excludes maps used up the line.
+  function mapSelect(g1, used, model, current, onPick){
+    const allowed=g1?['Control']:MODES.filter(x=>x!=='Control');
+    const s=el(`<select class="herosel" style="min-width:170px"></select>`);
+    allowed.forEach(cat=>{
+      const maps=Object.keys(pool).filter(mp=>pool[mp]===cat&&(!used.has(mp)||mp===current))
+        .map(mp=>({mp,n:model.pick[mp]||0})).sort((a,b)=>b.n-a.n||a.mp.localeCompare(b.mp));
+      if(!maps.length) return;
+      const og=el(`<optgroup label="${esc(cat)}"></optgroup>`);
+      maps.forEach(d=>og.appendChild(el(`<option value="${esc(d.mp)}" ${d.mp===current?'selected':''}>${esc(d.mp)}${d.n?` · ${d.n}×`:''}</option>`)));
+      s.appendChild(og);
+    });
+    s.onchange=()=>onPick(s.value||null);
+    return s;
+  }
+  function setOv(path,patch){ SIM_TREE[path]=Object.assign({},SIM_TREE[path],patch); draw(); }
 
   function draw(){
     body.innerHTML='';
     if(SIM_A===SIM_B){ body.appendChild(el(`<p class="note" style="margin-top:14px">Pick two different teams.</p>`)); return; }
-    const A=simModel(SIM_A), B=simModel(SIM_B), modelOf=ab=>ab==='A'?A:B;
-    const ledgerCard=el(`<div class="card" style="margin-top:10px"></div>`); body.appendChild(ledgerCard);
-    const tree=el(`<div></div>`); body.appendChild(tree);
+    const A=simModel(SIM_A), B=simModel(SIM_B), modelOf=ab=>ab==='A'?A:B, target=SIM_BO;
 
-    const banned={A:[],B:[]};                         // {hero,game,map} per team, built as we walk
-    const setOf=ab=>new Set(banned[ab].map(x=>x.hero));
-    let sa=0,sb=0; const used=new Set();
-    for(let i=0;i<5 && sa<3 && sb<3;i++){
-      const picker = i===0? SIM_FIRST : (SIM_PATH[i-1].winner==='A'?'B':'A');
-      const other = picker==='A'?'B':'A';
-      const node = SIM_PATH[i]||(SIM_PATH[i]={map:null,b1:null,b2:null,winner:null});
-      const blk=el(`<div class="simblock"></div>`);
-      blk.appendChild(el(`<div class="bh"><span class="gno">M${i+1}</span> <b>${esc(nameOf(picker))}</b> picks &amp; bans first <span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}</span></div>`));
-      // map pick — grouped by mode. Game 1 is always Control; later maps are never Control.
-      const pk=modelOf(picker), g1=(i===0);
-      const MODES=['Control','Escort','Flashpoint','Hybrid','Push'];
-      const allowed=g1?['Control']:MODES.filter(x=>x!=='Control');
-      const mrow=el(`<div class="simrow" style="align-items:flex-start"></div>`);
-      mrow.appendChild(el(`<span class="rl">Map pick${g1?'<br><span style="text-transform:none;letter-spacing:0;font-weight:400">G1 = Control</span>':''}</span>`));
-      const groups=el(`<div style="display:flex;flex-direction:column;gap:7px;flex:1;min-width:0"></div>`);
-      allowed.forEach(cat=>{
-        const maps=Object.keys(pool).filter(mp=>!used.has(mp)&&pool[mp]===cat)
-          .map(mp=>({map:mp,n:pk.pick[mp]||0})).sort((a,b)=>b.n-a.n||a.map.localeCompare(b.map));
-        if(!maps.length) return;
-        const grow=el(`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>`);
-        grow.appendChild(el(`<span class="modelbl">${esc(cat)}</span>`));
-        maps.forEach(d=>{ const o=el(`<span class="opt ${node.map===d.map?'sel':''} ${d.n<1?'dim':''}">${esc(d.map)}${d.n?` <span class="pp">picked ${d.n}×</span>`:''}</span>`);
-          o.onclick=()=>setMap(i,d.map); grow.appendChild(o); });
-        groups.appendChild(grow);
-      });
-      mrow.appendChild(groups); blk.appendChild(mrow);
-      if(node.map){
-        used.add(node.map);
-        // two ban rows: picker bans first, then the other team.
-        [['b1',picker],['b2',other]].forEach(([key,tab])=>{
-          const illegal=setOf(tab);
-          if(node[key] && illegal.has(node[key])) node[key]=null;      // heal an illegal repeat after an edit
-          const row=el(`<div class="simrow"><span class="rl">${esc(nameOf(tab))} ban</span></div>`);
-          const sugg=banSuggest(modelOf(tab), node.map, illegal);
-          // Signature marker: a hero this team bans well above the division rate
-          // is a rehearsed, intentional ban — worth pre-empting.
-          const tm=modelOf(tab), teamTot=Object.values(tm.bansAll).reduce((a,b)=>a+b,0)||1, dbase=divBanBaseline();
-          sugg.forEach(s2=>{
-            const lift=dbase.all[s2.hero]?(s2.all/teamTot)/dbase.all[s2.hero]:0;
-            const sig=lift>=1.5?` <span class="pp" style="color:var(--good)">★×${lift.toFixed(1)}</span>`:'';
-            const o=el(`<span class="opt ${node[key]===s2.hero?'sel':''} ${(s2.onMap+s2.all)<2?'dim':''}">${heroChip(s2.hero)}<span class="pp">${s2.onMap?s2.onMap+'× here':s2.all+'× total'}</span>${sig}</span>`);
-            o.onclick=()=>{node[key]=s2.hero;draw();}; row.appendChild(o); });
-          row.appendChild(heroSelect(node[key], illegal, h=>{node[key]=h;draw();}));
-          if(node[key] && !sugg.some(x=>x.hero===node[key]))
-            row.appendChild(el(`<span class="opt sel">${heroChip(node[key])}<span class="pp">manual</span></span>`));
-          blk.appendChild(row);
-        });
-        if(node.b1) banned[picker].push({hero:node.b1,game:i+1,map:node.map});
-        if(node.b2) banned[other].push({hero:node.b2,game:i+1,map:node.map});
-        // map winner (drives who picks next)
-        const wr=el(`<div class="simrow"><span class="rl">Map winner</span></div>`);
-        const wa=el(`<span class="wbtn ${node.winner==='A'?'selA':''}">${esc(SIM_A)}</span>`); wa.onclick=()=>setWinner(i,'A');
-        const wb=el(`<span class="wbtn ${node.winner==='B'?'selB':''}">${esc(SIM_B)}</span>`); wb.onclick=()=>setWinner(i,'B');
-        wr.append(wa,wb); blk.appendChild(wr);
-        if(node.winner){ if(node.winner==='A')sa++; else sb++;
-          blk.appendChild(el(`<div class="simnext">↳ ${esc(nameOf(node.winner==='A'?'B':'A'))} lost — they pick next${(sa>=3||sb>=3)?' · series decided':''}.</div>`)); }
+    // Recursively draw the draft at `path` (string of prior winners) plus its two branches.
+    // used = maps already taken on this line; banned = {A:Set,B:Set} of each team's earlier bans.
+    function node(path, used, banned){
+      const k=path.length;
+      const sa=[...path].filter(c=>c==='A').length, sb=k-sa;
+      const picker = k===0? SIM_FIRST : opp(path[k-1]);
+      const other = opp(picker);
+      const ov = SIM_TREE[path]||{};
+      const g1 = (k===0);
+
+      const stn=el(`<div class="stnode"></div>`);
+      const card=el(`<div class="snode${g1?' g1':''}"></div>`); stn.appendChild(card);
+      card.appendChild(el(`<div class="snhd"><span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b> pick &amp; ban first`+
+        `<span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}${g1?' · G1 Control':''}</span></div>`));
+
+      // map (auto unless a legal override exists)
+      const allowedCats=g1?['Control']:MODES.filter(x=>x!=='Control');
+      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(modelOf(picker),g1,used);
+      const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
+      mrow.appendChild(mapSelect(g1,used,modelOf(picker),map,mp=>setOv(path,{map:mp,b1:null,b2:null})));
+      if(map) mrow.appendChild(el(`<span class="pp">${esc(pool[map]||'')}${modelOf(picker).pick[map]?` · picked ${modelOf(picker).pick[map]}×`:' · never picked'}</span>`));
+      card.appendChild(mrow);
+
+      let b1=null,b2=null;
+      if(map){
+        const ill1=banned[picker];
+        b1 = (ov.b1 && !ill1.has(ov.b1)) ? ov.b1 : autoBan(modelOf(picker),map,ill1);
+        const r1=el(`<div class="snrow"><span class="rl2">${esc(nameOf(picker))} ban</span></div>`);
+        r1.appendChild(heroSelect(b1, ill1, h=>setOv(path,{b1:h})));
+        if(sigMark(modelOf(picker),b1)) r1.appendChild(el(sigMark(modelOf(picker),b1)));
+        card.appendChild(r1);
+        const ill2=banned[other];
+        b2 = (ov.b2 && !ill2.has(ov.b2)) ? ov.b2 : autoBan(modelOf(other),map,ill2);
+        const r2=el(`<div class="snrow"><span class="rl2">${esc(nameOf(other))} ban</span></div>`);
+        r2.appendChild(heroSelect(b2, ill2, h=>setOv(path,{b2:h})));
+        if(sigMark(modelOf(other),b2)) r2.appendChild(el(sigMark(modelOf(other),b2)));
+        card.appendChild(r2);
       }
-      tree.appendChild(blk);
-      if(!node.map || !node.winner) break;
+
+      // branches: win / lose
+      if(map){
+        const childUsed=new Set(used); childUsed.add(map);
+        ['A','B'].forEach(w=>{
+          const nsa=sa+(w==='A'?1:0), nsb=sb+(w==='B'?1:0), cls=w==='A'?'awin':'bwin';
+          const br=el(`<div class="sbranch"></div>`); stn.appendChild(br);
+          if(nsa>=target||nsb>=target){
+            br.appendChild(el(`<div class="sterm ${cls}">🏆 ${esc(nameOf(w))} win the series ${Math.max(nsa,nsb)}–${Math.min(nsa,nsb)}</div>`));
+          } else {
+            br.appendChild(el(`<div class="blab ${cls}">${esc(nameOf(w))} win · ${nsa}–${nsb}</div>`));
+            const nb={A:new Set(banned.A),B:new Set(banned.B)};
+            if(b1) nb[picker].add(b1);
+            if(b2) nb[other].add(b2);
+            const kids=el(`<div class="skids"></div>`);
+            kids.appendChild(node(path+w, childUsed, nb));
+            br.appendChild(kids);
+          }
+        });
+      }
+      return stn;
     }
-    // series ban ledger (populated after the walk)
-    ledgerCard.appendChild(el(`<p class="eyebrow">Series ban ledger <span class="note" style="text-transform:none;letter-spacing:0">· a team can't repeat its own bans (opponents may)</span></p>`));
-    const grid=el(`<div class="grid cols-2" style="margin-top:6px"></div>`);
-    ['A','B'].forEach(ab=>{ const col=el(`<div></div>`);
-      col.appendChild(el(`<div style="font-weight:680;font-size:13px;margin-bottom:5px">${esc(nameOf(ab))} <span class="faint" style="font-weight:400">· ${banned[ab].length} banned</span></div>`));
-      if(banned[ab].length){ const chips=el(`<div style="display:flex;flex-wrap:wrap;gap:5px"></div>`);
-        banned[ab].forEach(x=>chips.appendChild(el(`<span class="opt" style="cursor:default">${heroChip(x.hero)}<span class="pp">M${x.game}</span></span>`)));
-        col.appendChild(chips);
-      } else col.appendChild(el(`<span class="faint" style="font-size:12.5px">no bans yet</span>`));
-      grid.appendChild(col); });
-    ledgerCard.appendChild(grid);
-    if(sa>=3||sb>=3) body.appendChild(el(`<div class="card" style="margin-top:10px"><b>Series result (your scenario):</b> ${esc(sa>sb?SIM_A:SIM_B)} win ${Math.max(sa,sb)}–${Math.min(sa,sb)}.</div>`));
+
+    const tree=el(`<div class="stree"></div>`);
+    tree.appendChild(node('', new Set(), {A:new Set(),B:new Set()}));
+    body.appendChild(tree);
   }
-  function setMap(i,map){ SIM_PATH.length=i; SIM_PATH[i]={map,b1:null,b2:null,winner:null}; draw(); }
-  function setWinner(i,ab){ SIM_PATH.length=i+1; SIM_PATH[i].winner=ab; draw(); }
   draw();
   return wrap;
 }
