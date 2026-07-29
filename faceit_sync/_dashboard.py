@@ -468,6 +468,11 @@ const esc = (s)=> (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':
 const nf = (n)=> (n==null?'—':Number(n).toLocaleString('en-US'));
 const pctOf = (a,b)=> b? Math.round(100*a/b) : 0;
 const dshort = (s)=> s? String(s).slice(0,10) : '?';
+// Kickoff time in the viewer's local zone, from a UTC ISO string.
+const _DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], _MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtWhen(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) return esc(iso);
+  const p=n=>String(n).padStart(2,'0');
+  return `${_DAYS[d.getDay()]} ${d.getDate()} ${_MON[d.getMonth()]} · ${p(d.getHours())}:${p(d.getMinutes())}`; }
 const inc = (o,k,by=1)=>{ o[k]=(o[k]||0)+by; };
 const rank = (o)=> Object.entries(o).sort((a,b)=>b[1]-a[1]);   // NB: not `top` (window.top is reserved)
 
@@ -920,22 +925,29 @@ function renderPlayoffs(){
   }
   const N=PLAYOFF_QUALIFIERS[tier]||8, teams=D().teams||[], k=nextPow2(N);
   const ubRounds=Math.round(Math.log2(k)), order=seedOrder(k);
-  const po=D().playoffs||[];   // real played series, attached from the playoff championship (empty until it exists)
+  const po=D().playoffs||[];   // real bracket matches (finished + scheduled), attached from the playoff championship (empty until it exists)
 
-  // Real results (once the playoff championship is ingested): each played series,
-  // grouped by bracket round, winner highlighted. Shown above the projection.
+  // Real bracket (once the playoff championship is ingested): every match grouped
+  // by round — finished series with the winner highlighted, and upcoming slots
+  // with their kickoff time (TBD where teams aren't resolved yet). Shown above the
+  // standings-based projection.
   if(po.length){
+    const done=po.filter(m=>m.status==='FINISHED').length, up=po.length-done;
     const rc=el(`<div class="card"></div>`);
-    rc.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — results</p>`));
-    rc.appendChild(el(`<p class="note" style="margin:2px 0 8px">${po.length} series played · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
+    rc.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — bracket</p>`));
+    rc.appendChild(el(`<p class="note" style="margin:2px 0 8px">${done} played${up?` · ${up} upcoming`:''} · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
+    const nm=(n)=> n? teamLink(n) : '<span class="faint">TBD</span>';
     const byRound={}; po.forEach(m=>{const r=m.round||0;(byRound[r]=byRound[r]||[]).push(m);});
     Object.keys(byRound).map(Number).sort((a,b)=>a-b).forEach(rd=>{
       rc.appendChild(el(`<p class="note" style="margin:8px 0 2px"><b>Round ${rd||'—'}</b></p>`));
-      byRound[rd].sort((a,b)=>String(a.finished_at||'').localeCompare(String(b.finished_at||''))).forEach(m=>{
-        const w1=m.winner_team&&m.winner_team===m.f1, w2=m.winner_team&&m.winner_team===m.f2;
-        rc.appendChild(el(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:12.5px">`+
-          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis"><b style="color:${w1?'var(--good)':'var(--fg)'}">${esc(m.f1||'TBD')}</b> <span class="faint">vs</span> <b style="color:${w2?'var(--good)':'var(--fg)'}">${esc(m.f2||'TBD')}</b>${m.forfeit?' <span class="faint">(FF)</span>':''}</span>`+
-          `<span class="st">${esc(m.series||'')}</span></div>`));
+      byRound[rd].sort((a,b)=>String(a.finished_at||a.scheduled_at||'').localeCompare(String(b.finished_at||b.scheduled_at||''))).forEach(m=>{
+        const fin=m.status==='FINISHED';
+        const w1=fin&&m.winner_team&&m.winner_team===m.f1, w2=fin&&m.winner_team&&m.winner_team===m.f2;
+        const right = fin ? `<span class="st">${esc(m.series||'')}</span>`
+                          : `<span class="faint" style="font-size:11.5px">${m.scheduled_at?esc(fmtWhen(m.scheduled_at)):'upcoming'}</span>`;
+        rc.appendChild(el(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:12.5px${fin?'':';opacity:.85'}">`+
+          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis"><b style="color:${w1?'var(--good)':'var(--fg)'}">${nm(m.f1)}</b> <span class="faint">vs</span> <b style="color:${w2?'var(--good)':'var(--fg)'}">${nm(m.f2)}</b>${m.forfeit?' <span class="faint">(FF)</span>':''}</span>`+
+          right+`</div>`));
       });
     });
     wrap.appendChild(rc);
@@ -944,7 +956,7 @@ function renderPlayoffs(){
   const hd=el(`<div class="card"${po.length?' style="margin-top:14px"':''}></div>`);
   hd.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — projected</p>`));
   hd.appendChild(el(`<p style="margin:2px 0 0;font-size:14px">Top <b>${N}</b> · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
-  hd.appendChild(el(`<p class="note" style="margin-top:6px">${po.length?'Real results are shown above; the seeds and bracket below are the standings-based projection.':'Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches have been played yet.'} Format from FACEIT League S8; will re-confirm when S9 brackets are posted.</p>`));
+  hd.appendChild(el(`<p class="note" style="margin-top:6px">${po.length?'The real bracket is shown above; the seeds and bracket below are the standings-based projection.':'Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches exist yet.'} Format from FACEIT League S8; will re-confirm when S9 brackets are posted.</p>`));
   wrap.appendChild(hd);
 
   // Projected seeds
@@ -2464,11 +2476,6 @@ function renderMatches(){
   const upWrap=el(`<div></div>`);
   const list=el(`<div></div>`); wrap.append(bar,upWrap,note,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
-  // Local, human-readable kickoff time from a UTC ISO string.
-  const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  function fmtWhen(iso){ const d=new Date(iso); if(isNaN(d)) return esc(iso);
-    const p=n=>String(n).padStart(2,'0');
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ${p(d.getHours())}:${p(d.getMinutes())}`; }
   function drawUpcoming(q){
     upWrap.innerHTML='';
     let up=(D().upcoming||[]);

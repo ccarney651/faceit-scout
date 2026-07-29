@@ -550,14 +550,24 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             if not reg_cid:
                 continue
             pd = _dashboard_data(db, pcid, attack_cycles=owscout_cycles)
-            series = [
+            # A bracket entry per playoff match — finished (with a result) and
+            # scheduled (upcoming slot). TBD slots (teams not yet resolved) carry
+            # NULL team names. The Playoffs tab lays these out by round.
+            bracket = [
                 {"round": m["round"], "group": m["group"], "f1": m["f1"], "f2": m["f2"],
                  "series": m["series"], "winner_team": m["winner_team"],
-                 "finished_at": m["finished_at"], "best_of": m["best_of"], "forfeit": m["forfeit"]}
-                for m in pd["matches"] if not m["walkover"]
+                 "finished_at": m["finished_at"], "best_of": m["best_of"],
+                 "forfeit": m["forfeit"], "status": "FINISHED"}
+                for m in pd["matches"]
+            ] + [
+                {"round": u["round"], "group": u["group"], "f1": u["f1"], "f2": u["f2"],
+                 "series": None, "winner_team": None, "finished_at": None,
+                 "best_of": u["best_of"], "forfeit": False,
+                 "scheduled_at": u["scheduled_at"], "status": u["status"]}
+                for u in pd["upcoming"]
             ]
-            if series:
-                divisions[reg_cid].setdefault("playoffs", []).extend(series)
+            if bracket:
+                divisions[reg_cid].setdefault("playoffs", []).extend(bracket)
 
     # Build the switcher "views": every division present in a region (tiers
     # strongest-first, see TIERS), then a merged "Combined" of all of them — so

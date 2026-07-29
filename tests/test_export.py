@@ -127,6 +127,54 @@ def test_external_data_build_is_a_shell_plus_datajson(db: Database, tmp_path) ->
     assert len(data["divisions"]) == 1 and data["views"]
 
 
+def _insert_match(db, cid, mid, status, f1, f2, winner, sched, fin, rnd, games) -> None:
+    db.conn.execute(
+        "INSERT OR REPLACE INTO matches(id,championship_id,round,group_no,status,best_of,"
+        "scheduled_at,started_at,finished_at,faction1_team_id,faction2_team_id,winner_faction,"
+        "forfeit,fetched_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
+        (mid, cid, rnd, 1, status, 5, sched, None, fin, f1, f2, winner, "2026-07-29T00:00:00Z"))
+    for i, wf in enumerate(games, 1):
+        db.conn.execute(
+            "INSERT OR REPLACE INTO games(match_id,game_no,map_guid,map_category,winner_faction,"
+            "was_restarted) VALUES(?,?,?,?,?,0)", (mid, i, "m1", "Control", wf))
+
+
+def test_playoff_bracket_attaches_finished_and_scheduled(db: Database) -> None:
+    """A "… - Playoffs" championship's matches — played AND upcoming — attach to
+    the matching region+tier division as its bracket, without a 4th view."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo"), ("t3", "Cabra"), ("t4", "Delta")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    reg, po = "reg-emea-master", "po-emea-master"
+    c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,?)",
+              (reg, "S9 EMEA Master Central - Regular Season", "ow2", "EMEA"))
+    c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,?)",
+              (po, "S9 EMEA Master Central - Playoffs", "ow2", "EMEA"))
+    _insert_match(db, reg, "r1", "FINISHED", "t1", "t2", "faction1", None,
+                  "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    _insert_match(db, po, "p1", "FINISHED", "t1", "t4", "faction1", None,
+                  "2026-07-29T20:00:00Z", 1, ["faction1", "faction2", "faction1"])   # 2-1
+    _insert_match(db, po, "p2", "SCHEDULED", "t1", "t3", None,
+                  "2026-08-02T18:00:00Z", None, 2, [])
+    db.conn.commit()
+
+    buf = io.StringIO()
+    export_html(db, buf, only_region="emea")
+    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+    # The playoff championship is NOT its own view — only the regular division.
+    assert not any("Playoffs" in v["label"] for v in data["views"])
+    div = next(d for d in data["divisions"].values()
+               if "Master" in d["summary"]["championship"] and "Playoffs" not in d["summary"]["championship"])
+    po_list = div.get("playoffs") or []
+    assert sorted(x["status"] for x in po_list) == ["FINISHED", "SCHEDULED"]
+    fin = next(x for x in po_list if x["status"] == "FINISHED")
+    assert fin["series"] == "2-1" and fin["winner_team"] == "Alpha"
+    sch = next(x for x in po_list if x["status"] == "SCHEDULED")
+    assert sch["scheduled_at"] == "2026-08-02T18:00:00Z" and sch["round"] == 2 and sch["f2"] == "Cabra"
+
+
 def test_is_playoff_classifies_championships() -> None:
     """Playoff championships are split out of the tier views/standings and attached
     to their division as results; regular-season ones are not."""
