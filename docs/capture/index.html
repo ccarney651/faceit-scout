@@ -16,6 +16,10 @@
   .layout.nopreview .previewcol{display:none}
   @media(max-width:900px){.layout{grid-template-columns:1fr}.previewcol{position:static}}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  summary.cardsum{cursor:pointer;list-style:none;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  summary.cardsum::-webkit-details-marker{display:none}
+  summary.cardsum::before{content:'▸ ';color:var(--faint)}
+  details[open]>summary.cardsum::before{content:'▾ '}
   .howto{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px}
   .howto summary{cursor:pointer;font-weight:700;color:var(--accent);list-style:none}
   .howto summary::-webkit-details-marker{display:none}
@@ -181,9 +185,9 @@
     <div id="caplist" class="status">Nothing captured yet.</div>
   </div>
 
-  <div class="card">
-    <h2>Hero recognition — teach it a miss · <span id="refcount" class="status" style="text-transform:none;letter-spacing:0">0 learned</span></h2>
-    <p class="status" style="margin:0 0 8px">If a portrait reads wrong, or a brand-new hero isn't in the library yet, fix it here — it learns the current portrait so future reads improve. Share your screen &amp; calibrate with a comp on screen first; learned refs are saved in this browser and exportable.</p>
+  <details class="card" id="herocard">
+    <summary class="cardsum">Hero recognition — teach it a miss · <span id="refcount" class="status" style="text-transform:none;letter-spacing:0">0 learned</span> <span class="faint" style="text-transform:none;letter-spacing:0;font-weight:400">— optional, open when a portrait reads wrong</span></summary>
+    <p class="status" style="margin:10px 0 8px">If a portrait reads wrong, or a brand-new hero isn't in the library yet, fix it here — it learns the current portrait so future reads improve. Share your screen &amp; calibrate with a comp on screen first; learned refs are saved in this browser and exportable.</p>
     <div class="row">
       <button id="fixreads" class="ghost" disabled title="Read the 10 portraits now and correct any misreads">🔧 Fix current reads</button>
       <button id="exprefs" class="ghost" type="button">Export learned</button>
@@ -192,7 +196,7 @@
       <button id="clearrefs" class="ghost" type="button">Clear learned</button>
     </div>
     <div id="refpanel" style="margin-top:8px"></div>
-  </div>
+  </details>
 
   <div class="card">
     <h2>Publish to the site</h2>

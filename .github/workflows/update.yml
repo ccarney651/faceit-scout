@@ -15,7 +15,16 @@ on:
     types: [refresh]            # the site's "Refresh now" button, via the worker
   push:
     paths:
-      - "data/captures/**"      # a contribution upload rebuilds the site in ~2min
+      - "data/captures/**"      # a contribution upload rebuilds the site
+      # Code/template/asset changes republish the site too — these runs SKIP the
+      # slow FACEIT fetch (see DO_FETCH below) and just re-export from the cached
+      # DB, so a dashboard tweak goes live in seconds without a manual dispatch.
+      - "faceit_sync/**"
+      - "owscout/**"
+      - "tools/**"
+      - "docs/capture/**"
+      - "refs.json"
+      - "matches.txt"
 
 permissions:
   contents: write               # allow committing the rebuilt dashboard
@@ -85,22 +94,37 @@ jobs:
         run: pip install -e .
 
       - name: Update all divisions + rebuild dashboard
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
-          # Seed known teams from the committed match list (idempotent), then let
-          # the keyless enumerator discover and ingest every finished league match
-          # across all divisions. Already-stored finished matches are skipped -
-          # EXCEPT the two cases that can still gain a replay code: a match with
-          # a partial gap (some games have codes) within --backfill-days, and any
-          # match ingested in the last 12 hours. Matches with no code on any game
-          # are permanently code-less and are not re-fetched.
-          # A stray unreachable match must not block the daily dashboard update,
-          # so fetch errors are tolerated; the export must still succeed.
-          faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt || echo "seed: some matches errored (continuing)"
-          faceit-sync --db faceit.sqlite3 fetch || echo "update: some matches errored (continuing)"
-          # Fill Battle.net game_name for scoutable matches so player attribution
-          # matches the HUD (the HUD shows the game name, not the FACEIT nickname).
-          # Cheap + idempotent: only coded matches still missing it.
-          faceit-sync --db faceit.sqlite3 backfill-gamenames || echo "backfill: some matches errored (continuing)"
+          # FRESH data from FACEIT (the slow, rate-limited part) is only needed for
+          # the daily schedule, a manual run, or the site's "Refresh now" button.
+          # A code/template push or a contribution upload just re-exports from the
+          # cached DB - seconds, not minutes. A missing cache self-heals below by
+          # forcing a full fetch (the seed list rebuilds every division from
+          # scratch via transitive discovery).
+          DO_FETCH=false
+          case "$EVENT" in schedule|workflow_dispatch|repository_dispatch) DO_FETCH=true;; esac
+          if [ ! -s faceit.sqlite3 ]; then DO_FETCH=true; echo "no cached DB - forcing a full fetch"; fi
+          if [ "$DO_FETCH" = "true" ]; then
+            # Seed known teams from the committed match list (idempotent), then let
+            # the keyless enumerator discover and ingest every finished league match
+            # across all divisions. Already-stored finished matches are skipped -
+            # EXCEPT the two cases that can still gain a replay code: a match with
+            # a partial gap (some games have codes) within --backfill-days, and any
+            # match ingested in the last 12 hours. Matches with no code on any game
+            # are permanently code-less and are not re-fetched.
+            # A stray unreachable match must not block the daily dashboard update,
+            # so fetch errors are tolerated; the export must still succeed.
+            faceit-sync --db faceit.sqlite3 fetch --matches-file matches.txt || echo "seed: some matches errored (continuing)"
+            faceit-sync --db faceit.sqlite3 fetch || echo "update: some matches errored (continuing)"
+            # Fill Battle.net game_name for scoutable matches so player attribution
+            # matches the HUD (the HUD shows the game name, not the FACEIT nickname).
+            # Cheap + idempotent: only coded matches still missing it.
+            faceit-sync --db faceit.sqlite3 backfill-gamenames || echo "backfill: some matches errored (continuing)"
+          else
+            echo "push event ($EVENT) - skipping FACEIT fetch; re-exporting from the cached DB"
+          fi
           # Scouting data arrives as RAW OBSERVATIONS, one file per contributor
           # under data/captures/. Merge them here rather than committing a derived
           # payload: the report is then always computed by the current analysis,
