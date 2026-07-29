@@ -17,6 +17,22 @@ HTML_TEMPLATE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OW Scout &mdash; FACEIT League</title>
+<meta name="description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every EMEA team.">
+<meta name="theme-color" content="#0d1015">
+<link rel="canonical" href="https://owscout.com/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OW Scout">
+<meta property="og:title" content="OW Scout &mdash; FACEIT League scouting">
+<meta property="og:description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every EMEA team.">
+<meta property="og:url" content="https://owscout.com/">
+<meta property="og:image" content="https://owscout.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OW Scout &mdash; FACEIT League scouting">
+<meta name="twitter:description" content="Overwatch 2 composition scouting for the FACEIT League: comps, bans, map picks & a draft simulator.">
+<meta name="twitter:image" content="https://owscout.com/og.png">
 <style>
 :root{
   --bg:#f5f7fa; --surface:#ffffff; --surface2:#eef1f6; --fg:#171a20; --muted:#5c6674;
@@ -420,6 +436,11 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   <nav id="nav"></nav>
 </div></div>
 <main id="content"></main>
+<footer style="max-width:1200px;margin:32px auto 20px;padding:16px 20px;border-top:1px solid var(--line);color:var(--faint);font-size:12px;line-height:1.6">
+  <b style="color:var(--muted)">OW Scout</b> &mdash; community Overwatch 2 scouting for the FACEIT League.
+  Not affiliated with, endorsed by, or sponsored by FACEIT or Blizzard Entertainment.
+  Overwatch is a trademark of Blizzard Entertainment. <span id="footbuilt"></span>
+</footer>
 <script>
 // __DATA_INLINE__
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
@@ -428,6 +449,7 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 // the authenticated Worker — rather than a rewrite.
 function bootApp(DATA){
 const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined views
+(()=>{ const fb=document.getElementById('footbuilt'); if(fb&&DATA.built_at) fb.textContent='· data updated '+String(DATA.built_at).slice(0,10); })();
 let CURRENT_VIEW = VIEWS[0].id;
 const viewOf = (id)=> VIEWS.find(v=>v.id===id);
 const _vcache = {};
