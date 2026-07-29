@@ -26,6 +26,12 @@
   .howto summary::before{content:'▸ ';color:var(--muted)}
   .howto[open] summary::before{content:'▾ '}
   .howto ol{margin:8px 0 0;padding-left:20px;line-height:1.6} .howto li{margin:2px 0}
+  .steps{display:flex;gap:8px;margin:11px 0 2px;padding-bottom:7px;overflow-x:auto}
+  .step{flex:1 0 168px;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:12px;line-height:1.45;color:var(--muted)}
+  .step .n{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:var(--accent);color:#0b1020;font-weight:700;font-size:11px;margin-right:7px;flex:none}
+  .step .sh{display:flex;align-items:center;margin-bottom:5px}
+  .step .st{font-weight:700;color:var(--fg);font-size:12.5px}
+  .step b{color:var(--fg)}
   .card h2{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   label.f{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}
@@ -84,15 +90,15 @@
   <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 13px;font-size:13px"></div>
   <details id="howto" class="howto">
     <summary>How it works — 30-second guide</summary>
-    <ol>
-      <li>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</li>
-      <li><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</li>
-      <li><b>Auto-calibrate ✨</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</li>
-      <li><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch's replay-code box, and load it. Maps you've done drop off the list; <b>🔒</b> means someone else is scouting that one now.</li>
-      <li><b>✨ Auto-detect sides + players</b> reads the HUD names to set which team is on the left and tag each hero with its player (or set the left team by hand / <b>⇄ Swap teams</b>).</li>
-      <li><b>Snapshot</b> each distinct comp (spawn + key fights) — or tick <b>auto-snapshot</b> to read on a timer. Use <b>Next round</b>, the <b>Attacking</b> team picker (escort/hybrid), <b>Sub-map</b> (control) as they change. <b>Pop out overlay</b> to do it all without alt-tabbing; keys <b>S/R/Z/F</b> work when this page or the overlay is focused.</li>
-      <li><b>Finish + save</b> → it auto-fetches the next un-scouted code. <b>Publish</b> when done; the site updates in ~2 min.</li>
-    </ol>
+    <div class="steps">
+      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
+      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
+      <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate ✨</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
+      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Pick a code</span></div><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch and load it. Done maps drop off; <b>🔒</b> = someone's scouting it now.</div>
+      <div class="step"><div class="sh"><span class="n">5</span><span class="st">Set sides</span></div><b>✨ Auto-detect sides + players</b> reads the HUD names to set which team is on the left and tag each hero (or set it by hand / <b>⇄ Swap teams</b>).</div>
+      <div class="step"><div class="sh"><span class="n">6</span><span class="st">Capture</span></div><b>Snapshot</b> each distinct comp (or tick <b>auto-snapshot</b>). Use <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
+      <div class="step"><div class="sh"><span class="n">7</span><span class="st">Publish</span></div><b>Finish + save</b> → auto-fetches the next code. <b>Publish</b> when done; the site updates in ~2 min.</div>
+    </div>
     <p class="status" style="margin:4px 0 2px">Tips: use borderless, not exclusive fullscreen; re-scouting an already-covered map still adds player data. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button before publishing.</p>
   </details>
   <div class="layout" id="layout">
