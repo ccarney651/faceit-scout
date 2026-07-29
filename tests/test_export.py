@@ -8,8 +8,9 @@ import re
 
 import responses
 
+from faceit_sync.client import MATCH_URL
 from faceit_sync.db import Database
-from faceit_sync.export import export_html
+from faceit_sync.export import _dashboard_data, export_html
 from faceit_sync.sync import SyncEngine
 from conftest import RESTART_DC_ID, make_client, register_match
 
@@ -17,6 +18,48 @@ from conftest import RESTART_DC_ID, make_client, register_match
 def _ingest(db: Database) -> None:
     register_match(responses, RESTART_DC_ID, prefix="restart_dc", democracy=True)
     SyncEngine(make_client()[0], db).ingest_match(RESTART_DC_ID, force_refresh=True)
+
+
+def _register_scheduled(responses_mock, match_id: str, cid: str, *,
+                        f1=("tA", "Alpha"), f2=("tB", "Bravo"),
+                        schedule="2026-08-01T18:00:00Z", rnd=15) -> None:
+    """A pre-finish fixture: status SCHEDULED, teams assigned, no results. Only the
+    match endpoint is hit (no veto/stats for an unplayed match)."""
+    payload = {
+        "id": match_id, "status": "SCHEDULED", "schedule": schedule,
+        "game": "ow2", "region": "EMEA",
+        "entity": {"id": cid, "name": "S9 EMEA Master Central - Regular Season"},
+        "entityCustom": {"round": rnd, "group": 1},
+        "teams": {
+            "faction1": {"id": f1[0], "name": f1[1], "roster": [{"id": f1[0] + "p", "nickname": "n1"}]},
+            "faction2": {"id": f2[0], "name": f2[1], "roster": [{"id": f2[0] + "p", "nickname": "n2"}]},
+        },
+        "results": [], "voting": {}, "demoURLs": [],
+    }
+    responses_mock.add(responses_mock.GET, MATCH_URL.format(id=match_id),
+                       json={"payload": payload}, status=200)
+
+
+@responses.activate
+def test_scheduled_excluded_from_stats_and_listed_in_upcoming(db: Database) -> None:
+    """Scheduled fixtures must not inflate match counts / standings, but must
+    appear in the `upcoming` payload the Matches tab reads."""
+    _ingest(db)                                    # one FINISHED match
+    cid = db.conn.execute("SELECT championship_id FROM matches LIMIT 1").fetchone()[0]
+    mid = "1-22222222-2222-2222-2222-222222222222"
+    _register_scheduled(responses, mid, cid, f1=("s1", "Sched One"), f2=("s2", "Sched Two"))
+    SyncEngine(make_client()[0], db).ingest_match(mid)
+
+    d = _dashboard_data(db, cid)
+    assert d["summary"]["matches"] == 1            # the scheduled one is NOT counted
+    # No phantom standings row from a winner-less scheduled match.
+    assert all(t["matches"] >= 1 for t in d["teams"])
+    assert "Sched One" not in {t["name"] for t in d["teams"]}
+    # …but it IS in upcoming, with its matchup and time.
+    up = d["upcoming"]
+    assert len(up) == 1
+    assert {up[0]["f1"], up[0]["f2"]} == {"Sched One", "Sched Two"}
+    assert up[0]["scheduled_at"] == "2026-08-01T18:00:00Z" and up[0]["round"] == 15
 
 
 @responses.activate

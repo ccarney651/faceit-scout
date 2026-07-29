@@ -376,7 +376,7 @@ def extract_bundle(
         group_no=_to_int(entity_custom.get("group")),
         status=match_payload.get("status", "UNKNOWN"),
         best_of=best_of,
-        scheduled_at=match_payload.get("scheduledAt") or None,
+        scheduled_at=match_payload.get("scheduledAt") or match_payload.get("schedule") or None,
         started_at=match_payload.get("startedAt") or None,
         finished_at=match_payload.get("finishedAt") or None,
         faction1_team_id=faction_ids.get(FACTION1),
@@ -595,6 +595,15 @@ class SyncResult:
 # a code will ever show up, and the set is small (matches missing codes only).
 DEFAULT_BACKFILL_DAYS = 14
 
+# Pre-finish match states worth storing as an upcoming fixture (teams + schedule
+# time + round). We store these so the site can show what's coming; a re-fetch
+# upgrades them to a full ingest once they reach FINISHED. CANCELLED/ABORTED and
+# unknown states are ignored.
+SCHEDULED_STATES = frozenset({
+    "SCHEDULED", "READY", "READY_TO_START", "ONGOING",
+    "VOTING", "CONFIGURING", "SUBSTITUTION", "MANUAL_RESULT",
+})
+
 
 class SyncEngine:
     def __init__(self, client: FaceitClient, db: Database,
@@ -631,23 +640,29 @@ class SyncEngine:
             return "skipped"
 
         match_payload = self.client.get_match(match_id)
-        # Only ingest matches that have actually been played. Scheduled/ongoing
-        # matches carry no results and would otherwise be stored empty and
-        # re-fetched on every run.
-        status = match_payload.get("status", "")
-        if status != "FINISHED" or not match_payload.get("results"):
-            log.info("skip %s (status=%s, not a finished match)", match_id, status or "?")
+        status = match_payload.get("status", "") or ""
+        finished = status == "FINISHED" and bool(match_payload.get("results"))
+        # A FINISHED match gets the full treatment (veto + stats). A pre-finish
+        # match in a known scheduled state is stored as an upcoming FIXTURE only
+        # (teams / schedule time / round) so the site can show what's coming; it
+        # is always re-fetched (never skipped) and upgraded once it FINISHES.
+        # Anything else (cancelled / aborted / unknown) is ignored.
+        if not finished and status not in SCHEDULED_STATES:
+            log.info("skip %s (status=%s, neither finished nor scheduled)", match_id, status or "?")
             return "skipped"
 
-        dem_payload = self.client.get_democracy(match_id)
-        stats = self.client.get_stats(match_id)
-        if dem_payload is None:
-            log.warning(
-                "%s: democracy unavailable (404 / expired) -> veto attribution NULL",
-                match_id,
-            )
-
-        bundle = extract_bundle(match_payload, dem_payload, stats)
+        if finished:
+            dem_payload = self.client.get_democracy(match_id)
+            stats = self.client.get_stats(match_id)
+            if dem_payload is None:
+                log.warning(
+                    "%s: democracy unavailable (404 / expired) -> veto attribution NULL",
+                    match_id,
+                )
+            bundle = extract_bundle(match_payload, dem_payload, stats)
+        else:
+            # Upcoming fixture: no veto/stats yet; store the match row + teams only.
+            bundle = extract_bundle(match_payload, None, [])
         for w in bundle.warnings:
             log.warning("%s: %s", match_id, w)
 
@@ -777,7 +792,10 @@ class SyncEngine:
                     result.errors += 1
                     continue
                 for m in matches:
-                    if m.get("status") != "finished":
+                    # The keyless list returns finished AND upcoming ("created")
+                    # matches; take both (ingest_match decides how to store each by
+                    # its detail status). Skip anything else (declined/cancelled).
+                    if m.get("status") not in ("finished", "created", "ongoing"):
                         continue
                     mid = m["match_id"]
                     if mid in seen:

@@ -234,9 +234,11 @@ def _dashboard_data(db: Database, cid: str,
     summary = {
         "championship": champ["name"] if champ else cid,
         "region": champ["region"] if champ else None,
-        "matches": scalar("SELECT COUNT(*) FROM matches WHERE championship_id=?", cid),
-        "forfeits": scalar("SELECT COUNT(*) FROM matches WHERE championship_id=? AND forfeit=1", cid),
-        "walkovers": scalar(f"""SELECT COUNT(*) FROM matches m WHERE m.championship_id=:c
+        # Counts are of PLAYED matches only. Scheduled/upcoming fixtures live in
+        # `upcoming` below and must not inflate totals or (worse) read as walkovers.
+        "matches": scalar("SELECT COUNT(*) FROM matches WHERE championship_id=? AND status='FINISHED'", cid),
+        "forfeits": scalar("SELECT COUNT(*) FROM matches WHERE championship_id=? AND status='FINISHED' AND forfeit=1", cid),
+        "walkovers": scalar(f"""SELECT COUNT(*) FROM matches m WHERE m.championship_id=:c AND m.status='FINISHED'
             AND NOT EXISTS (SELECT 1 FROM games g WHERE g.match_id=m.id AND g.map_guid IS NOT NULL)""", {"c": cid}),
         "played_games": scalar(f"SELECT COUNT(*) FROM games WHERE match_id IN {in_champ} AND map_guid IS NOT NULL", {"c": cid}),
         "teams": scalar("SELECT COUNT(DISTINCT id) FROM teams WHERE id IN "
@@ -254,7 +256,7 @@ def _dashboard_data(db: Database, cid: str,
     teams = rows("""
       WITH sides AS (
         SELECT id mid, winner_faction wf, faction1_team_id t1, faction2_team_id t2
-        FROM matches WHERE championship_id=:c
+        FROM matches WHERE championship_id=:c AND status='FINISHED'
       ), tm AS (
         SELECT t1 team, CASE WHEN wf='faction1' THEN 1 ELSE 0 END win FROM sides WHERE t1 IS NOT NULL
         UNION ALL
@@ -341,7 +343,8 @@ def _dashboard_data(db: Database, cid: str,
     for m in c.execute("""SELECT m.*, t1.name f1name, t2.name f2name
                           FROM matches m LEFT JOIN teams t1 ON t1.id=m.faction1_team_id
                                          LEFT JOIN teams t2 ON t2.id=m.faction2_team_id
-                          WHERE m.championship_id=? ORDER BY m.round, m.group_no, m.id""", (cid,)):
+                          WHERE m.championship_id=? AND m.status='FINISHED'
+                          ORDER BY m.round, m.group_no, m.id""", (cid,)):
         f1, f2 = m["f1name"], m["f2name"]
         if f1:
             team_names.add(f1)
@@ -402,12 +405,23 @@ def _dashboard_data(db: Database, cid: str,
             "games": gs,
         })
 
+    # Upcoming fixtures: matches ingested but not yet FINISHED (status SCHEDULED /
+    # ongoing). Teams may be TBD in a bracket's later rounds -> name is NULL.
+    upcoming = rows("""
+      SELECT m.id, m.round, m.group_no "group", m.scheduled_at, m.status, m.best_of,
+             t1.name f1, t2.name f2
+      FROM matches m LEFT JOIN teams t1 ON t1.id=m.faction1_team_id
+                     LEFT JOIN teams t2 ON t2.id=m.faction2_team_id
+      WHERE m.championship_id=:c AND m.status!='FINISHED'
+      ORDER BY (m.scheduled_at IS NULL), m.scheduled_at, m.round, m.group_no""", {"c": cid})
+
     return {
         "summary": summary, "teams": teams, "heroes": heroes,
         "bans_by_role": bans_by_role, "maps": maps,
         "attacking_first": atk_panel,
         "attacking_first_extra": atk_extra,
         "matches": matches,
+        "upcoming": upcoming,
         "team_names": sorted(team_names),
     }
 

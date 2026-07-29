@@ -205,6 +205,13 @@ table.blocks thead th:hover{color:var(--faint)}
 .sterm{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:720;padding:6px 12px;border-radius:9px;border:1px solid var(--line2);background:var(--surface2);font-variant-numeric:tabular-nums}
 .sterm.awin{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
 .sterm.bwin{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+/* upcoming fixtures (Matches tab) */
+.uprows{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.uprow{display:flex;align-items:center;gap:14px;padding:9px 13px;border:1px solid var(--line);border-radius:9px;background:var(--surface);flex-wrap:wrap}
+.uprow .uptime{font-size:12px;color:var(--muted);min-width:130px;font-variant-numeric:tabular-nums}
+.uprow .upteams{font-weight:640;font-size:14px}
+.uprow .upvs{color:var(--faint);font-weight:400;margin:0 6px}
+.uprow .uptag{margin-left:auto;font-size:11px;color:var(--faint);letter-spacing:.02em;font-variant-numeric:tabular-nums}
 
 /* chips / badges */
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
@@ -434,6 +441,7 @@ function D(){                                       // active view's data (singl
 function mergeDivisions(v){
   const ds=v.divisions.map(cid=>DIVS[cid]);
   const matches=[].concat(...ds.map(d=>d.matches));
+  const upcoming=[].concat(...ds.map(d=>d.upcoming||[]));
   const teams=[].concat(...ds.map(d=>d.teams));
   const team_names=[...new Set([].concat(...ds.map(d=>d.team_names)))].sort();
   const sum={championship:v.label, region:v.region};
@@ -449,7 +457,7 @@ function mergeDivisions(v){
     return {by_map:Object.values(bm).sort((a,b)=>b.games-a.games),
       total_games:ds.reduce((a,d)=>a+((get(d)||{}).total_games||0),0),
       atk_first_wins:ds.reduce((a,d)=>a+((get(d)||{}).atk_first_wins||0),0)}; };
-  return {summary:sum, teams, team_names, matches,
+  return {summary:sum, teams, team_names, matches, upcoming,
     attacking_first:mergePanel(d=>d.attacking_first),
     attacking_first_extra:mergePanel(d=>d.attacking_first_extra)};
 }
@@ -2453,14 +2461,38 @@ function renderMatches(){
   // full match list reads as their "book" against a field you already know -
   // search a team to see exactly how they drafted vs each opponent you also play.
   const note=el(`<p class="note" style="margin:0 2px 10px">Single round-robin — everyone plays the same 15 opponents. Search a team to read their book against the field.</p>`);
-  const list=el(`<div></div>`); wrap.append(bar,note,list);
+  const upWrap=el(`<div></div>`);
+  const list=el(`<div></div>`); wrap.append(bar,upWrap,note,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
+  // Local, human-readable kickoff time from a UTC ISO string.
+  const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtWhen(iso){ const d=new Date(iso); if(isNaN(d)) return esc(iso);
+    const p=n=>String(n).padStart(2,'0');
+    return `${DAYS[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  function drawUpcoming(q){
+    upWrap.innerHTML='';
+    let up=(D().upcoming||[]);
+    if(q) up=up.filter(u=>((u.f1||'')+' '+(u.f2||'')).toLowerCase().includes(q));
+    if(!up.length) return;
+    upWrap.appendChild(el(`<p class="eyebrow" style="margin:2px 2px 8px">Upcoming · ${up.length}</p>`));
+    const rows=el(`<div class="uprows"></div>`);
+    up.forEach(u=>{
+      const f1=u.f1?teamLink(u.f1):'<span class="faint">TBD</span>';
+      const f2=u.f2?teamLink(u.f2):'<span class="faint">TBD</span>';
+      rows.appendChild(el(`<div class="uprow"><span class="uptime">${u.scheduled_at?fmtWhen(u.scheduled_at):'time TBD'}</span>`+
+        `<span class="upteams">${f1}<span class="upvs">vs</span>${f2}</span>`+
+        `<span class="uptag">${u.round?('Round '+u.round):''}${u.best_of?(' · Bo'+u.best_of):''}</span></div>`));
+    });
+    upWrap.appendChild(rows);
+  }
   function draw(){
-    const q=(search.value||'').trim().toLowerCase(); list.innerHTML='';
+    const q=(search.value||'').trim().toLowerCase();
+    drawUpcoming(q);
+    list.innerHTML='';
     // MATCHES_RECENT is newest-first; reverse for oldest-first.
     let shown=MATCHES_RECENT.filter(m=>!q||hay(m).includes(q));
     if(sort.value==='old') shown=[...shown].reverse();
-    if(!shown.length){ list.appendChild(el(`<p class="note">No matches.</p>`)); return; }
+    if(!shown.length){ list.appendChild(el(`<p class="note">No played matches${q?' match your search':''}.</p>`)); return; }
     shown.forEach(m=>list.appendChild(matchCard(m)));
   }
   search.oninput=draw; sort.onchange=draw; draw(); return wrap;
