@@ -2026,6 +2026,18 @@ function playerAvg(cap){ if(!cap||!cap.heroes) return null; let g=0,e=0,d=0,dm=0
   return {games:g, kd:Math.round(e/Math.max(d,0.5)*100)/100, deaths:Math.round(d/g*10)/10,
     damage:Math.round(dm/g), healing:Math.round(h/g), mitigation:Math.round(mi/g), elims:Math.round(e/g*10)/10}; }
 const roleOf=r=>/tank/i.test(r||'')?'Tank':/support/i.test(r||'')?'Support':/dam|dps/i.test(r||'')?'Damage':null;
+// A player's competitive SEAT, inferred from the heroes they've been captured on:
+// tally rounds per seat among the two seats their FACEIT role allows and take the
+// most-played. Tanks are one seat. A player with no captures returns null (can't
+// be seated → listed by role at the foot); a scouted player whose captured heroes
+// are all unclassified falls back to their role's primary seat.
+const ROLE_SEATS={Damage:['Hitscan','Flex DPS'],Support:['Main Support','Flex Support']};
+function seatOfPlayer(p){ const role=roleOf(p.role); if(!role) return null;
+  const hs=(p.cap&&p.cap.heroes)||[]; if(!hs.length) return null;   // unscouted (any role) → listed by role at the foot
+  if(role==='Tank') return 'Tank';                                  // tanks are one seat
+  const allowed=ROLE_SEATS[role]; if(!allowed) return null;
+  const tally={}; hs.forEach(h=>{ const s=HERO_SEAT[h.hero]; if(s&&allowed.indexOf(s)>=0) tally[s]=(tally[s]||0)+(h.rounds||0); });
+  return Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0]||allowed[0]; }
 function playerStatLine(role,s){ if(!s) return ''; const kd=s.kd!=null?`${s.kd} k/d`:'';
   if(role==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
   if(role==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
@@ -2073,31 +2085,38 @@ function renderPlayers(){
     });
     body.appendChild(grid);
   }
-  // Role view: every player grouped by role, with top 3 heroes + their average
-  // stats on captured games (un-captured players listed by name at the foot).
+  // Seat view: every player grouped by competitive seat (Tank / Hitscan / Flex
+  // DPS / Main Support / Flex Support), with top 3 heroes + their average stats on
+  // captured games. A player's seat is inferred from the heroes they've been
+  // captured on (see seatOfPlayer); un-captured players can't be seated, so
+  // they're listed by role at the foot.
   function drawRole(){
     body.innerHTML='';
-    const byRole={Tank:[],Damage:[],Support:[]};
-    players.forEach(p=>{ const r=roleOf(p.role); if(r) byRole[r].push(p); });
+    const bySeat={}; SEATS.forEach(s=>bySeat[s]=[]);
+    const unseated={Tank:[],Damage:[],Support:[]};
+    players.forEach(p=>{ const role=roleOf(p.role); if(!role) return;
+      const seat=seatOfPlayer(p);
+      if(seat&&bySeat[seat]) bySeat[seat].push(p); else unseated[role].push(p); });
     const grid=el(`<div class="grid cols-3"></div>`); let any=false;
-    ['Tank','Damage','Support'].forEach(role=>{
-      const list=byRole[role]||[]; if(!list.length) return; any=true;
-      const capped=list.filter(p=>topHeroes(p.cap).length).sort((a,b)=>b.maps-a.maps);
-      const bare=list.filter(p=>!topHeroes(p.cap).length).sort((a,b)=>b.maps-a.maps);
+    SEATS.forEach(seat=>{
+      const list=(bySeat[seat]||[]).sort((a,b)=>b.maps-a.maps); if(!list.length) return; any=true;
+      const baseRole = seat==='Tank'?'Tank' : /Support/.test(seat)?'Support':'Damage';
       const card=el(`<div class="card"></div>`);
-      card.appendChild(el(`<p class="eyebrow role-${role}">${role} <span class="note" style="text-transform:none;letter-spacing:0">${list.length} player${list.length===1?'':'s'}</span></p>`));
-      capped.forEach(p=>{ const av=playerAvg(p.cap), hs=topHeroes(p.cap,3);
+      card.appendChild(el(`<p class="eyebrow role-${baseRole}">${esc(seat)} <span class="note" style="text-transform:none;letter-spacing:0">${list.length} player${list.length===1?'':'s'}</span></p>`));
+      list.forEach(p=>{ const av=playerAvg(p.cap), hs=topHeroes(p.cap,3);
         card.appendChild(el(`<div class="crow" title="${av?av.games+'g avg · '+(av.kd!=null?av.kd+' k/d · ':'')+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':'no stats'}">`+
           `<span><b>${esc(p.nick)}</b> <span class="faint">${esc(p.team)}</span> ${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
-          `<span class="rec">${av?playerStatLine(role,av)+` <span class="faint">· ${av.games}g</span>`:''}</span></div>`)); });
-      if(bare.length) card.appendChild(el(`<p class="note" style="margin-top:8px">Not scouted yet: ${bare.map(p=>esc(p.nick)).join(', ')}</p>`));
+          `<span class="rec">${av?playerStatLine(baseRole,av)+` <span class="faint">· ${av.games}g</span>`:''}</span></div>`)); });
       grid.appendChild(card);
     });
     body.appendChild(any?grid:el(`<p class="note">No players with a known role yet.</p>`));
+    const un=[]; const foot=(lbl,arr)=>{ if(arr.length) un.push(lbl+': '+arr.sort((a,b)=>b.maps-a.maps).map(p=>esc(p.nick)).join(', ')); };
+    foot('Tank',unseated.Tank); foot('DPS',unseated.Damage); foot('Support',unseated.Support);
+    if(un.length) body.appendChild(el(`<p class="note" style="margin-top:10px">Not scouted yet <span class="faint">(seat shows once a player is captured)</span> — ${un.join(' · ')}</p>`));
   }
   const draw=()=>{ [...modebar.children].forEach(b=>b.classList.toggle('selA', b.dataset.v===PLAYERS_VIEW));
     if(PLAYERS_VIEW==='role') drawRole(); else drawTeam(); };
-  [['team','By team'],['role','By role']].forEach(([v,label])=>{
+  [['team','By team'],['role','By seat']].forEach(([v,label])=>{
     const b=el(`<span class="wbtn" data-v="${v}">${esc(label)}</span>`);
     b.onclick=()=>{ PLAYERS_VIEW=v; draw(); }; modebar.appendChild(b);
   });
