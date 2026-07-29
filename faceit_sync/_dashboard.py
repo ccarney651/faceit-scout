@@ -524,6 +524,7 @@ function wrCell(wins,games){
 /* recency: matches newest-first (recency is measured in matches ≈ how a season is counted).
    Recomputed whenever the active division changes. */
 let MATCHES_RECENT=[];
+let MATCHES_MODE='played';   // Matches tab: 'played' history vs 'upcoming' fixtures
 function recomputeDivision(){
   MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
   SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
@@ -1956,6 +1957,21 @@ function renderScoutBody(t){
     side.appendChild(el(`<p class="note">No matches in this window.</p>`));
   }
 
+  // Upcoming fixtures for this team — who they play next and when. Not windowed
+  // (these are future matches); pulled from the division's scheduled matches.
+  const tUp=(D().upcoming||[]).filter(u=>u.f1===t.team||u.f2===t.team)
+    .sort((a,b)=>String(a.scheduled_at||'').localeCompare(String(b.scheduled_at||'')));
+  if(tUp.length){
+    side.appendChild(el(sectionH('Upcoming',`<span class="note">${tUp.length} scheduled</span>`)));
+    const ub=el(`<div class="uprows"></div>`);
+    tUp.forEach(u=>{ const opp=(u.f1===t.team)?u.f2:u.f1;
+      ub.appendChild(el(`<div class="uprow"><span class="uptime">${u.scheduled_at?esc(fmtWhen(u.scheduled_at)):'time TBD'}</span>`+
+        `<span class="upteams"><span class="upvs">vs</span>${opp?teamLink(opp):'<span class="faint">TBD</span>'}</span>`+
+        `<span class="uptag">${u.round?('Round '+u.round):''}</span></div>`));
+    });
+    side.appendChild(ub);
+  }
+
   const layout=el(`<div class="scoutgrid"></div>`);
   layout.append(w, side);
   root.appendChild(layout);
@@ -2469,38 +2485,51 @@ function renderMatches(){
   const search=el(`<input placeholder="search team, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
   const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
   bar.append(search,sort);
+  // Played history vs upcoming fixtures. A full-season schedule can be large, so
+  // upcoming lives in its own view (toggle) rather than stacked on the results.
+  const up0=D().upcoming||[];
+  const modeBar=el(`<div class="wsel" style="margin:0 2px 12px"></div>`);
+  const mkMode=(m,lbl)=>{ const b=el(`<span class="wbtn">${lbl}</span>`); b.onclick=()=>{ MATCHES_MODE=m; draw(); }; return b; };
+  modeBar.append(mkMode('played','Played'), mkMode('upcoming',`Upcoming${up0.length?' · '+up0.length:''}`));
   // In a single round-robin every team has faced the same opponents, so a team's
   // full match list reads as their "book" against a field you already know -
   // search a team to see exactly how they drafted vs each opponent you also play.
   const note=el(`<p class="note" style="margin:0 2px 10px">Single round-robin — everyone plays the same 15 opponents. Search a team to read their book against the field.</p>`);
-  const upWrap=el(`<div></div>`);
-  const list=el(`<div></div>`); wrap.append(bar,upWrap,note,list);
+  const list=el(`<div></div>`); wrap.append(bar,modeBar,note,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
   function drawUpcoming(q){
-    upWrap.innerHTML='';
     let up=(D().upcoming||[]);
     if(q) up=up.filter(u=>((u.f1||'')+' '+(u.f2||'')).toLowerCase().includes(q));
-    if(!up.length) return;
-    upWrap.appendChild(el(`<p class="eyebrow" style="margin:2px 2px 8px">Upcoming · ${up.length}</p>`));
-    const rows=el(`<div class="uprows"></div>`);
-    up.forEach(u=>{
-      const f1=u.f1?teamLink(u.f1):'<span class="faint">TBD</span>';
-      const f2=u.f2?teamLink(u.f2):'<span class="faint">TBD</span>';
-      rows.appendChild(el(`<div class="uprow"><span class="uptime">${u.scheduled_at?fmtWhen(u.scheduled_at):'time TBD'}</span>`+
-        `<span class="upteams">${f1}<span class="upvs">vs</span>${f2}</span>`+
-        `<span class="uptag">${u.round?('Round '+u.round):''}${u.best_of?(' · Bo'+u.best_of):''}</span></div>`));
+    if(!up.length){ list.appendChild(el(`<p class="note">No upcoming fixtures${q?' match your search':''}.</p>`)); return; }
+    // A season schedule reads best grouped by round.
+    const byR={}; up.forEach(u=>{ const r=u.round||0; (byR[r]=byR[r]||[]).push(u); });
+    Object.keys(byR).map(Number).sort((a,b)=>a-b).forEach(r=>{
+      list.appendChild(el(`<p class="eyebrow" style="margin:12px 2px 6px">Round ${r||'—'} · ${byR[r].length}</p>`));
+      const rows=el(`<div class="uprows"></div>`);
+      byR[r].sort((a,b)=>String(a.scheduled_at||'').localeCompare(String(b.scheduled_at||''))).forEach(u=>{
+        const f1=u.f1?teamLink(u.f1):'<span class="faint">TBD</span>';
+        const f2=u.f2?teamLink(u.f2):'<span class="faint">TBD</span>';
+        rows.appendChild(el(`<div class="uprow"><span class="uptime">${u.scheduled_at?fmtWhen(u.scheduled_at):'time TBD'}</span>`+
+          `<span class="upteams">${f1}<span class="upvs">vs</span>${f2}</span>`+
+          `<span class="uptag">${u.best_of?('Bo'+u.best_of):''}</span></div>`));
+      });
+      list.appendChild(rows);
     });
-    upWrap.appendChild(rows);
   }
-  function draw(){
-    const q=(search.value||'').trim().toLowerCase();
-    drawUpcoming(q);
-    list.innerHTML='';
+  function drawPlayed(q){
     // MATCHES_RECENT is newest-first; reverse for oldest-first.
     let shown=MATCHES_RECENT.filter(m=>!q||hay(m).includes(q));
     if(sort.value==='old') shown=[...shown].reverse();
     if(!shown.length){ list.appendChild(el(`<p class="note">No played matches${q?' match your search':''}.</p>`)); return; }
     shown.forEach(m=>list.appendChild(matchCard(m)));
+  }
+  function draw(){
+    const q=(search.value||'').trim().toLowerCase();
+    const upMode=(MATCHES_MODE==='upcoming');
+    [...modeBar.children].forEach((b,i)=>b.classList.toggle('selA',(i===0)!==upMode));
+    note.style.display=upMode?'none':''; sort.style.display=upMode?'none':'';
+    list.innerHTML='';
+    if(upMode) drawUpcoming(q); else drawPlayed(q);
   }
   search.oninput=draw; sort.onchange=draw; draw(); return wrap;
 }
