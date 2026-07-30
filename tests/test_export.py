@@ -73,6 +73,30 @@ def test_players_table_gets_nicknames(db: Database) -> None:
 
 
 @responses.activate
+def test_roster_players_carry_faceit_stat_averages_and_elo(db: Database) -> None:
+    """FACEIT reports per-game stats and an elo snapshot for every player of every
+    match, independently of whether anyone captured that map's comps. Rosters must
+    therefore carry season averages + elo for ALL players, so the player views work
+    in divisions with no capture coverage at all."""
+    _ingest(db)
+    cid = db.conn.execute("SELECT DISTINCT championship_id FROM matches").fetchone()[0]
+    div = _dashboard_data(db, cid)
+    players = [p for t in div["teams"] for p in t["roster"]]
+    assert players, "no roster players exported"
+
+    withstats = [p for p in players if p.get("stats")]
+    assert len(withstats) >= 10, "expected stat lines for both teams' players"
+    s = withstats[0]["stats"]
+    # Averages are per map played, plus the sample they rest on.
+    for key in ("games", "elims", "deaths", "dmg", "heal", "mit", "kd"):
+        assert key in s, f"missing {key} in {s}"
+    assert s["games"] >= 1
+    assert s["elims"] >= 0 and s["dmg"] >= 0
+    # Elo comes off the same feed and is the manager-facing skill signal.
+    assert any(isinstance(p.get("elo"), int) for p in players), "no elo exported"
+
+
+@responses.activate
 def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     _ingest(db)
     buf = io.StringIO()
@@ -83,14 +107,24 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert doc.startswith("<!doctype html>")
     # No external resource LOADS: the page must render completely offline, with
     # every asset inlined. Tested precisely rather than by banning the string
-    # "https://" outright, because the refresh button legitimately holds an
-    # endpoint URL - a user-initiated fetch, not a resource the page loads.
-    assert "<script src" not in doc and "<link" not in doc
+    # "https://" outright, because some URLs legitimately appear without being
+    # fetched on load - the refresh endpoint (user-initiated), the canonical URL
+    # and the OG image (metadata read by crawlers, not by the browser).
+    assert "<script src" not in doc
     assert 'src="http' not in doc and "src='http" not in doc
     assert "url(http" not in doc and "@import" not in doc
-    # ...and the only outbound URLs are the ones we intend.
-    urls = {u.rstrip('",;)') for u in re.findall(r"https?://[^\s\"'<>]+", doc)}
-    allowed_hosts = {"owscout-upload.owscout.workers.dev"}
+    # <link> may only carry things that load nothing: the canonical reference and
+    # an inlined favicon. A stylesheet/preload/manifest link would be a real load.
+    for tag in re.findall(r"<link[^>]*>", doc):
+        rel = re.search(r'rel="([^"]+)"', tag)
+        assert rel and rel.group(1) in {"canonical", "icon"}, f"loading <link>: {tag[:90]}"
+        if rel.group(1) == "icon":
+            assert 'href="data:' in tag, f"favicon is not inlined: {tag[:90]}"
+    # ...and the only outbound URLs are the ones we intend. data: URIs are inlined
+    # assets (the favicon's SVG carries an xmlns that merely looks like a URL).
+    scan = re.sub(r'"data:[^"]*"', '""', doc)
+    urls = {u.rstrip('",;)') for u in re.findall(r"https?://[^\s\"'<>]+", scan)}
+    allowed_hosts = {"owscout-upload.owscout.workers.dev", "owscout.com"}
     external = {u for u in urls
                 if u.split("/")[2] not in allowed_hosts} if urls else set()
     assert not external, f"unexpected external URLs in the dashboard: {external}"
@@ -187,7 +221,7 @@ def test_is_playoff_classifies_championships() -> None:
 
 
 def test_tier_and_region_classify_championship_names() -> None:
-    """The EMEA-Master-only site filter keys off these. Names carry both words."""
+    """The site's region+tier switcher keys off these. Names carry both words."""
     from faceit_sync.export import _region_of, _tier_of
 
     assert _tier_of("S9 EMEA Master Central - Regular Season") == "Master"
@@ -200,6 +234,81 @@ def test_tier_and_region_classify_championship_names() -> None:
     assert _region_of("S9 NA Expert Central - Regular Season") == "NA"
     assert _region_of("Some Open Qualifier") is None
     assert _region_of(None) is None
+
+
+def test_region_matches_whole_words_only() -> None:
+    """A bare '"NA" in name' substring test classifies any championship merely
+    CONTAINING those letters as NA — which, now that NA actually ships, would
+    file a division under the wrong region's switcher. Mirrors the equivalent
+    guard in owscout.db.list_codes."""
+    from faceit_sync.export import _region_of
+
+    assert _region_of("S9 Open Nationals - Regular Season") is None
+    assert _region_of("Winter Finale Cup") is None
+    assert _region_of("NATO Invitational") is None
+    # Hyphen-adjacent and case-insensitive forms still resolve.
+    assert _region_of("S9 NA Master Central-Regular Season") == "NA"
+    assert _region_of("s9 na master central - regular season") == "NA"
+    # EMEA is checked first, so a name carrying both is not ambiguous.
+    assert _region_of("EMEA vs NA Showmatch") == "EMEA"
+
+
+def test_both_regions_export_as_grouped_views(db: Database) -> None:
+    """Unlocking NA: every region+tier division becomes a view, region-major and
+    EMEA-first, each region with more than one tier also getting a Combined.
+
+    Builds its own championships rather than reading the working DB — the local
+    copy has no EMEA Advanced, so a live-DB assertion would disagree with CI.
+    """
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    champs = [
+        ("em", "S9 EMEA Master Central - Regular Season"),
+        ("ee", "S9 EMEA Expert Central - Regular Season"),
+        ("nm", "S9 NA Master Central - Regular Season"),
+    ]
+    for cid, nm in champs:
+        c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+                  (cid, nm, "ow2"))
+        _insert_match(db, cid, f"m-{cid}", "FINISHED", "t1", "t2", "faction1", None,
+                      "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    db.conn.commit()
+
+    buf = io.StringIO()
+    export_html(db, buf)
+    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+    labels = [v["label"] for v in data["views"]]
+    # EMEA before NA; tiers strongest-first; Combined only where >1 tier exists.
+    assert labels == ["EMEA Master", "EMEA Expert", "EMEA Combined", "NA Master"]
+    assert [v["region"] for v in data["views"]] == ["EMEA", "EMEA", "EMEA", "NA"]
+    # The Combined view spans exactly its own region's divisions.
+    combined = next(v for v in data["views"] if v["label"] == "EMEA Combined")
+    assert sorted(combined["divisions"]) == ["ee", "em"]
+
+
+def test_region_filter_still_narrows_the_export(db: Database) -> None:
+    """--region remains available after the unlock: it is how the site would be
+    narrowed back to one region."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    for cid, nm in [("em", "S9 EMEA Master Central - Regular Season"),
+                    ("nm", "S9 NA Master Central - Regular Season")]:
+        c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+                  (cid, nm, "ow2"))
+        _insert_match(db, cid, f"m-{cid}", "FINISHED", "t1", "t2", "faction1", None,
+                      "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    db.conn.commit()
+
+    buf = io.StringIO()
+    export_html(db, buf, only_region="na")
+    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+    assert [v["label"] for v in data["views"]] == ["NA Master"]
 
 
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):

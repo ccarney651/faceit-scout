@@ -28,11 +28,11 @@ ALL_TEAMS = "(all teams)"
 ALL_REGIONS = "(all regions)"
 ALL_DIVISIONS = "(all)"
 
-# Region lock. The live site currently ships EMEA only, so scouting any other
-# region would produce captures the site never displays. Pin the app to EMEA to
-# keep effort aligned. Set to None to restore the region picker (e.g. when NA is
-# brought onto the site).
-LOCK_REGION: Optional[str] = "EMEA"
+# Region lock. Pins the code list to one region when the site ships only that
+# one, so nobody scouts replays the site would never display. UNLOCKED since NA
+# joined EMEA on the site (2026-07-31) — the picker is back. Set it to a region
+# name again if the site ever narrows to a single region.
+LOCK_REGION: Optional[str] = None
 
 # Light/dark palettes. ttk widgets are themed via ttk.Style; the handful of tk
 # widgets (Text logs, banners, Toplevels) read these directly. Muted/Link labels

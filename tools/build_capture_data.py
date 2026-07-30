@@ -1,6 +1,12 @@
 """Emit docs/capture/data.json — the codes + rosters feed the browser capture
 app consumes instead of crawling FACEIT. CI-run (reads faceit.sqlite3); the app
-fetches it same-origin. Scoped to EMEA, all tiers, post-wipe coded games.
+fetches it same-origin. Scoped to the regions the site ships, all tiers,
+post-wipe coded games.
+
+``division`` is REGION-QUALIFIED ("EMEA Master", "NA Expert"), not a bare tier.
+The app's picker is one dropdown filtering on equality, so bare tiers would
+merge two regions' codes under a single "Master" with nothing telling them
+apart.
 
     faceit-sync ... export ...          # (CI already builds the DB)
     .venv/Scripts/python tools/build_capture_data.py
@@ -20,14 +26,30 @@ import sqlite3
 from datetime import datetime, timezone
 
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
-OUT = os.path.join("docs", "capture", "data.json")
-REGION = "EMEA"
+OUT = os.environ.get("CAPTURE_OUT", os.path.join("docs", "capture", "data.json"))
+# Regions the site ships, strongest-audience first. Order drives the app's
+# division dropdown. Kept in sync with faceit_sync.export.REGIONS.
+REGIONS = ("EMEA", "NA")
 CODE_WIPE_DATE = "2026-07-28"          # league-wide replay-code wipe (SPEC §2); bump each patch
 TIERS = ("Master", "Expert", "Advanced", "Open")
 
 
 def _tier(name: str) -> str | None:
     return next((t for t in TIERS if t in (name or "")), None)
+
+
+def _region(name: str) -> str | None:
+    """Whole-word region match — a bare '%NA%' would also hit any championship
+    whose name merely contains those letters. Mirrors owscout.db.list_codes."""
+    words = (name or "").upper().replace("-", " ").split()
+    return next((r for r in REGIONS if r in words), None)
+
+
+def _division(name: str) -> str | None:
+    """The region-qualified division label ('EMEA Master'), or None if the
+    championship name carries no region or no tier."""
+    region, tier = _region(name), _tier(name)
+    return f"{region} {tier}" if region and tier else None
 
 
 def main() -> None:
@@ -51,23 +73,24 @@ def main() -> None:
         LEFT JOIN teams t1 ON t1.id = m.faction1_team_id
         LEFT JOIN teams t2 ON t2.id = m.faction2_team_id
         WHERE g.demo_code IS NOT NULL AND g.demo_code <> ''
-          AND (' ' || ch.name || ' ') LIKE ?
           AND substr(m.finished_at, 1, 10) > ?
         ORDER BY m.finished_at DESC, g.game_no
         """,
-        (f"% {REGION} %", CODE_WIPE_DATE),
+        (CODE_WIPE_DATE,),
     ).fetchall()
 
     match_ids: set[str] = set()
     for r in rows:
-        tier = _tier(r["champ"])
-        if not tier:
+        # Region is filtered here rather than in SQL: a championship naming
+        # neither region (a one-off cup) is dropped, not mislabelled.
+        div = _division(r["champ"])
+        if not div:
             continue
-        seen_divs.add(tier)
+        seen_divs.add(div)
         codes.append({
             "code": r["code"], "match_id": r["match_id"], "game_no": r["game_no"],
             "map": r["map"], "map_category": r["cat"], "map_guid": r["map_guid"],
-            "division": tier,
+            "division": div,
             "team_a": r["team_a"], "team_b": r["team_b"],
             "t1": r["t1"], "t2": r["t2"], "finished_at": r["finished_at"],
         })
@@ -99,8 +122,11 @@ def main() -> None:
     payload = {
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "code_wipe_date": CODE_WIPE_DATE,
-        "region": REGION,
-        "divisions": [t for t in TIERS if t in seen_divs],
+        "regions": list(REGIONS),
+        # Region-major, then tier strongest-first — the order the app's dropdown
+        # renders in.
+        "divisions": [f"{r} {t}" for r in REGIONS for t in TIERS
+                      if f"{r} {t}" in seen_divs],
         "codes": codes,
         "rosters": rosters,
     }

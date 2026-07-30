@@ -443,6 +443,127 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 </footer>
 <script>
 // __DATA_INLINE__
+
+/* ---------- pure decision helpers ----------
+   Declared ahead of bootApp (no DOM, no DATA) so tests/test_dashboard_logic.py
+   can execute them for real. Every one of these got a claim on the page wrong
+   at some point; the tests are the record of what the right answer is. */
+
+// The date range a capture sample actually covers, and whether all of it
+// predates the latest replay-code wipe. A wipe IS a patch, so a wholly pre-wipe
+// sample is pre-patch comp data and must never be labelled as newer than it is.
+function capSample(dates, wipe){
+  const ds=(dates||[]).filter(Boolean).map(d=>String(d).slice(0,10)).sort();
+  if(!ds.length) return null;
+  const to=ds[ds.length-1];
+  return {n:ds.length, from:ds[0], to, stale: !!(wipe && to<=wipe)};
+}
+// fmt lets the caller localise the dates (the page passes dshort); the default
+// keeps the helper pure and testable on raw ISO days.
+function capLabelText(sample, wipe, fmt){
+  if(!sample) return '';
+  const f=fmt||(s=>s);
+  const range = sample.from===sample.to ? f(sample.from)
+              : f(sample.from)+' → '+f(sample.to);
+  return sample.stale
+    ? `captured ${range} — all before the ${f(wipe)} patch`
+    : `captured ${range}`;
+}
+
+// Maps worth targeting: only where a team is genuinely weaker than its own
+// baseline. Sorting by win rate alone hands a coach the opponent's best maps as
+// "their worst" the moment that opponent is undefeated, so a map must sit a
+// clear margin BELOW their own average to count, and single games never do.
+const WORST_MIN_GAMES=2, WORST_MARGIN=10;
+function worstMaps(mapStats, opts){
+  const o=opts||{}, minGames=o.minGames||WORST_MIN_GAMES,
+        margin=(o.margin==null?WORST_MARGIN:o.margin), limit=o.limit||4;
+  const rows=Object.entries(mapStats||{})
+    .filter(([,v])=>(v&&v.games||0)>=minGames)
+    .map(([m,v])=>({m, g:v.games, wr:Math.round(100*v.wins/v.games)}));
+  if(!rows.length) return {rows:[], baseline:null};
+  const g=rows.reduce((a,r)=>a+r.g,0), w=rows.reduce((a,r)=>a+r.wr*r.g/100,0);
+  const baseline=Math.round(100*w/g);
+  return {baseline, rows: rows.filter(r=>r.wr<=baseline-margin)
+                               .sort((a,b)=>a.wr-b.wr||b.g-a.g).slice(0,limit)};
+}
+
+// Hero win rates off the captured comps joined to the match result. Ban counts
+// say what the league respects; this says what actually wins on the same sample.
+// The unit is the MAP: a hero who appears on two sub-maps of one Control map has
+// played one map, and each team's lineup is counted separately.
+function heroWinRates(pergame, winnerOf, opts){
+  const minMaps=(opts&&opts.minMaps)||5, tally={};
+  Object.entries(pergame||{}).forEach(([key,teams])=>{
+    const won=(winnerOf||{})[key];
+    if(!won) return;                     // no result on record -> not evidence
+    Object.entries(teams||{}).forEach(([team,submaps])=>{
+      const heroes=new Set();
+      Object.values(submaps||{}).forEach(l=>(l||[]).forEach(h=>heroes.add(h)));
+      heroes.forEach(h=>{
+        const t=tally[h]||(tally[h]={maps:0,wins:0});
+        t.maps++; if(team===won) t.wins++;
+      });
+    });
+  });
+  return Object.entries(tally)
+    .map(([hero,t])=>({hero, maps:t.maps, wins:t.wins,
+                       wr:Math.round(100*t.wins/t.maps)}))
+    .filter(r=>r.maps>=minMaps)
+    .sort((a,b)=>b.wr-a.wr||b.maps-a.maps||a.hero.localeCompare(b.hero));
+}
+
+// Rank players for the leaderboard. Rate columns (k/d, damage…) need a sample
+// floor or a one-map cameo tops the table; elo is a rating FACEIT reports per
+// game, so it stands on its own even when the stat rows were zeroed (hazard A).
+// A player missing the sorted stat always sorts last, never above a real number.
+const LB_MIN_GAMES=5;
+function rankPlayers(players, opts){
+  const o=opts||{}, key=o.key||'elo';
+  const minGames=(o.minGames==null?LB_MIN_GAMES:o.minGames);
+  const role=(o.role&&o.role!=='All')?o.role:null;
+  const count=(key==='elo'||key==='maps');   // counts/ratings, not per-map rates
+  const val=p=> key==='elo' ? p.elo
+              : key==='maps' ? (p.maps==null?null:p.maps)
+              : (p.stats?p.stats[key]:null);
+  return (players||[])
+    .filter(p=>!role||p.role===role)
+    .filter(p=> count ? true : (p.stats?(p.stats.games||0)>=minGames:true))
+    .sort((a,b)=>{
+      const av=val(a), bv=val(b);
+      if(av==null&&bv==null) return String(a.nick).localeCompare(String(b.nick));
+      if(av==null) return 1;
+      if(bv==null) return -1;
+      return bv-av || String(a.nick).localeCompare(String(b.nick));
+    });
+}
+
+// What a team's scouting-coverage row should say. `scoutable` counts games whose
+// replay code still works (or that were captured before it died), so it can be
+// zero — and 0-of-0 is "nothing left to scout", never "fully scouted".
+function coverageState(total, scoutable, done, wipe){
+  if(!total) return null;
+  const lost=total-scoutable;
+  if(!scoutable) return {kind:'wiped', lost,
+    text:`Nothing left to scout — all ${lost} replay code${lost===1?'':'s'} `+
+         `were wiped on ${wipe}.`};
+  if(done>=scoutable) return {kind:'full', lost,
+    text:'Fully scouted - every replay-coded game is captured.'};
+  return {kind:'partial', lost, text:''};
+}
+
+// Which division to open on, given the one remembered from last visit. With more
+// than one region live, always opening VIEWS[0] (EMEA Master) makes every NA
+// visitor re-pick their region on every visit.
+//
+// A stored id is only honoured if it STILL EXISTS: divisions come and go between
+// seasons, and this page renders its entire body off the active view, so a stale
+// id must fall back to the first view rather than leave it dangling.
+function pickDivision(storedId, views){
+  if(!views || !views.length) return null;
+  return views.some(v=>v.id===storedId) ? storedId : views[0].id;
+}
+
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
 // (single-file/offline builds) or fetched from data.json (the shell build). This
 // split is what lets next-season gating be a config change — point the fetch at
@@ -450,7 +571,13 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 function bootApp(DATA){
 const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined views
 (()=>{ const fb=document.getElementById('footbuilt'); if(fb&&DATA.built_at) fb.textContent='· data updated '+String(DATA.built_at).slice(0,10); })();
-let CURRENT_VIEW = VIEWS[0].id;
+// Remembered division (decision in pickDivision above; this is just the IO).
+// localStorage throws in some privacy modes and on file:// origins, so both ends
+// are guarded — an uncaught throw here would render a blank page.
+const DIV_KEY='owscout.division';
+const readDivision=()=>{ try{ return localStorage.getItem(DIV_KEY); }catch(e){ return null; } };
+const rememberDivision=(id)=>{ try{ localStorage.setItem(DIV_KEY,id); }catch(e){} };
+let CURRENT_VIEW = pickDivision(readDivision(), VIEWS);
 const viewOf = (id)=> VIEWS.find(v=>v.id===id);
 const _vcache = {};
 function D(){                                       // active view's data (single or merged)
@@ -513,11 +640,22 @@ const CAPTURED=new Set(DATA.owscout_captured||[]);
 // date can never be replayed, so it is only "scoutable" if already captured.
 const CODE_WIPE=DATA.code_wipe||null;
 const codeDead=(when)=>!!(CODE_WIPE&&when&&String(when).slice(0,10)<=CODE_WIPE);
-// Every capture-based stat can only see games since the last replay-code wipe
-// (codes reset each patch), so capture sections append this to their subtitle.
-const capSince=()=> CODE_WIPE
-  ? ` <span class="faint" title="Replay codes reset each patch, so captured data only covers games since the last code wipe">· captures since ${dshort(CODE_WIPE)}</span>`
-  : '';
+// Capture sections append the sample's REAL date range to their subtitle. The
+// old label read "captures since <wipe date>", which claimed the comps were
+// post-patch when in practice the whole sample usually predates the wipe that
+// killed its codes - the one direction of error that misleads a coach.
+let _capSampleAll;
+function capSampleAll(){
+  if(_capSampleAll!==undefined) return _capSampleAll;
+  const when={};
+  Object.values(DIVS).forEach(d=>(d.matches||[]).forEach(m=>{when[m.id]=m.finished_at||'';}));
+  const dates=[...CAPTURED].map(k=>when[k.slice(0,k.lastIndexOf(':'))]);
+  return (_capSampleAll=capSample(dates,CODE_WIPE));
+}
+const capSince=()=>{
+  const t=capLabelText(capSampleAll(),CODE_WIPE,dshort);
+  return t?` <span class="faint" title="Comps come from captured replays. Replay codes reset every patch, so a game can only be scouted while its code lives.">· ${t}</span>`:'';
+};
 // Map lists everywhere read as a mode block at a time (all Control together, etc),
 // and within a mode the maps the league actually plays come first.
 const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
@@ -930,8 +1068,12 @@ function aggregate(matches,team){
 // into a 32-slot bracket, so the top 8 draw byes automatically — no special case.
 const PLAYOFF_QUALIFIERS={Master:8,Expert:16,Advanced:24,Open:32};
 const tierOf=(name)=>['Master','Expert','Advanced','Open'].find(t=>(name||'').includes(t))||null;
-// Deep-link into the browser capture tool, pre-filtered to a team (+ its tier).
-const captureUrl=(team)=>{ const t=tierOf(String((D().summary||{}).championship||''))||''; return 'capture/?team='+encodeURIComponent(team)+(t?'&division='+encodeURIComponent(t):''); };
+const regionOf=(name)=>['EMEA','NA'].find(r=>String(name||'').toUpperCase().replace(/-/g,' ').split(/\s+/).includes(r))||null;
+// Deep-link into the browser capture tool, pre-filtered to a team (+ its division).
+// The division must be REGION-QUALIFIED ("EMEA Master") to match the labels
+// tools/build_capture_data.py emits — a bare tier merges both regions there.
+const captureUrl=(team)=>{ const c=String((D().summary||{}).championship||''), t=tierOf(c), r=regionOf(c);
+  const d=(r&&t)?r+' '+t:''; return 'capture/?team='+encodeURIComponent(team)+(d?'&division='+encodeURIComponent(d):''); };
 const nextPow2=(n)=>{let k=1;while(k<n)k*=2;return k;};
 // Standard bracket seed order so 1 & 2 can only meet in the final:
 // seeds(4)=[1,4,2,3]; seeds(8)=[1,8,4,5,2,7,3,6].
@@ -1044,8 +1186,17 @@ let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
-let PLAYERS_ROLE='All';        // (unused since the Players tab became a directory)
-let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role'
+let PLAYERS_ROLE='All';         // Leaderboard role filter: All | Tank | Damage | Support
+let PLAYERS_VIEW='team';        // Players tab mode: 'team' | 'role' | 'rank'
+let PLAYERS_SORT='elo';         // Leaderboard sort column (see LB_COLS)
+// Leaderboard columns, in table order. `rate` marks a per-map average, which
+// needs a sample floor to be meaningful; counts and elo do not.
+// Hero win rate needs a real sample before it means anything; at ~140 captured
+// maps a league-wide floor of 8 keeps the table honest without emptying it.
+const HERO_WR_MIN=8;
+const LB_COLS=[{k:'maps',label:'Maps'},{k:'elo',label:'Elo'},
+  {k:'kd',label:'K/D',rate:1},{k:'dmg',label:'Dmg/map',rate:1},
+  {k:'heal',label:'Heal/map',rate:1},{k:'mit',label:'Mit/map',rate:1}];
 let SIM_A=null, SIM_B=null, SIM_FIRST='A';  // draft simulator state
 let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) -> {map,b1,b2} overrides
 let SIM_BO=3;       // wins needed: 2 = Bo3, 3 = Bo5 (default), 4 = Bo7 (playoff)
@@ -1221,12 +1372,17 @@ function renderPrepBody(t){
   grid.appendChild(pick);
 
   const weak=el(`<div class="card"></div>`);
-  weak.appendChild(el(`<p class="eyebrow">Target these maps - their worst</p>`));
-  const worst=Object.entries(t.mapStats).filter(([,v])=>v.games>=2)
-    .map(([m,v])=>({m,g:v.games,wr:pctOf(v.wins,v.games)}))
-    .sort((a,b)=>a.wr-b.wr).slice(0,4);
-  if(!worst.length) weak.appendChild(el(`<p class="note">Not enough games per map yet.</p>`));
-  worst.forEach(r=>weak.appendChild(el(`<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
+  const ws=worstMaps(t.mapStats);
+  weak.appendChild(el(`<p class="eyebrow">Target these maps - their worst`+
+    (ws.baseline!=null?` <span class="note" style="text-transform:none;letter-spacing:0">vs their ${ws.baseline}% overall</span>`:'')+`</p>`));
+  if(!ws.rows.length){
+    // A dominant (or too-thin) record has no weak map. Saying so beats handing
+    // the coach four maps the opponent has never lost on.
+    weak.appendChild(el(ws.baseline==null
+      ? `<p class="note">Not enough games per map yet <span class="faint">(needs ${WORST_MIN_GAMES}+ on a map)</span>.</p>`
+      : `<p class="note">No clear weak map - they hold ${ws.baseline}% across their pool. Draft to your own strengths instead.</p>`));
+  }
+  ws.rows.forEach(r=>weak.appendChild(el(`<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
     `<span class="rec">${r.g} games · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
   grid.appendChild(weak);
   w.appendChild(grid);
@@ -1259,10 +1415,14 @@ function renderPrepBody(t){
 function renderScout(){
   const wrap=el(`<div></div>`);
   const bar=el(`<div class="card controls"></div>`);
-  bar.appendChild(el(`<label>Opponent</label>`));
+  // "Team", not "Opponent": the same sheet read about your own side is a
+  // self-scout - what you are predictable on, and what an opponent prepping you
+  // is looking at right now. Only the label ever stopped that being obvious.
+  bar.appendChild(el(`<label>Team</label>`));
   const sel=el(`<select style="min-width:190px"></select>`);
   D().team_names.forEach(n=>sel.appendChild(el(`<option ${n===SCOUT_TEAM?'selected':''}>${esc(n)}</option>`)));
   bar.appendChild(sel);
+  bar.appendChild(el(`<span class="note" style="margin:0">opponent — or your own team, to see what they see</span>`));
   bar.appendChild(el(`<label>Recent matches</label>`));
   const holder=el(`<span style="display:inline-flex"></span>`);
   bar.appendChild(holder);
@@ -1438,10 +1598,13 @@ function renderScoutBody(t){
     const done=scoutable.filter(r=>CAPTURED.has(r.mid+':'+r.gno));
     const todo=scoutable.filter(r=>!CAPTURED.has(r.mid+':'+r.gno))
       .sort((a,b)=>(b.when||'').localeCompare(a.when||''));
+    const cst=coverageState(t.replays.length,scoutable.length,done.length,CODE_WIPE);
     const cov=el(`<div class="card" style="margin-top:10px"></div>`);
     cov.appendChild(el(`<p class="eyebrow">Scouting coverage · ${done.length} of ${scoutable.length} scoutable games captured`+
       (lost?` <span class="faint" style="text-transform:none;letter-spacing:0">· ${lost} lost to the ${esc(CODE_WIPE)} code wipe</span>`:'')+`</p>`));
-    if(todo.length){
+    if(cst&&cst.kind==='wiped'){
+      cov.appendChild(el(`<p class="note" style="margin:0">${esc(cst.text)}</p>`));
+    } else if(todo.length){
       const row=el(`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>`);
       row.appendChild(el(`<span class="note" style="margin:0">to scout:</span>`));
       todo.slice(0,8).forEach(r=>{
@@ -1452,7 +1615,7 @@ function renderScoutBody(t){
       row.appendChild(el(`<a class="btn" href="${captureUrl(t.team)}" style="text-decoration:none;padding:4px 10px;font-size:12px;margin-left:auto;white-space:nowrap">Capture →</a>`));
       cov.appendChild(row);
     } else {
-      cov.appendChild(el(`<p class="note" style="margin:0">Fully scouted - every replay-coded game is captured.</p>`));
+      cov.appendChild(el(`<p class="note" style="margin:0">${esc((cst||{}).text||'')}</p>`));
     }
     root.appendChild(cov);
   }
@@ -2017,14 +2180,6 @@ function playerCaptures(){ const ocs=DATA.owscout_comps||{}, out={};
   return out; }
 function topHeroes(cap,n){ return cap&&cap.heroes&&cap.heroes.length
   ? cap.heroes.slice().sort((a,b)=>(b.rounds||0)-(a.rounds||0)).slice(0,n||3) : []; }
-// Games-weighted average across a player's captured heroes (per-hero stats are
-// already per-game averages), for the Role view's stat line.
-function playerAvg(cap){ if(!cap||!cap.heroes) return null; let g=0,e=0,d=0,dm=0,h=0,mi=0;
-  cap.heroes.forEach(x=>{ const gg=x.games||0, s=x.stats; if(!gg||!s) return;
-    g+=gg; e+=(s.elims||0)*gg; d+=(s.deaths||0)*gg; dm+=(s.damage||0)*gg; h+=(s.healing||0)*gg; mi+=(s.mitigation||0)*gg; });
-  if(!g) return null;
-  return {games:g, kd:Math.round(e/Math.max(d,0.5)*100)/100, deaths:Math.round(d/g*10)/10,
-    damage:Math.round(dm/g), healing:Math.round(h/g), mitigation:Math.round(mi/g), elims:Math.round(e/g*10)/10}; }
 const roleOf=r=>/tank/i.test(r||'')?'Tank':/support/i.test(r||'')?'Support':/dam|dps/i.test(r||'')?'Damage':null;
 // A player's competitive SEAT, inferred from the heroes they've been captured on:
 // tally rounds per seat among the two seats their FACEIT role allows and take the
@@ -2038,6 +2193,13 @@ function seatOfPlayer(p){ const role=roleOf(p.role); if(!role) return null;
   const allowed=ROLE_SEATS[role]; if(!allowed) return null;
   const tally={}; hs.forEach(h=>{ const s=HERO_SEAT[h.hero]; if(s&&allowed.indexOf(s)>=0) tally[s]=(tally[s]||0)+(h.rounds||0); });
   return Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0]||allowed[0]; }
+// The exported roster stats (per-map averages off FACEIT's feed) in the shape
+// playerStatLine speaks. This replaced an equivalent computed from CAPTURED
+// heroes only: the seat is what needs a capture, the numbers never did, and the
+// season feed covers every player of every match.
+function faceitAvg(p){ const s=p&&p.stats; if(!s) return null;
+  return {games:s.games, kd:s.kd, elims:s.elims, deaths:s.deaths,
+          damage:s.dmg, healing:s.heal, mitigation:s.mit}; }
 function playerStatLine(role,s){ if(!s) return ''; const kd=s.kd!=null?`${s.kd} k/d`:'';
   if(role==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
   if(role==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
@@ -2046,16 +2208,20 @@ function renderPlayers(){
   const wrap=el(`<div></div>`);
   const cap=playerCaptures();
   // Every known player from the FACEIT rosters, captured heroes/stats joined by nick.
+  // elo + per-map stat averages ride on the roster rows: FACEIT reports them for
+  // every player of every match, so they are present at full league coverage -
+  // unlike hero pools, which only exist where someone captured the replay.
   const players=[];
   D().teams.forEach(t=>{ (t.roster||[]).forEach(p=>{
     players.push({nick:p.nick, team:t.name, role:p.role||'', maps:p.games||0, current:!!p.current,
+      elo:(p.elo==null?null:p.elo), stats:p.stats||null,
       cap:cap[t.name+'|'+p.nick]||null}); }); });
   if(!players.length){
     wrap.appendChild(el(`<p class="note" style="margin-top:14px">No roster data yet.</p>`));
     return wrap;
   }
   wrap.appendChild(el(sectionH('Players',
-    `<span class="note">every known player in ${esc(D().summary.championship||'the division')} · roles, teams &amp; names from FACEIT · top heroes &amp; averages from captured games (blank until scouted)${capSince()}</span>`)));
+    `<span class="note">every known player in ${esc(D().summary.championship||'the division')} · roles, teams, elo &amp; per-map stats from FACEIT (every division) · hero pools from captured games</span>`)));
   const modebar=el(`<div class="wsel" style="margin:2px 2px 12px"></div>`);
   const body=el(`<div></div>`);
   wrap.append(modebar, body);
@@ -2073,9 +2239,9 @@ function renderPlayers(){
       const card=el(`<div class="card roster"></div>`);
       card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
         `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
-      const line=(p,dim)=>`<div class="pl"${dim?' style="opacity:.55"':''} title="${p.games} maps this season">`+
+      const line=(p,dim)=>`<div class="pl"${dim?' style="opacity:.55"':''} title="${p.games} maps this season${p.stats?' · '+p.stats.kd+' k/d over '+p.stats.games+' maps':''}">`+
         `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-        `<span>${esc(p.nick)}</span>`+
+        `<span>${esc(p.nick)}${p.elo!=null?` <span class="faint" style="font-size:11px">${p.elo}</span>`:''}</span>`+
         `<span class="st">${icons(cap[t.name+'|'+p.nick])}</span></div>`;
       const curP=ros.filter(p=>p.current), subP=ros.filter(p=>!p.current);
       let b=curP.map(p=>line(p,false)).join('');
@@ -2103,10 +2269,12 @@ function renderPlayers(){
       const baseRole = seat==='Tank'?'Tank' : /Support/.test(seat)?'Support':'Damage';
       const card=el(`<div class="card"></div>`);
       card.appendChild(el(`<p class="eyebrow role-${baseRole}">${esc(seat)} <span class="note" style="text-transform:none;letter-spacing:0">${list.length} player${list.length===1?'':'s'}</span></p>`));
-      list.forEach(p=>{ const av=playerAvg(p.cap), hs=topHeroes(p.cap,3);
-        card.appendChild(el(`<div class="crow" title="${av?av.games+'g avg · '+(av.kd!=null?av.kd+' k/d · ':'')+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':'no stats'}">`+
+      // Stats come from FACEIT's season feed (every map they played), not just the
+      // captured ones - the seat itself is what needs a capture, not the numbers.
+      list.forEach(p=>{ const av=faceitAvg(p), hs=topHeroes(p.cap,3);
+        card.appendChild(el(`<div class="crow" title="${av?av.games+' maps · '+(av.kd!=null?av.kd+' k/d · ':'')+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':'no stats'}">`+
           `<span><b>${esc(p.nick)}</b> <span class="faint">${esc(p.team)}</span> ${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
-          `<span class="rec">${av?playerStatLine(baseRole,av)+` <span class="faint">· ${av.games}g</span>`:''}</span></div>`)); });
+          `<span class="rec">${av?playerStatLine(baseRole,av)+` <span class="faint">· ${av.games}m</span>`:''}</span></div>`)); });
       grid.appendChild(card);
     });
     body.appendChild(any?grid:el(`<p class="note">No players with a known role yet.</p>`));
@@ -2114,9 +2282,52 @@ function renderPlayers(){
     foot('Tank',unseated.Tank); foot('DPS',unseated.Damage); foot('Support',unseated.Support);
     if(un.length) body.appendChild(el(`<p class="note" style="margin-top:10px">Not scouted yet <span class="faint">(seat shows once a player is captured)</span> — ${un.join(' · ')}</p>`));
   }
+  // Leaderboard: pure FACEIT signal (elo + per-map averages), so unlike the hero
+  // pools it is fully populated in every division, captured or not. Rate columns
+  // carry a sample floor; counts and elo do not (see rankPlayers).
+  function drawRanks(){
+    body.innerHTML='';
+    const col=LB_COLS.find(c=>c.k===PLAYERS_SORT)||LB_COLS[0];
+    const ctl=el(`<div class="ctlrow" style="flex-wrap:wrap;gap:8px"></div>`);
+    const rsel=el(`<select class="sortbtn">`+
+      ['All','Tank','Damage','Support'].map(r=>`<option${r===PLAYERS_ROLE?' selected':''}>${r}</option>`).join('')+
+      `</select>`);
+    rsel.onchange=()=>{ PLAYERS_ROLE=rsel.value; drawRanks(); };
+    ctl.append(el(`<span class="note" style="margin:0">Role</span>`), rsel,
+      el(`<span class="note" style="margin:0">sorted by <b>${esc(col.label)}</b> · click a column to re-sort`+
+         `${col.rate?` · needs ${LB_MIN_GAMES}+ maps`:''}</span>`));
+    body.appendChild(ctl);
+    const rows=rankPlayers(players,{key:PLAYERS_SORT,role:PLAYERS_ROLE});
+    if(!rows.length){ body.appendChild(el(`<p class="note">No players with that stat yet.</p>`)); return; }
+    const box=el(`<div class="scroll"></div>`);
+    const tb=el(`<table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Role</th>`+
+      LB_COLS.map(c=>`<th class="num" data-k="${c.k}" style="cursor:pointer">${esc(c.label)}${c.k===PLAYERS_SORT?' ▾':''}</th>`).join('')+
+      `</tr></thead><tbody></tbody></table>`);
+    const body2=tb.querySelector('tbody');
+    rows.forEach((p,i)=>{
+      const s=p.stats;
+      body2.appendChild(el(`<tr>`+
+        `<td class="num faint">${i+1}</td>`+
+        `<td><b>${esc(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
+        `<td><span class="tlink" data-scout="${esc(p.team)}">${esc(p.team)}</span></td>`+
+        `<td><span class="dot bg-${esc(p.role||'')}"></span> <span class="faint">${esc(p.role||'—')}</span></td>`+
+        `<td class="num">${p.maps||0}</td>`+
+        `<td class="num">${p.elo!=null?p.elo:'<span class="faint">—</span>'}</td>`+
+        `<td class="num">${s?s.kd:'<span class="faint">—</span>'}</td>`+
+        `<td class="num">${s?nf(s.dmg):'<span class="faint">—</span>'}</td>`+
+        `<td class="num">${s?nf(s.heal):'<span class="faint">—</span>'}</td>`+
+        `<td class="num">${s?nf(s.mit):'<span class="faint">—</span>'}</td>`+
+        `</tr>`));
+    });
+    tb.querySelectorAll('th[data-k]').forEach(th=>{
+      th.onclick=()=>{ PLAYERS_SORT=th.dataset.k; drawRanks(); }; });
+    box.appendChild(tb); body.appendChild(box);   // [data-scout] clicks: global handler
+    body.appendChild(el(`<p class="note" style="margin-top:8px">Elo is FACEIT's rating at the player's most recent map. `+
+      `Averages are per map played across the whole season — they do not depend on anyone scouting the game.</p>`));
+  }
   const draw=()=>{ [...modebar.children].forEach(b=>b.classList.toggle('selA', b.dataset.v===PLAYERS_VIEW));
-    if(PLAYERS_VIEW==='role') drawRole(); else drawTeam(); };
-  [['team','By team'],['role','By seat']].forEach(([v,label])=>{
+    if(PLAYERS_VIEW==='role') drawRole(); else if(PLAYERS_VIEW==='rank') drawRanks(); else drawTeam(); };
+  [['team','By team'],['role','By seat'],['rank','Leaderboard']].forEach(([v,label])=>{
     const b=el(`<span class="wbtn" data-v="${v}">${esc(label)}</span>`);
     b.onclick=()=>{ PLAYERS_VIEW=v; draw(); }; modebar.appendChild(b);
   });
@@ -2459,6 +2670,30 @@ function renderMeta(){
     }
   }
 
+  // What actually wins, next to what gets banned. Same captured sample as the
+  // comps above, joined to the match result - so it carries the same caveats and
+  // a hard sample floor (a hero seen 4 times has no win rate worth printing).
+  {
+    // Only this view's matches carry a winner, which scopes the whole table to
+    // the selected division without filtering the league-wide capture blob.
+    const winnerOf={};
+    D().matches.forEach(m=>(m.games||[]).forEach(g=>{
+      if(g.winner_team) winnerOf[m.id+':'+g.game_no]=g.winner_team;
+    }));
+    const rows=heroWinRates(DATA.owscout_pergame||{},winnerOf,{minMaps:HERO_WR_MIN});
+    wrap.appendChild(el(sectionH('Hero win rates',
+      `<span class="note">map win rate across captured maps · ${HERO_WR_MIN}+ maps to qualify · counted once per map a hero appears on${capSince()}</span>`)));
+    if(rows.length){
+      const card=el(`<div class="card"></div>`);
+      rows.slice(0,18).forEach(r=>card.appendChild(el(`<div class="crow">`+
+        `<span>${heroChip(r.hero)}</span>`+
+        `<span class="rec">${r.wins}/${r.maps} · ${pill(r.wr+'%',winVar(r.wr))}</span></div>`)));
+      wrap.appendChild(card);
+    } else {
+      wrap.appendChild(el(`<p class="note">Not enough captured maps yet — no hero in this division clears ${HERO_WR_MIN} maps.</p>`));
+    }
+  }
+
   // Current map pool, grouped by mode the way FACEIT lays out the veto pool.
   const MODE_ORDER=['Control','Escort','Flashpoint','Hybrid','Push','Clash'];
   const pool={};
@@ -2617,7 +2852,7 @@ function updateHeader(){
   }
 }
 function setDivision(id){
-  CURRENT_VIEW=id; recomputeDivision(); updateHeader();
+  CURRENT_VIEW=id; rememberDivision(id); recomputeDivision(); updateHeader();
   const dsel=document.getElementById('division'); if(dsel) dsel.value=id;   // keep header in sync
   const cur=document.querySelector('nav button.active');
   show(cur?cur.dataset.id:'overview');

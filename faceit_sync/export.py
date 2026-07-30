@@ -271,10 +271,16 @@ def _dashboard_data(db: Database, cid: str,
     # each team, most-recent + most-used first, so a scout sees the squad at a
     # glance. One row per game played, so `games` counts maps (a bo3 = up to 3).
     # `last_seen` is the match date, used to sort and to flag the last lineup.
+    # Stats + elo ride along on the same rows: FACEIT reports them for every player
+    # of every match, so these are the one player signal that works at full league
+    # coverage — no capture required. Zeroed (hazard A) rows are stored NULL, so the
+    # stat sample is counted separately from maps played.
     roster_rows = rows("""
       SELECT te.name team, rp.player_id pid,
              COALESCE(p.nickname, rp.player_id) nick, p.game_name gname,
-             rp.role role, m.finished_at fin
+             rp.role role, m.finished_at fin, rp.elo_snapshot elo,
+             rp.eliminations e, rp.deaths d, rp.damage dmg,
+             rp.healing heal, rp.damage_mitigated mit
       FROM round_players rp
       JOIN matches m ON m.id=rp.match_id
       JOIN teams te ON te.id=rp.team_id
@@ -283,10 +289,13 @@ def _dashboard_data(db: Database, cid: str,
     _agg: dict[tuple[str, str], dict[str, Any]] = {}
     _roles: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     _last_match: dict[str, str] = {}          # team -> its most recent match date
+    _STAT_KEYS = ("e", "d", "dmg", "heal", "mit")
     for rr in roster_rows:
         key = (rr["team"], rr["pid"])
         a = _agg.setdefault(key, {"nick": rr["nick"], "game_name": rr["gname"],
-                                  "games": 0, "last_seen": ""})
+                                  "games": 0, "last_seen": "", "elo": None,
+                                  "elo_at": "", "sgames": 0,
+                                  **{k: 0 for k in _STAT_KEYS}})
         a["games"] += 1
         fin = rr["fin"] or ""
         if fin > a["last_seen"]:
@@ -295,12 +304,30 @@ def _dashboard_data(db: Database, cid: str,
             _last_match[rr["team"]] = fin
         if rr["role"]:
             _roles[key][rr["role"]] += 1
+        # Elo is a snapshot per game; the most recent one is the current rating.
+        if rr["elo"] is not None and fin >= a["elo_at"]:
+            a["elo"], a["elo_at"] = int(rr["elo"]), fin
+        if rr["e"] is not None and rr["d"] is not None:
+            a["sgames"] += 1
+            for k, col in zip(_STAT_KEYS, ("e", "d", "dmg", "heal", "mit")):
+                a[k] += rr[col] or 0
     team_rosters: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for (team, pid), a in _agg.items():
         rc = _roles[(team, pid)]
+        n = a["sgames"]
+        stats = None
+        if n:
+            # Per-map averages, and k/d on the season totals (not a mean of ratios).
+            stats = {
+                "games": n,
+                "elims": round(a["e"] / n, 1), "deaths": round(a["d"] / n, 1),
+                "dmg": round(a["dmg"] / n), "heal": round(a["heal"] / n),
+                "mit": round(a["mit"] / n),
+                "kd": round(a["e"] / max(a["d"], 1), 2),
+            }
         team_rosters[team].append({
             "nick": a["nick"], "game_name": a["game_name"], "games": a["games"],
-            "last_seen": a["last_seen"],
+            "last_seen": a["last_seen"], "elo": a["elo"], "stats": stats,
             "role": rc.most_common(1)[0][0] if rc else None,
             # Played in the team's most recent match = part of the current lineup.
             "current": bool(a["last_seen"]) and a["last_seen"] == _last_match.get(team, ""),
@@ -439,12 +466,22 @@ def _tier_of(name: Optional[str]) -> Optional[str]:
     return next((t for t in TIERS if t in name), None)
 
 
+REGIONS: tuple[str, ...] = ("EMEA", "NA")
+
+
 def _region_of(name: Optional[str]) -> Optional[str]:
-    """The region a championship name encodes ('EMEA' | 'NA' | None)."""
+    """The region a championship name encodes ('EMEA' | 'NA' | None).
+
+    Matched as a WHOLE WORD, mirroring ``owscout.db.list_codes``: a bare
+    substring test would classify any name merely containing those letters
+    ("Open Nationals") as NA. Harmless while the site shipped one region and
+    EMEA was tested first; load-bearing now that a mis-classified division
+    would land in the wrong region's switcher.
+    """
     if not name:
         return None
-    u = name.upper()
-    return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
+    words = name.upper().replace("-", " ").split()
+    return next((r for r in REGIONS if r in words), None)
 
 
 def _is_playoff(name: Optional[str]) -> bool:
@@ -452,7 +489,8 @@ def _is_playoff(name: Optional[str]) -> bool:
     divisions. Its matches feed the Playoffs tab as real results but must NOT
     enter regular-season standings/meta — so it's classified out of the tier
     views and attached to the matching division instead."""
-    return bool(name) and ("playoff" in name.lower() or "knockout" in name.lower())
+    low = (name or "").lower()
+    return "playoff" in low or "knockout" in low
 
 
 def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,
@@ -546,7 +584,8 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
                 rt_reg[(r, t)] = cid
         for pcid in playoff_cids:
             pnm = name_by_cid.get(pcid)
-            reg_cid = rt_reg.get((_region_of(pnm), _tier_of(pnm)))
+            preg, ptier = _region_of(pnm), _tier_of(pnm)
+            reg_cid = rt_reg.get((preg, ptier)) if preg and ptier else None
             if not reg_cid:
                 continue
             pd = _dashboard_data(db, pcid, attack_cycles=owscout_cycles)
@@ -582,7 +621,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
 
     views: list[dict[str, Any]] = []
     used: set[str] = set()
-    for region in ("EMEA", "NA"):
+    for region in REGIONS:
         present = [(t, by_region_tier[(region, t)]) for t in TIERS
                    if (region, t) in by_region_tier]
         for t, cid in present:

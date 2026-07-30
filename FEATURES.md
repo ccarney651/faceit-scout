@@ -8,7 +8,7 @@ reads the hero portraits off the observer HUD, and turns them into composition
 scouting that the same dashboard displays. They share nothing but a read-only
 database link and one JSON file.
 
-*196 tests, mypy clean across 44 files.*
+*329 tests, mypy clean across 49 files.*
 
 ---
 
@@ -85,20 +85,63 @@ Hero portraits are inlined as WebP data URIs from a committed
 gitignored, so builds read the committed cache and local and CI produce identical
 pages. Regenerate with `python -m faceit_sync.hero_icons <asset-dir>`.
 
+### Regions and divisions
+
+The site ships **EMEA** (Master / Expert / Advanced) and **NA** (Master /
+Expert), picked with a paired region + division selector. Region and tier are
+read from the championship *name* — the `championships.region` column says
+`GLOBAL` on every row and is useless — matched as **whole words**, since a bare
+`"NA" in name` would file an "Open Nationals" cup under North America.
+
+Each region with more than one tier also gets a **Combined** view, merged on
+demand from the divisions already in the payload rather than duplicated into it.
+Views are ordered region-major, EMEA first, tiers strongest-first.
+
+The chosen division is remembered in `localStorage`, so an NA coach picks their
+region once rather than every visit. A stored id is validated against the current
+views before use: divisions come and go between seasons, and a stale id has to
+fall back to the first view rather than leave the page with nothing to render.
+Shared `#scout=` / `#prep=` links still win, and deliberately do *not* overwrite
+the stored preference — following a link to an NA team shouldn't relocate an EMEA
+coach permanently.
+
+Everything the FACEIT feed provides — standings, bans, maps, player stats, elo —
+is populated for every division. Comp/scouting sections depend on someone having
+captured replays for that division (see §5, Known gaps).
+
+`--region emea|na` narrows the build to one region; the live site passes no
+`--region` and ships everything in the database.
+
 ### Tabs
 
 **Overview** — division summary, most-picked maps, ban leaders, data-quality
 counters (walkovers, restarts, DC'd games, attribution coverage).
 
-**Scout a team** — the main working view. Detailed in §3.
+**Scout a team** — the main working view. Detailed in §3. The team picker is
+labelled *Team*, not *Opponent*: pointed at your own side the same sheet is a
+self-scout, showing what an opponent prepping you is looking at.
+
+**Players** — every player on every roster, in three views. *By team* (rosters,
+starters over subs, elo, top-3 captured heroes), *By seat* (grouped by inferred
+subrole — Tank / Hitscan / Flex DPS / Main Support / Flex Support), and
+*Leaderboard* — a sortable table of elo, maps, K/D and per-map damage / healing /
+mitigation. The leaderboard runs purely off FACEIT's stat feed, so unlike hero
+pools it is fully populated in **every** division, captured or not. Rate columns
+carry a 5-map sample floor; counts and elo do not need one.
 
 **Draft simulator** — a manual scenario planner. Pick two teams and walk a draft;
 each team's real history drives the suggestions (map-pick frequency, per-map ban
 counts, overall ban rates), with already-banned heroes excluded from the picker.
 
 **League meta** — cross-division hero ban rates, ban-by-role split, map
-popularity, and attacking-first win rate per map (Escort/Hybrid only, since
-mirrored modes have no attacking side).
+popularity, attacking-first win rate per map (Escort/Hybrid only, since mirrored
+modes have no attacking side), and **hero win rates** off the captured comps
+joined to the match result — what actually wins, next to what gets banned. The
+unit is the map (a hero on two sub-maps of one Control map played one map), each
+team's lineup counts separately, and 8+ maps are needed to qualify.
+
+**Playoffs** — the bracket, seeded from current standings until real playoff
+matches exist.
 
 **Matches** — every match card: per-map bans in draft order, replay codes inline
 and click-to-copy, expandable rosters, newest/oldest sort, and the match date.
@@ -113,6 +156,17 @@ and click-to-copy, expandable rosters, newest/oldest sort, and the match date.
 - **Evidence weighting** — single-sample rows render at reduced opacity. `n` is
   always shown; a rate below the sample floor renders as a raw fraction rather
   than a percentage, so `1/2` never masquerades as "50%".
+- **Capture sections are dated by their real range**, not by the code wipe.
+  Every capture-based panel appends `captured <from> → <to>`, and when the whole
+  sample predates the latest wipe it says so outright (`— all before the
+  <date> patch`). A replay-code wipe *is* a patch, so a pre-wipe sample is
+  pre-patch comp data; the earlier label ("captures since <wipe date>") claimed
+  the opposite, which is the one direction of error that misleads a coach.
+- **A recommendation is withheld rather than faked.** "Target these maps — their
+  worst" only lists maps a clear margin *below the team's own baseline*, so an
+  undefeated opponent yields "no clear weak map" instead of four maps they have
+  never lost on. Likewise a team whose replay codes all died reads "nothing left
+  to scout", never "fully scouted" off a 0-of-0.
 
 ## 1.3 Statistics
 
@@ -124,6 +178,17 @@ chain (map → mode → global) and stops at the first level with enough samples
 `comps top` prints a **mandatory bias-disclosure header** stating how many maps
 the numbers rest on — the sample is captured replays, not the league, and the
 output says so rather than letting the reader assume otherwise.
+
+**Player season aggregates (`export.py`, on each roster row).** FACEIT reports
+per-game stats and an elo snapshot for every player of every match, so these are
+the one player signal that exists at *full* league coverage — no capture needed.
+Each roster entry carries `elo` (the rating at their most recent map) and a
+`stats` block of per-map averages: eliminations, deaths, damage, healing,
+mitigation, plus `kd` taken on season totals rather than as a mean of per-map
+ratios. The stat sample is counted separately from maps played, because hazard-A
+rows (a played game whose stats came back zeroed) are stored NULL and must not
+dilute an average. Verified against the raw feed: FACEIT's own `c1` equals
+`i8`/`i9`, which is what confirms the eliminations/deaths mapping.
 
 ## 1.4 Independent audit (`verify_accuracy.py`)
 
@@ -416,7 +481,12 @@ degrades to first-wins rather than blocking the build.
 # Part 3 — The scouting page, section by section
 
 Reached via **Scout a team**. Sections above the fold come from captured replays;
-the rest from FACEIT's draft data.
+the rest from FACEIT's draft data. The **Prep sheet** toggle condenses all of it
+to one screen of decisions — ban candidates by round share, what they will ban,
+their first ban when drafting first, what they will pick, which maps to target,
+their comps, and how their opener moves under a key ban. Its URL carries the team
+(`#prep=<Team>`), so a link pasted into Discord lands a teammate on the right
+sheet.
 
 **Common comps** — the comp families they actually run, with maps played and W-L.
 
@@ -485,8 +555,11 @@ presentation is built to keep that visible.
 
 # Part 5 — Known gaps
 
-- **Player-name OCR is not wired** (SPEC §8.2), so per-player hero pools stay
-  empty. Comps are captured per *team*, not attributed to individuals.
+- **Per-player hero pools depend on capture coverage.** Name OCR *is* wired (the
+  scout page renders player pools from HUD attribution), but only for maps someone
+  scouted — so in a division with no captures the pools are empty. Elo and per-map
+  stats do not have this problem: they come off FACEIT's own feed for every player
+  of every match (see §1.3).
 - **Map-name verification is stubbed** — the OCR hook returns `None`, so map
   mismatch reads "not checked". It is unclear whether the map name is reliably on
   the observer HUD at all.
