@@ -1967,10 +1967,13 @@ function renderScoutBody(t){
             ? `<p class="note" style="margin-top:0">They went <b class="${wins>=losses?'wlw':'wll'}">${wins}W-${losses}L</b> when the opponent shared ${q}.</p>`
             : `<p class="note" style="margin-top:0">Only ${sim.length} game${sim.length>1?'s':''} where the opponent shared ${q} — too thin to call a record, but here's what they did:</p>`));
           sim.slice(0,6).forEach(({m,ov})=>{
+            // Counter-scout rows are already one game each (unlike the aggregated
+            // tables above) - always the inline single-code case, never a popover.
+            const cc=lookup.get(m.match_id+':'+m.game_no);
             resBox.appendChild(el(`<div class="crow${ov.length<2?' thin':''}">`+
               `<span class="csrow"><span class="wlsq ${m.won?'w':'l'}">${m.won?'W':'L'}</span>`+
               `<b>${esc(m.map)}</b><span class="faint">ran</span>${compRow(m.open||[])}</span>`+
-              `<span class="rec">matched ${ov.length}/${signal.length}</span></div>`));
+              `<span class="rec">matched ${ov.length}/${signal.length}${cc?' '+rcChip(cc.code):''}</span></div>`));
           });
         } else {
           resBox.appendChild(el(`<p class="note">No captured game where they faced any of those heroes yet.</p>`));
