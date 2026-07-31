@@ -1089,8 +1089,8 @@ function makeRecency(total, currentN, onChange, sliderMax){
 /* ---------- aggregation over a set of matches ---------- */
 // team=null → league-wide; else that team's own bans/picks/counters + map win rates.
 function aggregate(matches,team){
-  const a={bans:{},banRoles:{},mapsPicked:{},perMapPick:{},counter:{},mapStats:{},
-           firstBans:{},firstBanGames:0,pickFirstBan:{},banHeroWin:{},banOpen:{},games:0,gwins:0,results:[],replays:[]};
+  const a={bans:{},bansGk:{},banRoles:{},mapsPicked:{},perMapPick:{},counter:{},counterGk:{},mapStats:{},
+           firstBans:{},firstBansGk:{},firstBanGames:0,pickFirstBan:{},banHeroWin:{},banOpen:{},games:0,gwins:0,results:[],replays:[]};
   matches.forEach(m=>{
     const side = team? (m.f1===team?'faction1':(m.f2===team?'faction2':null)) : 'x';
     if(team && !side) return;
@@ -1099,7 +1099,8 @@ function aggregate(matches,team){
       if(!g.map) return; a.games++;
       if(team){
         const won=g.winner_faction===side; if(won)a.gwins++;
-        const ms=a.mapStats[g.map]||(a.mapStats[g.map]={games:0,wins:0,picks:0}); ms.games++; if(won)ms.wins++;
+        const gk=m.id+':'+g.game_no;
+        const ms=a.mapStats[g.map]||(a.mapStats[g.map]={games:0,wins:0,picks:0,gk:new Set()}); ms.games++; if(won)ms.wins++; ms.gk.add(gk);
         if(g.map_picked_by===team){ inc(a.mapsPicked,g.map); ms.picks++; }
         // map win rate conditioned on a hero being banned out this map (by either team).
         const seenB=new Set();
@@ -1114,16 +1115,20 @@ function aggregate(matches,team){
         if(g.demo_code) a.replays.push({when:m.finished_at,mid:m.id,opp:(m.f1===team?m.f2:m.f1),
           map:g.map,cat:g.map_category,gno:g.game_no,code:g.demo_code,won});
         const mine=g.bans.find(b=>b.team===team), oc=g.bans.find(b=>b.team&&b.team!==team);
-        if(mine){ inc(a.bans,mine.hero); if(mine.role)inc(a.banRoles,mine.role);
-          if(g.map_picked_by===team){ (a.perMapPick[g.map]=a.perMapPick[g.map]||{}); inc(a.perMapPick[g.map],mine.hero); }
-          if(mine.order===1){ a.firstBanGames++; inc(a.firstBans,mine.hero); }
+        if(mine){ inc(a.bans,mine.hero); (a.bansGk[mine.hero]=a.bansGk[mine.hero]||new Set()).add(gk);
+          if(mine.role)inc(a.banRoles,mine.role);
+          if(g.map_picked_by===team){ const pm=a.perMapPick[g.map]=a.perMapPick[g.map]||{heroes:{},gk:new Set()};
+            inc(pm.heroes,mine.hero); pm.gk.add(gk); }
+          if(mine.order===1){ a.firstBanGames++; inc(a.firstBans,mine.hero);
+            (a.firstBansGk[mine.hero]=a.firstBansGk[mine.hero]||new Set()).add(gk); }
           // their pick + they ban first: a self-chosen setup — surfaces repeated strats.
           if(g.map_picked_by===team && mine.order===1){
-            const p=a.pickFirstBan[g.map]||(a.pickFirstBan[g.map]={games:0,wins:0,bans:{}});
-            p.games++; if(won)p.wins++; inc(p.bans,mine.hero); }
+            const p=a.pickFirstBan[g.map]||(a.pickFirstBan[g.map]={games:0,wins:0,bans:{},gk:new Set()});
+            p.games++; if(won)p.wins++; inc(p.bans,mine.hero); p.gk.add(gk); }
           // counter-ban = the team's RESPONSE, i.e. only when the opponent
           // banned first (order 1) and this team banned second (order 2).
-          if(oc && oc.order===1 && mine.order===2){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero); } }
+          if(oc && oc.order===1 && mine.order===2){ (a.counter[oc.hero]=a.counter[oc.hero]||{}); inc(a.counter[oc.hero],mine.hero);
+            (a.counterGk[oc.hero]=a.counterGk[oc.hero]||new Set()).add(gk); } }
         // Ban -> opening comp: pair each hero THIS team banned (FACEIT bans are
         // complete + team-attributed) with the comp they OPENED that game (their
         // captured first-segment). Reliable ban side; opening side fills in with
@@ -1131,7 +1136,7 @@ function aggregate(matches,team){
         // number of "banned X" games it appeared in.
         const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
         const myOpen=(pg&&team&&pg[team])?Object.values(pg[team])[0]:null;   // first segment = the opening comp
-        if(myOpen&&myOpen.length){ const gk=m.id+':'+g.game_no;
+        if(myOpen&&myOpen.length){
           g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{
             const bo=a.banOpen[b.hero]||(a.banOpen[b.hero]={gk:new Set(),heroes:{}});
             if(!bo.gk.has(gk)){ bo.gk.add(gk); myOpen.forEach(h=>inc(bo.heroes,h)); } }); }
@@ -2145,12 +2150,14 @@ function renderScoutBody(t){
     // Ordered by ban count, not by mode: the top of this table is also the map
     // they pick most often, which is the thing worth seeing first.
     const rows=Object.keys(pm).map(mp=>({map:mp,cat:MAP_CAT[mp]||'',
-      n:Object.values(pm[mp]).reduce((a,b)=>a+b,0),
-      heroes:rank(pm[mp]).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' ')}))
+      n:Object.values(pm[mp].heroes).reduce((a,b)=>a+b,0),
+      heroes:rank(pm[mp].heroes).map(([h,c])=>`${heroChip(h)}<span class="faint"> ${c}</span>`).join(' '),
+      codes:codesFor(pm[mp].gk, lookup)}))
       .sort((a,b)=>b.n-a.n||mapCmp(a.map,b.map));
     return rows.length?table(
       [{k:'map',label:'Map',html:r=>`${esc(r.map)} <span class="faint">${esc(r.cat)}</span>`},
-       {k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes}],
+       {k:'n',label:'Bans',num:true},{k:'heroes',label:'Heroes banned',html:r=>r.heroes},
+       {k:'codes',label:'Codes',html:r=>codesCell(r.codes)}],
       rows)
      :el(`<p class="note">No data in this window.</p>`);
   };
