@@ -95,9 +95,8 @@
       <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
       <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate ✨</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
       <div class="step"><div class="sh"><span class="n">4</span><span class="st">Pick a code</span></div><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch and load it. Done maps drop off; <b>🔒</b> = someone's scouting it now.</div>
-      <div class="step"><div class="sh"><span class="n">5</span><span class="st">Set sides</span></div><b>✨ Auto-detect sides + players</b> reads the HUD names to set which team is on the left and tag each hero (or set it by hand / <b>⇄ Swap teams</b>).</div>
-      <div class="step"><div class="sh"><span class="n">6</span><span class="st">Capture</span></div><b>Snapshot</b> each distinct comp (or tick <b>auto-snapshot</b>). Use <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
-      <div class="step"><div class="sh"><span class="n">7</span><span class="st">Publish</span></div><b>Finish + save</b> → auto-fetches the next code. <b>Publish</b> when done; the site updates in ~2 min.</div>
+      <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — the first press per map auto-detects which team is on the left and tags players from the HUD names; if it can't tell, it'll say so and ask you to set the LEFT team / <b>⇄ Swap teams</b> before it captures anything. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
+      <div class="step"><div class="sh"><span class="n">6</span><span class="st">Publish</span></div><b>Finish + save</b> → auto-fetches the next code. <b>Publish</b> when done; the site updates in ~2 min.</div>
     </div>
     <p class="status" style="margin:4px 0 2px">Tips: use borderless, not exclusive fullscreen; re-scouting an already-covered map still adds player data. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button before publishing.</p>
   </details>
@@ -160,7 +159,7 @@
     <div class="row" style="margin-top:6px;align-items:center;gap:12px">
       <label class="status" title="Read the comp automatically on a timer — deduped, so it only keeps real changes"><input type="checkbox" id="autosnap"> auto-snapshot every
         <select id="autosnapint" style="width:auto"><option value="3000">3s</option><option value="5000" selected>5s</option><option value="8000">8s</option></select></label>
-      <span class="status faint" title="Shortcuts work when this page or the overlay is focused (not while Overwatch has focus)">keys: <b>S</b> snapshot · <b>R</b> round · <b>Z</b> undo · <b>F</b> finish · <b>D</b> auto-detect</span>
+      <span class="status faint" title="Shortcuts work when this page or the overlay is focused (not while Overwatch has focus)">keys: <b>S</b> snapshot · <b>R</b> round · <b>Z</b> undo · <b>F</b> finish · <b>D</b> re-run auto-detect</span>
     </div>
     <!-- Escort/Hybrid: instead of a "flip" the operator has to reason about, just
          ask who's attacking each round, by team name. Click what the HUD shows. -->
@@ -170,9 +169,9 @@
       <span class="status faint" id="atkhint">— click the team on attack (as the HUD shows)</span>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
-      <button id="autodetect" class="ghost" type="button" disabled title="Read the HUD player names once to set which team is on the left and tag each hero with its player">✨ Auto-detect sides + players</button>
+      <button id="autodetect" class="ghost" type="button" disabled title="Runs automatically on your first Snapshot each map — use this to re-run it (e.g. to re-tag players, or force a fresh read)">✨ Re-run auto-detect</button>
       <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD">⇄ Swap teams</button>
-      <span class="status" id="sidehint">Confirm each team matches the HUD before saving. <b>Auto-detect</b> reads the names once to set sides and tag players (opt-in; first use downloads a small OCR pack).</span>
+      <span class="status" id="sidehint">Sides auto-detect from the HUD names on your first <b>Snapshot</b> each map (first use downloads a small OCR pack). If it can't tell, it'll say so and won't capture until you set the LEFT team.</span>
     </div>
     <div class="grid2" style="margin-top:10px">
       <div class="team"><h3 id="hA">Left / blue</h3><div id="outA"></div></div>
@@ -602,34 +601,80 @@ function setDetectMsg(html,cls){ const e=document.getElementById('sidehint');
   if(e) e.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
 function sideTeamName(id){ const c=selectedCode(); if(!c) return '?';
   const t=((DATA.rosters||{})[c.match_id]||{})[id]; return (t&&t.name) || (id===c.t1?c.team_a:c.team_b) || '?'; }
+// Core OCR + attribution, shared by the manual button below and the automatic
+// first-snapshot gate (ensureSideResolved, near snapshot()). Callers must ensure
+// a code is selected and the video/boxes are ready. Returns { left, aIds, bIds,
+// lRoster, rRoster, stale } — `left` is 't1'|'t2' when confident, or null when
+// the read was inconclusive (confidentLeft's margin/strong-name gates: noise
+// must be refused, never guessed — see AUTO_SIDE_MARGIN above) OR `stale` is
+// true. OCR takes real seconds; if the operator picks a different replay while
+// it runs, the video (one continuous OW capture regardless of which code is
+// selected) hasn't changed but the CONTEXT has — applying a name-vs-roster
+// match from before the switch to whatever is selected now would silently
+// mis-tag it, so the result is discarded rather than committed.
+async function detectSides(){ const c=selectedCode(), s=session;
+  const names=await ocrNames();
+  if(selectedCode()!==c || session!==s)
+    return {left:null, aIds:[], bIds:[], lRoster:[], rRoster:[], stale:true};
+  const t1n=teamRoster(c.t1).map(x=>x.name), t2n=teamRoster(c.t2).map(x=>x.name);
+  const left=confidentLeft(names.a,names.b,t1n,t2n);
+  if(left){ const leftId=left==='t1'?c.t1:c.t2;
+    document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===leftId); });
+    relabelTeams(); }
+  // Attribute against whichever teams are now on each side (unchanged if `left`
+  // was null — still worth a best-effort tag against the current/default sides).
+  const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
+  const lRoster=teamRoster(leftId), rRoster=teamRoster(rightId);
+  const aIds=attribute(names.a,lRoster), bIds=attribute(names.b,rRoster);
+  if(s) s.players={a:aIds,b:bIds};
+  return {left, aIds, bIds, lRoster, rRoster};
+}
+// Manual re-run/override: sides now resolve automatically on the first snapshot
+// (ensureSideResolved), so this button exists for re-tagging players after the
+// feed rebuilds, or forcing a fresh read if the automatic one got it wrong.
 async function autoDetect(){ const c=selectedCode();
   if(!c){ setDetectMsg('pick a replay first.','warn'); return; }
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ setDetectMsg('share your screen and calibrate first.','warn'); return; }
   const btn=document.getElementById('autodetect'); btn.disabled=true;
   try{
     setDetectMsg('loading OCR (first use downloads a small pack)…');
-    const names=await ocrNames();
-    const t1n=teamRoster(c.t1).map(x=>x.name), t2n=teamRoster(c.t2).map(x=>x.name);
-    const left=confidentLeft(names.a,names.b,t1n,t2n);      // 't1' | 't2' | null
-    let sideMsg;
-    if(left){ const leftId = left==='t1'?c.t1:c.t2;
-      document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===leftId); });
-      relabelTeams(); sideMsg=sideTeamName(leftId)+' on the left'; }
-    else sideMsg='sides unclear — set the left team by hand';
-    // Attribute against whichever teams are now on each side.
-    const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
-    const lRoster=teamRoster(leftId), rRoster=teamRoster(rightId);
-    const aIds=attribute(names.a,lRoster), bIds=attribute(names.b,rRoster);
-    if(session) session.players={a:aIds,b:bIds};
-    const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
+    const res=await detectSides();
+    if(res.left&&session) session.sideResolved=true;
+    const sideMsg=res.left?(sideTeamName(currentLeftId())+' on the left'):'sides unclear — set the left team by hand';
+    const hit=res.aIds.filter(Boolean).length+res.bIds.filter(Boolean).length;
     // No ids in the feed for this match yet = the data feed hasn't rebuilt since
     // player-ids were added; sides still work, tags fill in after the next update.
-    const feedHasIds=lRoster.some(p=>p.id)||rRoster.some(p=>p.id);
+    const feedHasIds=res.lRoster.some(p=>p.id)||res.rRoster.some(p=>p.id);
     const tagMsg = feedHasIds ? `${hit}/10 players tagged`
       : 'player tags pending — roster ids for this match are still rebuilding (sides are set; retry after the site updates)';
-    setDetectMsg(`✨ ${sideMsg} · ${tagMsg}`+(left?'':' — check sides'), left?'ok':'warn');
+    setDetectMsg(`✨ ${sideMsg} · ${tagMsg}`+(res.left?'':' — check sides'), res.left?'ok':'warn');
   }catch(e){ setDetectMsg('auto-detect failed: '+(e.message||e)+' — use manual sides / Swap teams.','warn'); }
   finally{ updateBtns(); }
+}
+// Runs OCR side-detection automatically on the FIRST snapshot of a map (called
+// from snapshot(), below) instead of requiring the separate button above — which
+// wasn't even reachable from the pop-out overlay, the exact place a scout is
+// most likely to be. A no-op once resolved (confidently, or by an explicit
+// manual pick/swap — see onSideChange), so steady-state capturing after the
+// first snapshot pays no OCR cost. On failure the snapshot is refused outright
+// (never guess a side) and BOTH surfaces — the main page and the pop-out — are
+// told to set the left team by hand; the next Snapshot press retries fresh.
+async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
+  if(s._detecting) return false;    // an attempt is already in flight (rapid S presses) — let it finish, don't stack OCR passes
+  s._detecting=true;
+  const tell=(text,cls)=>{ setDetectMsg(text,cls); snapMsg(text,cls==='warn'); };
+  try{
+    tell('detecting sides…');
+    const res=await detectSides();
+    if(res.stale || session!==s) return false;   // operator moved to a different replay meanwhile — say nothing, they're not waiting on this one
+    if(res.left){ s.sideResolved=true;
+      tell(`✨ ${sideTeamName(currentLeftId())} on the left`,'ok'); return true; }
+    tell('couldn’t identify sides from the HUD — set the LEFT team above (or ⇄ Swap teams), then press Snapshot again.','warn');
+    return false;
+  }catch(e){
+    if(session===s) tell('side detection failed ('+(e.message||e)+') — set the left team by hand, then try again.','warn');
+    return false;
+  }finally{ s._detecting=false; }
 }
 
 // ---------- hero recognition: learn a miss / add a new hero (Phase 4) ----------
@@ -785,7 +830,14 @@ async function clearLearnedRefs(){ if(!confirm('Remove all learned refs? (The bu
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
-  session={code:c, submaps, phased, round:1, sub: submaps.length?null:null, attacker: phased?'b':null, snaps:[], lastKept:null, history:[]};
+  // sideResolved: whether the LEFT team is known (auto-detected or manually
+  // picked) rather than the unverified faction1-is-left default — gates every
+  // snapshot until true (see ensureSideResolved). attackerConfirmed: round 1-2
+  // follow the settled parity rule (red attacks R1, flip R2) with no operator
+  // input needed; round 3+ is decided by time bank, not parity, so it starts
+  // false each such round and gates snapshots until the operator confirms.
+  session={code:c, submaps, phased, round:1, sub: submaps.length?null:null,
+    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[]};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
   const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
   document.getElementById('subpill').style.display=submaps.length?'':'none';
@@ -811,7 +863,11 @@ function currentLeftId(){ const c=selectedCode(); if(!c) return null;
   return ((document.querySelector('input[name=side]:checked')||{}).value||'') || c.t1; }
 // Any manual side change invalidates Auto-detect's player tags (they were matched
 // to the previous orientation's rosters) — clear them rather than publish wrong ids.
-function onSideChange(){ if(session) session.players=null; relabelTeams(); }
+// Picking an actual team locks sideResolved (stops ensureSideResolved's automatic
+// retry below); picking back to "auto/blank" explicitly hands control back to it.
+function onSideChange(){ if(session){ session.players=null;
+  session.sideResolved=!!((document.querySelector('input[name=side]:checked')||{}).value||''); }
+  relabelTeams(); }
 function swapSides(){ const c=selectedCode(); if(!c) return;
   const newLeft = currentLeftId()===c.t1 ? c.t2 : c.t1;
   document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked = (r.value===newLeft); });
@@ -831,8 +887,16 @@ function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.l
 function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:'';
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
-function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
+async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
   if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
+  // Auto-detect sides on this map's first snapshot (see ensureSideResolved).
+  // Fast path: once resolved, this is a synchronous no-op on every later call.
+  if(!(await ensureSideResolved())) return;
+  // Escort/Hybrid round 3+: attacker is time-bank based, not parity — refuse to
+  // guess (see setAttacker/nextRound). Checked AFTER side-detect since the
+  // attack picker's team names depend on knowing which side is which.
+  if(!attackerGateOk(session)){
+    snapMsg('confirm who is attacking before capturing (round 3+ is time-bank, not parity)',true); return; }
   if(!auto) maybeClaim();   // a manual snapshot is a definite "I'm scouting this map"
   const comp=readComp(); if(!comp) return;
   const aG=comp.a.map(s=>s.guid), bG=comp.b.map(s=>s.guid);
@@ -847,38 +911,68 @@ function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
   session.snaps.push(snap); session.history.push({type:'snap'}); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
   refreshSession(); snapMsg('✓ snapshot '+session.snaps.length+' kept');
 }
+// Pure decisions for the Escort/Hybrid attacker state machine, factored out so
+// they're testable without a DOM (mirrors faceit_sync/_dashboard.py's "pure
+// decision helpers" pattern). Rounds 1-2 follow the settled parity rule (red
+// attacks R1, flip R2) — no operator input needed. Round 3+ is decided by time
+// bank, not parity, and must never be guessed: it starts unconfirmed each such
+// round, and attackerGateOk refuses to capture until the operator says who.
+function nextAttackerState(phased, prevAttacker, newRound){
+  if(!phased) return {attacker:null, confirmed:true};
+  if(newRound<3) return {attacker:(prevAttacker==='a'?'b':'a'), confirmed:true};
+  return {attacker:prevAttacker, confirmed:false};   // prevAttacker is only a UI hint now
+}
+function attackerGateOk(s){ return !(s&&s.phased&&s.round>=3&&!s.attackerConfirmed); }
 function nextRound(){ if(!session) return;
-  session.history.push({type:'round', round:session.round, sub:session.sub, attacker:session.attacker});
+  session.history.push({type:'round', round:session.round, sub:session.sub,
+    attacker:session.attacker, attackerConfirmed:session.attackerConfirmed});
   session.round++;
   if(session.submaps.length) session.sub=null;                        // control: a new sub-map each round → re-prompt
-  if(session.phased) session.attacker=(session.attacker==='a'?'b':'a');
+  if(session.phased){
+    const nx=nextAttackerState(session.phased, session.attacker, session.round);
+    session.attacker=nx.attacker; session.attackerConfirmed=nx.confirmed;
+  }
   session.lastKept=null; refreshSession();
   if(session.submaps.length) snapMsg('round '+session.round+' — pick the sub-map ▸', true);
+  else if(!attackerGateOk(session)) snapMsg('round '+session.round+' — confirm who is attacking ▸', true);
 }
 function pickSub(s){ if(!session) return; session.history.push({type:'sub', sub:session.sub}); session.sub=s; snapMsg(''); refreshSession(); }
 // Set who's attacking this round directly (by side), from the team-name picker.
-// nextRound() still auto-alternates as a sensible default; this makes correcting
-// it a single click on the attacking team — no "flip" or round-parity to reason
-// about. Records a 'flip'-type history entry so Undo restores the prior attacker.
-function setAttacker(side){ if(!session||!session.phased||session.attacker===side) return;
-  session.history.push({type:'flip', attacker:session.attacker}); session.attacker=side; refreshSession(); }
+// nextRound() still auto-alternates as a sensible default for rounds 1-2; this
+// makes correcting it (or, from round 3, confirming it) a single click on the
+// attacking team. Records a 'flip'-type history entry so Undo restores the
+// prior attacker AND confirmation state. Does NOT early-return when the side is
+// already selected but unconfirmed — round 3+ needs a click to REGISTER the
+// existing guess as confirmed even when it happens to already be correct.
+function setAttacker(side){ if(!session||!session.phased) return;
+  if(session.attacker===side && session.attackerConfirmed) return;
+  session.history.push({type:'flip', attacker:session.attacker, attackerConfirmed:session.attackerConfirmed});
+  session.attacker=side; session.attackerConfirmed=true; refreshSession(); }
 // The main-page attack picker: two team-name toggles, the current attacker lit.
+// From round 3, an unconfirmed guess renders as a DASHED outline (not solid) so
+// it visibly reads as "unset", and a warning explains why a click is required.
 function renderAttack(){ const row=document.getElementById('atkrow'); if(!row) return;
   if(!session||!session.phased){ row.style.display='none'; return; }
   row.style.display='flex';
-  document.getElementById('atklbl').textContent='Attacking (R'+session.round+')';
+  const needsConfirm=!attackerGateOk(session);
+  document.getElementById('atklbl').textContent='Attacking (R'+session.round+')'+(needsConfirm?' — confirm to capture':'');
   const {leftName,rightName}=sideNames(), host=document.getElementById('atkbtns'); host.innerHTML='';
   const mkb=(side,name,color)=>{ const b=document.createElement('button'); b.className='mk'; b.textContent=name;
     b.style.borderColor=color;
-    if(session.attacker===side){ b.style.background=color; b.style.color='#0b1020'; b.style.fontWeight='700'; }
+    if(session.attacker===side&&session.attackerConfirmed){ b.style.background=color; b.style.color='#0b1020'; b.style.fontWeight='700'; }
+    else if(needsConfirm&&session.attacker===side){ b.style.borderStyle='dashed'; }
     b.onclick=()=>setAttacker(side); host.appendChild(b); };
-  mkb('a',leftName,'#5a9bd8'); mkb('b',rightName,'#e9694f'); }
+  mkb('a',leftName,'#5a9bd8'); mkb('b',rightName,'#e9694f');
+  if(needsConfirm){ const w=document.createElement('span'); w.className='status warn'; w.style.marginLeft='8px';
+    w.textContent='round 3+ is time-bank based, not parity — click who is attacking'; host.appendChild(w); } }
 // Undo the LAST action of any kind (snapshot / round / sub-map / attack flip), LIFO.
 function undo(){ if(!session||!session.history.length) return; const h=session.history.pop();
   if(h.type==='snap'){ session.snaps.pop(); session.lastKept=null; }
-  else if(h.type==='round'){ session.round=h.round; session.sub=h.sub; session.attacker=h.attacker; session.lastKept=null; }
+  else if(h.type==='round'){ session.round=h.round; session.sub=h.sub; session.attacker=h.attacker;
+    session.attackerConfirmed=(h.attackerConfirmed!=null?h.attackerConfirmed:true); session.lastKept=null; }
   else if(h.type==='sub'){ session.sub=h.sub; }
-  else if(h.type==='flip'){ session.attacker=h.attacker; }
+  else if(h.type==='flip'){ session.attacker=h.attacker;
+    session.attackerConfirmed=(h.attackerConfirmed!=null?h.attackerConfirmed:true); }
   snapMsg('undid '+h.type); refreshSession();
 }
 
@@ -972,25 +1066,39 @@ function el(html){ const t=document.createElement('template'); t.innerHTML=html.
 // Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
 // always match the current map — the whole loop runs with no alt-tab.
 function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.document;
-  const main=d.getElementById('prow-main'), sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'); if(!main) return;
+  const main=d.getElementById('prow-main'), side=d.getElementById('prow-side'),
+    sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'); if(!main) return;
   const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
   main.className='prow'; main.innerHTML='';
   mk(main,'◉ Snapshot',()=>snapshot(false),'go');
   mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
   mk(main,'⧉ Copy code',()=>{ const c=selectedCode(); if(c){ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); } });
+  // side row — sides auto-detect on the first Snapshot press; this is only the
+  // no-alt-tab ESCAPE HATCH for when that read fails or gets it backwards, so a
+  // scout glued to the game doesn't have to leave this window to fix it.
+  side.innerHTML='';
+  if(session&&!session.sideResolved){ side.className='prow warn';
+    const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l);
+    mk(side,'⇄ Swap L/R',swapSides); }
+  else side.className='prow';
   // sub-map row (control maps) — warn colour until one is picked; active highlighted
   sub.innerHTML='';
   if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
     const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
     session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
   else sub.className='prow';
-  // attack row (escort/hybrid) — click the team that's attacking this round
+  // attack row (escort/hybrid) — click the team that's attacking this round;
+  // warn colour from round 3 while unconfirmed (time-bank, not parity — see
+  // setAttacker), same treatment as the sub-map row above.
   atk.innerHTML='';
-  if(session&&session.phased){ atk.className='prow';
-    const l=d.createElement('span'); l.className='lbl'; l.textContent='Attack R'+session.round; atk.appendChild(l);
+  if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
+    atk.className='prow'+(needsConfirm?' warn':'');
+    const l=d.createElement('span'); l.className='lbl';
+    l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
     const {leftName,rightName}=sideNames();
     const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
-      if(session.attacker===side){ b.className='on'; } else { b.style.borderColor=color; }
+      if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
+      else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
       b.onclick=()=>setAttacker(side); atk.appendChild(b); };
     mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
   else atk.className='prow';
@@ -1011,7 +1119,7 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
       '.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37;font-size:12px}.slot:first-of-type{border-top:0}'+
       '.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}.warn{color:#e5624a}.ok{color:#34b877}';
     w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
+    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
     target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
     renderPipControls();
     w.document.addEventListener('keydown',handleKey);          // shortcuts work from the overlay too
