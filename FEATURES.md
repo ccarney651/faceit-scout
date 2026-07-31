@@ -114,12 +114,23 @@ captured replays for that division (see §5, Known gaps).
 
 ### Tabs
 
-**Overview** — division summary, most-picked maps, ban leaders, data-quality
-counters (walkovers, restarts, DC'd games, attribution coverage).
+A hero strip above the tab bar ("Scout a team →" / "Contribute a capture →")
+is always visible, on every tab — it's the fast path for both a first-time
+visitor and a returning one, so Overview itself doesn't need to duplicate it.
+
+**Overview** — coverage tiles (maps played, teams, teams scouted, comps
+captured), standings, and the scout leaderboard (maps contributed per scout).
+Deliberately does not repeat content that has its own tab (ban/map meta lives
+in League meta; per-team rosters live on Scout a team and Players) — Overview
+is orientation, not a preview of everything else.
 
 **Scout a team** — the main working view. Detailed in §3. The team picker is
 labelled *Team*, not *Opponent*: pointed at your own side the same sheet is a
-self-scout, showing what an opponent prepping you is looking at.
+self-scout, showing what an opponent prepping you is looking at. Includes a
+collapsed **Draft simulator (beta)** section near the bottom — pick two teams
+and walk a draft; each team's real history drives the suggestions (map-pick
+frequency, per-map ban counts, overall ban rates), with already-banned heroes
+excluded from the picker. Opens pre-filled with the currently scouted team.
 
 **Players** — every player on every roster, in three views. *By team* (rosters,
 starters over subs, elo, top-3 captured heroes), *By seat* (grouped by inferred
@@ -129,10 +140,6 @@ mitigation. The leaderboard runs purely off FACEIT's stat feed, so unlike hero
 pools it is fully populated in **every** division, captured or not. Rate columns
 carry a 5-map sample floor; counts and elo do not need one.
 
-**Draft simulator** — a manual scenario planner. Pick two teams and walk a draft;
-each team's real history drives the suggestions (map-pick frequency, per-map ban
-counts, overall ban rates), with already-banned heroes excluded from the picker.
-
 **League meta** — cross-division hero ban rates, ban-by-role split, map
 popularity, attacking-first win rate per map (Escort/Hybrid only, since mirrored
 modes have no attacking side), and **hero win rates** off the captured comps
@@ -140,11 +147,12 @@ joined to the match result — what actually wins, next to what gets banned. The
 unit is the map (a hero on two sub-maps of one Control map played one map), each
 team's lineup counts separately, and 8+ maps are needed to qualify.
 
-**Playoffs** — the bracket, seeded from current standings until real playoff
-matches exist.
-
 **Matches** — every match card: per-map bans in draft order, replay codes inline
-and click-to-copy, expandable rosters, newest/oldest sort, and the match date.
+and click-to-copy, expandable rosters, newest/oldest sort, and the match date. A
+**Played / Upcoming / Playoffs** toggle switches the list; Playoffs shows the
+bracket (seeded from current standings until real playoff matches exist) and
+becomes the default view automatically once real playoff matches are ingested
+for the active division.
 
 ### Cross-cutting conventions
 
