@@ -179,9 +179,15 @@ CSS (near `.rc`'s existing rules):
 ### 3. Wiring the 8 sites
 
 Each site adds one column (or extends an existing cell) via `codesCell(...)`.
-`lookup` = `codeLookup(t.matches, t.team)` built once per `renderScoutBody`
-call (reused by sites 1-7 via each row's `gk`; site 8 uses it directly per
-matchup's own `match_id:game_no`, no `gk` involved).
+`lookup` = `codeLookup(MATCHES_RECENT, t.team)` built once per
+`renderScoutBody` call — deliberately the **unwindowed** division-wide match
+list, not the recency-windowed `t.matches`: sites 1-7's `gk` sets only ever
+contain keys from `t.matches` anyway (they're built in the same
+`aggregate(t.matches, team)` pass), so a broader lookup changes nothing for
+them, but site 8's `scout.matchups` come from a separate, unwindowed
+owscout-computed source — building the lookup from `MATCHES_RECENT` instead
+of `t.matches` means a matchup never fails to resolve a code just because it
+falls outside the dashboard's current recency window.
 
 | # | Change |
 |---|---|
