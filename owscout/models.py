@@ -40,6 +40,12 @@ class ObsDetail(NamedTuple):
     # game 1 of the same match), which per-map rows cannot express.
     match_id: str | None = None
     game_no: int | None = None
+    # Per-slot FACEIT player id, aligned 1:1 with hero_guids (same slot order,
+    # same length) - None where a slot's attribution didn't resolve. Lets
+    # analysis confirm WHICH player is on a hero, so a hero-set change can be
+    # told apart from a personnel substitution that only looks like one
+    # (see owscout.analysis.classify_player_transition).
+    player_ids: tuple[str | None, ...] = ()
 
 
 class HeroCoverage(NamedTuple):

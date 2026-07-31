@@ -2,8 +2,11 @@
 
 from owscout.analysis import (
     CompInstance,
+    PlayerSlot,
+    classify_player_transition,
     classify_transition,
     cluster_comps,
+    confirmed_swap_events,
     phase_of,
     same_comp,
     swap_events,
@@ -92,6 +95,76 @@ def test_swap_events_tags_enemy_and_skips_no_change() -> None:
     ev = events[0]
     assert ev.kind == "core"
     assert "dva" in ev.vs_enemy
+
+
+# --- player-confirmed swap detection -----------------------------------------
+# A hero-set change alone can't tell a real swap (same player, new hero) apart
+# from a personnel substitution (a different player entered on a different
+# hero) - both look identical as a plain hero-set diff. classify_player_transition
+# only calls it a swap when every slot's player identity is known on both sides
+# AND the same players are still present (see docstring for the "why").
+
+
+def test_classify_player_transition_confirms_a_real_swap() -> None:
+    # Same five players throughout; "sym-player" moved from mei to reaper.
+    prev = [PlayerSlot("p-tank", "ram"), PlayerSlot("p-dps1", "sojourn"),
+            PlayerSlot("p-sym", "mei"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    curr = [PlayerSlot("p-tank", "ram"), PlayerSlot("p-dps1", "sojourn"),
+            PlayerSlot("p-sym", "reaper"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    t = classify_player_transition(prev, curr, ROLES)
+    assert t is not None and t.kind == "flex"
+    assert t.out_heroes == ["mei"] and t.in_heroes == ["reaper"]
+
+
+def test_classify_player_transition_excludes_a_personnel_substitution() -> None:
+    # The exact reported bug: sivaartt (on mei) is subbed for alison (on
+    # reaper). The hero set changes identically to the real-swap case above,
+    # but this is personnel churn, not a tactical decision - must not count.
+    prev = [PlayerSlot("p-tank", "ram"), PlayerSlot("p-dps1", "sojourn"),
+            PlayerSlot("p-sivaartt", "mei"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    curr = [PlayerSlot("p-tank", "ram"), PlayerSlot("p-dps1", "sojourn"),
+            PlayerSlot("p-alison", "reaper"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    assert classify_player_transition(prev, curr, ROLES) is None
+
+
+def test_classify_player_transition_excludes_unconfirmed_when_a_slot_is_unknown() -> None:
+    # One slot's attribution never resolved (OCR miss) - can't rule out a
+    # substitution hiding there, so don't guess either way.
+    prev = [PlayerSlot("p-tank", "ram"), PlayerSlot(None, "sojourn"),
+            PlayerSlot("p-sym", "mei"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    curr = [PlayerSlot("p-tank", "ram"), PlayerSlot(None, "sojourn"),
+            PlayerSlot("p-sym", "reaper"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    assert classify_player_transition(prev, curr, ROLES) is None
+
+
+def test_classify_player_transition_none_when_no_hero_change() -> None:
+    same = [PlayerSlot("p-tank", "ram"), PlayerSlot("p-dps1", "sojourn"),
+            PlayerSlot("p-sym", "mei"), PlayerSlot("p-sup1", "lucio"),
+            PlayerSlot("p-sup2", "kiriko")]
+    assert classify_player_transition(same, same, ROLES) is None
+
+
+def test_confirmed_swap_events_skips_substitutions_but_keeps_real_swaps() -> None:
+    enemy = ["rein", "ashe", "sojourn", "lucio", "ana"]
+    real_swap_prev = [PlayerSlot("p1", "ram"), PlayerSlot("p2", "sojourn"),
+                       PlayerSlot("p3", "mei"), PlayerSlot("p4", "lucio"),
+                       PlayerSlot("p5", "kiriko")]
+    real_swap_curr = [PlayerSlot("p1", "ram"), PlayerSlot("p2", "sojourn"),
+                       PlayerSlot("p3", "reaper"), PlayerSlot("p4", "lucio"),
+                       PlayerSlot("p5", "kiriko")]
+    sub_curr = [PlayerSlot("p1", "ram"), PlayerSlot("p2", "sojourn"),
+                PlayerSlot("p6", "ashe"), PlayerSlot("p4", "lucio"),
+                PlayerSlot("p5", "kiriko")]   # p3 subbed out for p6
+    snaps = [(real_swap_prev, enemy), (real_swap_curr, enemy), (sub_curr, enemy)]
+    events = confirmed_swap_events(snaps, ROLES)
+    assert len(events) == 1   # only the p3 mei->reaper swap; the sub is excluded
+    assert events[0].out_heroes == ["mei"] and events[0].in_heroes == ["reaper"]
 
 
 # --- comp-family clustering --------------------------------------------------

@@ -116,6 +116,28 @@ def test_distinct_timestamps_are_separate_rows(db: Database) -> None:
     assert db.conn.execute("SELECT COUNT(*) FROM comp_observations").fetchone()[0] == 2
 
 
+def test_observation_details_surfaces_player_ids_aligned_with_heroes(db: Database) -> None:
+    """observation_details() must expose player_id per slot, positionally
+    aligned with hero_guids - the swap-tracking fix needs to know WHICH player
+    is on a hero, not just which heroes were present (see owscout/analysis.py
+    classify_player_transition)."""
+    mid = db.upsert_map_instance_from_context(_ctx(), side_a_faction="faction1")
+    comp = canonical_comp(["g-ram", "g-ana"], {"g-ram": "Tank"}, {"g-ram": "Ramattra"})
+    slots = [{"slot_index": 0, "hero_guid": "g-ram", "confidence": 0.9, "is_dead": 0,
+              "expected_role": None, "ingame_name_raw": None, "player_id": "p-alison"},
+             {"slot_index": 1, "hero_guid": "g-ana", "confidence": 0.9, "is_dead": 0,
+              "expected_role": None, "ingame_name_raw": None, "player_id": None}]
+    db.upsert_comp_observation(map_instance_id=mid, side="a", sample_ts_ms=0,
+                              comp_id=comp.comp_id, min_slot_confidence=0.9, resolved=1,
+                              slots=slots, comp=comp)
+    db.finalize_map(mid)
+    details = db.observation_details()
+    assert len(details) == 1
+    d = details[0]
+    assert d.hero_guids == ("g-ram", "g-ana")
+    assert d.player_ids == ("p-alison", None)
+
+
 def test_resolved_observation_inserts_its_comp(db: Database) -> None:
     # A resolved observation's comp_id FKs into comps; passing `comp` must insert
     # it in the same transaction (regression: FK failure without it).

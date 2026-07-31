@@ -1,5 +1,7 @@
 """Per-team scouting report assembly (owscout.scout)."""
 
+from typing import Sequence
+
 from owscout.models import ObsDetail
 from owscout.scout import team_scout
 
@@ -11,11 +13,12 @@ NAMES = {g: g.upper() for g in ROLES}
 
 def _obs(mi: int, side: str, ts: int, guids: list[str], cat: str, winner: str, *,
          sub: str | None = None, rnd: int | None = None, phase: str | None = None,
-         mn: str = "King's Row") -> ObsDetail:
+         mn: str = "King's Row", players: Sequence[str | None] | None = None) -> ObsDetail:
     return ObsDetail(map_instance_id=mi, side=side, sample_ts_ms=ts, sub_map=sub, phase=phase,
                      round_no=rnd, hero_guids=tuple(guids), map_name=mn,
                      map_category=cat, side_a_team="Alpha", side_b_team="Bravo",
-                     winner_side=winner)
+                     winner_side=winner,
+                     player_ids=tuple(players) if players is not None else ())
 
 
 def test_overall_uses_opening_comp_per_game() -> None:
@@ -93,19 +96,51 @@ def test_hero_pool_counts_rounds_not_maps() -> None:
 
 def test_swaps_are_reported_per_map() -> None:
     """The map card shows the swaps seen on THAT map, so they must be bucketed by
-    map and not folded into the team-wide total."""
+    map and not folded into the team-wide total. Swaps need matching player_ids
+    across the transition to be confirmed (see test_swap fixture below and
+    owscout/analysis.py's classify_player_transition) - same five players
+    throughout, one of them (p3) moves from mei to reaper."""
     base = ["ram", "soj", "mei", "luc", "kir"]
     swapped = ["ram", "soj", "reaper", "luc", "kir"]
+    same_five = ["p1", "p2", "p3", "p4", "p5"]
     details = [
-        _obs(1, "a", 0, base, "hybrid", "a"),                       # King's Row
-        _obs(1, "a", 100, swapped, "hybrid", "a"),                  # swap here
-        _obs(2, "a", 0, base, "control", "a", sub="Ruins", mn="Ilios"),
+        _obs(1, "a", 0, base, "hybrid", "a", players=same_five),           # King's Row
+        _obs(1, "a", 100, swapped, "hybrid", "a", players=same_five),      # swap here
+        _obs(2, "a", 0, base, "control", "a", sub="Ruins", mn="Ilios", players=same_five),
     ]
     maps = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]
     kings = maps["King's Row"]["swaps"]
     assert len(kings) == 1
     assert kings[0]["out"] == ["MEI"] and kings[0]["in"] == ["REAPER"]
     assert maps["Ilios"]["swaps"] == []
+
+
+def test_a_personnel_substitution_is_not_reported_as_a_swap() -> None:
+    """The reported bug: subbing one player for another can change the hero set
+    exactly like a same-player hero swap would. p3 (on mei) is subbed for a NEW
+    player p6 (on reaper) - must not appear as a mei->reaper swap."""
+    base = ["ram", "soj", "mei", "luc", "kir"]
+    after_sub = ["ram", "soj", "reaper", "luc", "kir"]
+    details = [
+        _obs(1, "a", 0, base, "hybrid", "a", players=["p1", "p2", "p3", "p4", "p5"]),
+        _obs(1, "a", 100, after_sub, "hybrid", "a", players=["p1", "p2", "p6", "p4", "p5"]),
+    ]
+    maps = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]
+    assert maps["King's Row"]["swaps"] == []
+
+
+def test_a_hero_change_with_unknown_attribution_is_not_reported_as_a_swap() -> None:
+    """No player data at all (the common case for older/unattributed captures)
+    must not silently fall back to the old hero-set-only behavior - that's the
+    exact bug this fixes. Unconfirmed => excluded, never guessed."""
+    base = ["ram", "soj", "mei", "luc", "kir"]
+    swapped = ["ram", "soj", "reaper", "luc", "kir"]
+    details = [
+        _obs(1, "a", 0, base, "hybrid", "a"),        # players=() (default): unknown
+        _obs(1, "a", 100, swapped, "hybrid", "a"),
+    ]
+    maps = team_scout(details, ROLES, NAMES)["Alpha"]["maps"]
+    assert maps["King's Row"]["swaps"] == []
 
 
 def test_matchups_pair_opening_with_enemy_opening() -> None:

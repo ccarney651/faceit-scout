@@ -175,12 +175,79 @@ def swap_events(
 ) -> list[SwapEvent]:
     """Walk a team's ordered snapshots — each ``(own_lineup, enemy_lineup)`` — and
     emit a SwapEvent for every real change (flex or core), tagged with the enemy
-    lineup present when the swap happened. No-change steps are skipped."""
+    lineup present when the swap happened. No-change steps are skipped.
+
+    Hero-set-only: this cannot tell a real swap (the same player picking a new
+    hero) apart from a personnel substitution (a different player entering on a
+    different hero) - both look identical as a plain set diff. Use
+    :func:`confirmed_swap_events` when player identity is available."""
     events: list[SwapEvent] = []
     for i in range(1, len(snapshots)):
         prev_own = snapshots[i - 1][0]
         curr_own, curr_enemy = snapshots[i]
         t = classify_transition(prev_own, curr_own, roles)
         if t.kind != "none":
+            events.append(SwapEvent(t.kind, t.out_heroes, t.in_heroes, list(curr_enemy)))
+    return events
+
+
+@dataclass(frozen=True)
+class PlayerSlot:
+    """One roster slot in a lineup snapshot: which player (if attribution
+    resolved) is on which hero."""
+
+    player_id: Optional[str]
+    hero: str
+
+
+def classify_player_transition(
+    prev: Sequence[PlayerSlot], curr: Sequence[PlayerSlot], roles: Roles
+) -> Optional[Transition]:
+    """Like :func:`classify_transition`, but confirmed via player identity: a
+    hero-set change is only reported as a swap when it's traceable to the SAME
+    players still being present, with at least one of them on a different hero.
+
+    Returns None (never guessed) when:
+      * any slot's player identity is unknown on either side — an unresolved
+        slot could be hiding a substitution, so partial data can't confirm
+        "no substitution happened" any more than it can confirm one did;
+      * the set of players differs between prev and curr — a substitution
+        happened (or a slot dropped), which is personnel churn, not a swap;
+      * no hero actually changed for the (confirmed, unchanged) player set.
+
+    This is the fix for a real misreport: a team subbing one player for
+    another can change the hero-set identically to a same-player hero swap
+    (e.g. sivaartt-on-Symmetra subbed for alison-on-Reaper looks, by hero set
+    alone, exactly like a Symmetra->Reaper swap). Only a same-player hero
+    change is a swap; the codebase's practice — "never guess", "silence is not
+    evidence" (see tools/audit_capture_sides.py) — is to decline to guess when
+    identity can't confirm it either way."""
+    if any(s.player_id is None for s in prev) or any(s.player_id is None for s in curr):
+        return None
+    prev_by_player = {s.player_id: s.hero for s in prev}
+    curr_by_player = {s.player_id: s.hero for s in curr}
+    if set(prev_by_player) != set(curr_by_player):
+        return None
+    prev_heroes = [s.hero for s in prev]
+    curr_heroes = [s.hero for s in curr]
+    if set(prev_heroes) == set(curr_heroes):
+        return None
+    return classify_transition(prev_heroes, curr_heroes, roles)
+
+
+def confirmed_swap_events(
+    snapshots: Sequence[tuple[Sequence[PlayerSlot], Sequence[str]]], roles: Roles
+) -> list[SwapEvent]:
+    """Like :func:`swap_events`, but each ``own`` lineup carries player identity
+    per slot (:class:`PlayerSlot`) and every emitted event is confirmed via
+    :func:`classify_player_transition` — a personnel substitution never gets
+    reported as a hero swap, and an unconfirmed transition (attribution
+    missing) is skipped rather than guessed."""
+    events: list[SwapEvent] = []
+    for i in range(1, len(snapshots)):
+        prev_own = snapshots[i - 1][0]
+        curr_own, curr_enemy = snapshots[i]
+        t = classify_player_transition(prev_own, curr_own, roles)
+        if t is not None:
             events.append(SwapEvent(t.kind, t.out_heroes, t.in_heroes, list(curr_enemy)))
     return events

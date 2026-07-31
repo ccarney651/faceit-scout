@@ -57,16 +57,34 @@ def _enemy_at(enemy_obs: list[ObsDetail], ts: int) -> tuple[str, ...]:
     return lineup
 
 
+def _player_slots(o: ObsDetail) -> list[Any]:
+    """o's lineup as PlayerSlots for confirmed_swap_events. player_ids is only
+    trustworthy when it's the same length as hero_guids (some callers, mostly
+    tests, build an ObsDetail without setting it) - anything else means
+    "attribution unknown for this whole observation", so every slot goes in
+    unconfirmed rather than mis-pairing a player with the wrong hero."""
+    from .analysis import PlayerSlot
+
+    pids = o.player_ids if len(o.player_ids) == len(o.hero_guids) else (None,) * len(o.hero_guids)
+    return [PlayerSlot(pid, hero) for hero, pid in zip(o.hero_guids, pids)]
+
+
 def aggregate_swaps(
     details: Iterable[ObsDetail], roles: Roles, hero_names: dict[str, str],
     *, per_map: bool = False,
 ) -> dict[str, Any]:
     """Per team, recurring mid-map swaps with what they were made against. For each
     (out, in, kind) swap: how often it happened and the enemy heroes present in at
-    least half its occurrences (the trigger — e.g. answering a D.Va)."""
+    least half its occurrences (the trigger — e.g. answering a D.Va).
+
+    Swaps are confirmed via player identity (confirmed_swap_events): a hero-set
+    change is only counted when it's traceable to the same players, so a
+    personnel substitution (a different player entering on a different hero)
+    is never misreported as a tactical swap. See owscout/analysis.py's
+    classify_player_transition docstring."""
     from collections import Counter
 
-    from .analysis import swap_events
+    from .analysis import confirmed_swap_events
 
     by_map: dict[int, list[ObsDetail]] = {}
     for d in details:
@@ -84,9 +102,9 @@ def aggregate_swaps(
             team = own[0].side_a_team if side == "a" else own[0].side_b_team
             if not team:
                 continue
-            snaps = [(o.hero_guids, _enemy_at(sides[opp], o.sample_ts_ms)) for o in own]
+            snaps = [(_player_slots(o), _enemy_at(sides[opp], o.sample_ts_ms)) for o in own]
             mp = own[0].map_name or "?"
-            for ev in swap_events(snaps, roles):
+            for ev in confirmed_swap_events(snaps, roles):
                 key = (tuple(ev.out_heroes), tuple(ev.in_heroes), ev.kind)
                 bucket = _MAP_KEY.join((team, mp)) if per_map else team
                 slot = agg.setdefault(bucket, {}).setdefault(
