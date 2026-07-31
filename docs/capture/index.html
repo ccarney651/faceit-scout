@@ -125,7 +125,7 @@
       <span class="status" id="feedmeta"></span>
     </div>
     <div class="row">
-      <label class="f">Region<span class="lock">EMEA</span></label>
+      <label class="f">Region<select id="reg"></select></label>
       <label class="f">Division<select id="div"></select></label>
       <label class="f">Opponent<select id="opp"></select></label>
       <label class="f" style="justify-content:flex-end"><span>&nbsp;</span><label class="status"><input type="checkbox" id="hide" checked> hide already-scouted</label></label>
@@ -278,12 +278,17 @@ async function loadFeeds(){
     const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; }catch(e){}
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
-  buildDivisions();
-  restorePrefs();           // saved division + hide-scouted preference (a ?division deep-link overrides below)
+  buildRegions();
+  restorePrefs();           // saved region/division + hide-scouted (builds the division list; a ?division deep-link overrides below)
   await renderCaptured();   // populate savedKeys BEFORE the picker filters, so locally-captured maps are hidden on load
   // Deep-link from the dashboard's "Capture this team" prompts: ?team=&division=
   const q=new URLSearchParams(location.search);
-  const dv=q.get('division'); if(dv && [...document.getElementById('div').options].some(o=>o.value===dv)) document.getElementById('div').value=dv;
+  // The dashboard sends the QUALIFIED label ("EMEA Master"); older bookmarks send
+  // a bare tier, which is honoured within whichever region is already selected.
+  const dv=q.get('division');
+  if(dv){ const s=splitDiv(dv), reg=document.getElementById('reg'), div=document.getElementById('div');
+    if(s.region && [...reg.options].some(o=>o.value===s.region)){ reg.value=s.region; buildDivisions(); }
+    if([...div.options].some(o=>o.value===s.tier)) div.value=s.tier; }
   refreshCodes();
   const tm=q.get('team'), po=localStorage.getItem('owscout_pref_opp');
   if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
@@ -293,10 +298,35 @@ async function loadFeeds(){
 function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(el) el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
 async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(el) el.textContent='refreshing…';
   try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
-  buildDivisions(); refreshCodes(); setFeedMeta(); }
+  buildRegions(); buildDivisions(); refreshCodes(); setFeedMeta(); }
 
 // ---------- pick a replay ----------
-function buildDivisions(){ document.getElementById('div').innerHTML='<option value="all">all</option>'+(DATA.divisions||[]).map(t=>`<option>${t}</option>`).join(''); }
+// data.json ships REGION-QUALIFIED divisions ("EMEA Master") so two regions can
+// never merge under one "Master". The picker splits that back into two controls:
+// Region, then the tiers that exist inside it. Codes are matched on the qualified
+// string, which is the only form that is unambiguous.
+function splitDiv(q){ const r=(DATA.regions||[]).find(x=>q===x||q.startsWith(x+' '));
+  return r?{region:r, tier:q.slice(r.length+1)}:{region:null, tier:q}; }
+// Rebuilt on every feed refresh, so both keep their selection when it still exists
+// and fall back to the first option when a division disappears between seasons.
+function buildRegions(){ const sel=document.getElementById('reg'), cur=sel.value;
+  const rs=[...new Set((DATA.divisions||[]).map(d=>splitDiv(d).region).filter(Boolean))];
+  sel.innerHTML=rs.map(r=>`<option${r===cur?' selected':''}>${r}</option>`).join('');
+  if(!sel.value&&rs.length) sel.value=rs[0]; }
+function buildDivisions(){ const sel=document.getElementById('div'), cur=sel.value,
+    reg=document.getElementById('reg').value;
+  const ts=(DATA.divisions||[]).filter(d=>splitDiv(d).region===reg).map(d=>splitDiv(d).tier);
+  sel.innerHTML='<option value="all">all</option>'+
+    ts.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join('');
+  if(![...sel.options].some(o=>o.value===cur)) sel.value='all'; }
+// The qualified label a code must carry to pass the current filter, or null for
+// "every division in this region".
+function wantedDivision(){ const reg=document.getElementById('reg').value,
+    dv=document.getElementById('div').value;
+  return dv==='all'?null:reg+' '+dv; }
+function inRegion(c){ return splitDiv(c.division||'').region===document.getElementById('reg').value; }
+function divFilter(cs){ const want=wantedDivision();
+  return cs.filter(c=>want?c.division===want:inRegion(c)); }
 function codeKey(c){ return c.match_id+':'+c.game_no; }
 // A map is "done" if scouted by anyone (captured.json) OR captured locally in this
 // browser (savedKeys) — both count for "hide already-scouted".
@@ -306,13 +336,12 @@ function codeOption(c,i){ const k=codeKey(c);
   let tag = savedKeys.has(k)?'  [captured here]' : (CLAIMED.has(k)?'  [scouted]':'');
   if(claimedByOther(c)) tag += '  🔒 '+CLAIMS[k].by;
   return `<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${tag}</option>`; }
-function currentCodes(){ let cs=DATA.codes.slice();
-  const dv=document.getElementById('div').value, op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
-  if(dv!=='all') cs=cs.filter(c=>c.division===dv);
+function currentCodes(){ let cs=divFilter(DATA.codes.slice());
+  const op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
   if(op&&op!=='all') cs=cs.filter(c=>c.team_a===op||c.team_b===op);
   if(hide) cs=cs.filter(c=>!isDone(c));
   return cs; }
-function refreshOpponents(){ const dv=document.getElementById('div').value; let cs=DATA.codes.slice(); if(dv!=='all') cs=cs.filter(c=>c.division===dv);
+function refreshOpponents(){ const cs=divFilter(DATA.codes.slice());
   const teams=[...new Set(cs.flatMap(c=>[c.team_a,c.team_b]).filter(Boolean))].sort();
   const sel=document.getElementById('opp'), cur=sel.value;
   sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join(''); }
@@ -343,7 +372,13 @@ function onCode(){ const c=selectedCode(); if(!c) return;
 }
 function savePref(id){ const el=document.getElementById(id); localStorage.setItem('owscout_pref_'+id, el.type==='checkbox'?(el.checked?'1':'0'):el.value); }
 function restorePrefs(){ const h=localStorage.getItem('owscout_pref_hide'); if(h!=null) document.getElementById('hide').checked=h==='1';
+  // Region first: the division list is built FROM it, so restoring them the other
+  // way round would validate the saved tier against the wrong region's options.
+  const r=localStorage.getItem('owscout_pref_reg');
+  if(r!=null && [...document.getElementById('reg').options].some(o=>o.value===r)) document.getElementById('reg').value=r;
+  buildDivisions();
   const d=localStorage.getItem('owscout_pref_div'); if(d!=null && [...document.getElementById('div').options].some(o=>o.value===d)) document.getElementById('div').value=d; }
+document.getElementById('reg').onchange=()=>{ savePref('reg'); buildDivisions(); savePref('div'); refreshCodes(); };
 document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); };
 document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
 document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };

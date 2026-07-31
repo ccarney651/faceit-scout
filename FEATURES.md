@@ -8,7 +8,7 @@ reads the hero portraits off the observer HUD, and turns them into composition
 scouting that the same dashboard displays. They share nothing but a read-only
 database link and one JSON file.
 
-*329 tests, mypy clean across 49 files.*
+*334 tests, mypy clean across 49 files.*
 
 ---
 
