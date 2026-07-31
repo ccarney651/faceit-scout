@@ -756,10 +756,11 @@ function divBanBaseline(){
 }
 // A team's ban counts -> lift rows vs a baseline share map. Drops n<minN (a lone
 // ban makes any lift meaningless), sorts by lift then count.
-function banLiftRows(counts, baseShare, minN){
+function banLiftRows(counts, baseShare, minN, gkByHero, lookup){
   const tot=Object.values(counts).reduce((a,b)=>a+b,0)||1;
   return Object.entries(counts).map(([h,n])=>({hero:h, n, share:n/tot,
-      base:baseShare[h]||0, lift: baseShare[h]? (n/tot)/baseShare[h] : null}))
+      base:baseShare[h]||0, lift: baseShare[h]? (n/tot)/baseShare[h] : null,
+      codes: gkByHero ? codesFor(gkByHero[h]||new Set(), lookup) : null}))
     .filter(r=>r.n>=(minN||2))
     .sort((a,b)=>((b.lift==null?-1:b.lift)-(a.lift==null?-1:a.lift))||b.n-a.n);
 }
@@ -769,7 +770,7 @@ function banLiftList(rows){
     const lab=r.lift==null?'new':'×'+r.lift.toFixed(1);
     const col=r.lift==null?'var(--faint)':r.lift>=1.5?'var(--good)':r.lift<=0.6?'var(--bad)':'var(--mid)';
     return `<div class="crow"><span>${heroChip(r.hero)} <span class="faint">${r.n} ban${r.n===1?'':'s'} · ${Math.round(r.share*100)}% of theirs vs ${Math.round(r.base*100)}% field</span></span>`+
-      `<span class="rec">${pill(lab,col)}</span></div>`;
+      `<span class="rec">${r.codes?codesCell(r.codes)+' ':''}${pill(lab,col)}</span></div>`;
   }).join('')+`</div>`;
 }
 
@@ -1491,6 +1492,13 @@ function renderScoutBody(t){
   const root=el(`<div></div>`);
   const w=el(`<div class="scout-main"></div>`);
   const side=el(`<div class="scout-side"></div>`);
+  // Resolves every gk-tracked evidence row in this function to its replay
+  // code(s); built from MATCHES_RECENT (unwindowed), not t.matches, so it
+  // also covers Counter-scout's matchups below, which come from a separate,
+  // unwindowed owscout source (see the design doc). Declared here, at the
+  // top of the function, because Counter-scout (which needs it) renders
+  // before the aggregated evidence tables do, and const isn't hoisted.
+  const lookup=codeLookup(MATCHES_RECENT, t.team);
   const matchW=t.results.filter(r=>r.won).length;
   const form=t.results.slice(0,7).map(r=>`<b class="${r.won?'w':'l'}" title="${esc(r.opp)} ${esc(r.series)}">${r.won?'W':'L'}</b>`).join('');
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
@@ -2061,10 +2069,10 @@ function renderScoutBody(t){
   const banC=el(`<div class="card"></div>`);
   const banBase=divBanBaseline();
   banC.appendChild(el(`<p class="eyebrow">Ban tendencies <span class="note" style="text-transform:none;letter-spacing:0">· lift vs the field, not raw counts</span></p>`));
-  banC.appendChild(el(banLiftList(banLiftRows(t.bans, banBase.all))));
+  banC.appendChild(el(banLiftList(banLiftRows(t.bans, banBase.all, undefined, t.bansGk, lookup))));
   if(t.firstBanGames){
     banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note" style="text-transform:none;letter-spacing:0">· when they draft first (${t.firstBanGames} maps) — the intentional one</span></p>`));
-    banC.appendChild(el(banLiftList(banLiftRows(t.firstBans, banBase.first))));
+    banC.appendChild(el(banLiftList(banLiftRows(t.firstBans, banBase.first, undefined, t.firstBansGk, lookup))));
   }
   two.appendChild(banC);
   const mapC=el(`<div class="card"></div>`);
