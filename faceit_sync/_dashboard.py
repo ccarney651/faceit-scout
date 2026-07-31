@@ -1193,7 +1193,6 @@ const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
  {id:'scout',label:'Scout a team',render:renderScout},
  {id:'players',label:'Players',render:renderPlayers},
- {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
  {id:'matches',label:'Matches',render:renderMatches},
 ];
@@ -1214,6 +1213,7 @@ const LB_COLS=[{k:'maps',label:'Maps'},{k:'elo',label:'Elo'},
   {k:'kd',label:'K/D',rate:1},{k:'dmg',label:'Dmg/map',rate:1},
   {k:'heal',label:'Heal/map',rate:1},{k:'mit',label:'Mit/map',rate:1}];
 let SIM_A=null, SIM_B=null, SIM_FIRST='A';  // draft simulator state
+let SCOUT_SIM_OPEN=false;   // one-shot: force the Scout page's beta draft-simulator section open (set by the #sim deep-link redirect in init(), consumed and reset on the next renderScoutBody)
 let SIM_TREE={};    // scenario tree: path-of-winners string ('','A','AB'…) -> {map,b1,b2} overrides
 let SIM_BO=3;       // wins needed: 2 = Bo3, 3 = Bo5 (default), 4 = Bo7 (playoff)
 let SIM_RECENT=0;   // ban window: use each team's most recent N maps for BANS (0 = full season, default — a short window is too sparse to read ban tendencies)
@@ -2127,6 +2127,27 @@ function renderScoutBody(t){
   const layout=el(`<div class="scoutgrid"></div>`);
   layout.append(w, side);
   root.appendChild(layout);
+
+  // Draft simulator, relegated here from its own top-level tab: it's a
+  // matchup-prep tool reached for while prepping a specific opponent, not a
+  // destination on its own. Lazy-built on first open (or forced open once by
+  // the #sim deep-link redirect in init()) since renderSim() does real work
+  // aggregating each team's ban/pick history.
+  {
+    const openSim=SCOUT_SIM_OPEN; SCOUT_SIM_OPEN=false;
+    const dsCard=el(`<details class="card" style="margin-top:14px"${openSim?' open':''}></details>`);
+    dsCard.appendChild(el(`<summary style="cursor:pointer"><span class="eyebrow" style="display:inline;margin:0">Draft simulator</span> <span class="opener">beta</span></summary>`));
+    const dsBody=el(`<div style="margin-top:10px"></div>`);
+    dsCard.appendChild(dsBody);
+    const buildSim=()=>{
+      if(SIM_A!==t.team){ SIM_A=t.team; SIM_TREE={}; SIM_FOCUS=''; }
+      dsBody.innerHTML=''; dsBody.appendChild(renderSim());
+    };
+    dsCard.addEventListener('toggle',()=>{ if(dsCard.open) buildSim(); });
+    if(openSim) buildSim();
+    root.appendChild(dsCard);
+  }
+
   return root;
 }
 
@@ -2875,6 +2896,7 @@ function init(){
   // bookmarked from before still needs to resolve to real content, not fall
   // through to Overview.
   if(start==='playoffs'){ MATCHES_MODE='playoffs'; MATCHES_MODE_SET=true; show('matches'); return; }
+  if(start==='sim'){ SCOUT_PREP=false; SCOUT_SIM_OPEN=true; show('scout'); return; }
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 init();
