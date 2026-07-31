@@ -272,3 +272,49 @@ def test_default_matches_mode_is_playoffs_when_playoffs_are_finished(tmp_path) -
         "return defaultMatchesMode([{status:'FINISHED'}]);", tmp_path
     )
     assert got == "playoffs"
+
+
+# --- click-to-codes: code lookup + resolution -----------------------------
+# codeLookup/codesFor are pure data transforms (no DOM, no esc/el/rcChip), so
+# they're declared above bootApp and directly testable here.
+
+_ONE_MATCH = ("[{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-20',"
+              "games:[{game_no:1,map:'Ilios',map_category:'Control',"
+              "demo_code:'ABC123',winner_faction:'faction1'},"
+              "{game_no:2,map:'Circuit Royal',map_category:'Escort',"
+              "demo_code:null,winner_faction:'faction2'}]}]")
+
+
+def test_code_lookup_indexes_by_match_and_game(tmp_path) -> None:
+    got = _run(f"return [...codeLookup({_ONE_MATCH},'Alpha').entries()]"
+               ".map(([k])=>k);", tmp_path)
+    assert got == ["m1:1"]   # game 2 has no demo_code -> excluded
+
+
+def test_code_lookup_carries_opponent_and_result_for_the_given_team(tmp_path) -> None:
+    got = _run(f"return codeLookup({_ONE_MATCH},'Alpha').get('m1:1');", tmp_path)
+    assert got["opp"] == "Bravo" and got["won"] is True and got["code"] == "ABC123"
+    assert got["map"] == "Ilios"
+
+
+def test_code_lookup_flips_opponent_for_the_other_team(tmp_path) -> None:
+    got = _run(f"return codeLookup({_ONE_MATCH},'Bravo').get('m1:1');", tmp_path)
+    assert got["opp"] == "Alpha" and got["won"] is False
+
+
+_LOOKUP = ("codeLookup(" + _ONE_MATCH + ",'Alpha')")
+
+
+def test_codes_for_resolves_and_sorts_newest_first(tmp_path) -> None:
+    two = ("[{id:'m2',f1:'Alpha',f2:'Charlie',finished_at:'2026-07-25',"
+           "games:[{game_no:1,map:'Oasis',map_category:'Control',"
+           "demo_code:'ZZZ999',winner_faction:'faction1'}]}]")
+    got = _run(
+        f"const lk=codeLookup([...{_ONE_MATCH},...{two}],'Alpha');"
+        "return codesFor(['m1:1','m2:1'], lk).map(r=>r.code);", tmp_path)
+    assert got == ["ZZZ999", "ABC123"]   # 07-25 before 07-20
+
+
+def test_codes_for_silently_drops_an_unresolvable_key(tmp_path) -> None:
+    got = _run(f"return codesFor(['m1:1','nope:9'], {_LOOKUP}).map(r=>r.code);", tmp_path)
+    assert got == ["ABC123"]

@@ -580,6 +580,26 @@ function defaultMatchesMode(playoffsList){
   return (playoffsList && playoffsList.length) ? 'playoffs' : 'played';
 }
 
+// Click-to-codes: mid:gno -> the replay-code context an evidence row's popover
+// needs. `team` is whose perspective opp/won are read from (may be falsy).
+function codeLookup(matches, team){
+  const m=new Map();
+  (matches||[]).forEach(mt=>(mt.games||[]).forEach(g=>{
+    if(!g.demo_code) return;
+    const won = team ? (g.winner_faction===(mt.f1===team?'faction1':'faction2')) : null;
+    m.set(mt.id+':'+g.game_no, {map:g.map, cat:g.map_category, code:g.demo_code,
+      opp:(team&&mt.f1===team)?mt.f2:mt.f1, when:mt.finished_at, won});
+  }));
+  return m;
+}
+// Resolve a Set/array of 'mid:gno' keys to their code rows via codeLookup's
+// Map, newest first. A key with no match (a code that wiped, or a lookup
+// built narrower than the gk set) is silently dropped, not guessed.
+function codesFor(gkSet, lookup){
+  return [...gkSet].map(k=>lookup.get(k)).filter(Boolean)
+    .sort((a,b)=>String(b.when||'').localeCompare(String(a.when||'')));
+}
+
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
 // (single-file/offline builds) or fetched from data.json (the shell build). This
 // split is what lets next-season gating be a config change — point the fetch at
