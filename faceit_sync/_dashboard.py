@@ -2077,11 +2077,12 @@ function renderScoutBody(t){
   two.appendChild(banC);
   const mapC=el(`<div class="card"></div>`);
   mapC.appendChild(el(`<p class="eyebrow">Maps — picks &amp; win rate</p>`));
-  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wins:v.wins,wr:pctOf(v.wins,v.games)})).sort((a,b)=>mapCmp(a.map,b.map));
+  const mrows=Object.entries(t.mapStats).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',games:v.games,picks:v.picks,wins:v.wins,wr:pctOf(v.wins,v.games),codes:codesFor(v.gk,lookup)})).sort((a,b)=>mapCmp(a.map,b.map));
   mapC.appendChild(mrows.length?table(
     [{k:'map',label:'Map'},
      {k:'picks',label:'Picked',num:true},{k:'games',label:'Played',num:true},
-     {k:'wr',label:'Win %',num:true,html:r=>wrCell(r.wins,r.games)}], mrows, byMode)
+     {k:'wr',label:'Win %',num:true,html:r=>wrCell(r.wins,r.games)},
+     {k:'codes',label:'Codes',html:r=>codesCell(r.codes)}], mrows, byMode)
    :el(`<p class="note">No maps in window.</p>`));
   two.appendChild(mapC);
   w.appendChild(two);
