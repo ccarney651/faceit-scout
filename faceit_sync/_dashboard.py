@@ -2097,10 +2097,12 @@ function renderScoutBody(t){
   // banned second in reply. (Cases where this team banned first are excluded.)
       dv.body.appendChild(el(sectionH('Counter-bans',`<span class="note">opponent bans first → ${esc(t.team)}'s reply</span>`)));
   const cRows=rank(Object.fromEntries(Object.entries(t.counter).map(([k,v])=>[k,Object.values(v).reduce((x,y)=>x+y,0)])))
-    .map(([opp,tot])=>({opp,tot,resp:rank(t.counter[opp]).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' ')}));
+    .map(([opp,tot])=>({opp,tot,resp:rank(t.counter[opp]).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' '),
+      codes:codesFor(t.counterGk[opp]||new Set(),lookup)}));
       dv.body.appendChild(cRows.length?table(
     [{k:'opp',label:'Opponent banned first',html:r=>heroChip(r.opp)},{k:'tot',label:'×',num:true},
-     {k:'resp',label:`${esc(t.team)} replied with`,html:r=>r.resp}], cRows)
+     {k:'resp',label:`${esc(t.team)} replied with`,html:r=>r.resp},
+     {k:'codes',label:'Codes',html:r=>codesCell(r.codes)}], cRows)
    :el(`<p class="note">No counter-bans in this window (needs the opponent to have banned first with both bans attributed).</p>`));
 
     // Ban -> opening: when THIS team bans a hero (FACEIT, complete), the heroes
@@ -2109,13 +2111,15 @@ function renderScoutBody(t){
     // fills in as more of their games are scouted.
     const boRows=Object.entries(t.banOpen||{})
       .map(([ban,v])=>({ban, n:v.gk.size,
-        opens:Object.entries(v.heroes).sort((x,y)=>y[1]-x[1]).filter(([h,c])=>c/v.gk.size>=0.6).slice(0,5)}))
+        opens:Object.entries(v.heroes).sort((x,y)=>y[1]-x[1]).filter(([h,c])=>c/v.gk.size>=0.6).slice(0,5),
+        codes:codesFor(v.gk,lookup)}))
       .filter(r=>r.n>=2 && r.opens.length).sort((x,y)=>y.n-x.n).slice(0,8);
     if(boRows.length){
       dv.body.appendChild(el(sectionH('When they ban a hero → what they open',`<span class="note">their ban paired with the comp they opened that game · captured games only</span>`)));
       dv.body.appendChild(table(
         [{k:'ban',label:'They ban',html:r=>heroChip(r.ban)},{k:'n',label:'Games',num:true},
-         {k:'opens',label:'They open with',html:r=>r.opens.map(([h,c])=>`${heroChip(h)}${c<r.n?`<span class="faint"> ${c}/${r.n}</span>`:''}`).join(' ')}], boRows));
+         {k:'opens',label:'They open with',html:r=>r.opens.map(([h,c])=>`${heroChip(h)}${c<r.n?`<span class="faint"> ${c}/${r.n}</span>`:''}`).join(' ')},
+         {k:'codes',label:'Codes',html:r=>codesCell(r.codes)}], boRows));
     }
     w.appendChild(dv.root);
   }
