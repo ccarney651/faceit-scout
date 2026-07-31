@@ -199,19 +199,26 @@ matchup's own `match_id:game_no`, no `gk` involved).
   `pytest tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`.
 - New pure-function tests (`tests/test_dashboard_logic.py`, via the existing
   `_pure_js()`/`_run()` node harness) for `codeLookup` and `codesFor` — both
-  are declared above `bootApp` specifically so they're reachable by that
-  harness, same placement discipline as `defaultMatchesMode`/`pickDivision`.
-  Cases: a game with no `demo_code` is excluded from the lookup; `codesFor`
-  sorts newest-first and silently drops a key missing from the lookup.
-- `codesCell`'s inline-vs-popover branch is a one-line pure decision — cover
-  it in the same test file (0 rows → em-dash, 1 row → `rcChip`-shaped output,
-  2+ rows → `codeslink`-shaped output with valid embedded JSON).
-- Everything downstream of these (the `aggregate()` accumulator wiring, the
-  popover DOM/positioning, the delegated click handler) lives inside `bootApp`
-  and is DOM-dependent — per this codebase's established practice (see the
-  Overview/nav redesign plan, same day), that's verified via `node --check`
-  plus a manual headless-Edge visual/interaction check, not invented pytest
-  coverage for code the test harness can't reach.
+  are pure data transforms with no dependency on any `bootApp`-scoped helper
+  (no `esc`/`el`/`rcChip`), so they're declared above `bootApp`, same
+  placement discipline as `defaultMatchesMode`/`pickDivision`. Cases: a game
+  with no `demo_code` is excluded from the lookup; `codesFor` sorts
+  newest-first and silently drops a key missing from the lookup.
+- `codesCell` is **not** pure-testable the same way: it calls `rcChip`, which
+  calls `esc` — both declared inside `bootApp` (`:632`, `:841`), alongside
+  every other HTML-string builder in this file (`heroChip`, `pill`, `table`,
+  ...). Moving them above `bootApp` to make `codesCell` reachable by the pure
+  harness would be a much larger, unrelated refactor of already-shared
+  helpers - out of scope. `codesCell` stays next to `rcChip` and is verified
+  the same way every other bootApp-scoped renderer in this file already is:
+  `node --check` for syntax, plus the manual visual/interaction check below.
+- Everything downstream of `codeLookup`/`codesFor` (the `aggregate()`
+  accumulator wiring, the popover DOM/positioning, the delegated click
+  handler) is likewise `bootApp`-scoped and DOM-dependent — per this
+  codebase's established practice (see the Overview/nav redesign plan, same
+  day), verified via `node --check` plus a manual headless-Edge
+  visual/interaction check, not invented pytest coverage for code the test
+  harness can't reach.
 - Manual check: build a local preview, screenshot `#scout=<team>` for a team
   with multi-game evidence rows; confirm each of the 8 sections shows a Codes
   column/chip, a single-code row shows the `.rc` chip inline, a multi-code row
