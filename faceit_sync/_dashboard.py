@@ -425,6 +425,13 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   border:1px solid var(--line2);letter-spacing:.03em}
 .rc:hover{border-color:var(--accent);color:var(--accent)}
 .rc.copied{color:var(--good);border-color:var(--good)}
+.codeslink{cursor:pointer;color:var(--accent);font-size:12px;text-decoration:underline dotted;text-underline-offset:2px}
+.codeslink:hover{color:var(--fg)}
+.codespop{position:fixed;z-index:50;background:var(--surface);border:1px solid var(--line2);
+  border-radius:8px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:280px;max-height:320px;overflow:auto}
+.codesrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;
+  border-top:1px solid var(--line);font-size:12px}
+.codesrow:first-child{border-top:0}
 .hidden{display:none}
 </style>
 </head>
@@ -859,6 +866,41 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
   if(t&&t.dataset.scout){ e.preventDefault(); gotoScout(t.dataset.scout); } });
 // Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
 function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Copy replay code — paste in Overwatch → Watch">${esc(code)}</code>`; }
+// Evidence-row codes cell: exactly one backing game -> the code chip inline,
+// no click needed (the common thin-sample case, and the explicit ask —
+// "bring me straight to code"). More than one -> a small click-to-open link.
+// The resolved rows travel in a data attribute (JSON, esc()-quoted) rather
+// than an external registry, since table() rebuilds every row's HTML string
+// from scratch on every re-sort and an insertion-order registry would go
+// stale across that rebuild.
+function codesCell(rows){
+  if(!rows.length) return '<span class="faint">—</span>';
+  if(rows.length===1) return rcChip(rows[0].code);
+  return `<span class="codeslink" data-codes="${esc(JSON.stringify(rows))}">${rows.length} codes ▾</span>`;
+}
+let _codesPop=null;
+function closeCodesPopover(){
+  if(!_codesPop) return;
+  _codesPop.remove(); _codesPop=null;
+  document.removeEventListener('click', _codesPopOutside, true);
+}
+function _codesPopOutside(e){ if(_codesPop && !_codesPop.contains(e.target) && !e.target.closest('.codeslink')) closeCodesPopover(); }
+function openCodesPopover(anchor, rows){
+  closeCodesPopover();
+  const pop=el(`<div class="codespop"></div>`);
+  rows.forEach(r=>pop.appendChild(el(
+    `<div class="codesrow"><span>${esc(r.map)} <span class="faint">vs ${esc(r.opp||'—')} · ${dshort(r.when)}</span></span>${rcChip(r.code)}</div>`)));
+  document.body.appendChild(pop);
+  const rc=anchor.getBoundingClientRect();
+  pop.style.left=Math.max(8,Math.min(rc.left, window.innerWidth-pop.offsetWidth-8))+'px';
+  pop.style.top=(rc.bottom+4)+'px';
+  _codesPop=pop;
+  setTimeout(()=>document.addEventListener('click', _codesPopOutside, true), 0);
+}
+document.addEventListener('click', e=>{
+  const t=e.target.closest('.codeslink'); if(!t) return;
+  openCodesPopover(t, JSON.parse(t.dataset.codes));
+});
 function copyText(t){
   if(navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
   return new Promise((res,rej)=>{ try{ const ta=document.createElement('textarea');
