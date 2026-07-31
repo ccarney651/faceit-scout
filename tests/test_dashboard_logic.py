@@ -248,3 +248,27 @@ def test_pick_division_survives_an_empty_view_list(tmp_path) -> None:
     """An export with no divisions is already an error upstream; it must still
     not throw here, because a throw during boot yields a blank page."""
     assert _run("return pickDivision('em',[]);", tmp_path) is None
+
+
+# --- Matches tab default mode --------------------------------------------
+# Landing a visitor on an empty "Playoffs" panel is a worse first screen than
+# landing them on the (populated) regular-season list, so the toggle should
+# only default to Playoffs once real playoff matches exist.
+
+def test_default_matches_mode_is_played_when_no_playoff_matches(tmp_path) -> None:
+    got = _run("return defaultMatchesMode([]);", tmp_path)
+    assert got == "played"
+
+
+def test_default_matches_mode_is_playoffs_once_any_playoff_match_exists(tmp_path) -> None:
+    got = _run(
+        "return defaultMatchesMode([{status:'SCHEDULED'}]);", tmp_path
+    )
+    assert got == "playoffs"
+
+
+def test_default_matches_mode_is_playoffs_when_playoffs_are_finished(tmp_path) -> None:
+    got = _run(
+        "return defaultMatchesMode([{status:'FINISHED'}]);", tmp_path
+    )
+    assert got == "playoffs"

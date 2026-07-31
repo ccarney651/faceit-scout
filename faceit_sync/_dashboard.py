@@ -564,6 +564,14 @@ function pickDivision(storedId, views){
   return views.some(v=>v.id===storedId) ? storedId : views[0].id;
 }
 
+// Matches tab: which mode (Regular season vs Playoffs) opens by default.
+// Landing on an empty Playoffs panel is worse than landing on the (populated)
+// regular-season list, so only default to Playoffs once real playoff matches
+// exist for the active division — finished or scheduled, any status counts.
+function defaultMatchesMode(playoffsList){
+  return (playoffsList && playoffsList.length) ? 'playoffs' : 'played';
+}
+
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
 // (single-file/offline builds) or fetched from data.json (the shell build). This
 // split is what lets next-season gating be a config change — point the fetch at
