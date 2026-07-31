@@ -88,6 +88,7 @@ main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 .opener{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:4px;padding:0 4px;margin-left:3px;vertical-align:middle}
 .bvs{display:block;font-size:10.5px;font-weight:400;line-height:1.2;color:var(--faint)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
+.hero{max-width:min(1500px,96vw);margin:14px auto 0;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
 .grid{display:grid;gap:10px}
 .cols-2{grid-template-columns:1fr 1fr}
 .cols-3{grid-template-columns:1fr 1fr 1fr}
@@ -435,6 +436,13 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
     <span class="meta" id="subtitle"></span></div>
   <nav id="nav"></nav>
 </div></div>
+<div id="hero" class="card hero">
+  <span class="note" style="margin:0;font-size:13px">OW Scout — FACEIT League scouting, built from real match data + fan-captured comps.</span>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" id="heroScout" type="button">Scout a team →</button>
+    <button class="btn" id="heroCapture" type="button">Contribute a capture →</button>
+  </div>
+</div>
 <main id="content"></main>
 <footer style="max-width:1200px;margin:32px auto 20px;padding:16px 20px;border-top:1px solid var(--line);color:var(--faint);font-size:12px;line-height:1.6">
   <b style="color:var(--muted)">OW Scout</b> &mdash; community Overwatch 2 scouting for the FACEIT League.
@@ -1243,28 +1251,20 @@ function renderOverview(){
   tiles.forEach(([v,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${v}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
   wrap.appendChild(g);
 
-  // Scout launcher
-  const launch=el(`<div class="card" style="margin-top:14px"></div>`);
-  launch.appendChild(el(`<p class="eyebrow">Prep for a match</p>`));
-  const row=el(`<div class="controls"></div>`);
-  const sel=el(`<select style="min-width:200px"></select>`);
-  D().team_names.forEach(n=>sel.appendChild(el(`<option>${esc(n)}</option>`)));
-  const go=el(`<button class="btn">Scout this team →</button>`);
-  go.onclick=()=>gotoScout(sel.value);
-  row.append(sel,go); launch.appendChild(row);
-  wrap.appendChild(launch);
-
-  // Contribute callout: the browser capture tool lives at /capture/ — no install.
-  const contrib=el(`<div class="card" style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"></div>`);
-  contrib.appendChild(el(`<div><p class="eyebrow" style="margin:0 0 2px">Contribute</p><span class="note">Scout comps straight from your browser — no install, no exe. Every capture sharpens the data here.</span></div>`));
-  const cbtn=el(`<button class="btn">Capture comps →</button>`); cbtn.onclick=()=>{location.href='capture/';}; contrib.appendChild(cbtn);
-  wrap.appendChild(contrib);
+  wrap.appendChild(el(sectionH('Standings')));
+  wrap.appendChild(table(
+    [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},{k:'wins',label:'Wins',num:true},
+     {k:'win_pct',label:'Win %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))}],
+    D().teams));
+  wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
 
   // Scout leaderboard — maps each contributor owns (first-wins credited), the
   // same count the future contribute-or-pay threshold will use. League-wide.
+  // Below standings, not above: a trust signal for a returning visitor, not
+  // orientation info a cold visitor needs first (that's the hero strip above).
   const contribs=DATA.owscout_contributors||[];
   if(contribs.length){
-    const lc=el(`<div class="card" style="margin-top:14px"></div>`);
+    const lc=el(`<div class="card" style="margin-top:20px"></div>`);
     lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
     lc.appendChild(el(`<p class="note" style="margin:0 0 8px">Maps each scout has contributed this season — every capture sharpens the data here. 🙏</p>`));
     lc.appendChild(el(barList(contribs.slice(0,15).map(c=>({label:esc(c.name),value:c.maps})))));
@@ -1273,47 +1273,6 @@ function renderOverview(){
     wrap.appendChild(lc);
   }
 
-  // current meta + standings
-  const two=el(`<div class="grid cols-2" style="margin-top:20px"></div>`);
-  const win=recent(MATCHES_RECENT,20), a=aggregate(win,null), {from,to}=dateRange(win);
-  const banCard=el(`<div class="card"></div>`);
-  banCard.appendChild(el(`<p class="eyebrow">Current ban meta · last ${win.length} matches</p>`));
-  banCard.appendChild(el(barList(rank(a.bans).slice(0,8).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
-  banCard.appendChild(el(`<p class="note">${dshort(from)} → ${dshort(to)}. See <b>League meta</b> for windows.</p>`));
-  const mapCard=el(`<div class="card"></div>`);
-  mapCard.appendChild(el(`<p class="eyebrow">Most played maps · last ${win.length} matches</p>`));
-  mapCard.appendChild(el(barList(rank(a.mapsPicked).slice(0,8).map(([m,n])=>({label:`${esc(m)} ${tag(MAP_CAT[m]||'')}`,value:n})))));
-  two.append(banCard,mapCard); wrap.appendChild(two);
-
-  wrap.appendChild(el(sectionH('Standings')));
-  wrap.appendChild(table(
-    [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},{k:'wins',label:'Wins',num:true},
-     {k:'win_pct',label:'Win %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))}],
-    D().teams));
-  wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
-
-  // Rosters at a glance: the current lineup per team (whoever played the latest
-  // match), most-used first, with subs / departed players dimmed below. Straight
-  // from FACEIT round_players, so it's there even for un-scouted teams.
-  wrap.appendChild(el(sectionH('Rosters at a glance')));
-  const prow=(p,dim)=>`<div class="pl"${dim?' style="opacity:.5"':''}>`+
-    `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-    `<span>${esc(p.nick)}</span>`+
-    `<span class="st">${p.games} map${p.games===1?'':'s'}</span></div>`;
-  const rg=el(`<div class="grid cols-3"></div>`);
-  D().teams.forEach(t=>{
-    const ros=t.roster||[], cur=ros.filter(p=>p.current), sub=ros.filter(p=>!p.current);
-    let body=cur.map(p=>prow(p,false)).join('');
-    if(sub.length) body+=`<div class="subhd">also played this season</div>`+sub.map(p=>prow(p,true)).join('');
-    const card=el(`<div class="card roster"></div>`);
-    card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
-      `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>`+
-      pill(t.win_pct+'%',winVar(t.win_pct))+`</h4>`));
-    card.appendChild(el(`<div>${body||'<span class="faint">no roster data yet</span>'}</div>`));
-    rg.appendChild(card);
-  });
-  wrap.appendChild(rg);
-  wrap.appendChild(el(`<p class="note">Current lineup = players who appeared in the team's most recent match; “map” counts are games played this season. Roles and names are FACEIT's.</p>`));
   return wrap;
 }
 
@@ -2876,6 +2835,8 @@ function init(){
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
   nav.appendChild(el(`<a class="navcap" href="capture/" title="Scout comps in your browser — no install, no exe">＋ Capture comps</a>`));
+  document.getElementById('heroScout').onclick=()=>{ if(!SCOUT_TEAM) SCOUT_TEAM=(D().team_names||[])[0]||null; show('scout'); };
+  document.getElementById('heroCapture').onclick=()=>{ location.href='capture/'; };
   const start=decodeURIComponent((location.hash||'#overview').slice(1));
   if(start.startsWith('prep=')||start.startsWith('scout=')){
     SCOUT_PREP=start.startsWith('prep=');
