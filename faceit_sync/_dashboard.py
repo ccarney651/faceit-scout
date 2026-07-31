@@ -700,7 +700,8 @@ function wrCell(wins,games){
 /* recency: matches newest-first (recency is measured in matches ≈ how a season is counted).
    Recomputed whenever the active division changes. */
 let MATCHES_RECENT=[];
-let MATCHES_MODE='played';   // Matches tab: 'played' history vs 'upcoming' fixtures
+let MATCHES_MODE='played';   // Matches tab: 'played' | 'upcoming' | 'playoffs'
+let MATCHES_MODE_SET=false;  // whether the user (or a deep link) has explicitly chosen a mode this session — once true, defaultMatchesMode() no longer overrides it on re-render
 function recomputeDivision(){
   MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
   SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
@@ -1194,7 +1195,6 @@ const TABS=[
  {id:'players',label:'Players',render:renderPlayers},
  {id:'sim',label:'Draft simulator',render:renderSim},
  {id:'meta',label:'League meta',render:renderMeta},
- {id:'playoffs',label:'Playoffs',render:renderPlayoffs},
  {id:'matches',label:'Matches',render:renderMatches},
 ];
 
@@ -2728,12 +2728,15 @@ function renderMatches(){
   const search=el(`<input placeholder="search team, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
   const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
   bar.append(search,sort);
-  // Played history vs upcoming fixtures. A full-season schedule can be large, so
-  // upcoming lives in its own view (toggle) rather than stacked on the results.
+  // Played history vs upcoming fixtures vs the playoff bracket. A full-season
+  // schedule can be large, so each lives in its own view (toggle) rather than
+  // stacked on the results. Default mode is a real decision (defaultMatchesMode,
+  // declared above bootApp) so it's independently testable.
   const up0=D().upcoming||[];
+  if(!MATCHES_MODE_SET){ MATCHES_MODE=defaultMatchesMode(D().playoffs||[]); MATCHES_MODE_SET=true; }
   const modeBar=el(`<div class="wsel" style="margin:0 2px 12px"></div>`);
-  const mkMode=(m,lbl)=>{ const b=el(`<span class="wbtn">${lbl}</span>`); b.onclick=()=>{ MATCHES_MODE=m; draw(); }; return b; };
-  modeBar.append(mkMode('played','Played'), mkMode('upcoming',`Upcoming${up0.length?' · '+up0.length:''}`));
+  const mkMode=(m,lbl)=>{ const b=el(`<span class="wbtn">${lbl}</span>`); b.onclick=()=>{ MATCHES_MODE=m; MATCHES_MODE_SET=true; draw(); }; return b; };
+  modeBar.append(mkMode('played','Played'), mkMode('upcoming',`Upcoming${up0.length?' · '+up0.length:''}`), mkMode('playoffs','Playoffs'));
   // In a single round-robin every team has faced the same opponents, so a team's
   // full match list reads as their "book" against a field you already know -
   // search a team to see exactly how they drafted vs each opponent you also play.
@@ -2766,13 +2769,17 @@ function renderMatches(){
     if(!shown.length){ list.appendChild(el(`<p class="note">No played matches${q?' match your search':''}.</p>`)); return; }
     shown.forEach(m=>list.appendChild(matchCard(m)));
   }
+  function drawPlayoffs(){
+    list.appendChild(renderPlayoffs());
+  }
   function draw(){
     const q=(search.value||'').trim().toLowerCase();
-    const upMode=(MATCHES_MODE==='upcoming');
-    [...modeBar.children].forEach((b,i)=>b.classList.toggle('selA',(i===0)!==upMode));
-    note.style.display=upMode?'none':''; sort.style.display=upMode?'none':'';
+    const idx={played:0,upcoming:1,playoffs:2}[MATCHES_MODE]||0;
+    [...modeBar.children].forEach((b,i)=>b.classList.toggle('selA',i===idx));
+    const upMode=(MATCHES_MODE==='upcoming'), poMode=(MATCHES_MODE==='playoffs');
+    note.style.display=(upMode||poMode)?'none':''; sort.style.display=(upMode||poMode)?'none':''; search.style.display=poMode?'none':'';
     list.innerHTML='';
-    if(upMode) drawUpcoming(q); else drawPlayed(q);
+    if(poMode) drawPlayoffs(); else if(upMode) drawUpcoming(q); else drawPlayed(q);
   }
   search.oninput=draw; sort.onchange=draw; draw(); return wrap;
 }
@@ -2864,6 +2871,10 @@ function init(){
     }
     if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
   }
+  // 'playoffs' and 'sim' were their own tabs before this redesign; a link
+  // bookmarked from before still needs to resolve to real content, not fall
+  // through to Overview.
+  if(start==='playoffs'){ MATCHES_MODE='playoffs'; MATCHES_MODE_SET=true; show('matches'); return; }
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 init();
