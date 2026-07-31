@@ -519,12 +519,26 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
   return out; }
 
 // ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
-// A faithful browser port of the .exe's confident_left_faction: OCR the 10 HUD
-// name bars, fuzzy-match them to the two rosters, and only act when one
-// orientation clearly wins. Same difflib ratio + thresholds the exe tuned on
-// real frames (owscout/capture.py), so a garbled read can't assign sides or
-// players from noise.
-const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=3;
+// A browser port of the .exe's confident_left_faction: OCR the 10 HUD name
+// bars, fuzzy-match them to the two rosters, and only act when one orientation
+// clearly wins. Same difflib ratio as the exe (owscout/capture.py), so a
+// garbled read still can't assign sides or players from noise.
+//
+// MIN_STRONG_NAMES is lower here (2, vs the exe's 3) — a deliberate, browser-
+// only divergence. The exe's thresholds were measured against Windows' native
+// OCR on dxcam frames (owscout/capture.py: good reads cleared 5-6 strong
+// names, a known-garbage misaligned frame scored 0). tesseract.js reading a
+// getDisplayMedia canvas is a weaker OCR engine on a lossier source, and
+// field use since the auto-detect-on-Snapshot gate shipped (2026-07-31) put
+// its real hit rate around 70% at MIN_STRONG_NAMES=3 — clearing snapshots
+// often enough to be reliable, but failing (and blocking capture entirely,
+// since this gate is now mandatory) often enough to be frustrating. Dropping
+// to 2 is the single most targeted loosening: it only lowers how many
+// individually-strong reads are required, not the match-quality bar
+// (STRONG_NAME_SCORE) or the aggregate-lead bar (AUTO_SIDE_MARGIN, the
+// stronger anti-noise gate — it alone would already reject the exe's
+// documented garbage case, margin 25 vs this 100 threshold).
+const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=2;
 // difflib.SequenceMatcher.ratio() = 2*M/(len a+len b), M = total size of the
 // longest matching blocks (Ratcliff/Obershelp). Names are short → skip junk.
 function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
