@@ -2139,7 +2139,8 @@ function renderScoutBody(t){
   };
   const pfb=Object.entries(t.pickFirstBan).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',
       games:v.games,wr:pctOf(v.wins,v.games),comp:openOn(m),
-      ban:rank(v.bans).slice(0,2).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' ')}))
+      ban:rank(v.bans).slice(0,2).map(([h,n])=>`${heroChip(h)}<span class="faint"> ${n}</span>`).join(' '),
+      codes:codesFor(v.gk,lookup)}))
     .sort((a,b)=>mapCmp(a.map,b.map));
   w.appendChild(el(sectionH('Signature setups',`<span class="note">maps they pick &amp; ban first on · self-chosen drafts</span>`)));
   if(pfb.length){
@@ -2148,7 +2149,8 @@ function renderScoutBody(t){
       [{k:'map',label:'Map'},
        {k:'ban',label:'Their first ban',html:r=>r.ban},
        {k:'comp',label:'What they run there',html:r=>r.comp||`<span class="faint">not captured</span>`},
-       {k:'games',label:'Maps',num:true}], pfb, byMode));
+       {k:'games',label:'Maps',num:true},
+       {k:'codes',label:'Codes',html:r=>codesCell(r.codes)}], pfb, byMode));
   } else {
     w.appendChild(el(`<p class="note">No maps in this window where they both picked and banned first.</p>`));
   }
