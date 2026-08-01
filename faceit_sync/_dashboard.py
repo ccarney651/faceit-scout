@@ -589,13 +589,17 @@ function defaultMatchesMode(playoffsList){
 
 // Click-to-codes: mid:gno -> the replay-code context an evidence row's popover
 // needs. `team` is whose perspective opp/won are read from (may be falsy).
-function codeLookup(matches, team){
+// `wipeDate` (CODE_WIPE) marks a game `dead` when it finished on/before the
+// wipe - a plain string param, not a read of the bootApp-scoped CODE_WIPE
+// global, so this stays a pure function callers can pass any date into.
+function codeLookup(matches, team, wipeDate){
   const m=new Map();
   (matches||[]).forEach(mt=>(mt.games||[]).forEach(g=>{
     if(!g.demo_code) return;
     const won = team ? (g.winner_faction===(mt.f1===team?'faction1':'faction2')) : null;
+    const dead = !!(wipeDate && mt.finished_at && String(mt.finished_at).slice(0,10)<=wipeDate);
     m.set(mt.id+':'+g.game_no, {map:g.map, cat:g.map_category, code:g.demo_code,
-      opp:(team&&mt.f1===team)?mt.f2:mt.f1, when:mt.finished_at, won});
+      opp:(team&&mt.f1===team)?mt.f2:mt.f1, when:mt.finished_at, won, dead});
   }));
   return m;
 }
@@ -874,9 +878,10 @@ function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Co
 // than an external registry, since table() rebuilds every row's HTML string
 // from scratch on every re-sort and an insertion-order registry would go
 // stale across that rebuild.
+const wipedTag='<span class="faint" style="font-size:11.5px">code wiped</span>';
 function codesCell(rows){
   if(!rows.length) return '<span class="faint">—</span>';
-  if(rows.length===1) return rcChip(rows[0].code);
+  if(rows.length===1) return rows[0].dead ? wipedTag : rcChip(rows[0].code);
   return `<span class="codeslink" data-codes="${esc(JSON.stringify(rows))}">${rows.length} codes ▾</span>`;
 }
 let _codesPop=null;
@@ -890,7 +895,7 @@ function openCodesPopover(anchor, rows){
   closeCodesPopover();
   const pop=el(`<div class="codespop"></div>`);
   rows.forEach(r=>pop.appendChild(el(
-    `<div class="codesrow"><span>${esc(r.map)} <span class="faint">vs ${esc(r.opp||'—')} · ${dshort(r.when)}</span></span>${rcChip(r.code)}</div>`)));
+    `<div class="codesrow"><span>${esc(r.map)} <span class="faint">vs ${esc(r.opp||'—')} · ${dshort(r.when)}</span></span>${r.dead?wipedTag:rcChip(r.code)}</div>`)));
   document.body.appendChild(pop);
   const rc=anchor.getBoundingClientRect();
   pop.style.left=Math.max(8,Math.min(rc.left, window.innerWidth-pop.offsetWidth-8))+'px';
@@ -1498,7 +1503,9 @@ function renderScoutBody(t){
   // unwindowed owscout source (see the design doc). Declared here, at the
   // top of the function, because Counter-scout (which needs it) renders
   // before the aggregated evidence tables do, and const isn't hoisted.
-  const lookup=codeLookup(MATCHES_RECENT, t.team);
+  // CODE_WIPE marks pre-wipe entries `dead` so codesCell/the popover can
+  // label them "code wiped" instead of offering a copy chip that won't load.
+  const lookup=codeLookup(MATCHES_RECENT, t.team, CODE_WIPE);
   const matchW=t.results.filter(r=>r.won).length;
   const form=t.results.slice(0,7).map(r=>`<b class="${r.won?'w':'l'}" title="${esc(r.opp)} ${esc(r.series)}">${r.won?'W':'L'}</b>`).join('');
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
@@ -1970,10 +1977,11 @@ function renderScoutBody(t){
             // Counter-scout rows are already one game each (unlike the aggregated
             // tables above) - always the inline single-code case, never a popover.
             const cc=lookup.get(m.match_id+':'+m.game_no);
+            const ccTag=cc?(cc.dead?' '+wipedTag:' '+rcChip(cc.code)):'';
             resBox.appendChild(el(`<div class="crow${ov.length<2?' thin':''}">`+
               `<span class="csrow"><span class="wlsq ${m.won?'w':'l'}">${m.won?'W':'L'}</span>`+
               `<b>${esc(m.map)}</b><span class="faint">ran</span>${compRow(m.open||[])}</span>`+
-              `<span class="rec">matched ${ov.length}/${signal.length}${cc?' '+rcChip(cc.code):''}</span></div>`));
+              `<span class="rec">matched ${ov.length}/${signal.length}${ccTag}</span></div>`));
           });
         } else {
           resBox.appendChild(el(`<p class="note">No captured game where they faced any of those heroes yet.</p>`));

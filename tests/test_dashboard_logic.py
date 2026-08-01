@@ -318,3 +318,18 @@ def test_codes_for_resolves_and_sorts_newest_first(tmp_path) -> None:
 def test_codes_for_silently_drops_an_unresolvable_key(tmp_path) -> None:
     got = _run(f"return codesFor(['m1:1','nope:9'], {_LOOKUP}).map(r=>r.code);", tmp_path)
     assert got == ["ABC123"]
+
+
+def test_code_lookup_marks_a_pre_wipe_game_as_dead(tmp_path) -> None:
+    got = _run(f"return codeLookup({_ONE_MATCH},'Alpha','2026-07-28').get('m1:1').dead;", tmp_path)
+    assert got is True   # game finished 2026-07-20, wipe was 2026-07-28
+
+
+def test_code_lookup_does_not_mark_a_post_wipe_game_as_dead(tmp_path) -> None:
+    got = _run(f"return codeLookup({_ONE_MATCH},'Alpha','2026-07-15').get('m1:1').dead;", tmp_path)
+    assert got is False   # game finished 2026-07-20, wipe was 2026-07-15
+
+
+def test_code_lookup_without_a_wipe_date_marks_nothing_dead(tmp_path) -> None:
+    got = _run(f"return codeLookup({_ONE_MATCH},'Alpha').get('m1:1').dead;", tmp_path)
+    assert got is False
