@@ -973,9 +973,7 @@ function matchCard(m){
       (g.was_restarted?tag('veto disrupted','warn'):'')+
       (CAPTURED.has(m.id+':'+g.game_no)?tag('scouted','ok'):'')+
       `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
-        (g.demo_code?(codeDead(m.finished_at)&&!CAPTURED.has(m.id+':'+g.game_no)
-            ?'<span class="faint" style="font-size:11.5px">code wiped</span>'
-            :rcChip(g.demo_code))
+        (g.demo_code?(codeDead(m.finished_at)?wipedTag:rcChip(g.demo_code))
           :'<span class="faint" style="font-size:11.5px">no replay</span>')+
         `<span class="faint rtog">▸ rosters</span></span></div>`));
     gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
