@@ -1580,7 +1580,10 @@ function renderScoutBody(t){
       const over=n>=2 && ts>=fs*1.6 && (ts-fs)>=0.05;   // a real team-specific tell, not the meta
       const w=tBanWin[h]||{games:0,wins:0};
       c2.appendChild(el(`<div class="crow"><span>${heroChip(h)}${opener===h?` <span class="opener" title="their most common first ban">1st ban</span>`:''}</span>`+
-        `<span class="rec">${n}x <span class="faint">league ${Math.round(fs*100)}%</span> · ${wrCell(w.wins,w.games)}${over?`<span class="bvs" title="A ban that's distinctive to ${esc(t.team)} — they ban it in ${Math.round(ts*100)}% of their games, vs ${Math.round(fs*100)}% for most teams">signature</span>`:''}</span></div>`));
+        `<span class="rec"><span title="banned ${n} time${n===1?'':'s'} in this window">${n}x</span>`+
+        ` · <span class="faint" title="how often the league bans ${esc(h)}, for comparison">league ${Math.round(fs*100)}%</span>`+
+        ` · <span title="their win rate in games where they banned ${esc(h)}">won ${wrCell(w.wins,w.games)}</span>`+
+        `${over?`<span class="bvs" title="A ban that's distinctive to ${esc(t.team)} — they ban it in ${Math.round(ts*100)}% of their games, vs ${Math.round(fs*100)}% for most teams">signature</span>`:''}</span></div>`));
     });
     else c2.appendChild(el(`<p class="note" style="margin:2px 0 0">No bans in window.</p>`));
     cols.appendChild(c2);
