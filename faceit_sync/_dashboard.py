@@ -1040,10 +1040,8 @@ function matchCard(m){
 // One map's full detail: header (map/score/side/code/scouted), bans, opening
 // comps, and the roster/stat table — always visible (no toggle; this is
 // already the detail view, nothing left to progressively disclose). Used by
-// the match detail page's tabs (renderMatchDetail below). matchCard still has
-// its own copy of this rendering for now — Task 3 removes it once the
-// compact card no longer needs it, so this file is never left duplicating
-// nothing (each task leaves a working, testable page).
+// the match detail page's tabs (renderMatchDetail below); matchCard is now a
+// compact summary and no longer renders this itself.
 function gamePanel(m,g){
   const gEl=el(`<div class="game"></div>`);
   gEl.appendChild(el(`<div class="game-hd"><span class="gno">M${g.game_no}</span>`+
