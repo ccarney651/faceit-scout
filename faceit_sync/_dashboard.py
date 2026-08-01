@@ -1562,11 +1562,13 @@ function renderScoutBody(t){
     c2.appendChild(el(`<p class="eyebrow">Their bans</p>`));
     // Recount from the drafts so the opening ban + field comparison line up with
     // the shown counts (these two reads were folded in from the old Tendencies card).
-    const tBan={}, tFirst={}; let tBanTot=0, tFirstG=0;
-    t.matches.forEach(m=>m.games.forEach(gm=>{ if(!gm.map) return;
+    const tBan={}, tBanWin={}, tFirst={}; let tBanTot=0, tFirstG=0;
+    t.matches.forEach(m=>{ const side=m.f1===t.team?'faction1':(m.f2===t.team?'faction2':null);
+      m.games.forEach(gm=>{ if(!gm.map) return; const won=!!(side&&gm.winner_faction===side);
       const mine=(gm.bans||[]).filter(b=>b.hero&&b.team===t.team).sort((a,b)=>(a.order||9)-(b.order||9));
       if(mine.length){ inc(tFirst,mine[0].hero); tFirstG++; }
-      mine.forEach(b=>{ inc(tBan,b.hero); tBanTot++; }); }));
+      mine.forEach(b=>{ inc(tBan,b.hero); tBanTot++;
+        const w=tBanWin[b.hero]||(tBanWin[b.hero]={games:0,wins:0}); w.games++; if(won)w.wins++; }); }); });
     const fBan={}; let fBanTot=0;
     D().matches.forEach(m=>m.games.forEach(gm=>{ if(!gm.map) return;
       (gm.bans||[]).forEach(b=>{ if(b.hero){ inc(fBan,b.hero); fBanTot++; } }); }));
@@ -1576,8 +1578,9 @@ function renderScoutBody(t){
     if(tb.length) tb.forEach(([h,n])=>{
       const ts=tBanTot?n/tBanTot:0, fs=fBanTot?(fBan[h]||0)/fBanTot:0;
       const over=n>=2 && ts>=fs*1.6 && (ts-fs)>=0.05;   // a real team-specific tell, not the meta
+      const w=tBanWin[h]||{games:0,wins:0};
       c2.appendChild(el(`<div class="crow"><span>${heroChip(h)}${opener===h?` <span class="opener" title="their most common first ban">1st ban</span>`:''}</span>`+
-        `<span class="rec">${n}x${over?`<span class="bvs" title="A ban that's distinctive to ${esc(t.team)} — they ban it in ${Math.round(ts*100)}% of their games, vs ${Math.round(fs*100)}% for most teams">signature</span>`:''}</span></div>`));
+        `<span class="rec">${n}x <span class="faint">league ${Math.round(fs*100)}%</span> · ${wrCell(w.wins,w.games)}${over?`<span class="bvs" title="A ban that's distinctive to ${esc(t.team)} — they ban it in ${Math.round(ts*100)}% of their games, vs ${Math.round(fs*100)}% for most teams">signature</span>`:''}</span></div>`));
     });
     else c2.appendChild(el(`<p class="note" style="margin:2px 0 0">No bans in window.</p>`));
     cols.appendChild(c2);
@@ -1589,7 +1592,7 @@ function renderScoutBody(t){
       .sort((a,b)=>b.picks-a.picks).slice(0,4);
     if(mp.length) mp.forEach(r=>c3.appendChild(el(
       `<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
-      `<span class="rec">${r.picks}x · ${wrCell(r.wins,r.games)}</span></div>`)));
+      `<span class="rec">${r.games} played · ${r.picks}x picked · ${wrCell(r.wins,r.games)}</span></div>`)));
     else c3.appendChild(el(`<p class="note" style="margin:2px 0 0">No picked maps in window.</p>`));
     cols.appendChild(c3);
 
@@ -1724,7 +1727,7 @@ function renderScoutBody(t){
   const banHtml=c=>(c.bans&&c.bans.length)
     ? `<span class="cbans"><span class="bl">bans</span>${c.bans.slice(0,4).map(h=>heroIcon(h)).join('')}</span>` : '';
   const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
-                    `${banHtml(c)}<span class="rec">${rec(c)}</span></div>`;
+                    `${banHtml(c)}<span class="rec">${rec(c)} ${codesCell(codesFor(c.game_keys||[],lookup))}</span></div>`;
 
   // Ubiquitous heroes carry no trigger signal - computed once per team, used
   // by every swap row this page renders.

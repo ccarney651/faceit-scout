@@ -199,6 +199,7 @@ def _family_dict(f: CompFamily, names: dict[str, str]) -> dict[str, Any]:
         "win_rate": round(f.win_rate, 3), "samples": f.samples,
         "variants": len(f.variants),
         "bans": [names.get(g, g) for g in f.bans],
+        "game_keys": f.game_keys,
     }
 
 
@@ -272,8 +273,13 @@ def team_scout(
         game_key = f"{mi}:{side}"
         first = obs[0]
         mp = first.map_name or "?"
+        # FACEIT identity for this game, when known - lets a comp family point
+        # back to the replay code(s) that back it (distinct from game_key, which
+        # is only used here for internal dedup/counting).
+        code_key = (f"{first.match_id}:{first.game_no}"
+                    if first.match_id is not None and first.game_no is not None else None)
         overall.setdefault(team, []).append(
-            CompInstance(first.hero_guids, won, game_key, bans=first.bans))
+            CompInstance(first.hero_guids, won, game_key, bans=first.bans, code_key=code_key))
         enemy_obs = sorted(
             (e for e in games.get((mi, "b" if side == "a" else "a"), [])),
             key=lambda e: e.sample_ts_ms)
@@ -313,10 +319,10 @@ def team_scout(
             slot = by_map.setdefault(team, {}).setdefault(mp, {}).setdefault(
                 key, {"open": [], "settled": []})
             slot["open"].append(
-                CompInstance(fd.hero_guids, won, game_key, bans=fd.bans))
+                CompInstance(fd.hero_guids, won, game_key, bans=fd.bans, code_key=code_key))
             slot["settled"].append(
                 CompInstance(seg_last[key].hero_guids, won, game_key,
-                             bans=seg_last[key].bans))
+                             bans=seg_last[key].bans, code_key=code_key))
 
     swaps = aggregate_swaps(details, roles, hero_names)
     swaps_by_map = aggregate_swaps(details, roles, hero_names, per_map=True)

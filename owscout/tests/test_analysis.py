@@ -209,3 +209,20 @@ def test_cluster_comps_surfaces_majority_bans() -> None:
     ]
     fam = cluster_comps(insts, {"ram": "tank"})[0]
     assert fam.bans == ["sombra"]        # 2 of 3 games; widow/mauga only 1 each
+
+
+def test_cluster_comps_collects_game_keys_for_click_to_codes() -> None:
+    """A family exposes the FACEIT match:game keys behind it, so the dashboard
+    can resolve them to replay codes. Instances with no code_key (older/synthetic
+    data) are silently excluded rather than polluting the list with None."""
+    from owscout.analysis import CompInstance, cluster_comps
+
+    base = ("ram", "sojourn", "mei", "lucio", "kiriko")
+    flex = ("ram", "sojourn", "reaper", "lucio", "kiriko")  # same family (1 flex)
+    insts = [
+        CompInstance(base, True, "m1", code_key="a1:1"),
+        CompInstance(flex, False, "m2", code_key="a1:2"),
+        CompInstance(base, True, "m3", code_key=None),   # no FACEIT identity known
+    ]
+    fam = cluster_comps(insts, ROLES)[0]
+    assert fam.game_keys == ["a1:1", "a1:2"]

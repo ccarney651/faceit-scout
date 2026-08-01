@@ -220,3 +220,24 @@ def test_per_game_comps_splits_by_segment() -> None:
     assert list(b.keys()) == ["attack", "defend"]        # play order preserved
     assert b["attack"] == ["RAM", "SOJ", "MEI", "LUC", "KIR"]
     assert b["defend"] == ["DVA", "REAPER", "MEI", "ANA", "KIR"]
+
+
+def test_overall_families_carry_game_keys_for_click_to_codes() -> None:
+    """Common comps needs to point back to the replay code(s) behind a family -
+    team_scout must thread match_id:game_no through to each family's dict."""
+    base = ["ram", "soj", "mei", "luc", "kir"]
+    details = [
+        _obs(1, "a", 0, base, "hybrid", "a")._replace(match_id="M1", game_no=1),
+        _obs(2, "a", 0, base, "hybrid", "b")._replace(match_id="M2", game_no=1),
+    ]
+    fam = team_scout(details, ROLES, NAMES)["Alpha"]["overall"][0]
+    assert fam["game_keys"] == ["M1:1", "M2:1"]
+
+
+def test_overall_family_game_keys_empty_without_faceit_identity() -> None:
+    """Older/synthetic observations with no match_id/game_no must not crash or
+    fabricate a key - an empty list, not a guess."""
+    base = ["ram", "soj", "mei", "luc", "kir"]
+    details = [_obs(1, "a", 0, base, "hybrid", "a")]   # no ._replace -> match_id=None
+    fam = team_scout(details, ROLES, NAMES)["Alpha"]["overall"][0]
+    assert fam["game_keys"] == []
