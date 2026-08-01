@@ -2159,7 +2159,7 @@ function renderScoutBody(t){
     const segs=(scoutMaps[mp]||{}).segments||{};
     const best=Object.values(segs).map(b=>(b.open||[])[0]).filter(Boolean)
       .sort((a,b)=>b.maps-a.maps)[0];
-    return best?`${compRow(best.heroes)}<span class="faint" style="margin-left:8px">${rec(best)}</span>`:'';
+    return best?`<span style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px 8px;white-space:normal">${compRow(best.heroes)}<span class="faint">${rec(best)}</span></span>`:'';
   };
   const pfb=Object.entries(t.pickFirstBan).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',
       games:v.games,wr:pctOf(v.wins,v.games),comp:openOn(m),
