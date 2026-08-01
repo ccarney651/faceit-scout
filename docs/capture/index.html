@@ -611,6 +611,11 @@ function attribute(names,roster){ const out=[null,null,null,null,null], cand=[];
   for(const c of cand){ if(c.s<STRONG_NAME_SCORE) break;
     if(usedSlot.has(c.i)||usedId.has(c.id)) continue;
     out[c.i]=c.id; usedSlot.add(c.i); usedId.add(c.id); }
+  // Process of elimination: exactly one HUD slot and one roster player left
+  // unresolved means they must be each other - no ambiguity to guess through.
+  const openSlots=[0,1,2,3,4].filter(i=>out[i]===null);
+  const openIds=roster.filter(p=>p.id&&!usedId.has(p.id)).map(p=>p.id);
+  if(openSlots.length===1 && openIds.length===1) out[openSlots[0]]=openIds[0];
   return out; }
 function setDetectMsg(html,cls){ const e=document.getElementById('sidehint');
   if(e) e.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
@@ -738,6 +743,7 @@ function fixReads(){ const host=document.getElementById('refpanel');
       const ok=r.score>=0.5; const row=document.createElement('div'); row.className='refrow';
       row.innerHTML=`<span class="refread">${side.toUpperCase()}${i+1}: <b>${ok?esc(r.name):'??'}</b> <span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span></span>`;
       const sel=document.createElement('select'); sel.innerHTML=opts; sel.dataset.side=side; sel.dataset.i=i;
+      sel.dataset.wrong=ok?r.guid:'';   // the wrong guid to propagate to earlier snapshots on correction
       sel.onchange=()=>onFixPick(sel); row.appendChild(sel); grp.appendChild(row); }
     host.appendChild(grp); }
 }
@@ -751,13 +757,21 @@ async function promptNewHero(){ const nm=(prompt('New hero name (a hero not in t
   CUSTOM_HEROES[guid]={name:nm, role:role.charAt(0).toUpperCase()+role.slice(1).toLowerCase()};
   try{ await idbPutIn('heroes',{g:guid, ...CUSTOM_HEROES[guid]}); }catch(e){}
   return {guid, name:nm}; }
-async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i; let guid=sel.value, name;
+async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i, wrongG=sel.dataset.wrong||''; let guid=sel.value, name;
   if(!guid){ return; }
   if(guid==='__new__'){ const nh=await promptNewHero(); if(!nh){ sel.value=''; return; } guid=nh.guid; name=nh.name; }
   else { name=(heroCatalog().find(h=>h.g===guid)||{}).n||guid; }
   const rec={n:name, g:guid, v:side, d:learnCrop(side,i), added_at:Date.now()};
   await addRef(rec);
-  refMsg('✓ learned <b>'+esc(name)+'</b> ('+(side==='a'?'blue':'red')+') — re-reading…','ok');
+  // Propagate to snapshots already kept this map, not just future reads - a
+  // wrong read caught mid-session would otherwise still need fixing again in
+  // Review. An unread "??" slot (no wrongG) has nothing stored to fix.
+  let fixed=0;
+  if(wrongG && wrongG!==guid && session){
+    session.snaps.forEach(s=>{ const arr=side==='a'?s.a:s.b;
+      for(let k=0;k<arr.length;k++){ if(arr[k]===wrongG){ arr[k]=guid; fixed++; } } }); }
+  refMsg('✓ learned <b>'+esc(name)+'</b> ('+(side==='a'?'blue':'red')+')'+
+    (fixed?` — fixed ${fixed} earlier snapshot${fixed===1?'':'s'} too`:'')+' — re-reading…','ok');
   setTimeout(fixReads, 250);    // re-run so the operator sees the improved read (and can fix another)
 }
 // ---------- review & correct a captured map before publish (Phase 5) ----------
@@ -792,6 +806,31 @@ function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
       const del=document.createElement('button'); del.className='ghost'; del.textContent='remove'; del.onclick=()=>remapHero(rec,side,g,'__remove__',host);
       row.appendChild(sel); row.appendChild(del); grp.appendChild(row); }
     host.appendChild(grp); }
+  // Player attribution: heroes whose player never resolved (auto-detect ran
+  // out of confident/eliminable candidates). Roster is small (~5), so one-click
+  // chips beat a search dropdown - pick a name, it fills every observation of
+  // that hero+side still missing one.
+  for(const side of ['a','b']){
+    const teamId=side==='a'?rec.side_a_team_id:rec.side_b_team_id;
+    const roster=(((DATA.rosters||{})[rec.match_id]||{})[teamId]||{}).players||[];
+    const used=new Set(); const unresolved=new Set();
+    for(const o of rec.observations||[]){ if(o.side!==side) continue;
+      for(const [g,pid] of (o.pairs||[])){ if(pid) used.add(pid); else unresolved.add(g); } }
+    const open=roster.filter(p=>p.id&&!used.has(p.id));
+    if(!unresolved.size || !open.length) continue;
+    const pg=document.createElement('div'); pg.className='refgrp';
+    pg.innerHTML=`<h3 class="rlbl">Player attribution — ${side==='a'?'blue':'red'} <span class="status">who plays which hero</span></h3>`;
+    unresolved.forEach(g=>{
+      const row=document.createElement('div'); row.className='refrow';
+      const lbl=document.createElement('span'); lbl.className='refread'; lbl.style.flex='1';
+      lbl.innerHTML=`<b>${esc(heroName(g))}</b> <span class="status">player unresolved</span>`;
+      row.appendChild(lbl);
+      open.forEach(p=>{ const chip=document.createElement('button'); chip.className='ghost'; chip.type='button';
+        chip.style.marginLeft='6px'; chip.textContent=(p.game_name||p.nick||p.id);
+        chip.onclick=()=>assignPlayer(rec,side,g,p.id,host); row.appendChild(chip); });
+      pg.appendChild(row); });
+    host.appendChild(pg);
+  }
   // Teach recognition from this map's opening portraits: correct a slot and it
   // learns that exact crop as a ref (the live "Fix current reads", but post-hoc).
   if(rec.crops){
@@ -809,7 +848,13 @@ function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
           if(g==='__new__'){ const nh=await promptNewHero(); if(!nh){ sel.value=''; return; } g=nh.guid; nm=nh.name; }
           else nm=(heroCatalog().find(h=>h.g===g)||{}).n||g;
           await addRef({n:nm,g:g,v:side,d:cb[i],added_at:Date.now()});
-          snapMsg('learned '+nm+' — future reads improved'); renderReview(rec,host); };
+          // Propagate: this crop's current read (r.guid, if confident) is a
+          // wrong value already stored on every matching observation of this
+          // map - fix them too via the same path the hero-remap panel above
+          // uses, not just future reads. An unread "??" crop (no r.guid) has
+          // nothing stored to fix, so just teach and re-render.
+          if(r.score>=0.5 && r.guid && r.guid!==g){ await remapHero(rec, side, r.guid, g, host); }
+          else { snapMsg('learned '+nm+' — future reads improved'); renderReview(rec,host); } };
         row.append(cv,lbl,sel); tg.appendChild(row); } }
     host.appendChild(tg);
   }
@@ -824,6 +869,14 @@ async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
       nh.push(g); np.push([g, pid!=null?pid:null]); }
     o.heroes=nh; o.pairs=np; }
   rec.published=false;   // an edited map needs re-publishing; keep the review open, just re-enable Publish
+  await idbPut(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
+  renderReview(rec, host); }
+// Fill in a player for every observation where this hero+side is still
+// unattributed (the Player attribution picker's one-click chips).
+async function assignPlayer(rec, side, heroGuid, playerId, host){
+  for(const o of rec.observations||[]){ if(o.side!==side) continue;
+    for(const pair of (o.pairs||[])){ if(pair[0]===heroGuid && !pair[1]) pair[1]=playerId; } }
+  rec.published=false;
   await idbPut(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
   renderReview(rec, host); }
 function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
