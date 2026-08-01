@@ -257,6 +257,18 @@ table.blocks thead th:hover{color:var(--faint)}
 .crow+.crow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 .crow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
 .crow.thin{opacity:.55}                      /* n=1: present, but visibly weak evidence */
+/* Players -> By seat: a real grid instead of one flex line, so name/heroes/stats
+   land in fixed columns across every row regardless of how many hero icons or
+   how long a name is - variable-width inline content was what made rows read
+   as staggered. */
+.seatrow{display:grid;grid-template-columns:1fr 96px auto;align-items:center;gap:8px;padding:6px 2px;
+  border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.seatrow:first-child{border-top:0}
+.seatrow .nm{display:flex;flex-direction:column;gap:1px;min-width:0;line-height:1.3}
+.seatrow .nm b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.seatrow .nm .tm{color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seatrow .hs{display:flex;gap:2px}
+.seatrow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px;text-align:right}
 .csrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .wlsq{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;font-weight:800;font-size:11px;flex:none}
 .wlsq.w{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)}
@@ -2368,8 +2380,9 @@ function renderPlayers(){
       // Stats come from FACEIT's season feed (every map they played), not just the
       // captured ones - the seat itself is what needs a capture, not the numbers.
       list.forEach(p=>{ const av=faceitAvg(p), hs=topHeroes(p.cap,3);
-        card.appendChild(el(`<div class="crow" title="${av?av.games+' maps · '+(av.kd!=null?av.kd+' k/d · ':'')+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':'no stats'}">`+
-          `<span><b>${esc(p.nick)}</b> <span class="faint">${esc(p.team)}</span> ${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
+        card.appendChild(el(`<div class="seatrow" title="${av?av.games+' maps · '+(av.kd!=null?av.kd+' k/d · ':'')+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':'no stats'}">`+
+          `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${esc(p.team)}</span></span>`+
+          `<span class="hs">${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
           `<span class="rec">${av?playerStatLine(baseRole,av)+` <span class="faint">· ${av.games}m</span>`:''}</span></div>`)); });
       grid.appendChild(card);
     });
