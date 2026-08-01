@@ -773,8 +773,9 @@ function banLiftList(rows){
   return `<div>`+rows.slice(0,10).map(r=>{
     const lab=r.lift==null?'new':'×'+r.lift.toFixed(1);
     const col=r.lift==null?'var(--faint)':r.lift>=1.5?'var(--good)':r.lift<=0.6?'var(--bad)':'var(--mid)';
+    const liftTitle=r.lift==null?'no field baseline to compare yet':`bans this ${r.lift.toFixed(1)}x more often than the division average`;
     return `<div class="crow"><span>${heroChip(r.hero)} <span class="faint">${r.n} ban${r.n===1?'':'s'} · ${Math.round(r.share*100)}% of theirs vs ${Math.round(r.base*100)}% field</span></span>`+
-      `<span class="rec">${r.codes?codesCell(r.codes)+' ':''}${pill(lab,col)}</span></div>`;
+      `<span class="rec">${r.codes?codesCell(r.codes)+' ':''}<span title="${esc(liftTitle)}">${pill(lab,col)}</span></span></div>`;
   }).join('')+`</div>`;
 }
 
@@ -1595,7 +1596,7 @@ function renderScoutBody(t){
       .sort((a,b)=>b.picks-a.picks).slice(0,4);
     if(mp.length) mp.forEach(r=>c3.appendChild(el(
       `<div class="crow"><span>${esc(r.m)} <span class="faint">${esc(MAP_CAT[r.m]||'')}</span></span>`+
-      `<span class="rec">${r.games} played · ${r.picks}x picked · ${wrCell(r.wins,r.games)}</span></div>`)));
+      `<span class="rec">${r.games} played · ${r.picks}x picked · <span title="their win rate on ${esc(r.m)}">won ${wrCell(r.wins,r.games)}</span></span></div>`)));
     else c3.appendChild(el(`<p class="note" style="margin:2px 0 0">No picked maps in window.</p>`));
     cols.appendChild(c3);
 
@@ -1730,7 +1731,7 @@ function renderScoutBody(t){
   const banHtml=c=>(c.bans&&c.bans.length)
     ? `<span class="cbans"><span class="bl">bans</span>${c.bans.slice(0,4).map(h=>heroIcon(h)).join('')}</span>` : '';
   const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
-                    `${banHtml(c)}<span class="rec">${rec(c)} ${codesCell(codesFor(c.game_keys||[],lookup))}</span></div>`;
+                    `${banHtml(c)}<span class="rec">${rec(c)} · ${codesCell(codesFor(c.game_keys||[],lookup))}</span></div>`;
 
   // Ubiquitous heroes carry no trigger signal - computed once per team, used
   // by every swap row this page renders.
@@ -2750,7 +2751,7 @@ function renderMeta(){
       const card=el(`<div class="card"></div>`);
       rows.forEach(r=>card.appendChild(el(`<div class="crow${r.maps<=1?' thin':''}"><span>${compRow(r.heroes)}</span>`+
         `<span class="rec">${r.maps} map${r.maps===1?'':'s'} · ${r.teams.size} team${r.teams.size===1?'':'s'}`+
-        `${r.maps>=3?` · ${Math.round(100*r.wins/(r.games||1))}%`:''}</span></div>`)));
+        `${r.maps>=3?` · won ${Math.round(100*r.wins/(r.games||1))}%`:''}</span></div>`)));
       wrap.appendChild(card);
     } else {
       wrap.appendChild(el(`<p class="note">No comps captured yet — this fills in as games are scouted.</p>`));
