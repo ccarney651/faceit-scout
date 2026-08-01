@@ -333,3 +333,50 @@ def test_code_lookup_does_not_mark_a_post_wipe_game_as_dead(tmp_path) -> None:
 def test_code_lookup_without_a_wipe_date_marks_nothing_dead(tmp_path) -> None:
     got = _run(f"return codeLookup({_ONE_MATCH},'Alpha').get('m1:1').dead;", tmp_path)
     assert got is False
+
+
+# --- match detail page: pure helpers ---------------------------------------
+# divisionOfMatch/mapPipClass/scoutedCount are pure data transforms (no DOM,
+# no esc/el/CAPTURED), so they're declared above bootApp and directly
+# testable here, same discipline as codeLookup/codesFor.
+
+_DIVS = "{a:{matches:[{id:'m1'}]}, b:{matches:[{id:'m2'},{id:'m3'}]}}"
+
+
+def test_division_of_match_finds_the_owning_division(tmp_path) -> None:
+    assert _run(f"return divisionOfMatch({_DIVS},'m2');", tmp_path) == "b"
+
+
+def test_division_of_match_returns_null_for_an_unknown_id(tmp_path) -> None:
+    assert _run(f"return divisionOfMatch({_DIVS},'nope');", tmp_path) is None
+
+
+def test_map_pip_class_is_win_when_faction1_won(tmp_path) -> None:
+    got = _run("return mapPipClass({winner_faction:'faction1'});", tmp_path)
+    assert got == "win"
+
+
+def test_map_pip_class_is_loss_when_faction2_won(tmp_path) -> None:
+    got = _run("return mapPipClass({winner_faction:'faction2'});", tmp_path)
+    assert got == "loss"
+
+
+def test_map_pip_class_is_empty_with_no_winner(tmp_path) -> None:
+    got = _run("return mapPipClass({winner_faction:null});", tmp_path)
+    assert got == ""
+
+
+_SCOUT_MATCH = ("{id:'m1',games:[{game_no:1,map:'Ilios'},{game_no:2,map:'Oasis'},"
+                "{game_no:3,map:null}]}")   # game 3: not played (series ended 2-0)
+
+
+def test_scouted_count_only_counts_played_maps(tmp_path) -> None:
+    got = _run(f"return scoutedCount({_SCOUT_MATCH}, new Set());", tmp_path)
+    assert got == {"done": 0, "total": 2}
+
+
+def test_scouted_count_counts_captured_games(tmp_path) -> None:
+    got = _run(
+        f"return scoutedCount({_SCOUT_MATCH}, new Set(['m1:1']));", tmp_path
+    )
+    assert got == {"done": 1, "total": 2}

@@ -623,6 +623,30 @@ function codesFor(gkSet, lookup){
     .sort((a,b)=>String(b.when||'').localeCompare(String(a.when||'')));
 }
 
+// Match detail page: a match id is unique only within its own division
+// (DIVS[cid].matches), so a cross-division link (the Scout-a-team rail, or a
+// shared #match= URL) needs to find which division owns it before switching
+// CURRENT_VIEW — the same move gotoScout already makes for a team name.
+function divisionOfMatch(divs, matchId){
+  for(const cid in divs){ if((divs[cid].matches||[]).some(m=>m.id===matchId)) return cid; }
+  return null;
+}
+// The compact match card's per-map pip: win/loss is always read relative to
+// faction1 (the team listed first on the card), so one card's pips read
+// consistently even though "win" has no meaning without a fixed side.
+function mapPipClass(g){
+  if(g.winner_faction==='faction1') return 'win';
+  if(g.winner_faction==='faction2') return 'loss';
+  return '';
+}
+// Roll up per-game "scouted" (owscout has a captured comp for this game) into
+// one N/total for the compact card, in place of a tag per map.
+function scoutedCount(m, capturedIds){
+  const played=(m.games||[]).filter(g=>g.map);
+  const done=played.filter(g=>capturedIds.has(m.id+':'+g.game_no)).length;
+  return {done, total:played.length};
+}
+
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
 // (single-file/offline builds) or fetched from data.json (the shell build). This
 // split is what lets next-season gating be a config change — point the fetch at
