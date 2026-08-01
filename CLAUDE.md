@@ -11,7 +11,11 @@ packages feed **one website** (`docs/index.html`):
   into a local **SQLite** DB, exported as a self-contained HTML dashboard.
 - **`owscout`** — reads hero comps off the observer HUD of in-client replays
   (screen capture + template matching) and turns them into per-team composition
-  scouting shown on the same page. Windows-only capture stack.
+  scouting shown on the same page. Capture happens through the browser app at
+  `docs/capture/` (zero-install, `getDisplayMedia` + tesseract.js) — **the only
+  supported capture path.** A native Windows GUI (`owscout/gui.py`,
+  `owscout_app.py`) still exists in the repo but is dead: unmaintained, not
+  distributed, not documented to users. Don't point anyone at it.
 
 `README.md` (faceit_sync ingest + data-quality hazards) and `FEATURES.md`
 (every feature in both packages) are the authoritative long-form docs — read them
@@ -29,8 +33,9 @@ Dev environment is **Windows**; use the venv Python directly:
 pip install -e ".[dev]"                            # install (add [capture] for owscout CV deps)
 ```
 
-`faceit-sync` / `owscout` / `owscout-app` are the console entry points
-(see `[project.scripts]`). Common flows:
+`faceit-sync` / `owscout` are the console entry points (see `[project.scripts]`;
+`owscout-app` also exists but launches the dead native GUI — don't use it).
+Common flows:
 
 ```bash
 faceit-sync fetch --matches-file matches.txt        # seed + keyless transitive ingest

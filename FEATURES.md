@@ -398,7 +398,13 @@ opening and settled comps; recurring swaps with triggers, both overall and
 per map; hero pool counted in **rounds** with roles attached; and ban-response —
 how their opening comp shifts when a given hero is banned.
 
-## 2.7 GUI
+## 2.7 GUI — dead, not the capture path
+
+**Superseded by the browser capture app at `docs/capture/`** (zero-install,
+runs in any modern browser). The native Tk GUI described below still exists
+in the repo (`owscout/gui.py`) but is unmaintained and not distributed —
+nothing should point a user at it. Kept here only as an accurate record of
+what the code still does, for anyone touching that file.
 
 Everything above behind buttons, for operators who never touch a CLI. Worker
 threads with a queue drained on the Tk main loop, so the window never freezes and
@@ -422,7 +428,7 @@ cleanly and are re-derived by whatever the analysis does today.
 ## The workflow
 
 ```
-owscout gui            # calibrate, learn portraits, capture, review, finalize
+Open docs/capture/     # the browser capture app - share screen, calibrate, capture, review
 Publish my captures    # uploads to the OPEN endpoint under your chosen name -
                        # the site rebuilds itself within a couple of minutes
 ```
@@ -575,9 +581,3 @@ presentation is built to keep that visible.
   of 104 hero+team refs). They are unvalidated rather than known-bad; `refs
   coverage` tracks this and it shrinks with every capture.
 - **Swap triggers lack baseline subtraction** (see §2.5).
-- ~~The `.exe` is untested~~ **Field-verified 2026-07-18.** The operator ran the
-  full first-run flow on the frozen build: calibration UI, pre-trained library
-  auto-load (104 refs), dxcam capture with global hotkeys, and the fresh-machine
-  bootstrap sync — all worked. A new user's setup: run the exe → calibrate →
-  capture (the library and seed list are baked in). Remaining friction is only
-  Windows SmartScreen on the unsigned binary (More info → Run anyway).
