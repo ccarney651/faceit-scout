@@ -351,14 +351,14 @@ def test_division_of_match_returns_null_for_an_unknown_id(tmp_path) -> None:
     assert _run(f"return divisionOfMatch({_DIVS},'nope');", tmp_path) is None
 
 
-def test_map_pip_class_is_win_when_faction1_won(tmp_path) -> None:
+def test_map_pip_class_is_f1win_when_faction1_won(tmp_path) -> None:
     got = _run("return mapPipClass({winner_faction:'faction1'});", tmp_path)
-    assert got == "win"
+    assert got == "f1win"
 
 
-def test_map_pip_class_is_loss_when_faction2_won(tmp_path) -> None:
+def test_map_pip_class_is_f2win_when_faction2_won(tmp_path) -> None:
     got = _run("return mapPipClass({winner_faction:'faction2'});", tmp_path)
-    assert got == "loss"
+    assert got == "f2win"
 
 
 def test_map_pip_class_is_empty_with_no_winner(tmp_path) -> None:

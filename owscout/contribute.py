@@ -515,6 +515,17 @@ def merged_payload(
     # Per-game opening comps by segment, so match cards can show what each team
     # started each round/phase/sub-map on.
     payload["per_game_comps"] = per_game_comps(obs_details, names)
+    # Per-game per-player primary hero ('match_id:game_no' -> {nick: hero name}),
+    # so the site can put a hero next to each player in the per-map stat tables.
+    # Only games whose captures carried (hero, player) pairs appear; the dashboard
+    # falls back to the season pools for the rest.
+    pgp: dict[str, dict[str, str]] = {}
+    for (mid, gno, pid), guid in _primary_hero_per_game(merged.maps).items():
+        nick = (player_names or {}).get(str(pid))
+        if not nick:
+            continue
+        pgp.setdefault(f"{mid}:{gno}", {})[nick] = names.get(guid, guid)
+    payload["per_game_players"] = pgp
     from datetime import datetime, timezone
     payload["built_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Games on or before this date have DEAD replay codes: the site must not

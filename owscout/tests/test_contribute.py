@@ -348,6 +348,31 @@ def test_observations_without_pairs_are_simply_absent() -> None:
     assert player_pools(maps, {}, {}) == {}
 
 
+def test_per_game_players_rides_hero_player_pairs() -> None:
+    """(hero, player) pairs per observation become a per-game, per-player hero map
+    ('mid:gno' -> {nick: hero name}) for the site's per-map stat tables."""
+    from owscout.contribute import merged_payload
+    alice = _contrib("alice", [("m1", 1, ["ram", "soj"]), ("m1", 2, ["ram"])])
+    alice["maps"][0]["observations"][0]["pairs"] = [["ram", "p1"], ["soj", "p2"]]
+    alice["maps"][1]["observations"][0]["pairs"] = [["ram", "p1"]]
+    payload = merged_payload(
+        [alice], {}, {"ram": "Ramattra", "soj": "Sojourn"},
+        player_names={"p1": "Javi44", "p2": "BuFayez2"})
+    assert payload["per_game_players"]["m1:1"] == {
+        "Javi44": "Ramattra", "BuFayez2": "Sojourn"}
+    assert payload["per_game_players"]["m1:2"] == {"Javi44": "Ramattra"}
+
+
+def test_per_game_players_skips_unknown_player_ids() -> None:
+    """A pair whose player id has no nickname in the faceit roster can't be shown
+    as a row - it must be omitted, not crash or emit an empty-nick key."""
+    from owscout.contribute import merged_payload
+    alice = _contrib("alice", [("m1", 1, ["ram"])])
+    alice["maps"][0]["observations"][0]["pairs"] = [["ram", "ghost-id"]]
+    payload = merged_payload([alice], {}, {"ram": "Ramattra"}, player_names={})
+    assert payload["per_game_players"] == {}
+
+
 def test_captured_feed_parses() -> None:
     from owscout.contribute import fetch_captured_games
 

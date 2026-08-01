@@ -14,6 +14,7 @@ from ._dashboard import HTML_TEMPLATE
 from .db import Database
 from .hero_icons import load_hero_icons
 from .subroles import SEAT_ORDER, seat_of
+from .team_logos import build_team_logos
 
 # On mirrored modes (Control, Flashpoint, Push) the sides are symmetric, so which
 # team "attacks first" is competitively meaningless. Attack-order only matters on
@@ -367,16 +368,23 @@ def _dashboard_data(db: Database, cid: str,
 
     matches: list[dict[str, Any]] = []
     team_names: set[str] = set()
-    for m in c.execute("""SELECT m.*, t1.name f1name, t2.name f2name
+    team_avatars: dict[str, Optional[str]] = {}
+    for m in c.execute("""SELECT m.*, t1.name f1name, t2.name f2name,
+                                 t1.avatar_url f1avatar, t2.avatar_url f2avatar
                           FROM matches m LEFT JOIN teams t1 ON t1.id=m.faction1_team_id
                                          LEFT JOIN teams t2 ON t2.id=m.faction2_team_id
                           WHERE m.championship_id=? AND m.status='FINISHED'
                           ORDER BY m.round, m.group_no, m.id""", (cid,)):
         f1, f2 = m["f1name"], m["f2name"]
+        a1, a2 = m["f1avatar"], m["f2avatar"]
         if f1:
             team_names.add(f1)
+            if a1 and not team_avatars.get(f1):
+                team_avatars[f1] = a1
         if f2:
             team_names.add(f2)
+            if a2 and not team_avatars.get(f2):
+                team_avatars[f2] = a2
 
         def team_of(faction: Optional[str]) -> Optional[str]:
             return f1 if faction == "faction1" else f2 if faction == "faction2" else None
@@ -425,7 +433,8 @@ def _dashboard_data(db: Database, cid: str,
         matches.append({
             "id": m["id"], "round": m["round"], "group": m["group_no"],
             "finished_at": m["finished_at"],  # ISO8601 — sorts lexicographically
-            "f1": f1, "f2": f2, "forfeit": bool(m["forfeit"]),
+            "f1": f1, "f2": f2,
+            "forfeit": bool(m["forfeit"]),
             "walkover": not any(g["map"] for g in gs),
             "series": f"{s1}-{s2}", "winner": m["winner_faction"],
             "winner_team": team_of(m["winner_faction"]), "best_of": m["best_of"],
@@ -450,6 +459,7 @@ def _dashboard_data(db: Database, cid: str,
         "matches": matches,
         "upcoming": upcoming,
         "team_names": sorted(team_names),
+        "team_avatars": team_avatars,
     }
 
 
@@ -538,6 +548,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     owscout_wipe: object = None
     owscout_cycles: dict[str, object] = {}
     owscout_pergame: dict[str, object] = {}
+    owscout_pergame_players: dict[str, object] = {}
     owscout_contributors: list[object] = []
     oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
     if os.path.exists(oc_path):
@@ -549,6 +560,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             owscout_wipe = oc.get("code_wipe_date")
             owscout_cycles = oc.get("attack_cycles", {})
             owscout_pergame = oc.get("per_game_comps", {})
+            owscout_pergame_players = oc.get("per_game_players", {})
             owscout_contributors = oc.get("contributor_stats", [])
         except (json.JSONDecodeError, OSError):
             owscout_comps = {}
@@ -556,6 +568,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     divisions: dict[str, Any] = {}
     heroes: dict[str, Any] = {}
     maps: dict[str, Any] = {}
+    team_avatars: dict[str, Optional[str]] = {}
     ordered: list[tuple[str, str]] = []
     for cid in cids:
         d = _dashboard_data(db, cid, attack_cycles=owscout_cycles)
@@ -565,6 +578,9 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"]})
         for m in d.pop("maps"):
             maps.setdefault(m["name"], {"name": m["name"], "category": m["category"]})
+        for name, url in d.pop("team_avatars", {}).items():
+            if url and not team_avatars.get(name):
+                team_avatars[name] = url
         d.pop("bans_by_role", None)
         divisions[cid] = d
         ordered.append((str(d["summary"]["championship"]), cid))
@@ -645,6 +661,11 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         ).fetchall()
     ]
 
+    # Inline team logos so the dashboard remains a single self-contained file.
+    # This call fetches only logos that are not already cached; failures degrade
+    # to "no logo" rather than breaking the build.
+    inlined_team_avatars = build_team_logos(team_avatars)
+
     data = {
         "divisions": divisions,
         "views": views,
@@ -654,7 +675,9 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         "owscout_comps": owscout_comps,
         "owscout_captured": owscout_captured,
         "owscout_pergame": owscout_pergame,
+        "owscout_pergame_players": owscout_pergame_players,
         "owscout_contributors": owscout_contributors,
+        "team_avatars": inlined_team_avatars,
         "code_wipe": owscout_wipe,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.

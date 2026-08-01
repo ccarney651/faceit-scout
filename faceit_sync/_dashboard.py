@@ -361,11 +361,16 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 
 /* matches */
 .match{margin-bottom:12px;padding:0;overflow:hidden}
-.match .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
-  padding:14px 16px;border-bottom:1px solid var(--line)}
-.match .teams{font-size:15px;font-weight:600}
+.match .hd{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;
+  padding:8px 12px;border-bottom:1px solid var(--line)}
+.match .hd .teams{grid-column:2;min-width:0}
+.match .hd .tags{grid-column:3;justify-self:end;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.match .teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;font-size:13.5px;font-weight:600}
+.match .teams .tscout{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;display:inline-flex;align-items:center;justify-content:center}
+.match .teams .tscout .tlogo{flex:none;margin-right:5px}
 .match .teams .win{color:var(--fg)} .match .teams .lose{color:var(--muted)}
-.match .score{font-weight:750;font-size:15px;margin:0 8px}
+.match .teams .score{text-align:center;font-weight:750;font-size:13.5px;margin:0 2px}
+.tlogo{display:inline-block;width:20px;height:20px;border-radius:4px;object-fit:cover;vertical-align:middle}
 .game{padding:10px 16px;border-bottom:1px solid var(--line);font-size:13px}
 .game:last-child{border-bottom:0}
 .game-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
@@ -393,14 +398,69 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 @media (max-width:640px){.rosters{grid-template-columns:1fr}}
 .backlink{display:block;padding:14px 16px 0;margin:0;color:var(--muted);text-decoration:none;font-size:13px}
 .backlink:hover{color:var(--accent)}
-.maptabs{padding:0 16px 12px}
 .mrow{cursor:pointer}
-.mpips{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px}
-.mpip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 9px;border-radius:7px;
-  background:var(--surface2);border:1px solid var(--line2)}
-.mpip.win{border-color:color-mix(in srgb,var(--good) 45%,var(--line2))}
-.mpip.loss{color:var(--faint)}
-.mscouted{padding:0 16px 12px;margin:0}
+/* Compact per-map scoreboard on the shared match card: one row per map. The main
+   line is a 5-column grid (map | comp1 | vs | comp2 | code) so the comps always
+   line up. A second, full-width ban line below uses the same banstep display as
+   the match detail page. */
+.mscores{display:flex;flex-direction:column;gap:4px;padding:0 14px 10px}
+.msline{display:flex;flex-direction:column;gap:4px;
+  padding:6px 10px;border-radius:7px;font-size:12px;
+  background:var(--surface2);border:1px solid var(--line2);
+  border-left-width:3px;border-right-width:3px;
+  border-left-color:var(--line2);border-right-color:var(--line2)}
+.msline.f1win{border-left-color:var(--good)}
+.msline.f2win{border-right-color:var(--good)}
+.msline.f1win .msnum,.msline.f2win .msnum{color:var(--good)}
+.msrow{display:grid;
+  grid-template-columns:118px 142px 26px 142px auto;
+  gap:6px 8px;align-items:center}
+.msmap{grid-column:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.msmap .msnum{font-variant-numeric:tabular-nums;font-weight:750;margin-left:5px}
+.mscomp{grid-column:2;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
+.mscomp.f2{grid-column:4;justify-content:flex-start}
+.mscomp .comp{display:inline-flex;align-items:center;gap:3px;flex-wrap:nowrap}
+.mscomp .comp .rgap{flex:0 0 4px}
+.mscomp .comp .hicon{width:26px;height:26px;border-radius:4px}
+.mscomp .comp .hicon+.hicon{margin-left:0}
+.msvs{grid-column:3;text-align:center;font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.02em}
+.msright{grid-column:5;display:inline-flex;align-items:center;min-width:0;justify-self:end}
+/* Simple rail mode (team-page match cards): keep the compact single-line layout. */
+.msrow.rail{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border-left-width:3px;border-right-width:3px;border-left-color:var(--line2);border-right-color:var(--line2)}
+.msrow.rail .msmap{flex:1;min-width:0}
+.msrow.rail .msright{flex:none;justify-self:auto}
+/* Full-width ban line below each match-card map row — same banstep display as
+   the match detail page, so the preview mirrors the individual match page. */
+.msbansline{padding:3px 0 2px;font-size:11.5px;color:var(--fg)}
+.msbansline .bans{display:flex;flex-wrap:wrap;gap:6px 12px;margin:0;padding:0}
+.msbansline .banstep{gap:6px}
+.msbansline .ord{width:18px;height:18px;font-size:10px}
+.mscouted{padding:0 14px 10px;margin:0;font-size:11.5px}
+/* Matches tab: two cards per row on desktop; the 7-column map rows still fit on
+   typical 1440p+ widths, and mobile collapses to one column. */
+.matches-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.matches-grid .match{margin-bottom:0}
+/* Series overview on the match detail page: small side-by-side cards. */
+.seriesov{display:flex;flex-wrap:wrap;gap:10px;padding:0 16px 14px}
+.gcard{width:152px;flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:10px;
+  font-size:12.5px;background:var(--surface2);border:1px solid var(--line2);cursor:pointer;min-width:0}
+.gcard:hover{border-color:var(--accent)}
+.gcard.f1win{border-left:3px solid var(--good);padding-left:8px}
+.gcard.f2win{border-right:3px solid var(--good);padding-right:8px}
+.gcard.selA{background:var(--accent);color:#fff;border-color:var(--accent)}
+.gcard.selA .gcat,.gcard.selA .gwin{color:#fff}
+.gcard.selA .gcap{color:#fff}
+.ghead{display:flex;align-items:center;gap:6px;min-width:0}
+.gno{font-variant-numeric:tabular-nums;font-weight:750;color:var(--muted);font-size:11px}
+.gcard.selA .gno{color:#fff}
+.gmap{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:650}
+.gcat{font-weight:400;color:var(--faint);font-size:11px;flex:none}
+.gsc{font-size:20px;font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.gwin{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gcap{color:var(--good);font-weight:700;font-size:11px}
+.gmeta{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.mscouted{padding:0 14px 10px;margin:0;font-size:11.5px}
 /* ---- mobile pass: prep links get opened from Discord on phones ---- */
 @media (max-width:640px){
   main{padding:12px 10px 48px;overflow-x:clip}  /* reclaim gutters; clip (not hidden) keeps sticky working */
@@ -419,14 +479,26 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   .scoutgrid,.scoutgrid>*,.glance-col{min-width:0}
   .game-hd{flex-wrap:wrap;row-gap:4px}       /* map + score + code stack cleanly */
   .game-hd>span[style*="margin-left:auto"]{margin-left:0!important;width:100%}
+  .msline{padding:5px 6px}
+  .msrow{grid-template-columns:90px 120px 22px 120px auto;gap:4px 5px}
+  .msrow.rail{padding:5px 6px}
+  .mscomp .comp .hicon{width:22px;height:22px}
+  .msbansline{font-size:11px}
+  .msbansline .ord{width:15px;height:15px;font-size:9px}
+  .msvs{font-size:9px}
+  .matches-grid{grid-template-columns:1fr}
   th,td{padding:6px 7px;font-size:12.5px}
   .crow{gap:8px}
   .crow .rec{font-size:11.5px}
 }
 .roster h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:650}
-.roster .pl{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:3px 0;
-  border-top:1px solid var(--line);font-size:12.5px}
-.roster .pl .st{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+.roster table{font-size:12.5px}
+.roster table th{font-size:10px;padding:4px 8px}
+.roster table td{padding:4px 8px}
+.roster table td.num,.roster table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.roster table td.pname{display:flex;align-items:center;gap:7px;min-width:0;max-width:240px}
+.roster table td.pname .hicon{width:19px;height:19px;flex:none}
+.roster table td.pname span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .roster .subhd{margin:8px 0 2px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint)}
 /* ---- playoffs bracket ---- */
 .bracket{overflow-x:auto;padding-bottom:6px}
@@ -645,8 +717,8 @@ function divisionOfMatch(divs, matchId){
 // faction1 (the team listed first on the card), so one card's pips read
 // consistently even though "win" has no meaning without a fixed side.
 function mapPipClass(g){
-  if(g.winner_faction==='faction1') return 'win';
-  if(g.winner_faction==='faction2') return 'loss';
+  if(g.winner_faction==='faction1') return 'f1win';
+  if(g.winner_faction==='faction2') return 'f2win';
   return '';
 }
 // Roll up per-game "scouted" (owscout has a captured comp for this game) into
@@ -717,6 +789,14 @@ function fmtWhen(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) r
   return `${_DAYS[d.getDay()]} ${d.getDate()} ${_MON[d.getMonth()]} · ${p(d.getHours())}:${p(d.getMinutes())}`; }
 const inc = (o,k,by=1)=>{ o[k]=(o[k]||0)+by; };
 const rank = (o)=> Object.entries(o).sort((a,b)=>b[1]-a[1]);   // NB: not `top` (window.top is reserved)
+// Small team logo in match headers / team pages. Empty when the faceit ingest has
+// no avatar for this team (newly-created teams, or older seasons without logos).
+const teamAvatar = (name, size)=>{
+  const url=(DATA.team_avatars||{})[name];
+  if(!url) return '';
+  size = size || 20;
+  return `<img class="tlogo" src="${esc(url)}" alt="" width="${size}" height="${size}" loading="lazy">`;
+};
 
 const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 // Full roster (all heroes, incl. never-banned ones) for the draft simulator's hero picker.
@@ -971,16 +1051,66 @@ document.addEventListener('click',e=>{
 });
 
 /* ---------- shared match card (used by Matches tab and Scout page) ---------- */
-function rosterHTML(g){
-  return `<div class="rosters">`+(g.rosters||[]).map(rt=>{
-    const pls=rt.players.map(p=>{
-      const st=p.cap? `<span class="st">${nf(p.e)}e · ${nf(p.dmg)} dmg · ${nf(p.heal)} heal</span>`
-                     : `<span class="st faint">stats not captured (DC)</span>`;
-      return `<div class="pl"><span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-             `<span>${esc(p.nick)}</span>${st}</div>`;
-    }).join('');
-    return `<div class="roster"><h4>${esc(rt.team)}</h4>${pls||'<span class="faint">—</span>'}</div>`;
-  }).join('')+`</div>`;
+// Per-map stat tables, one per team: Player | E | Dmg | Heal | D. The hero next
+// to a name is that player's primary hero ON THIS MAP when the capture carried
+// per-player attribution (owscout's per_game_players), else their season
+// most-played hero (owscout_comps), else nothing but the name.
+function rosterHTML(m,g){
+  const pgHeroes=(DATA.owscout_pergame_players||{})[m.id+':'+g.game_no]||{};
+  const seasonHero=(team,nick)=>{ const ps=(((DATA.owscout_comps||{})[team]||{}).scout||{}).players||[];
+    const p=ps.find(x=>x.player===nick); return p&&p.heroes&&p.heroes[0]?p.heroes[0].hero:null; };
+  const portrait=(hero)=>{ if(!hero) return '';
+    const r=HERO_ROLE[hero], src=HERO_ICON[heroSlug(hero)];
+    return src?`<img class="hicon r-${esc(r||'')}" src="${src}" alt="" title="${esc(hero)}">`
+              :`<span class="dot bg-${esc(r||'')}" title="${esc(hero)}"></span>`; };
+  const wrap=el(`<div class="rosters"></div>`);
+  (g.rosters||[]).forEach(rt=>{
+    const box=el(`<div class="roster"><h4>${esc(rt.team)}</h4></div>`);
+    const table=el(`<table><thead><tr>`+
+      `<th class="pname" data-k="nick" data-num="0">Player<span class="sar"></span></th>`+
+      `<th class="num" data-k="e" data-num="1">E<span class="sar"></span></th>`+
+      `<th class="num" data-k="dmg" data-num="1">Dmg<span class="sar"></span></th>`+
+      `<th class="num" data-k="heal" data-num="1">Heal<span class="sar"></span></th>`+
+      `<th class="num" data-k="d" data-num="1">D<span class="sar"></span></th></tr></thead>`+
+      `<tbody></tbody></table>`);
+    const tbody=table.querySelector('tbody');
+    let rows=rt.players.map(p=>{
+      const hero=pgHeroes[p.nick]||seasonHero(rt.team,p.nick);
+      return {hero,nick:p.nick,e:p.e||0,dmg:p.dmg||0,heal:p.heal||0,d:p.d||0,cap:!!p.cap};
+    });
+    const render=()=>{
+      tbody.innerHTML='';
+      if(!rows.length){ tbody.innerHTML=`<tr><td class="faint" colspan="5">—</td></tr>`; return; }
+      rows.forEach(r=>{
+        if(!r.cap){
+          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}<span>${esc(r.nick)}</span></td>`+
+            `<td class="num faint" colspan="4">stats not captured (DC)</td></tr>`);
+        } else {
+          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}<span>${esc(r.nick)}</span></td>`+
+            `<td class="num">${nf(r.e)}</td><td class="num">${nf(r.dmg)}</td>`+
+            `<td class="num">${nf(r.heal)}</td><td class="num">${nf(r.d)}</td></tr>`);
+        }
+      });
+    };
+    const asc={};
+    table.querySelectorAll('th').forEach(th=>th.onclick=()=>{
+      const k=th.dataset.k, num=th.dataset.num==='1';
+      asc[k]=!asc[k];
+      rows=[...rows].sort((a,b)=>{
+        if(a.cap!==b.cap) return a.cap?-1:1;
+        let x=a[k],y=b[k];
+        if(num){ x=+x||0; y=+y||0; return asc[k]?x-y:y-x; }
+        return asc[k]?String(x).localeCompare(String(y)):String(y).localeCompare(String(x));
+      });
+      table.querySelectorAll('th').forEach(t=>{t.classList.remove('sorted');t.querySelector('.sar').textContent='';});
+      th.classList.add('sorted'); th.querySelector('.sar').textContent=asc[k]?'▲':'▼';
+      render();
+    });
+    render();
+    box.appendChild(table);
+    wrap.appendChild(box);
+  });
+  return wrap;
 }
 // Bans in draft order: 1st ban, 2nd ban — with the team that banned it.
 function bansOrdered(g){
@@ -1004,29 +1134,51 @@ function segOrder(pg){
 // per played map. Everything the old card used to expand inline (bans, per-
 // segment comps, rosters) now lives on the match detail page - click the
 // card (anywhere except a team name or a replay-code chip) to open it.
-function matchCard(m){
+function matchCard(m, opts={}){
   const c=el(`<div class="card match mrow"></div>`);
   const w1=m.winner==='faction1',w2=m.winner==='faction2';
   // Team names double as click-to-scout links (hover-only underline — a resting
   // dotted line under every name would clutter this dense list).
   const teamName=(name,cls)=> name
-    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${esc(name)}</span>`
+    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name)}${esc(name)}</span>`
     : `<span class="${cls}">?</span>`;
   c.appendChild(el(`<div class="hd"><div class="teams">${teamName(m.f1,w1?'win':'lose')}`+
     `<span class="score">${esc(m.series)}</span>${teamName(m.f2,w2?'win':'lose')}</div>`+
-    `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
+    `<div class="tags">${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
     // When it was played: a comp read from a 6-week-old match is weaker evidence
     // than last week's, and nothing else on the card says how old it is.
     `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
   const games=m.games.filter(g=>g.map);
   if(games.length){
-    const pips=el(`<div class="mpips"></div>`);
+    // Stripped-down comp preview in each map bar (Matches tab only). The grid is
+    // 5 columns so the map, each team's comp, and the code line up across every map
+    // in the series. A full-width ban line below mirrors the match detail page.
+    const compBit=(g)=>{
+      if(!opts.showComps) return '';
+      const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+      if(!pg) return '';
+      const order=segOrder(pg), seg=order[0];
+      if(!seg) return '';
+      const f1c=(pg[m.f1]||{})[seg], f2c=(pg[m.f2]||{})[seg];
+      if(!f1c && !f2c) return '';
+      return `<span class="mscomp f1">${compRow(f1c||[])}</span><span class="msvs">vs</span><span class="mscomp f2">${compRow(f2c||[])}</span>`;
+    };
+    const bansLine=(g)=>{
+      if(!opts.showComps || !g.bans || !g.bans.length) return '';
+      return `<div class="msbansline"><div class="bans">${bansOrdered(g)}</div></div>`;
+    };
+    const score=el(`<div class="mscores"></div>`);
     games.forEach(g=>{
       const codeBit=g.demo_code?(codeDead(m.finished_at)?wipedTag:rcChip(g.demo_code)):'';
-      pips.appendChild(el(`<span class="mpip ${mapPipClass(g)}"><b>${esc(g.map)}</b> `+
-        `<span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>${codeBit}</span>`));
+      const cbit=compBit(g), bline=bansLine(g);
+      const cls=mapPipClass(g);
+      if(opts.showComps){
+        score.appendChild(el(`<div class="msline ${cls}"><div class="msrow"><span class="msmap">${esc(g.map)} <span class="msnum">${esc(g.f1)}–${esc(g.f2)}</span></span>${cbit}<span class="msright">${codeBit}</span></div>${bline}</div>`));
+      } else {
+        score.appendChild(el(`<div class="msline ${cls}"><div class="msrow rail"><span class="msmap">${esc(g.map)} <span class="msnum">${esc(g.f1)}–${esc(g.f2)}</span></span><span class="msright">${codeBit}</span></div></div>`));
+      }
     });
-    c.appendChild(pips);
+    c.appendChild(score);
     const sc=scoutedCount(m, CAPTURED);
     if(sc.total) c.appendChild(el(`<p class="note mscouted">🎥 ${sc.done}/${sc.total} scouted</p>`));
   }
@@ -1074,11 +1226,32 @@ function gamePanel(m,g){
     }
     gEl.appendChild(box);
   }
-  gEl.appendChild(el(rosterHTML(g)));
+  gEl.appendChild(rosterHTML(m,g));
   return gEl;
 }
+// All-maps-at-a-glance series overview (owscouter-style): small cards side by
+// side, each showing one map's score, winner, and capture status. Clicking a
+// card selects that map's panel below.
+function seriesOverview(m,games,onSelect){
+  const wrap=el(`<div class="seriesov"></div>`);
+  games.forEach((g,i)=>{
+    const cls=mapPipClass(g);
+    const cap=CAPTURED.has(m.id+':'+g.game_no);
+    const card=el(`<div class="gcard ${cls}" data-gno="${g.game_no}">`+
+      `<div class="ghead"><span class="gno">M${g.game_no}</span><span class="gmap">${esc(g.map)}</span>`+
+      `<span class="gcat">${esc(g.map_category||'')}</span></div>`+
+      `<span class="gsc">${esc(g.f1)}–${esc(g.f2)}</span>`+
+      `<span class="gwin">${g.winner_team?esc(g.winner_team):'—'}</span>`+
+      `<div class="gmeta">${cap?'<span class="gcap" title="captured">✓ captured</span>':'<span></span>'}`+
+      `<span class="muted">${g.demo_code?(codeDead(m.finished_at)?'wiped':'replay'):'no replay'}</span></div>`+
+      `</div>`);
+    card.onclick=()=>onSelect(g.game_no);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
 // The match detail page: header (teams/score/tags, same as the compact
-// card's), a back link, a tab per played map, and the selected map's panel.
+// card's), a back link, a horizontal strip of map cards, and the selected map's panel.
 function renderMatchDetail(m){
   const wrap=el(`<div class="card match matchdetail"></div>`);
   if(!m){ wrap.appendChild(el(`<p class="note" style="padding:16px">Match not found.</p>`)); return wrap; }
@@ -1086,28 +1259,24 @@ function renderMatchDetail(m){
   back.onclick=(e)=>{ e.preventDefault(); show('matches'); };
   wrap.appendChild(back);
   const w1=m.winner==='faction1', w2=m.winner==='faction2';
-  const teamName=(name,cls)=> name
-    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${esc(name)}</span>`
+  const _teamName=(name,cls)=> name
+    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name)}${esc(name)}</span>`
     : `<span class="${cls}">?</span>`;
-  wrap.appendChild(el(`<div class="hd"><div class="teams">${teamName(m.f1,w1?'win':'lose')}`+
-    `<span class="score">${esc(m.series)}</span>${teamName(m.f2,w2?'win':'lose')}</div>`+
-    `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
+  wrap.appendChild(el(`<div class="hd"><div class="teams">${_teamName(m.f1,w1?'win':'lose')}`+
+    `<span class="score">${esc(m.series)}</span>${_teamName(m.f2,w2?'win':'lose')}</div>`+
+    `<div class="tags">${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
     `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
   const games=m.games.filter(g=>g.map);
   if(!games.length){ wrap.appendChild(el(`<p class="note" style="padding:0 16px 16px">No maps played.</p>`)); return wrap; }
-  const tabbar=el(`<div class="wsel maptabs"></div>`);
   const panel=el(`<div></div>`);
   let active=games[0].game_no;
+  const ov=seriesOverview(m,games,gno=>{ active=gno; draw(); });
   function draw(){
-    [...tabbar.children].forEach(b=>b.classList.toggle('selA', +b.dataset.gno===active));
+    [...ov.children].forEach(c=>c.classList.toggle('selA', +c.dataset.gno===active));
     panel.innerHTML=''; panel.appendChild(gamePanel(m, games.find(g=>g.game_no===active)));
   }
-  games.forEach(g=>{
-    const b=el(`<span class="wbtn" data-gno="${g.game_no}">M${g.game_no} ${esc(g.map)}${CAPTURED.has(m.id+':'+g.game_no)?' ✓':''}</span>`);
-    b.onclick=()=>{ active=g.game_no; draw(); };
-    tabbar.appendChild(b);
-  });
-  wrap.append(tabbar, panel);
+  wrap.appendChild(ov);
+  wrap.appendChild(panel);
   draw();
   return wrap;
 }
@@ -1622,8 +1791,10 @@ function renderScoutBody(t){
   const matchW=t.results.filter(r=>r.won).length;
   const form=t.results.slice(0,7).map(r=>`<b class="${r.won?'w':'l'}" title="${esc(r.opp)} ${esc(r.series)}">${r.won?'W':'L'}</b>`).join('');
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
-  head.appendChild(el(`<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
-    `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div>`));
+  const _tav=teamAvatar(t.team,40);
+  head.appendChild(el(`<div style="display:flex;align-items:center;gap:12px">${_tav?`<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px">${_tav}</div>`:''}`+
+    `<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
+    `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div></div>`));
   const _hsc=((DATA.owscout_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
   // Coverage is all-time (captures aren't windowed), so its denominator must be
   // all-time maps played too - windowing it (t.games) could show capMaps > total.
@@ -2979,7 +3150,7 @@ function renderMatches(){
   divSel.onchange=()=>setDivision(divSel.value);
   if(regions.length) bar.appendChild(regSel);
   if(VIEWS.length>1) bar.appendChild(divSel);
-  const search=el(`<input placeholder="search team, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
+  const search=el(`<input placeholder="search team, player, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
   const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
   bar.append(search,sort);
   // Played history vs upcoming fixtures vs the playoff bracket. A full-season
@@ -2994,9 +3165,13 @@ function renderMatches(){
   // In a single round-robin every team has faced the same opponents, so a team's
   // full match list reads as their "book" against a field you already know -
   // search a team to see exactly how they drafted vs each opponent you also play.
-  const note=el(`<p class="note" style="margin:0 2px 10px">Single round-robin — everyone plays the same 15 opponents. Search a team to read their book against the field.</p>`);
+  const note=el(`<p class="note" style="margin:0 2px 10px">Single round-robin — everyone plays the same 15 opponents. Search a team, player, hero, or map to read their book against the field.</p>`);
   const list=el(`<div></div>`); wrap.append(bar,modeBar,note,list);
-  const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>[g.map,...g.bans.map(b=>b.hero),...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))])].filter(Boolean).join(' ').toLowerCase();
+  const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>{
+    const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+    const compHeroes=pg?Object.values(pg).flatMap(segs=>Object.values(segs).flat()):[];
+    return [g.map,...g.bans.map(b=>b.hero),...compHeroes,...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))];
+  })].filter(Boolean).join(' ').toLowerCase();
   function drawUpcoming(q){
     let up=(D().upcoming||[]);
     if(q) up=up.filter(u=>((u.f1||'')+' '+(u.f2||'')).toLowerCase().includes(q));
@@ -3021,7 +3196,9 @@ function renderMatches(){
     let shown=MATCHES_RECENT.filter(m=>!q||hay(m).includes(q));
     if(sort.value==='old') shown=[...shown].reverse();
     if(!shown.length){ list.appendChild(el(`<p class="note">No played matches${q?' match your search':''}.</p>`)); return; }
-    shown.forEach(m=>list.appendChild(matchCard(m)));
+    const grid=el(`<div class="matches-grid"></div>`);
+    shown.forEach(m=>grid.appendChild(matchCard(m,{showComps:true})));
+    list.appendChild(grid);
   }
   function drawPlayoffs(){
     list.appendChild(renderPlayoffs());
@@ -3046,6 +3223,59 @@ function hashFor(id){
   if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
   return id;
 }
+// Browser back/forward: the hash is the source of truth for which screen we're
+// on. show() renders + syncs the hash; hashchange drives the reverse direction
+// (back/forward buttons, edited or pasted URLs). HANDLED_HASH keeps show()'s own
+// hash write from re-rendering itself in a loop.
+let HANDLED_HASH='';
+function hashDispatch(){
+  const h=location.hash||'#overview';
+  if(h===HANDLED_HASH) return;
+  HANDLED_HASH=h;
+  const start=decodeURIComponent(h.slice(1));
+  if(start.startsWith('prep=')||start.startsWith('scout=')){
+    SCOUT_PREP=start.startsWith('prep=');
+  }
+  if(start.startsWith('prep=')){
+    const team=start.slice(5);
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id; break;
+      }
+    }
+    if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
+  }
+  if(start.startsWith('scout=')){
+    const team=start.slice(6);
+    // Find the division that knows this team; a combined view would work too,
+    // but the single division is the page people mean when they share a link.
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id;
+        break;
+      }
+    }
+    if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
+  }
+  if(start.startsWith('match=')){
+    const mid=start.slice(6);
+    const cid=divisionOfMatch(DIVS, mid);
+    if(cid){
+      const v=VIEWS.find(v=>v.divisions.length===1&&v.divisions[0]===cid);
+      if(v){ CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id; }
+    }
+    MATCH_ID=mid; show('matchdetail'); return;
+  }
+  // 'playoffs' and 'sim' were their own tabs before this redesign; a link
+  // bookmarked from before still needs to resolve to real content, not fall
+  // through to Overview.
+  if(start==='playoffs'){ MATCHES_MODE='playoffs'; MATCHES_MODE_SET=true; show('matches'); return; }
+  if(start==='sim'){ SCOUT_PREP=false; SCOUT_SIM_OPEN=true; show('scout'); return; }
+  show(TABS.some(t=>t.id===start)?start:'overview');
+}
 function show(id){
   const navId = id==='matchdetail' ? 'matches' : id;   // no dedicated nav entry - it's a drill-in under Matches
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
@@ -3058,7 +3288,7 @@ function show(id){
     c.appendChild(TABS.find(t=>t.id===id).render());
   }
   try{window.scrollTo(0,0)}catch(e){}
-  const h=hashFor(id); if(location.hash!=='#'+h) location.hash=h;
+  const h=hashFor(id); if(location.hash!=='#'+h){ HANDLED_HASH='#'+h; location.hash=h; }
 }
 function updateHeader(){
   const s=D().summary;
@@ -3107,50 +3337,9 @@ function init(){
   nav.appendChild(el(`<a class="navcap" href="capture/" title="Scout comps in your browser — no install, no exe">＋ Capture comps</a>`));
   document.getElementById('heroScout').onclick=()=>{ if(!SCOUT_TEAM) SCOUT_TEAM=(D().team_names||[])[0]||null; show('scout'); };
   document.getElementById('heroCapture').onclick=()=>{ location.href='capture/'; };
-  const start=decodeURIComponent((location.hash||'#overview').slice(1));
-  if(start.startsWith('prep=')||start.startsWith('scout=')){
-    SCOUT_PREP=start.startsWith('prep=');
-  }
-  if(start.startsWith('prep=')){
-    const team=start.slice(5);
-    for(const v of VIEWS){
-      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
-        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
-        document.getElementById('division').value=v.id; break;
-      }
-    }
-    if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
-  }
-  if(start.startsWith('scout=')){
-    const team=start.slice(6);
-    // Find the division that knows this team; a combined view would work too,
-    // but the single division is the page people mean when they share a link.
-    for(const v of VIEWS){
-      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(team)){
-        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
-        document.getElementById('division').value=v.id;
-        break;
-      }
-    }
-    if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
-  }
-  if(start.startsWith('match=')){
-    const mid=start.slice(6);
-    const cid=divisionOfMatch(DIVS, mid);
-    if(cid){
-      const v=VIEWS.find(v=>v.divisions.length===1&&v.divisions[0]===cid);
-      if(v){ CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
-        document.getElementById('division').value=v.id; }
-    }
-    MATCH_ID=mid; show('matchdetail'); return;
-  }
-  // 'playoffs' and 'sim' were their own tabs before this redesign; a link
-  // bookmarked from before still needs to resolve to real content, not fall
-  // through to Overview.
-  if(start==='playoffs'){ MATCHES_MODE='playoffs'; MATCHES_MODE_SET=true; show('matches'); return; }
-  if(start==='sim'){ SCOUT_PREP=false; SCOUT_SIM_OPEN=true; show('scout'); return; }
-  show(TABS.some(t=>t.id===start)?start:'overview');
+  hashDispatch();
 }
+window.addEventListener('hashchange',hashDispatch);
 init();
 }
 // Data delivery: an inlined blob when present (offline / single-file builds),
