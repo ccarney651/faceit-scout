@@ -391,6 +391,9 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .rosters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
 @media (max-width:640px){.rosters{grid-template-columns:1fr}}
+.backlink{display:block;padding:14px 16px 0;margin:0;color:var(--muted);text-decoration:none;font-size:13px}
+.backlink:hover{color:var(--accent)}
+.maptabs{padding:0 16px 12px}
 /* ---- mobile pass: prep links get opened from Discord on phones ---- */
 @media (max-width:640px){
   main{padding:12px 10px 48px;overflow-x:clip}  /* reclaim gutters; clip (not hidden) keeps sticky working */
@@ -1052,6 +1055,83 @@ function matchCard(m){
   return c;
 }
 
+// One map's full detail: header (map/score/side/code/scouted), bans, opening
+// comps, and the roster/stat table — always visible (no toggle; this is
+// already the detail view, nothing left to progressively disclose). Used by
+// the match detail page's tabs (renderMatchDetail below). matchCard still has
+// its own copy of this rendering for now — Task 3 removes it once the
+// compact card no longer needs it, so this file is never left duplicating
+// nothing (each task leaves a working, testable page).
+function gamePanel(m,g){
+  const gEl=el(`<div class="game"></div>`);
+  gEl.appendChild(el(`<div class="game-hd"><span class="gno">M${g.game_no}</span>`+
+    `<b>${esc(g.map)}</b> ${tag(g.map_category||'')} <span class="tnum">${esc(g.f1)}–${esc(g.f2)}</span>`+
+    `<span class="muted">→ ${esc(g.winner_team||'?')}</span>`+
+    (g.was_restarted?tag('veto disrupted','warn'):'')+
+    (CAPTURED.has(m.id+':'+g.game_no)?tag('scouted','ok'):'')+
+    `<span style="margin-left:auto;display:inline-flex;gap:10px;align-items:center">`+
+      (g.demo_code?(codeDead(m.finished_at)?wipedTag:rcChip(g.demo_code))
+        :'<span class="faint" style="font-size:11.5px">no replay</span>')+
+      `</span></div>`));
+  gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
+  const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+  if(pg && Object.keys(pg).length){
+    const teams=Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)));
+    const order=segOrder(pg);
+    const single=order.length===1 && order[0]==='map';
+    const teamRow=(tn,c)=>`<div class="gcteam"><span class="gcname" title="${esc(tn)}">${esc(tn)}</span>`+
+      `${c&&c.length?compRow(c):'<span class="faint">—</span>'}</div>`;
+    const box=el(`<div class="gamecomps"></div>`);
+    if(single){
+      const seg=el(`<div class="gcseg"></div>`);
+      teams.forEach(tn=>seg.appendChild(el(teamRow(tn,(pg[tn]||{}).map))));
+      box.appendChild(seg);
+    } else {
+      order.forEach(sg=>{ const seg=el(`<div class="gcseg"></div>`);
+        seg.appendChild(el(`<div class="gcseglab">${esc(sg)}</div>`));
+        teams.forEach(tn=>seg.appendChild(el(teamRow(tn,(pg[tn]||{})[sg]))));
+        box.appendChild(seg); });
+    }
+    gEl.appendChild(box);
+  }
+  gEl.appendChild(el(rosterHTML(g)));
+  return gEl;
+}
+// The match detail page: header (teams/score/tags, same as the compact
+// card's), a back link, a tab per played map, and the selected map's panel.
+function renderMatchDetail(m){
+  const wrap=el(`<div class="card match matchdetail"></div>`);
+  if(!m){ wrap.appendChild(el(`<p class="note" style="padding:16px">Match not found.</p>`)); return wrap; }
+  const back=el(`<a class="backlink" href="#matches">‹ Matches</a>`);
+  back.onclick=(e)=>{ e.preventDefault(); show('matches'); };
+  wrap.appendChild(back);
+  const w1=m.winner==='faction1', w2=m.winner==='faction2';
+  const teamName=(name,cls)=> name
+    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${esc(name)}</span>`
+    : `<span class="${cls}">?</span>`;
+  wrap.appendChild(el(`<div class="hd"><div class="teams">${teamName(m.f1,w1?'win':'lose')}`+
+    `<span class="score">${esc(m.series)}</span>${teamName(m.f2,w2?'win':'lose')}</div>`+
+    `<div>${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
+    `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
+  const games=m.games.filter(g=>g.map);
+  if(!games.length){ wrap.appendChild(el(`<p class="note" style="padding:0 16px 16px">No maps played.</p>`)); return wrap; }
+  const tabbar=el(`<div class="wsel maptabs"></div>`);
+  const panel=el(`<div></div>`);
+  let active=games[0].game_no;
+  function draw(){
+    [...tabbar.children].forEach(b=>b.classList.toggle('selA', +b.dataset.gno===active));
+    panel.innerHTML=''; panel.appendChild(gamePanel(m, games.find(g=>g.game_no===active)));
+  }
+  games.forEach(g=>{
+    const b=el(`<span class="wbtn" data-gno="${g.game_no}">M${g.game_no} ${esc(g.map)}${CAPTURED.has(m.id+':'+g.game_no)?' ✓':''}</span>`);
+    b.onclick=()=>{ active=g.game_no; draw(); };
+    tabbar.appendChild(b);
+  });
+  wrap.append(tabbar, panel);
+  draw();
+  return wrap;
+}
+
 // horizontal bar list. items:[{label(html), value, color?}]
 function barList(items){
   if(!items.length) return `<p class="note">No data in this window.</p>`;
@@ -1309,6 +1389,7 @@ const TABS=[
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
+let MATCH_ID=null;          // match detail page: which match, within the active division
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 let PLAYERS_ROLE='All';         // Leaderboard role filter: All | Tank | Damage | Support
@@ -1343,6 +1424,21 @@ function gotoScout(team){
     }
   }
   SCOUT_TEAM=team; show('scout');
+}
+
+// A match id is only unique within its own division (see divisionOfMatch),
+// so findMatch assumes CURRENT_VIEW is already correct — true by the time
+// it's called, since openMatch/init's match= branch always resolve the
+// division first.
+function findMatch(matchId){ return (D().matches||[]).find(m=>m.id===matchId)||null; }
+function openMatch(matchId){
+  const cid=divisionOfMatch(DIVS, matchId);
+  if(cid){
+    const v=VIEWS.find(v=>v.divisions.length===1&&v.divisions[0]===cid);
+    if(v){ CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+      const dsel=document.getElementById('division'); if(dsel) dsel.value=v.id; }
+  }
+  MATCH_ID=matchId; show('matchdetail');
 }
 
 function renderOverview(){
@@ -2966,12 +3062,21 @@ function renderMatches(){
 // The scout tab's hash carries the team, so a prep link pasted in Discord lands
 // a teammate directly on the right page: site/#scout=Redline
 function hashFor(id){
+  if(id==='matchdetail'&&MATCH_ID) return 'match='+encodeURIComponent(MATCH_ID);
   if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
   return id;
 }
 function show(id){
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
-  const c=document.getElementById('content'); c.innerHTML=''; c.appendChild(TABS.find(t=>t.id===id).render());
+  const navId = id==='matchdetail' ? 'matches' : id;   // no dedicated nav entry - it's a drill-in under Matches
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
+  const c=document.getElementById('content'); c.innerHTML='';
+  if(id==='matchdetail'){
+    const m=findMatch(MATCH_ID);
+    if(!m){ show('matches'); return; }   // stale/unresolvable link - land on the list, not a blank page
+    c.appendChild(renderMatchDetail(m));
+  } else {
+    c.appendChild(TABS.find(t=>t.id===id).render());
+  }
   try{window.scrollTo(0,0)}catch(e){}
   const h=hashFor(id); if(location.hash!=='#'+h) location.hash=h;
 }
@@ -3048,6 +3153,16 @@ function init(){
       }
     }
     if((D().team_names||[]).includes(team)){ SCOUT_TEAM=team; show('scout'); return; }
+  }
+  if(start.startsWith('match=')){
+    const mid=start.slice(6);
+    const cid=divisionOfMatch(DIVS, mid);
+    if(cid){
+      const v=VIEWS.find(v=>v.divisions.length===1&&v.divisions[0]===cid);
+      if(v){ CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id; }
+    }
+    MATCH_ID=mid; show('matchdetail'); return;
   }
   // 'playoffs' and 'sim' were their own tabs before this redesign; a link
   // bookmarked from before still needs to resolve to real content, not fall
