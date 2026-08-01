@@ -26,6 +26,15 @@ tabs, FACEIT-match-room style.
   (`rosterHTML`, `:940`), and opening comps (`compRow`/`segOrder`, `:818`/
   `:961`, fed by `DATA.owscout_pergame[matchId:gameNo]`) are all already
   computed — this is a re-layout, not a new data need.
+- **Roster stats are thinner than the DB model**: `export.py:404-414` emits
+  only `nick`, `role`, `cap` (stats_captured), `e` (eliminations), `d`
+  (deaths), `dmg`, `heal` per player-per-game — no assists, no damage
+  mitigated, no hero (FACEIT's `round_players` has no hero field; hero comes
+  from the separate owscout capture feed above). `rosterHTML` (`:940-950`)
+  today only *renders* `e`/`dmg`/`heal` in a squeezed one-liner — `d`
+  (deaths) is already in the payload but currently unused. The detail page's
+  per-map player table uses exactly these five fields (role, E, D, dmg,
+  heal); nothing new to plumb.
 - **Replay codes**: `rcChip` (`:888`) click-to-copy, `wipedTag`/`codeDead`
   (`:896`/`:701`) for post-wipe codes. Reused as-is.
 - **`m.id`** is unique **within its division**, not globally — matches live
@@ -97,8 +106,12 @@ Opening comps       [compRow/segOrder box — unchanged, promoted to
                       full width now that it isn't sharing a card with
                       bans+rosters]
 
-Box score           [rosterHTML(g)'s table, always visible — no more
-                      hidden/toggle, since this page IS the detail view]
+Players             [role · nick · E · D · dmg · heal, per team, always
+                      visible — no more hidden/toggle, since this page IS
+                      the detail view. Same fields rosterHTML already reads
+                      (`p.role/nick/e/d/dmg/heal/cap`), laid out as a table
+                      instead of a squeezed one-liner; DC rows still show
+                      "stats not captured"]
 ```
 
 - Header repeats the compact card's summary line + a `‹ Matches` back link
