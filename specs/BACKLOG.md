@@ -14,6 +14,14 @@ Priority levels:
 The dated specs in this directory all correspond to merged work, verified live
 on owscout.com 2026-08-01. Treat them as historical records, not pending work:
 
+- **Swap-trigger baseline subtraction** (`owscout/scout.py::aggregate_swaps`,
+  2026-08-01). Was a P1 known gap below; audit found it already had a *frontend*
+  workaround (`SWAP_NOISE` in `_dashboard.py`, matchup-based, untested). Moved
+  the real fix into the tested core — a candidate trigger hero must now clear
+  its own baseline presence rate (all observations, not just swap moments), not
+  just the >=half-occurrences threshold — and deleted the JS heuristic it
+  replaces. Test: `test_swap_trigger_ignores_enemy_heroes_present_all_game`.
+
 - **Unlock NA** (`specs/2026-07-30-unlock-na-design.md`) — live: region switcher
   shows EMEA + NA, NA divisions rendered, qualified `division` labels.
 - **Overview/nav redesign** (`specs/2026-07-31-overview-ia-redesign-{design,plan}.md`)
@@ -23,12 +31,14 @@ on owscout.com 2026-08-01. Treat them as historical records, not pending work:
   evidence rows across all 8 Scout-page sites resolve to replay codes
   (`codeslink`/`codespop` in the deployed page).
 
-## In flight (uncommitted working tree)
+## In flight (committed, not yet re-exported to the live site)
 
-- **Players → By seat grid layout fix** (`faceit_sync/_dashboard.py`, uncommitted
-  at 2026-08-01). `.seatrow` CSS + the By-seat renderer: name/heroes/stats in
-  fixed grid columns so rows stop staggering on variable-width content. Not yet
-  on the live site. Gate: JS-syntax test + headless-Edge screenshot.
+- **Players → By seat grid layout fix** (`faceit_sync/_dashboard.py`, commit
+  `1ae09bb`, 2026-08-01). `.seatrow` CSS + the By-seat renderer: name/heroes/stats
+  in fixed grid columns so rows stop staggering on variable-width content.
+  Correction: the prior version of this doc called it "uncommitted" — it's on
+  `main`, just ahead of the last CI export (`bced1e4`), so `docs/index.html`
+  hasn't picked it up yet. Gate: JS-syntax test + headless-Edge screenshot.
 
 ---
 
@@ -38,11 +48,9 @@ on owscout.com 2026-08-01. Treat them as historical records, not pending work:
 
 - **Map-name verification is stubbed.** The OCR hook returns `None`, so map
   mismatch reads "not checked". Open question: is the map name reliably on the
-  observer HUD at all? If not, close as impossible rather than fake it.
-- **Swap triggers lack baseline subtraction.** A hero present in every game can
-  appear as a swap trigger (FEATURES.md §2.5). Read triggers are already
-  labelled "directional, not causal" — baseline subtraction would make them
-  directional-and-honest.
+  observer HUD at all? If not, close as impossible rather than fake it. Not a
+  desk task — needs a live in-client HUD check, not something resolvable by
+  reading code.
 - **Ref library live-frame validation is ongoing.** 88/104 hero+team refs have
   never faced a live frame. Not a code task — `refs coverage` tracks it and it
   shrinks with every capture. Keep `doctor`/`coverage` surfacing it.
@@ -82,6 +90,13 @@ as a roadmap item."* Needs its own design doc before any implementation.
 ---
 
 ## Added 2026-08-01 — owscouter.com parity + product ideas
+
+Audit note (2026-08-01): the codebase-side claims below (what data we already
+store, what's already shipped) were re-verified directly against schema/tests
+and hold up. The owscouter.com feature claims (MPI, scoreboard modal, map
+drawer) could not be independently re-checked — the site renders client-side
+and a plain fetch returns an empty shell — so they're carried forward on trust
+in the original agent's live-browser audit, not re-confirmed here.
 
 Sourced from a full audit of owscouter.com ("FACEIT Analytics & Insights").
 The audit's headline: owscouter is FACEIT-data-only analytics; its two data

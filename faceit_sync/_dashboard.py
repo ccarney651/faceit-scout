@@ -864,11 +864,13 @@ function mapHistory(scout, mp){
     .sort((a,b)=> (b.when||'').localeCompare(a.when||''));
 }
 
-let SWAP_NOISE=new Set();   // per-team: heroes in ~every enemy lineup (set by renderScoutBody)
 function swapLine(s){
   // One arrow only: the enemy lineup is the TRIGGER (context), the single arrow
   // is the actual out->in swap. A second arrow after "vs" read as a swap too.
-  const vs=(s.vs||[]).filter(h=>!SWAP_NOISE.has(h));
+  // Baseline subtraction (heroes present in ~every enemy lineup, not just at
+  // the swap) already happened server-side in aggregate_swaps - s.vs is
+  // pre-filtered to actual triggers.
+  const vs=s.vs||[];
   const trig=vs.length
     ? `<span class="faint">vs</span>${compRow(vs.slice(0,5))}<span class="faint swapsep">&middot;</span>`
     : '';
@@ -1750,15 +1752,6 @@ function renderScoutBody(t){
     ? `<span class="cbans"><span class="bl">bans</span>${c.bans.slice(0,4).map(h=>heroIcon(h)).join('')}</span>` : '';
   const compLine=c=>`<div class="crow${thin(c.maps)}"><span>${compRow(c.heroes)}</span>`+
                     `${banHtml(c)}<span class="rec">${rec(c)} · ${codesCell(codesFor(c.game_keys||[],lookup))}</span></div>`;
-
-  // Ubiquitous heroes carry no trigger signal - computed once per team, used
-  // by every swap row this page renders.
-  SWAP_NOISE=new Set();
-  if(scout){
-    const mus=scout.matchups||[]; const prev={};
-    mus.forEach(m=>new Set(m.vs).forEach(h=>prev[h]=(prev[h]||0)+1));
-    if(mus.length>=4) Object.entries(prev).forEach(([h,n])=>{ if(n/mus.length>=0.9) SWAP_NOISE.add(h); });
-  }
   if(scout) w.appendChild(cluster('sc-run','What they run'));
   if(scout){
     // 1. Common comps - the 3-5 they actually run most.

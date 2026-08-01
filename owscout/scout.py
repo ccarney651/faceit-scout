@@ -81,7 +81,14 @@ def aggregate_swaps(
     change is only counted when it's traceable to the same players, so a
     personnel substitution (a different player entering on a different hero)
     is never misreported as a tactical swap. See owscout/analysis.py's
-    classify_player_transition docstring."""
+    classify_player_transition docstring.
+
+    Baseline subtraction: a hero the enemy fields in nearly every observation
+    (not just at swap moments) isn't a trigger, it's just always there - so
+    each candidate's at-swap presence rate is compared against its presence
+    rate across every one of the team's own observations for that bucket
+    (every enemy-lineup snapshot, swap or not), and it's only reported when
+    the swap rate exceeds that baseline."""
     from collections import Counter
 
     from .analysis import confirmed_swap_events
@@ -91,6 +98,8 @@ def aggregate_swaps(
         by_map.setdefault(d.map_instance_id, []).append(d)
 
     agg: dict[str, dict[tuple[Any, ...], dict[str, Any]]] = {}
+    baseline: dict[str, Counter[str]] = {}
+    baseline_total: dict[str, int] = {}
     for obs in by_map.values():
         sides: dict[str, list[ObsDetail]] = {"a": [], "b": []}
         for d in sorted(obs, key=lambda x: x.sample_ts_ms):
@@ -104,9 +113,12 @@ def aggregate_swaps(
                 continue
             snaps = [(_player_slots(o), _enemy_at(sides[opp], o.sample_ts_ms)) for o in own]
             mp = own[0].map_name or "?"
+            bucket = _MAP_KEY.join((team, mp)) if per_map else team
+            for _, enemy in snaps:
+                baseline.setdefault(bucket, Counter()).update(set(enemy))
+                baseline_total[bucket] = baseline_total.get(bucket, 0) + 1
             for ev in confirmed_swap_events(snaps, roles):
                 key = (tuple(ev.out_heroes), tuple(ev.in_heroes), ev.kind)
-                bucket = _MAP_KEY.join((team, mp)) if per_map else team
                 slot = agg.setdefault(bucket, {}).setdefault(
                     key, {"count": 0, "vs": Counter()})
                 slot["count"] += 1
@@ -114,6 +126,8 @@ def aggregate_swaps(
 
     out: dict[str, Any] = {}
     for team, swaps in agg.items():
+        base = baseline.get(team, Counter())
+        btotal = baseline_total.get(team, 0)
         rows = []
         for (o, i, kind), v in sorted(swaps.items(), key=lambda kv: -kv[1]["count"]):
             n = v["count"]
@@ -123,9 +137,11 @@ def aggregate_swaps(
                 vs = [hero_names.get(g, g) for g, _ in v["vs"].most_common()]
             else:
                 # Recurring swap: the enemy heroes present in a majority of its
-                # occurrences - the consistent trigger, not one game's noise.
+                # occurrences AND more often than their own baseline rate - a
+                # consistent trigger, not one game's noise or an ever-present hero.
                 thresh = max(2, (n + 1) // 2)
-                vs = [hero_names.get(g, g) for g, c in v["vs"].most_common() if c >= thresh]
+                vs = [hero_names.get(g, g) for g, c in v["vs"].most_common()
+                      if c >= thresh and (not btotal or c / n > base[g] / btotal)]
             rows.append({
                 "out": [hero_names.get(x, x) for x in o],
                 "in": [hero_names.get(x, x) for x in i],

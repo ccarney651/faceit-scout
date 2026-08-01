@@ -3,7 +3,7 @@
 from typing import Sequence
 
 from owscout.models import ObsDetail
-from owscout.scout import team_scout
+from owscout.scout import aggregate_swaps, team_scout
 
 ROLES = {"ram": "tank", "dva": "tank", "soj": "damage", "mei": "damage",
          "reaper": "damage", "ashe": "damage", "luc": "support", "kir": "support",
@@ -113,6 +113,30 @@ def test_swaps_are_reported_per_map() -> None:
     assert len(kings) == 1
     assert kings[0]["out"] == ["MEI"] and kings[0]["in"] == ["REAPER"]
     assert maps["Ilios"]["swaps"] == []
+
+
+def test_swap_trigger_ignores_enemy_heroes_present_all_game() -> None:
+    """The known limitation this closes: a hero the enemy fields in every
+    observation (not just when the swap happens) is baseline noise, not a
+    trigger, even if it clears the >=half-occurrences threshold. Bravo runs
+    dva/reaper/luc/kir the whole match on both maps - only Ashe, who they add
+    specifically at the moment Alpha's swap lands, should survive as the
+    reported trigger."""
+    base = ["ram", "soj", "mei", "luc", "kir"]
+    swapped = ["ram", "soj", "reaper", "luc", "kir"]
+    five = ["p1", "p2", "p3", "p4", "p5"]
+    opening = ["dva", "reaper", "mei", "luc", "kir"]         # no ashe yet
+    committed = ["dva", "reaper", "ashe", "luc", "kir"]      # ashe joins
+    details = []
+    for mi in (1, 2):
+        details += [
+            _obs(mi, "a", 0, base, "hybrid", "a", players=five),
+            _obs(mi, "a", 100, swapped, "hybrid", "a", players=five),
+            _obs(mi, "b", 0, opening, "hybrid", "a"),
+            _obs(mi, "b", 90, committed, "hybrid", "a"),
+        ]
+    vs = aggregate_swaps(details, ROLES, NAMES)["Alpha"][0]["vs"]
+    assert vs == ["ASHE"]
 
 
 def test_a_personnel_substitution_is_not_reported_as_a_swap() -> None:

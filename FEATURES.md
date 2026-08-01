@@ -382,10 +382,13 @@ A mid-map change is therefore either a **flex** (same comp) or a **core** swap
 (different comp), and the two mean different things when scouting.
 
 **Swap triggers.** Each swap records the enemy lineup at that moment. Heroes
-present in at least half a swap's occurrences are reported as its trigger — "they
-answer a D.Va with this". *Known limitation: there is no baseline subtraction, so
-an enemy hero present in every game can appear as a trigger. Read triggers as
-directional, not causal.*
+present in at least half a swap's occurrences, *and* more often than in the
+team's own baseline (their overall enemy-lineup presence rate across every
+observation, swap or not — see `aggregate_swaps` in `owscout/scout.py`), are
+reported as its trigger — "they answer a D.Va with this". Baseline subtraction
+means an enemy hero present in every game no longer qualifies just for being
+omnipresent. Read triggers as directional, not causal — this only rules out one
+false-positive shape, it does not prove causation.
 
 **Segments.** A segment is the attack/defend phase on Escort/Hybrid, the sub-map on
 Control, and the whole map otherwise. Every per-map breakdown is per segment, and
@@ -580,4 +583,3 @@ presentation is built to keep that visible.
 - **Most of the library has never been checked against a live frame** (currently 88
   of 104 hero+team refs). They are unvalidated rather than known-bad; `refs
   coverage` tracks this and it shrinks with every capture.
-- **Swap triggers lack baseline subtraction** (see §2.5).
