@@ -262,10 +262,29 @@ def _dashboard_data(db: Database, cid: str,
         SELECT t1 team, CASE WHEN wf='faction1' THEN 1 ELSE 0 END win FROM sides WHERE t1 IS NOT NULL
         UNION ALL
         SELECT t2 team, CASE WHEN wf='faction2' THEN 1 ELSE 0 END win FROM sides WHERE t2 IS NOT NULL
+      ), gm AS (
+        SELECT g.match_id mid, g.faction1_score f1s, g.faction2_score f2s,
+               m.faction1_team_id t1, m.faction2_team_id t2
+        FROM games g JOIN matches m ON m.id=g.match_id
+        WHERE m.championship_id=:c AND g.map_guid IS NOT NULL
+      ), tg AS (
+        SELECT team, SUM(games) games, SUM(wins) wins FROM (
+          SELECT t1 team, COUNT(*) games,
+                 SUM(CASE WHEN f1s > f2s THEN 1 ELSE 0 END) wins
+          FROM gm WHERE t1 IS NOT NULL GROUP BY t1
+          UNION ALL
+          SELECT t2 team, COUNT(*),
+                 SUM(CASE WHEN f2s > f1s THEN 1 ELSE 0 END)
+          FROM gm WHERE t2 IS NOT NULL GROUP BY t2
+        ) GROUP BY team
       )
       SELECT te.name, COUNT(*) matches, SUM(win) wins,
-             ROUND(100.0*SUM(win)/COUNT(*),1) win_pct
-      FROM tm JOIN teams te ON te.id=tm.team GROUP BY tm.team
+             MAX(tg.games) games, MAX(tg.wins) game_wins,
+             ROUND(100.0*SUM(win)/COUNT(*),1) win_pct,
+             ROUND(100.0*MAX(tg.wins)/NULLIF(MAX(tg.games),0),1) map_win_pct
+      FROM tm JOIN teams te ON te.id=tm.team
+      LEFT JOIN tg ON tg.team=tm.team
+      GROUP BY tm.team
       ORDER BY win_pct DESC, wins DESC""", {"c": cid})
 
     # Current roster per team, rolled up from round_players: who has played for

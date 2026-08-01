@@ -242,6 +242,7 @@ table.blocks thead th:hover{color:var(--faint)}
 .hicon.r-Damage{box-shadow:0 0 0 1.5px var(--damage)}
 .hicon.r-Support{box-shadow:0 0 0 1.5px var(--support)}
 .hicon.sm{width:18px;height:18px;border-radius:5px;box-shadow:none;margin:-1px 1px -1px -3px}
+.hicon.md{width:24px;height:24px;border-radius:6px}
 .chip.ico{padding-left:4px;gap:4px}
 .comp{display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap}
 /* Spacer between role groups inside a comp, so tank | dps dps | sup sup reads as a shape. */
@@ -257,6 +258,10 @@ table.blocks thead th:hover{color:var(--faint)}
 .crow+.crow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 .crow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
 .crow.thin{opacity:.55}                      /* n=1: present, but visibly weak evidence */
+/* Clickable history row in map scouting: behaves like .crow but with hover cue. */
+a.crow.hrow{display:flex;text-decoration:none;color:inherit;border-radius:6px;margin:0 -4px;padding:7px 4px}
+a.crow.hrow:hover{background:var(--surface2);color:var(--fg)}
+a.crow.hrow+.hrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 /* Players -> By seat: a real grid instead of one flex line, so name/heroes/stats
    land in fixed columns across every row regardless of how many hero icons or
    how long a name is - variable-width inline content was what made rows read
@@ -795,7 +800,7 @@ const teamAvatar = (name, size)=>{
   const url=(DATA.team_avatars||{})[name];
   if(!url) return '';
   size = size || 20;
-  return `<img class="tlogo" src="${esc(url)}" alt="" width="${size}" height="${size}" loading="lazy">`;
+  return `<img class="tlogo" src="${esc(url)}" alt="" style="width:${size}px;height:${size}px" loading="lazy">`;
 };
 
 const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
@@ -915,6 +920,12 @@ function heroChip(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
 function heroIcon(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
   return src?`<img class="hicon r-${esc(r||'')}" src="${src}" alt="${esc(name)}" title="${esc(name)}">`
             :heroChip(name); }
+function heroIconSmall(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
+  return src?`<img class="hicon sm r-${esc(r||'')}" src="${src}" alt="${esc(name)}" title="${esc(name)}">`
+            :heroChip(name); }
+function heroIconMedium(name){ const r=HERO_ROLE[name], src=HERO_ICON[heroSlug(name)];
+  return src?`<img class="hicon md r-${esc(r||'')}" src="${src}" alt="${esc(name)}" title="${esc(name)}">`
+            :heroChip(name); }
 // Comps read best in role order: tank, damage, damage, support, support.
 // NB: ROLE_ORDER is declared further down (an array); don't redeclare it.
 function roleRank(h){ const i=['Tank','Damage','Support'].indexOf(HERO_ROLE[h]); return i<0?9:i; }
@@ -995,7 +1006,7 @@ function swapLine(s){
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
 // A team name rendered as a click-to-scout link (jumps to that team's scout page).
-function teamLink(name,extra){ return name?`<span class="tlink" data-scout="${esc(name)}" title="Scout ${esc(name)}">${esc(name)}</span>${extra||''}`:'<span class="faint">—</span>'; }
+function teamLink(name,extra){ return name?`<span class="tlink" data-scout="${esc(name)}" title="Scout ${esc(name)}" style="display:flex;align-items:center;gap:8px">${teamAvatar(name,24)}${esc(name)}</span>${extra||''}`:'<span class="faint">—</span>'; }
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
   if(t&&t.dataset.scout){ e.preventDefault(); gotoScout(t.dataset.scout); } });
 // Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
@@ -1608,8 +1619,10 @@ function renderOverview(){
 
   wrap.appendChild(el(sectionH('Standings')));
   wrap.appendChild(table(
-    [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},{k:'wins',label:'Wins',num:true},
-     {k:'win_pct',label:'Win %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))}],
+    [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},
+     {k:'wins',label:'Wins',num:true},{k:'win_pct',label:'Match %',num:true,html:r=>pill(r.win_pct+'%',winVar(r.win_pct))},
+     {k:'games',label:'Maps',num:true},{k:'game_wins',label:'Map wins',num:true},
+     {k:'map_win_pct',label:'Map %',num:true,html:r=>pill(r.map_win_pct+'%',winVar(r.map_win_pct))}],
     D().teams));
   wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
 
@@ -1791,8 +1804,8 @@ function renderScoutBody(t){
   const matchW=t.results.filter(r=>r.won).length;
   const form=t.results.slice(0,7).map(r=>`<b class="${r.won?'w':'l'}" title="${esc(r.opp)} ${esc(r.series)}">${r.won?'W':'L'}</b>`).join('');
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
-  const _tav=teamAvatar(t.team,40);
-  head.appendChild(el(`<div style="display:flex;align-items:center;gap:12px">${_tav?`<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px">${_tav}</div>`:''}`+
+  const _tav=teamAvatar(t.team,56);
+  head.appendChild(el(`<div style="display:flex;align-items:center;gap:14px">${_tav?`<div style="display:flex;align-items:center;justify-content:center;width:64px;height:64px">${_tav}</div>`:''}`+
     `<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
     `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div></div>`));
   const _hsc=((DATA.owscout_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
@@ -1814,14 +1827,17 @@ function renderScoutBody(t){
     const topHeroByPlayer={};
     (((DATA.owscout_comps||{})[t.team]||{}).scout||{}).players?.forEach(p=>{
       if(p.heroes&&p.heroes[0]) topHeroByPlayer[p.player]=p.heroes[0].hero; });
-    const prow=(p,dim)=>{ const th=topHeroByPlayer[p.nick];
-      return `<div class="pl"${dim?' style="opacity:.5"':''}>`+
-      `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-      `<span>${esc(p.nick)}${th?` ${heroIcon(th)}`:''}</span><span class="st">${p.games} map${p.games===1?'':'s'}</span></div>`; };
+    const prow=(p,dim)=>{
+      const th=topHeroByPlayer[p.nick];
+      const av=faceitAvg(p), role=roleOf(p.role);
+      return `<div class="seatrow" style="grid-template-columns:1fr 40px auto${dim?';opacity:.5':''}" title="${p.games} maps this season${av?' · '+av.games+' maps with stats':''}">`+
+      `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${esc(role||'—')}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
+      `<span class="hs">${th?heroIconMedium(th):''}</span>`+
+      `<span class="rec">${p.games} map${p.games===1?'':'s'}${av?` · ${av.games}m`:` ${p.stats?'<span class="faint"> · '+p.stats.kd+' k/d</span>':''}`}</span></div>`; };
     const rc=el(`<div class="card roster"></div>`);
     rc.appendChild(el(`<p class="eyebrow">Current roster</p>`));
     if(ros.length){
-      const grid=el(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0 20px"></div>`);
+      const grid=el(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0 16px"></div>`);
       cur.forEach(p=>grid.appendChild(el(prow(p,false))));
       if(sub.length){
         grid.appendChild(el(`<div class="subhd" style="grid-column:1/-1">also played this season</div>`));
@@ -2100,7 +2116,7 @@ function renderScoutBody(t){
         const fh=[], mapBans={};
         t.matches.forEach(m=>m.games.forEach(g=>{ if(g.map!==mp) return;
           const us=m.f1===t.team;
-          fh.push({opp:us?m.f2:m.f1, won:g.winner_team===t.team, when:m.finished_at,
+          fh.push({mid:m.id, opp:us?m.f2:m.f1, won:g.winner_team===t.team, when:m.finished_at,
                    score:us?`${g.f1}-${g.f2}`:`${g.f2}-${g.f1}`, pick:g.map_picked_by===t.team,
                    code:g.demo_code||null, dead:codeDead(m.finished_at)});
           (g.bans||[]).filter(b=>b.hero&&b.team===t.team).forEach(b=>{ mapBans[b.hero]=(mapBans[b.hero]||0)+1; }); }));
@@ -2142,9 +2158,10 @@ function renderScoutBody(t){
         if(fh.length){
           const hd=el(`<details class="hist"><summary>history &middot; ${fh.length} game${fh.length===1?'':'s'} &middot; ${fw}W-${fh.length-fw}L</summary></details>`);
           fh.forEach(x=>hd.appendChild(el(
-            `<div class="crow"><span>${x.pick?`<span class="pickpill" title="they picked this map">pick</span> `:''}<span class="faint">vs</span> ${esc(x.opp||'?')}</span>`+
+            `<a class="crow hrow" href="#match=${esc(x.mid)}"${x.mid?` title="Open match ${esc(x.mid)}"`:''}>`+
+            `<span>${x.pick?`<span class="pickpill" title="they picked this map">pick</span> `:''}<span class="faint">vs</span> ${esc(x.opp||'?')}</span>`+
             `<span class="rec">${x.when?dshort(x.when)+' &middot; ':''}<span class="faint">${esc(x.score)}</span> ${x.won?'<b class="wlw">W</b>':'<b class="wll">L</b>'}`+
-            `${x.code?(x.dead?' '+wipedTag:' '+rcChip(x.code)):''}</span></div>`)));
+            `${x.code?(x.dead?' '+wipedTag:' '+rcChip(x.code)):''}</span></a>`)));
           body.appendChild(hd);
         }
         Object.keys(segs).forEach(seg=>{
@@ -2610,15 +2627,16 @@ function renderPlayers(){
       const ros=t.roster||[];
       const card=el(`<div class="card roster"></div>`);
       card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
-        `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="color:var(--fg);font-size:14px;font-weight:660">${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
-      const line=(p,dim)=>`<div class="pl"${dim?' style="opacity:.55"':''} title="${p.games} maps this season${p.stats?' · '+p.stats.kd+' k/d over '+p.stats.games+' maps':''}">`+
-        `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-        `<span>${esc(p.nick)}${p.elo!=null?` <span class="faint" style="font-size:11px">${p.elo}</span>`:''}</span>`+
-        `<span class="st">${icons(cap[t.name+'|'+p.nick])}</span></div>`;
+        `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="display:flex;align-items:center;gap:8px;color:var(--fg);font-size:14px;font-weight:660">${teamAvatar(t.name,28)}${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
       const curP=ros.filter(p=>p.current), subP=ros.filter(p=>!p.current);
-      let b=curP.map(p=>line(p,false)).join('');
-      if(subP.length) b+=`<div class="subhd">subs / also played</div>`+subP.map(p=>line(p,true)).join('');
-      card.appendChild(el(`<div>${b||'<span class="faint">no roster data yet</span>'}</div>`));
+      const mkRow=(p,dim)=>{ const av=faceitAvg(p), hs=topHeroes(cap[t.name+'|'+p.nick],3), role=roleOf(p.role);
+        return el(`<div class="seatrow"${dim?' style="opacity:.55"':''} title="${p.games} maps this season${av?' · '+av.kd+' k/d · '+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':''}">`+
+          `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${role?`<span class="dot bg-${esc(role||'')}" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>${esc(role)}`:'—'}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
+          `<span class="hs">${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
+          `<span class="rec">${av?playerStatLine(role,av)+` <span class="faint">· ${av.games}m</span>`:''}</span></div>`); };
+      curP.forEach(p=>card.appendChild(mkRow(p,false)));
+      if(subP.length){ card.appendChild(el(`<div class="subhd">subs / also played</div>`)); subP.forEach(p=>card.appendChild(mkRow(p,true))); }
+      if(!ros.length) card.appendChild(el(`<span class="faint">no roster data yet</span>`));
       grid.appendChild(card);
     });
     body.appendChild(grid);
@@ -2673,17 +2691,18 @@ function renderPlayers(){
     const rows=rankPlayers(players,{key:PLAYERS_SORT,role:PLAYERS_ROLE});
     if(!rows.length){ body.appendChild(el(`<p class="note">No players with that stat yet.</p>`)); return; }
     const box=el(`<div class="scroll"></div>`);
-    const tb=el(`<table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Role</th>`+
+    const tb=el(`<table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Role</th><th>Top heroes</th>`+
       LB_COLS.map(c=>`<th class="num" data-k="${c.k}" style="cursor:pointer">${esc(c.label)}${c.k===PLAYERS_SORT?' ▾':''}</th>`).join('')+
       `</tr></thead><tbody></tbody></table>`);
     const body2=tb.querySelector('tbody');
     rows.forEach((p,i)=>{
-      const s=p.stats;
+      const s=p.stats; const hs=topHeroes(p.cap,3);
       body2.appendChild(el(`<tr>`+
         `<td class="num faint">${i+1}</td>`+
         `<td><b>${esc(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
-        `<td><span class="tlink" data-scout="${esc(p.team)}">${esc(p.team)}</span></td>`+
+        `<td><span class="tlink" data-scout="${esc(p.team)}" style="display:flex;align-items:center;gap:6px">${teamAvatar(p.team,20)}${esc(p.team)}</span></td>`+
         `<td><span class="dot bg-${esc(p.role||'')}"></span> <span class="faint">${esc(p.role||'—')}</span></td>`+
+        `<td class="num">${hs.length?hs.map(x=>heroIconSmall(x.hero)).join(''):'<span class="faint">—</span>'}</td>`+
         `<td class="num">${p.maps||0}</td>`+
         `<td class="num">${p.elo!=null?p.elo:'<span class="faint">—</span>'}</td>`+
         `<td class="num">${s?s.kd:'<span class="faint">—</span>'}</td>`+
