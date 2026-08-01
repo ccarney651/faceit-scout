@@ -771,7 +771,7 @@ function banLiftRows(counts, baseShare, minN, gkByHero, lookup){
 function banLiftList(rows){
   if(!rows.length) return `<p class="note">Too few bans to read a tendency (needs 2+ of a hero).</p>`;
   return `<div>`+rows.slice(0,10).map(r=>{
-    const lab=r.lift==null?'new':'×'+r.lift.toFixed(1);
+    const lab=r.lift==null?'new':r.lift>=1.5?'more than most':r.lift<=0.6?'less than most':'typical';
     const col=r.lift==null?'var(--faint)':r.lift>=1.5?'var(--good)':r.lift<=0.6?'var(--bad)':'var(--mid)';
     const liftTitle=r.lift==null?'no field baseline to compare yet':`bans this ${r.lift.toFixed(1)}x more often than the division average`;
     return `<div class="crow"><span>${heroChip(r.hero)} <span class="faint">${r.n} ban${r.n===1?'':'s'} · ${Math.round(r.share*100)}% of theirs vs ${Math.round(r.base*100)}% field</span></span>`+
@@ -1263,7 +1263,7 @@ function renderPlayoffs(){
 /* ============================================================= VIEWS */
 const TABS=[
  {id:'overview',label:'Overview',render:renderOverview},
- {id:'scout',label:'Scout a team',render:renderScout},
+ {id:'scout',label:'Teams',render:renderScout},
  {id:'players',label:'Players',render:renderPlayers},
  {id:'meta',label:'League meta',render:renderMeta},
  {id:'matches',label:'Matches',render:renderMatches},
@@ -1524,9 +1524,15 @@ function renderScoutBody(t){
   {
     const ros=((D().teams.find(x=>x.name===t.team)||{}).roster)||[];
     const cur=ros.filter(p=>p.current), sub=ros.filter(p=>!p.current);
-    const prow=(p,dim)=>`<div class="pl"${dim?' style="opacity:.5"':''}>`+
+    // Most-played hero per player, from the same HUD-attributed pools "Player
+    // pools" below uses (scout.players[].heroes is share-sorted, so [0] is it).
+    const topHeroByPlayer={};
+    (((DATA.owscout_comps||{})[t.team]||{}).scout||{}).players?.forEach(p=>{
+      if(p.heroes&&p.heroes[0]) topHeroByPlayer[p.player]=p.heroes[0].hero; });
+    const prow=(p,dim)=>{ const th=topHeroByPlayer[p.nick];
+      return `<div class="pl"${dim?' style="opacity:.5"':''}>`+
       `<span class="dot bg-${esc(p.role||'')}" title="${esc(p.role||'—')}"></span>`+
-      `<span>${esc(p.nick)}</span><span class="st">${p.games} map${p.games===1?'':'s'}</span></div>`;
+      `<span>${esc(p.nick)}${th?` ${heroIcon(th)}`:''}</span><span class="st">${p.games} map${p.games===1?'':'s'}</span></div>`; };
     const rc=el(`<div class="card roster"></div>`);
     rc.appendChild(el(`<p class="eyebrow">Current roster</p>`));
     if(ros.length){
@@ -1819,7 +1825,8 @@ function renderScoutBody(t){
         t.matches.forEach(m=>m.games.forEach(g=>{ if(g.map!==mp) return;
           const us=m.f1===t.team;
           fh.push({opp:us?m.f2:m.f1, won:g.winner_team===t.team, when:m.finished_at,
-                   score:us?`${g.f1}-${g.f2}`:`${g.f2}-${g.f1}`, pick:g.map_picked_by===t.team});
+                   score:us?`${g.f1}-${g.f2}`:`${g.f2}-${g.f1}`, pick:g.map_picked_by===t.team,
+                   code:g.demo_code||null, dead:codeDead(m.finished_at)});
           (g.bans||[]).filter(b=>b.hero&&b.team===t.team).forEach(b=>{ mapBans[b.hero]=(mapBans[b.hero]||0)+1; }); }));
         fh.sort((a,b)=>(b.when||'').localeCompare(a.when||''));
         const fw=fh.filter(x=>x.won).length;
@@ -1860,7 +1867,8 @@ function renderScoutBody(t){
           const hd=el(`<details class="hist"><summary>history &middot; ${fh.length} game${fh.length===1?'':'s'} &middot; ${fw}W-${fh.length-fw}L</summary></details>`);
           fh.forEach(x=>hd.appendChild(el(
             `<div class="crow"><span>${x.pick?`<span class="pickpill" title="they picked this map">pick</span> `:''}<span class="faint">vs</span> ${esc(x.opp||'?')}</span>`+
-            `<span class="rec">${x.when?dshort(x.when)+' &middot; ':''}<span class="faint">${esc(x.score)}</span> ${x.won?'<b class="wlw">W</b>':'<b class="wll">L</b>'}</span></div>`)));
+            `<span class="rec">${x.when?dshort(x.when)+' &middot; ':''}<span class="faint">${esc(x.score)}</span> ${x.won?'<b class="wlw">W</b>':'<b class="wll">L</b>'}`+
+            `${x.code?(x.dead?' '+wipedTag:' '+rcChip(x.code)):''}</span></div>`)));
           body.appendChild(hd);
         }
         Object.keys(segs).forEach(seg=>{
@@ -2084,7 +2092,7 @@ function renderScoutBody(t){
   const two=el(`<div class="grid cols-2" style="margin-top:16px;align-items:start"></div>`);
   const banC=el(`<div class="card"></div>`);
   const banBase=divBanBaseline();
-  banC.appendChild(el(`<p class="eyebrow">Ban tendencies <span class="note" style="text-transform:none;letter-spacing:0">· lift vs the field, not raw counts</span></p>`));
+  banC.appendChild(el(`<p class="eyebrow">Ban tendencies <span class="note" style="text-transform:none;letter-spacing:0">· compared to the league average, not raw counts</span></p>`));
   banC.appendChild(el(banLiftList(banLiftRows(t.bans, banBase.all, undefined, t.bansGk, lookup))));
   if(t.firstBanGames){
     banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note" style="text-transform:none;letter-spacing:0">· when they draft first (${t.firstBanGames} maps) — the intentional one</span></p>`));
@@ -2151,7 +2159,7 @@ function renderScoutBody(t){
     const segs=(scoutMaps[mp]||{}).segments||{};
     const best=Object.values(segs).map(b=>(b.open||[])[0]).filter(Boolean)
       .sort((a,b)=>b.maps-a.maps)[0];
-    return best?`${compRow(best.heroes)}<span class="faint"> ${rec(best)}</span>`:'';
+    return best?`${compRow(best.heroes)}<span class="faint" style="margin-left:8px">${rec(best)}</span>`:'';
   };
   const pfb=Object.entries(t.pickFirstBan).map(([m,v])=>({map:m,cat:MAP_CAT[m]||'',
       games:v.games,wr:pctOf(v.wins,v.games),comp:openOn(m),
@@ -2737,21 +2745,40 @@ function renderMeta(){
   // Most-played comps across the league (captured openings). Aggregated by exact
   // 5-hero identity across every team; capture-gated, so honest when thin.
   {
+    // Replay codes/map identity for this aggregate come from team_scout's
+    // per-team `overall` families (scout.overall[].game_keys, same source
+    // Scout a team's Common comps uses) - matched to the derive.py comp stats
+    // above by the same sorted-hero-set key. Two different aggregation
+    // pipelines over the same captures; a key that doesn't match just means
+    // no map breakdown for that row, not a crash.
+    const lookupLM=codeLookup(MATCHES_RECENT, null);
     const agg={};
     D().team_names.forEach(team=>{
+      const ovByKey={};
+      (((DATA.owscout_comps||{})[team]||{}).scout||{}).overall?.forEach(f=>{
+        ovByKey[[...f.heroes].sort().join(',')]=f; });
       (((DATA.owscout_comps||{})[team]||{}).comps||[]).forEach(c=>{
         const key=[...c.heroes].sort().join(',');
-        const a=agg[key]||(agg[key]={heroes:c.heroes,maps:0,games:0,wins:0,teams:new Set()});
+        const a=agg[key]||(agg[key]={heroes:c.heroes,maps:0,games:0,wins:0,teams:new Set(),gks:new Set()});
         a.maps+=c.maps||0; a.games+=c.games||0; a.wins+=c.wins||0; a.teams.add(team);
+        const fam=ovByKey[key];
+        if(fam&&fam.game_keys) fam.game_keys.forEach(k=>a.gks.add(k));
       });
     });
     const rows=Object.values(agg).sort((a,b)=>b.maps-a.maps).slice(0,12);
     wrap.appendChild(el(sectionH('Most-played comps',`<span class="note">captured openings across the league · win% shown at 3+ maps${capSince()}</span>`)));
     if(rows.length){
       const card=el(`<div class="card"></div>`);
-      rows.forEach(r=>card.appendChild(el(`<div class="crow${r.maps<=1?' thin':''}"><span>${compRow(r.heroes)}</span>`+
-        `<span class="rec">${r.maps} map${r.maps===1?'':'s'} · ${r.teams.size} team${r.teams.size===1?'':'s'}`+
-        `${r.maps>=3?` · won ${Math.round(100*r.wins/(r.games||1))}%`:''}</span></div>`)));
+      rows.forEach(r=>{
+        const codes=codesFor([...r.gks],lookupLM);
+        const mapTally={};
+        codes.forEach(c=>{ if(c.map) mapTally[c.map]=(mapTally[c.map]||0)+1; });
+        const mapBreak=Object.entries(mapTally).sort((a,b)=>b[1]-a[1]).map(([m,n])=>`${esc(m)} ${n}×`).join(' · ');
+        card.appendChild(el(`<div class="crow${r.maps<=1?' thin':''}"><span>${compRow(r.heroes)}</span>`+
+          `<span class="rec">${r.maps} map${r.maps===1?'':'s'} · ${r.teams.size} team${r.teams.size===1?'':'s'}`+
+          `${r.maps>=3?` · won ${Math.round(100*r.wins/(r.games||1))}%`:''} · ${codesCell(codes)}</span></div>`));
+        if(mapBreak) card.appendChild(el(`<p class="note" style="margin:0 0 8px;padding-left:2px">played on: ${mapBreak}</p>`));
+      });
       wrap.appendChild(card);
     } else {
       wrap.appendChild(el(`<p class="note">No comps captured yet — this fills in as games are scouted.</p>`));
