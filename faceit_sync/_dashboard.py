@@ -878,7 +878,7 @@ function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Co
 // than an external registry, since table() rebuilds every row's HTML string
 // from scratch on every re-sort and an insertion-order registry would go
 // stale across that rebuild.
-const wipedTag='<span class="faint" style="font-size:11.5px">code wiped</span>';
+const wipedTag='<span class="faint" style="font-size:11.5px" title="This replay code predates the last OW patch\'s code wipe and no longer loads in-game.">code wiped</span>';
 function codesCell(rows){
   if(!rows.length) return '<span class="faint">—</span>';
   if(rows.length===1) return rows[0].dead ? wipedTag : rcChip(rows[0].code);
