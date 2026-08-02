@@ -148,6 +148,7 @@
   .hp{width:22px;height:22px;border-radius:4px;flex:none;object-fit:cover;background:var(--surface2)}
   .slot{align-items:center}
   .slot .hp{margin-right:auto;order:-1}
+  .slot .pn{display:block;font-style:normal;color:var(--muted);font-size:10.5px;line-height:1.15;font-weight:400}
 </style></head><body>
 <header>
   <div class="hrow">
@@ -703,7 +704,9 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
   for(const side of ['a','b']){ const b=boxes[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
-      if(host){ const row=document.createElement('div'); row.className='slot'; row.innerHTML=`${heroPortrait(r.name)}<span>${ok?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+      if(host){ const row=document.createElement('div'); row.className='slot'; const pid=(session&&session.players&&session.players[side])?session.players[side][i]:null;
+        const pn=pid?playerName(pid):'';
+        row.innerHTML=`${heroPortrait(r.name)}<span>${ok?r.name:'??'}${pn?` <i class="pn">${esc(pn)}</i>`:''}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 
 // ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
@@ -789,6 +792,12 @@ async function ocrNames(){ const w=await ocrWorker(); const frame=grabFrame(); c
 function teamRoster(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
   const t=((DATA.rosters||{})[c.match_id]||{})[teamId]; if(!t||!t.players) return [];
   return t.players.map(p=>({ id:p.id||null, name:(p.game_name||p.nick||'').trim() })).filter(x=>x.name); }
+// FACEIT player id -> display name, from either team's roster for this match.
+function playerName(pid){ if(!pid) return ''; const c=selectedCode(); if(!c) return '';
+  const rs=((DATA.rosters||{})[c.match_id]||{}); if(!c.t1&&!c.t2) return '';
+  for(const id of [c.t1,c.t2]){ const t=rs[id]; if(!t||!t.players) continue;
+    const p=t.players.find(x=>x.id===pid); if(p) return (p.game_name||p.nick||pid); }
+  return pid; }
 // Greedy 1:1: each HUD slot → its best-scoring roster player above the strong
 // threshold, no player used twice. Returns [id|null x5] aligned to slots.
 function attribute(names,roster){ const out=[null,null,null,null,null], cand=[];
@@ -1140,7 +1149,8 @@ function refreshSession(){ if(!session) return;
   document.getElementById('obscount').textContent=session.snaps.length+' snapshot'+(session.snaps.length===1?'':'s');
   const ol=document.getElementById('obslist'); ol.innerHTML='';
   session.snaps.slice().reverse().forEach(s=>{ const el=document.createElement('div'); el.className='obs';
-    el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${s.aNames.join('/')}  vs  ${s.bNames.join('/')}`; ol.appendChild(el); });
+    const fmt=(names,players)=>names.map((n,i)=>(players&&players[i])?`${n} (${players[i]})`:n).join('/');
+    el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames,s.aPlayers)}  vs  ${fmt(s.bNames,s.bPlayers)}`; ol.appendChild(el); });
   updateBtns(); renderPipControls();
 }
 function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
@@ -1164,8 +1174,10 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   // dedup: same round+sub and only-lost-known both sides => skip (a worse read, not new info)
   const lk=session.lastKept;
   if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)){ if(!auto) snapMsg('unchanged — nothing new'); return; }
+  const pA=(session.players&&session.players.a)||[], pB=(session.players&&session.players.b)||[];
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
-    a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name), ts:session.snaps.length*1000};
+    a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name),
+    aPlayers:pA.map(playerName), bPlayers:pB.map(playerName), ts:session.snaps.length*1000};
   // Keep the opening portraits (10 grayscale crops) so a misread can be corrected
   // AND taught from Review later, not just live — closes the correction→learning loop.
   if(!session.crops){ const cr={a:[],b:[]}; for(const s of ['a','b']) for(let i=0;i<5;i++) cr[s].push(learnCrop(s,i)); session.crops=cr; }
