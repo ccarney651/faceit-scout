@@ -380,3 +380,81 @@ def test_scouted_count_counts_captured_games(tmp_path) -> None:
         f"return scoutedCount({_SCOUT_MATCH}, new Set(['m1:1']));", tmp_path
     )
     assert got == {"done": 1, "total": 2}
+
+
+# --- capture queue: league-wide + per-match --------------------------------
+# The nav badge and the Overview "Most wanted" list run off scoutQueue; per-match
+# Scout buttons off matchLiveTodo. Both must agree with coverageState: a code is
+# only dead once a patch wiped it AND the game was never captured.
+
+_LIVE_MATCH = ("{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-30',"
+               "games:[{game_no:1,map:'Ilios',demo_code:'AAA111'},"
+               "{game_no:2,map:'Oasis',demo_code:'BBB222'}]}")
+_PREWIPE_MATCH = ("{id:'m2',f1:'Alpha',f2:'Charlie',finished_at:'2026-07-20',"
+                  "games:[{game_no:1,map:'Numbani',demo_code:'CCC333'}]}")
+
+
+def test_match_live_todo_lists_coded_uncaptured_games(tmp_path) -> None:
+    got = _run(
+        f"return matchLiveTodo({_LIVE_MATCH}, new Set(), null).map(g=>g.demo_code);",
+        tmp_path)
+    assert got == ["AAA111", "BBB222"]
+
+
+def test_match_live_todo_drops_captured_games(tmp_path) -> None:
+    got = _run(
+        f"return matchLiveTodo({_LIVE_MATCH}, new Set(['m1:1']), null).map(g=>g.demo_code);",
+        tmp_path)
+    assert got == ["BBB222"]
+
+
+def test_match_live_todo_drops_pre_wipe_uncaptured_codes(tmp_path) -> None:
+    got = _run(
+        f"return matchLiveTodo({_PREWIPE_MATCH}, new Set(), '2026-07-28');", tmp_path)
+    assert got == []   # finished 07-20, wiped 07-28, never captured -> dead
+
+
+def test_match_live_todo_has_nothing_for_a_captured_pre_wipe_game(tmp_path) -> None:
+    """A pre-wipe game captured in time stays in the coverage COUNTS but is no
+    longer a to-do — nothing left to scout for it."""
+    got = _run(
+        f"return matchLiveTodo({_PREWIPE_MATCH}, new Set(['m2:1']), '2026-07-28');",
+        tmp_path)
+    assert got == []
+
+
+_DIVS2 = (
+    "{a:{summary:{championship:'EMEA Master'},matches:["
+    "{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-30',games:["
+    "{game_no:1,map:'Ilios',demo_code:'AAA111'},"
+    "{game_no:2,map:'Oasis',demo_code:'BBB222'}]}]},"
+    "b:{summary:{championship:'NA Master'},matches:["
+    "{id:'m2',f1:'Alpha',f2:'Charlie',finished_at:'2026-07-20',games:["
+    "{game_no:1,map:'Numbani',demo_code:'CCC333'}]},"
+    "{id:'m3',f1:'Delta',f2:'Echo',finished_at:'2026-08-01',games:["
+    "{game_no:1,map:'Push',demo_code:'DDD444'}]}]}}"
+)
+
+
+def test_scout_queue_collects_live_uncaptured_codes_newest_first(tmp_path) -> None:
+    got = _run(
+        f"return scoutQueue({_DIVS2}, new Set(), '2026-07-28').map(r=>r.code);", tmp_path)
+    assert got == ["DDD444", "AAA111", "BBB222"]   # m2 is pre-wipe -> dead, excluded
+
+
+def test_scout_queue_excludes_captured_games(tmp_path) -> None:
+    got = _run(
+        f"return scoutQueue({_DIVS2}, new Set(['m1:1','m3:1']), '2026-07-28').map(r=>r.code);",
+        tmp_path)
+    assert got == ["BBB222"]
+
+
+def test_scout_queue_carries_team_map_and_division(tmp_path) -> None:
+    r = _run(f"return scoutQueue({_DIVS2}, new Set(), '2026-07-28');", tmp_path)[-1]
+    assert r["f1"] == "Alpha" and r["map"] == "Oasis" and r["div"] == "EMEA Master"
+
+
+def test_scout_queue_without_a_wipe_treats_every_code_as_live(tmp_path) -> None:
+    got = _run(f"return scoutQueue({_DIVS2}, new Set(), null).map(r=>r.code);", tmp_path)
+    assert len(got) == 4
+

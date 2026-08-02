@@ -122,8 +122,6 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
   `tools/build_capture_data.py` `CODE_WIPE_DATE` (drives the capture tool). Update
   both when a patch lands, plus the pinned wipe-date assertions in
   `owscout/tests/test_codes.py` / `test_context.py`.
-- **`setup.txt`** is intentionally-uncommitted working notes — leave it out of
-  commits (stash it around `git pull --rebase` / `git push`).
 - **Cloudflare Worker** (`infra/upload-worker/`, `wrangler.toml`) handles capture
   uploads + real-time scouting claims (a Durable Object). `wrangler deploy` is run
   by the human, not from here.

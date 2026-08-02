@@ -1,7 +1,23 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OW Scout — Capture (browser)</title>
+<title>OW Scout — Capture comps</title>
+<meta name="description" content="Zero-install Overwatch 2 scouting: share your screen, calibrate once, and capture team comps round-by-round. Every capture sharpens the FACEIT League scouting data.">
+<meta name="theme-color" content="#0d1015">
+<link rel="canonical" href="https://owscout.com/capture/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OW Scout">
+<meta property="og:title" content="OW Scout — Capture comps in your browser">
+<meta property="og:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, capture each map's comps round-by-round. Every capture sharpens the FACEIT League data.">
+<meta property="og:url" content="https://owscout.com/capture/">
+<meta property="og:image" content="https://owscout.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OW Scout — Capture comps in your browser">
+<meta name="twitter:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, and every capture sharpens the FACEIT League data.">
+<meta name="twitter:image" content="https://owscout.com/og.png">
 <style>
   :root{color-scheme:dark;--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;--faint:#6b7686;--line:#252c37;--accent:#8087ff;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;--blue:#5a9bd8;--red:#e9694f}
   *{box-sizing:border-box}
@@ -78,13 +94,71 @@
   .cap.done{opacity:.55}.pubdone{margin-top:6px}.pubdone summary{cursor:pointer;padding:6px 0;color:var(--muted)}
   .cap:first-of-type{border-top:0}
   .warn{color:var(--bad)} .ok{color:var(--good)} .faint{color:var(--faint)}
+  .eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:800}
+  .hrow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .backlink{text-decoration:none;border-radius:7px;padding:8px 13px;font-weight:650;font-size:13px}
+  .welcome{background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:8px;padding:8px 13px;font-size:13px;margin-top:10px}
+  #pubimpact{margin-top:8px;border:1px solid var(--good);background:color-mix(in srgb,var(--good) 9%,var(--surface));border-radius:9px;padding:11px 13px;font-size:13px;line-height:1.6}
+  #pubimpact b{color:var(--fg)}
+  #pubimpact a{color:var(--accent);font-weight:700;text-decoration:none}
+  #pubimpact .teams{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0}
+  #pubimpact .team{background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:2px 9px;font-size:12.5px;color:var(--fg)}
+  /* ---- feedback: toasts (transient, top-right) ---- */
+  #toasts{position:fixed;top:14px;right:14px;z-index:1000;display:flex;flex-direction:column;gap:8px;max-width:min(380px,90vw)}
+  .toast{display:flex;gap:9px;align-items:flex-start;background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:10px 13px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45);animation:tin .18s ease-out;cursor:pointer}
+  .toast.ok{border-left-color:var(--good)} .toast.warn{border-left-color:var(--mid)} .toast.bad{border-left-color:var(--bad)}
+  .toast .ti{flex:none;line-height:1.2}
+  .toast.ok .ti{color:var(--good)} .toast.warn .ti{color:var(--mid)} .toast.bad .ti{color:var(--bad)} .toast.info .ti{color:var(--accent)}
+  .ticon{width:15px;height:15px;display:block}
+  @keyframes tin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  .toast.out{opacity:0;transition:opacity .25s}
+  /* ---- skeleton shimmer while the feeds load ---- */
+  @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+  .skel{background:linear-gradient(90deg,var(--surface2) 25%,var(--line) 50%,var(--surface2) 75%) !important;background-size:200% 100% !important;animation:shimmer 1.4s infinite linear;border-radius:7px;color:transparent !important;border-color:var(--surface2) !important}
+  select.skel{min-height:37px}
+  /* ---- determinate progress bar (OCR name reads) ---- */
+  .pbar{display:none;height:4px;border-radius:3px;background:var(--surface2);overflow:hidden;width:150px;flex:none}
+  .pbar>div{height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .2s}
+  /* ---- modal (replaces native prompt/confirm/alert) ---- */
+  #mback{position:fixed;inset:0;background:rgba(4,7,12,.62);backdrop-filter:blur(2px);z-index:900;display:none;align-items:center;justify-content:center}
+  #mback.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--line2,#313a48);border-radius:12px;padding:16px 18px;max-width:min(440px,92vw);width:100%;box-shadow:0 12px 40px rgba(0,0,0,.55);animation:tin .16s ease-out}
+  .modal h3{margin:0 0 8px;font-size:14px}
+  .modal .mbody{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .modal .mbody label.f{color:var(--muted)}
+  .modal .mrow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .modal input[type=text],.modal select{width:100%;margin-top:2px}
+  /* ---- prominent floating-overlay control ---- */
+  .poprow{border-top:1px solid var(--line);padding-top:10px}
+  #pop{background:var(--accent);color:#0b1020;border:0;border-radius:8px;padding:10px 16px;font-weight:750;font-size:13.5px;box-shadow:0 2px 12px rgba(128,135,255,.3)}
+  #pop:hover{box-shadow:0 2px 16px rgba(128,135,255,.5)}
+  #pop.on{background:var(--surface2);color:var(--good);border:1px solid var(--good);box-shadow:none}
+  /* ---- guided stepper: where you are in the 4-step flow ---- */
+  .stepper{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:8px}
+  .sstep{display:flex;align-items:center;gap:6px;padding:4px 11px 4px 5px;border-radius:20px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;font-weight:650;color:var(--muted)}
+  .sstep .sc{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--surface2);border:1px solid var(--line2);color:var(--muted);font-size:11px;font-weight:800;flex:none}
+  .sstep .sc svg{width:13px;height:13px}
+  .sstep.cur{border-color:var(--accent);color:var(--fg)}
+  .sstep.cur .sc{background:var(--accent);border-color:var(--accent);color:#0b1020}
+  .sstep.done{border-color:color-mix(in srgb,var(--good) 45%,var(--line));color:var(--fg)}
+  .sstep.done .sc{background:var(--good);border-color:var(--good);color:#0b1020}
+  .sstep.todo{opacity:.6}
+  .shint{color:var(--muted);font-size:13px}
+  /* ---- live preview hero portraits (colored, from hero_icons.json) ---- */
+  .hp{width:22px;height:22px;border-radius:4px;flex:none;object-fit:cover;background:var(--surface2)}
+  .slot{align-items:center}
+  .slot .hp{margin-right:auto;order:-1}
 </style></head><body>
 <header>
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    <h1>OW Scout — Capture <span class="status">· browser</span></h1>
-    <a href="../" class="ghost" style="text-decoration:none;border-radius:7px;padding:8px 13px;font-weight:650;font-size:13px">← Back to OW Scout site</a>
+  <div class="hrow">
+    <div>
+      <div class="eyebrow">OW Scout · FACEIT League</div>
+      <h1>Capture comps</h1>
+    </div>
+    <a href="../" class="ghost backlink">← Back to OW Scout site</a>
   </div>
-  <div class="sub">Zero-install scouting: share your Overwatch screen (borderless/windowed), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
+  <div class="sub">Zero-install scouting: share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
+  <div id="welcome" class="welcome" style="display:none"></div>
 </header>
 <main>
   <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:9px 13px;font-size:13px"></div>
@@ -93,13 +167,13 @@
     <div class="steps">
       <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
       <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
-      <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate ✨</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
-      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Pick a code</span></div><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch and load it. Done maps drop off; <b>🔒</b> = someone's scouting it now.</div>
-      <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — the first press per map auto-detects which team is on the left and tags players from the HUD names; if it can't tell, it'll say so and ask you to set the LEFT team / <b>⇄ Swap teams</b> before it captures anything. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
+      <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
+      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Pick a code</span></div><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch and load it. Done maps drop off; a <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><rect x="3.4" y="7.3" width="9.2" height="5.9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.4 7.3V5.7a2.6 2.6 0 0 1 5.2 0v1.6" stroke="currentColor" stroke-width="1.5"/></svg> = someone's scouting it now.</div>
+      <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — the first press per map auto-detects which team is on the left and tags players from the HUD names; if it can't tell, it'll say so and ask you to set the LEFT team / <b>Swap teams</b> before it captures anything. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Publish</span></div><b>Finish + save</b> → auto-fetches the next code. <b>Publish</b> when done; the site updates in ~2 min.</div>
     </div>
     <p class="status" style="margin:4px 0 2px">Tips: use borderless, not exclusive fullscreen; re-scouting an already-covered map still adds player data. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button before publishing.</p>
-    <p class="status warn" style="margin:4px 0 2px"><b>⚠ Use Overwatch's default team colors (blue/red)</b> — if your in-game UI colors are customized, accuracy drops noticeably.</p>
+    <p class="status warn" style="margin:4px 0 2px"><b>Use Overwatch's default team colors (blue/red)</b> — if your in-game UI colors are customized, accuracy drops noticeably.</p>
   </details>
   <div class="layout" id="layout">
     <div class="appcol">
@@ -107,22 +181,22 @@
     <h2>1 · Set up (once)</h2>
     <div class="row">
       <button id="share">Share my screen</button>
-      <button id="autocal" disabled>Auto-calibrate ✨</button>
+      <button id="autocal" disabled>Auto-calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
       <button id="setL" class="ghost" disabled>Set LEFT box (blue)</button>
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
-      <button id="fscal" class="ghost" disabled title="Enlarge the preview to the whole screen so the boxes are easy to place">⛶ Fullscreen calibrate</button>
+      <button id="fscal" class="ghost" disabled title="Enlarge the preview to the whole screen so the boxes are easy to place">Fullscreen calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="clearcal" class="ghost">reset boxes</button>
       <button id="hidep" class="ghost" disabled>Hide preview</button>
       <button id="stopcap" class="ghost" disabled>Stop capture</button>
     </div>
-    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate ✨</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
+    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
   </div>
 
   <div class="card">
     <h2>2 · Pick a replay</h2>
     <div class="row" style="margin-bottom:8px">
-      <button id="refresh" class="ghost">↻ Refresh codes</button>
-      <span class="status" id="feedmeta"></span>
+      <button id="refresh" class="ghost"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.5 2.4v2.4H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Refresh codes</button>
+      <span class="status skel" id="feedmeta">loading the codes feed…</span>
     </div>
     <div class="row">
       <label class="f">Region<select id="reg"></select></label>
@@ -131,15 +205,15 @@
       <label class="f" style="justify-content:flex-end"><span>&nbsp;</span><label class="status"><input type="checkbox" id="hide" checked> hide already-scouted</label></label>
     </div>
     <div class="row" style="margin-top:8px">
-      <select id="code"></select>
+      <select id="code" class="skel" disabled></select>
       <button id="copy" class="ghost">Copy code</button>
-      <button id="skip" class="ghost">Skip ⏭</button>
+      <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
     </div>
     <div class="row" style="margin-top:8px">
       <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
     </div>
     <div id="roster" style="margin-top:6px"></div>
-    <div class="status" id="codenote" style="margin-top:4px"></div>
+    <div class="status" id="codenote" style="margin-top:4px">loading codes…</div>
   </div>
 
   <div class="card">
@@ -154,8 +228,11 @@
       <button id="nextr" class="mk" disabled>Next round ▸</button>
       <span id="subbtns" class="row"></span>
       <button id="undo" class="mk" disabled>Undo</button>
-      <button id="pop" class="ghost">Pop out overlay ⇱</button>
       <span class="status" id="snapmsg"></span>
+    </div>
+    <div class="row poprow" style="margin-top:10px">
+      <button id="pop" title="Open the floating capture console over Overwatch — snapshot, round, finish and copy without alt-tabbing"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg> Floating overlay</button>
+      <span class="status">capture without alt-tab — opens automatically the moment you pick a replay code.</span>
     </div>
     <div class="row" style="margin-top:6px;align-items:center;gap:12px">
       <label class="status" title="Read the comp automatically on a timer — deduped, so it only keeps real changes"><input type="checkbox" id="autosnap"> auto-snapshot every
@@ -170,9 +247,10 @@
       <span class="status faint" id="atkhint">— click the team on attack (as the HUD shows)</span>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
-      <button id="autodetect" class="ghost" type="button" disabled title="Runs automatically on your first Snapshot each map — use this to re-run it (e.g. to re-tag players, or force a fresh read)">✨ Re-run auto-detect</button>
-      <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD">⇄ Swap teams</button>
+      <button id="autodetect" class="ghost" type="button" disabled title="Runs automatically on your first Snapshot each map — use this to re-run it (e.g. to re-tag players, or force a fresh read)"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg> Re-run auto-detect</button>
+      <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Swap teams</button>
       <span class="status" id="sidehint">Sides auto-detect from the HUD names on your first <b>Snapshot</b> each map (first use downloads a small OCR pack). If it can't tell, it'll say so and won't capture until you set the LEFT team.</span>
+      <span class="pbar" id="ocrbar"><div></div></span>
     </div>
     <div class="grid2" style="margin-top:10px">
       <div class="team"><h3 id="hA">Left / blue</h3><div id="outA"></div></div>
@@ -195,7 +273,7 @@
     <summary class="cardsum">Hero recognition — teach it a miss · <span id="refcount" class="status" style="text-transform:none;letter-spacing:0">0 learned</span> <span class="faint" style="text-transform:none;letter-spacing:0;font-weight:400">— optional, open when a portrait reads wrong</span></summary>
     <p class="status" style="margin:10px 0 8px">If a portrait reads wrong, or a brand-new hero isn't in the library yet, fix it here — it learns the current portrait so future reads improve. Share your screen &amp; calibrate with a comp on screen first; learned refs are saved in this browser and exportable.</p>
     <div class="row">
-      <button id="fixreads" class="ghost" disabled title="Read the 10 portraits now and correct any misreads">🔧 Fix current reads</button>
+      <button id="fixreads" class="ghost" disabled title="Read the 10 portraits now and correct any misreads"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><circle cx="8" cy="8" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Fix current reads</button>
       <button id="exprefs" class="ghost" type="button">Export learned</button>
       <button id="imprefsbtn" class="ghost" type="button">Import…</button>
       <input id="imprefs" type="file" accept="application/json" style="display:none">
@@ -213,6 +291,7 @@
       <button id="download" class="ghost">Download JSON</button>
     </div>
     <div class="status" id="pubnote" style="margin-top:6px">First upload under a name claims it for this browser; the site rebuilds automatically (~2 min). Names: 2–24 of a–z 0–9 _ -</div>
+    <div id="pubimpact" style="display:none"></div>
   </div>
 
   <div class="card" id="admincard" style="display:none">
@@ -232,18 +311,21 @@
           <div class="stagebar" id="stagebar">
             <button id="fsL" type="button">Set LEFT (blue)</button>
             <button id="fsR" type="button">Set RIGHT (red)</button>
-            <button id="fsAuto" type="button">Auto-calibrate ✨</button>
+            <button id="fsAuto" type="button">Auto-calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
             <span id="stagehint" class="shint">Click a Set button, then drag a box over that team's 5 portraits.</span>
-            <button id="fsExit" type="button" style="margin-left:auto">Exit ⛶</button>
+            <button id="fsExit" type="button" style="margin-left:auto">Exit <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
         </div>
       </div>
     </aside>
   </div>
 </main>
+<div id="mback" role="dialog" aria-modal="true"></div>
 <script>
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
+let HERO_ICON={};   // {heroSlug: colored portrait data-URI} — optional, from sibling hero_icons.json
+let feedError=null;   // set when data.json fails to load — surfaced in feedmeta instead of a silent "0 codes"
 let LOCAL_REFS=[], CUSTOM_HEROES={};   // operator-learned hero refs + heroes not in refs.json (persisted in IndexedDB)
 let CLAIMS={}, myClaimKey=null, claimHb=null;   // live scouting claims (match:game -> {by,at}); myClaimKey = the one I hold
 // control-map sub-maps (mirror of owscout/maps.py)
@@ -257,12 +339,71 @@ const HAS_CAPTURE = !!(window.isSecureContext && navigator.mediaDevices && navig
 if(!HAS_CAPTURE){
   const noApi = !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
   document.getElementById('ctxwarn').innerHTML = noApi
-    ? "📵 <b>Capture needs a desktop browser.</b> You scout while watching Overwatch on a PC — open this page on your computer. (You can still browse all the scouting data on the main site from mobile.)"
-    : "⚠ This page isn't a secure context, so screen capture is blocked — open it from the site (https) or a localhost server.";
+    ? "Capture needs a desktop browser. You scout while watching Overwatch on a PC — open this page on your computer. (You can still browse all the scouting data on the main site from mobile.)"
+    : "This page isn't a secure context, so screen capture is blocked — open it from the site (https) or a localhost server.";
   const sb=document.getElementById('share'); if(sb) sb.disabled=true;
 }
 function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// ---------- feedback: SVG icons, toasts, modal, progress ----------
+const ICONS={
+  info:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.9" r="1.1" fill="currentColor"/></svg>',
+  ok:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 8.2l2 2 3.6-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.3l6 10.4H2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.6v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.1" r="1" fill="currentColor"/></svg>',
+  bad:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  // functional affordances (buttons + inline status) — same 16px stroke style
+  sparkle:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  fullscreen:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  refresh:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.5 2.4v2.4H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  skip:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  overlay:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg>',
+  swap:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  lock:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="3.4" y="7.3" width="9.2" height="5.9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.4 7.3V5.7a2.6 2.6 0 0 1 5.2 0v1.6" stroke="currentColor" stroke-width="1.5"/></svg>',
+  fixreads:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  nophone:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="4" y="2" width="8" height="12" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 11.5h3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 2l12 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'};
+function ico(n){ return ICONS[n]||''; }
+// Transient top-right notification for one-off events (saved / published /
+// failures). Persistent state stays in the inline status spans next to its
+// controls — toasts would spam during auto-snapshot.
+function toast(msg,kind,ms){ kind=kind||'info'; ms=ms||5200;
+  let host=document.getElementById('toasts'); if(!host){ host=document.createElement('div'); host.id='toasts'; document.body.appendChild(host); }
+  const t=document.createElement('div'); t.className='toast '+kind;
+  t.innerHTML='<span class="ti">'+(ICONS[kind]||ICONS.info)+'</span><span>'+msg+'</span>';
+  host.appendChild(t);
+  const kill=()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),280); };
+  const timer=setTimeout(kill,ms);
+  t.onclick=()=>{ clearTimeout(timer); kill(); };
+  return t; }
+// Promise-based modal — replaces native prompt/confirm/alert so dialogs match
+// the page. opts: {title, body|bodyHtml, actions:[{label,value,ghost}], escapeValue,
+// collect} — with collect, resolves {value, fields:{id:text}} reading the
+// modal's inputs/selects. Enter in a field triggers the last (primary) action.
+function uiModal(opts){ return new Promise(res=>{
+  const back=document.getElementById('mback'); back.innerHTML='';
+  const m=document.createElement('div'); m.className='modal';
+  if(opts.title){ const h=document.createElement('h3'); h.textContent=opts.title; m.appendChild(h); }
+  const body=document.createElement('div'); body.className='mbody';
+  if(opts.bodyHtml) body.innerHTML=opts.bodyHtml; else if(opts.body) body.textContent=opts.body;
+  m.appendChild(body);
+  const row=document.createElement('div'); row.className='mrow';
+  const done=v=>{ back.classList.remove('open'); back.innerHTML=''; document.removeEventListener('keydown',onkey,true);
+    if(!opts.collect){ res(v); return; }
+    const fields={}; m.querySelectorAll('input,select').forEach(el=>{ fields[el.id]=el.value; }); res({value:v, fields}); };
+  const acts=opts.actions||[{label:'OK',value:true}];
+  acts.forEach(a=>{ const b=document.createElement('button'); b.type='button'; b.textContent=a.label; if(a.ghost) b.className='ghost'; b.onclick=()=>done(a.value); row.appendChild(b); });
+  m.appendChild(row); back.appendChild(m); back.classList.add('open');
+  const onkey=e=>{ if(e.key==='Escape'){ e.stopPropagation(); done(opts.escapeValue!==undefined?opts.escapeValue:null); } };
+  document.addEventListener('keydown',onkey,true);
+  const primary=row.lastChild;
+  m.querySelectorAll('input').forEach(inp=>inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); primary.click(); } }));
+  const first=m.querySelector('input,select'); if(first) first.focus(); }); }
+function uiConfirm(msg,title){ return uiModal({title:title||'Are you sure?', body:msg, escapeValue:false,
+  actions:[{label:'Cancel',value:false,ghost:true},{label:'Confirm',value:true}] }); }
+// OCR name-read progress: show/fill (frac 0..1) or hide (null).
+function ocrProgress(frac){ const b=document.getElementById('ocrbar'); if(!b) return;
+  if(frac==null){ b.style.display='none'; return; }
+  b.style.display='inline-block'; b.firstElementChild.style.width=Math.round(frac*100)+'%'; }
 
 // ---------- load feeds ----------
 async function loadFeeds(){
@@ -272,11 +413,16 @@ async function loadFeeds(){
       const c=new Float32Array(px.length);let ss=0;for(let i=0;i<px.length;i++){c[i]=px[i]-m;ss+=c[i]*c[i];}
       return {n:r.n,g:r.g,v:r.v,c,norm:Math.sqrt(ss)||1};});
   }catch(e){ document.getElementById('ctxwarn').textContent='Could not load refs.json ('+e+').'; }
+  // Optional colored portraits for the live preview (dashboard ships them as a
+  // static sibling file; absence just falls back to the plain name row).
+  try{ HERO_ICON=await (await fetch('hero_icons.json',{cache:'no-store'})).json(); }catch(e){ HERO_ICON={}; }
   // Operator-learned refs + heroes (this browser) merge on top of the baked library.
   try{ LOCAL_REFS=await idbGetAll('refs'); for(const rec of LOCAL_REFS){ const t=refTemplate(rec); if(t) REFS.push(t); }
     for(const h of await idbGetAll('heroes')) CUSTOM_HEROES[h.g]={name:h.name, role:h.role};
     const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; }catch(e){}
-  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }catch(e){}
+  feedError=null;
+  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); }
+  catch(e){ feedError='could not load the codes feed (data.json) — check your connection, then Refresh codes'; }
   try{ const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
   buildRegions();
   restorePrefs();           // saved region/division + hide-scouted (builds the division list; a ?division deep-link overrides below)
@@ -293,11 +439,40 @@ async function loadFeeds(){
   const tm=q.get('team'), po=localStorage.getItem('owscout_pref_opp');
   if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
   else if(po){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===po)){ opp.value=po; refreshCodes(); } }   // restore saved opponent filter
+  // Deep-link from the dashboard's per-match "Scout" buttons: ?code= pre-selects
+  // a replay code and copies it so you can paste straight into Overwatch.
+  const cd=q.get('code');
+  if(cd){
+    const c=DATA.codes.find(x=>x.code===cd);
+    if(c){
+      // Jump the picker to this code's division and drop any filter that could
+      // hide it — it may already be scouted by someone else, but re-scouting it
+      // still adds player data.
+      const sr=splitDiv(c.division||''), reg=document.getElementById('reg'), div=document.getElementById('div');
+      if(sr.region && [...reg.options].some(o=>o.value===sr.region)){ reg.value=sr.region; savePref('reg'); buildDivisions(); }
+      if([...div.options].some(o=>o.value===sr.tier)){ div.value=sr.tier; savePref('div'); }
+      const opp=document.getElementById('opp'); opp.value='all'; savePref('opp');
+      document.getElementById('hide').checked=false; savePref('hide');
+      refreshCodes();
+      const idx=currentCodes().findIndex(x=>x.code===cd);
+      if(idx>=0){ const sel=document.getElementById('code'); sel.value=String(idx); onCode(); }
+      let copied=false;
+      try{ if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(cd); copied=true; } }catch(e){}
+      document.getElementById('codenote').textContent=`loaded ${cd}${copied?' — copied, paste into OW':' — click Copy, then paste into OW'}`;
+      toast('<b>'+esc(cd)+'</b> pre-loaded'+(copied?' &amp; copied':'')+' — paste into Overwatch (<b>Ctrl+V</b>)','ok',6000);
+    } else {
+      toast('Code <b>'+esc(cd)+'</b> isn\'t in the live feed — it may have been wiped or captured already.','warn',6000);
+    }
+  }
   setFeedMeta();
 }
-function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(el) el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
-async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(el) el.textContent='refreshing…';
-  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }catch(e){}
+function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(!el) return; el.classList.remove('skel');
+  if(feedError){ el.innerHTML='<span class="warn">'+esc(feedError)+'</span>'; return; }
+  el.textContent=`codes as of ${(DATA.built_at||'?').replace('T',' ').replace('Z',' UTC')} · ${(DATA.codes||[]).length} codes · ${CLAIMED.size} already scouted`; }
+async function refreshFeeds(){ const el=document.getElementById('feedmeta'); if(el){ el.classList.remove('skel'); el.textContent='refreshing…'; }
+  feedError=null;
+  try{ DATA=await (await fetch('data.json',{cache:'no-store'})).json(); const cj=await (await fetch('../captured.json',{cache:'no-store'})).json(); CLAIMED=new Set(cj.captured||[]); }
+  catch(e){ feedError='refresh failed — check your connection and try again'; }
   buildRegions(); buildDivisions(); refreshCodes(); setFeedMeta(); }
 
 // ---------- pick a replay ----------
@@ -334,7 +509,7 @@ function isDone(c){ const k=codeKey(c); return CLAIMED.has(k)||savedKeys.has(k);
 function claimedByOther(c){ const k=codeKey(c); return !!CLAIMS[k] && k!==myClaimKey; }
 function codeOption(c,i){ const k=codeKey(c);
   let tag = savedKeys.has(k)?'  [captured here]' : (CLAIMED.has(k)?'  [scouted]':'');
-  if(claimedByOther(c)) tag += '  🔒 '+CLAIMS[k].by;
+  if(claimedByOther(c)) tag += '  '+ico('lock')+' '+CLAIMS[k].by;
   return `<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${tag}</option>`; }
 function currentCodes(){ let cs=divFilter(DATA.codes.slice());
   const op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
@@ -346,6 +521,7 @@ function refreshOpponents(){ const cs=divFilter(DATA.codes.slice());
   const sel=document.getElementById('opp'), cur=sel.value;
   sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join(''); }
 function refreshCodes(){ refreshOpponents(); const cs=currentCodes(), sel=document.getElementById('code');
+  sel.classList.remove('skel'); sel.disabled=false;
   sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
   sel._codes=cs; document.getElementById('codenote').textContent=`${cs.length} codes shown`;
   if(cs.length){ sel.value='0'; onCode(); } else { document.getElementById('roster').innerHTML=''; document.getElementById('sideradios').innerHTML=''; startMap(); } }
@@ -384,7 +560,7 @@ document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); }
 document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };
 document.getElementById('code').onchange=onCode;
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
-function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`⏭ ${c.code} — copied`;} }
+function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`${c.code} — copied`;} }
 document.getElementById('skip').onclick=nextCode;
 
 // ---------- screen share + calibrate ----------
@@ -473,9 +649,10 @@ async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMed
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     const trk=st.getVideoTracks()[0];
     if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
-    document.getElementById('calhint').textContent='Screen shared — click Auto-calibrate ✨ (or set the boxes by hand).'; updateBtns();
+    document.getElementById('calhint').textContent='Screen shared — click Auto-calibrate (or set the boxes by hand).'; updateBtns();
     maybeClaim();   // claim now if a returning scout is already calibrated on a code (the WS keeps locks live)
-  }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Share failed: '+err+'</span>'; } }
+  }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Screen share was cancelled or blocked — click <b>Share my screen</b> to try again, and pick your whole screen.</span>';
+    toast('Screen share failed: '+esc(err&&err.message?err.message:String(err)),'bad',7000); } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
   document.getElementById('autocal').disabled=!vid.srcObject;
   document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
@@ -485,14 +662,22 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('autodetect').disabled=!ready;
   document.getElementById('fixreads').disabled=!(vid.srcObject&&boxes.a&&boxes.b);
   document.getElementById('undo').disabled=!(session&&session.history.length);
-  document.getElementById('finish').disabled=!(session&&session.snaps.length); updateGuide(); }
-function updateGuide(){ const g=document.getElementById('guide'); if(!g) return; let m;
-  if(!HAS_CAPTURE){ g.innerHTML='📵 <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
-  if(!vid.srcObject) m='① Click <b>Share my screen</b> and pick your Overwatch window (borderless/windowed).';
-  else if(!(boxes.a&&boxes.b)) m='② Click <b>Auto-calibrate ✨</b> (or drag the LEFT/RIGHT boxes by hand).';
-  else if(!selectedCode()) m='③ Pick a replay code in step 2.';
-  else m='④ <b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.';
-  g.innerHTML=m; }
+  document.getElementById('finish').disabled=!(session&&session.snaps.length);
+  maybeAutoPop(); updateGuide(); }
+function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
+  if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
+  const steps=[
+    {t:'Share screen', done:!!vid.srcObject, hint:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) — auto-calibrate needs the full frame.'},
+    {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
+    {t:'Pick a code', done:!!selectedCode(), hint:'Pick a replay code in step 2 — Copy code, then paste into Overwatch.'},
+    {t:'Capture &amp; publish', done:!!(session&&session.snaps.length), hint:'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.'}];
+  const cur=steps.findIndex(s=>!s.done);
+  const pills=steps.map((s,i)=>{
+    const st=s.done?'done':(i===cur?'cur':'todo');
+    const mark=s.done?'<svg viewBox="0 0 16 16" fill="none"><path d="M3.2 8.4l3.2 3.2 6-6.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>':String(i+1);
+    return `<span class="sstep ${st}"><span class="sc">${mark}</span><span>${s.t}</span></span>`;
+  }).join('');
+  g.innerHTML=`<div class="stepper">${pills}</div>`+(cur>=0?`<div class="shint">${steps[cur].hint}</div>`:`<div class="shint ok">all set — go capture!</div>`); }
 
 // ---------- matcher ----------
 const work=document.createElement('canvas'); let wctx;
@@ -509,6 +694,8 @@ function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,n
     for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
   return best; }
 function grabFrame(){ const c=document.createElement('canvas'); c.width=vid.videoWidth; c.height=vid.videoHeight; c.getContext('2d').drawImage(vid,0,0); return c; }
+function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
+function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 // read both sides -> {a:[{name,guid,score}], b:[...]}; render to target
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
@@ -516,7 +703,7 @@ function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const fra
   for(const side of ['a','b']){ const b=boxes[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
-      if(host){ const row=document.createElement('div'); row.className='slot'; row.innerHTML=`<span>${ok?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+      if(host){ const row=document.createElement('div'); row.className='slot'; row.innerHTML=`${heroPortrait(r.name)}<span>${ok?r.name:'??'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 
 // ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
@@ -597,7 +784,7 @@ async function ocrNames(){ const w=await ocrWorker(); const frame=grabFrame(); c
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       const {data}=await w.recognize(nameCanvas(frame,cell));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
-      setDetectMsg('reading HUD names… '+(++done)+'/10'); } }
+      setDetectMsg('reading HUD names… '+(++done)+'/10'); ocrProgress(done/10); } }
   return out; }
 function teamRoster(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
   const t=((DATA.rosters||{})[c.match_id]||{})[teamId]; if(!t||!t.players) return [];
@@ -657,8 +844,8 @@ async function autoDetect(){ const c=selectedCode();
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ setDetectMsg('share your screen and calibrate first.','warn'); return; }
   const btn=document.getElementById('autodetect'); btn.disabled=true;
   try{
-    setDetectMsg('loading OCR (first use downloads a small pack)…');
-    const res=await detectSides();
+    setDetectMsg('loading OCR (first use downloads a small pack)…'); ocrProgress(0);
+    const res=await detectSides(); ocrProgress(null);
     if(res.left&&session) session.sideResolved=true;
     const sideMsg=res.left?(sideTeamName(currentLeftId())+' on the left'):'sides unclear — set the left team by hand';
     const hit=res.aIds.filter(Boolean).length+res.bIds.filter(Boolean).length;
@@ -667,8 +854,8 @@ async function autoDetect(){ const c=selectedCode();
     const feedHasIds=res.lRoster.some(p=>p.id)||res.rRoster.some(p=>p.id);
     const tagMsg = feedHasIds ? `${hit}/10 players tagged`
       : 'player tags pending — roster ids for this match are still rebuilding (sides are set; retry after the site updates)';
-    setDetectMsg(`✨ ${sideMsg} · ${tagMsg}`+(res.left?'':' — check sides'), res.left?'ok':'warn');
-  }catch(e){ setDetectMsg('auto-detect failed: '+(e.message||e)+' — use manual sides / Swap teams.','warn'); }
+    setDetectMsg(`${ico('sparkle')} ${sideMsg} · ${tagMsg}`+(res.left?'':' — check sides'), res.left?'ok':'warn');
+  }catch(e){ ocrProgress(null); setDetectMsg('auto-detect failed: '+(e.message||e)+' — use manual sides / Swap teams.','warn'); }
   finally{ updateBtns(); }
 }
 // Runs OCR side-detection automatically on the FIRST snapshot of a map (called
@@ -684,20 +871,21 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
   s._detecting=true;
   const tell=(text,cls)=>{ setDetectMsg(text,cls); snapMsg(text,cls==='warn'); };
   try{
-    tell('detecting sides…');
-    const res=await detectSides();
+    tell('detecting sides…'); ocrProgress(0);
+    const res=await detectSides(); ocrProgress(null);
     if(res.stale || session!==s) return false;   // operator moved to a different replay meanwhile — say nothing, they're not waiting on this one
     if(res.left){ s.sideResolved=true;
-      tell(`✨ ${sideTeamName(currentLeftId())} on the left`,'ok'); return true; }
-    tell('couldn’t identify sides from the HUD — set the LEFT team above (or ⇄ Swap teams), then press Snapshot again.','warn');
+      tell(`${ico('sparkle')} ${sideTeamName(currentLeftId())} on the left`,'ok'); return true; }
+    tell('couldn’t identify sides from the HUD — set the LEFT team above (or Swap teams), then press Snapshot again.','warn');
     return false;
   }catch(e){
+    ocrProgress(null);
     if(session===s) tell('side detection failed ('+(e.message||e)+') — set the left team by hand, then try again.','warn');
     return false;
   }finally{ s._detecting=false; }
 }
 
-// ---------- hero recognition: learn a miss / add a new hero (Phase 4) ----------
+// ---------- hero recognition: learn a miss / add a new hero ----------
 // A ref = a 64x36 grayscale portrait template. The built-in library is refs.json
 // (curator-baked); operators can LEARN more from the live frame here — a fix when
 // a portrait reads wrong, or a brand-new hero the library has never seen. Learned
@@ -749,9 +937,13 @@ function fixReads(){ const host=document.getElementById('refpanel');
 }
 // Register a hero the library has never seen (name + role -> custom: guid),
 // persisted so the picker offers it everywhere. Returns {guid,name} or null.
-async function promptNewHero(){ const nm=(prompt('New hero name (a hero not in the library yet):')||'').trim();
-  if(!nm) return null;
-  let role=(prompt('Role — Tank, Damage or Support:','Damage')||'Damage').trim();
+async function promptNewHero(){ const r=await uiModal({title:'Add a new hero', escapeValue:null, collect:true,
+    bodyHtml:'<label class="f">Hero name<input type="text" id="nhname" placeholder="a hero not in the library yet"></label>'+
+      '<label class="f">Role<select id="nhrole"><option>Tank</option><option selected>Damage</option><option>Support</option></select></label>',
+    actions:[{label:'Cancel',value:null,ghost:true},{label:'Add hero',value:true}]});
+  if(!r||!r.value) return null;
+  const nm=(r.fields.nhname||'').trim(); if(!nm) return null;
+  let role=(r.fields.nhrole||'Damage').trim();
   if(!/^(tank|damage|support)$/i.test(role)) role='Damage';
   const guid='custom:'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')+'-'+Math.random().toString(36).slice(2,6);
   CUSTOM_HEROES[guid]={name:nm, role:role.charAt(0).toUpperCase()+role.slice(1).toLowerCase()};
@@ -774,7 +966,7 @@ async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i, wr
     (fixed?` — fixed ${fixed} earlier snapshot${fixed===1?'':'s'} too`:'')+' — re-reading…','ok');
   setTimeout(fixReads, 250);    // re-run so the operator sees the improved read (and can fix another)
 }
-// ---------- review & correct a captured map before publish (Phase 5) ----------
+// ---------- review & correct a captured map before publish ----------
 // The saved record stores each observation's heroes as guids (+ player pairs).
 // Recognition can misread; here the operator fixes a whole map's comp before it
 // goes out — remap a wrong hero to the right one, or drop a spurious read, across
@@ -890,12 +1082,13 @@ async function importRefs(file){ try{ const j=JSON.parse(await file.text());
   let n=0; for(const r of (j.refs||[])){ if(r.d && r.g && r.v){ await addRef({n:r.n, g:r.g, v:r.v, d:r.d, added_at:Date.now()}); n++; } }
   refMsg('imported '+n+' refs.','ok');
  }catch(e){ refMsg('import failed: '+(e.message||e),'warn'); } }
-async function clearLearnedRefs(){ if(!confirm('Remove all learned refs? (The built-in library stays; operator-added heroes are kept.)')) return;
+async function clearLearnedRefs(){ if(!(await uiConfirm('Remove all learned refs? The built-in library stays; operator-added heroes are kept.','Clear learned refs'))) return;
   REFS=REFS.filter(t=>!t.local); LOCAL_REFS=[]; try{ await idbClear('refs'); }catch(e){}
   const rc=document.getElementById('refcount'); if(rc) rc.textContent='0 learned'; refMsg('cleared learned refs.','ok'); }
 
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
+let pipAutoShown=false, pipAutoPending=false;   // auto-open the floating overlay once the tool is capture-ready (see maybeAutoPop)
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   // sideResolved: whether the LEFT team is known (auto-detected or manually
@@ -1077,6 +1270,7 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
   await idbPut(rec);
   savedKeys.add(c.match_id+':'+c.game_no); await renderCaptured();
   const savedMsg=`saved ${c.code} — ${session.snaps.length} snapshots`;
+  toast('<b>'+esc(c.code)+'</b> saved — '+session.snaps.length+' snapshot'+(session.snaps.length===1?'':'s')+' captured','ok');
   advanceAfterSave(savedMsg, document.getElementById('autofetch').checked);
 }
 // After saving a map: rebuild the picker (the just-saved map drops out when
@@ -1117,6 +1311,7 @@ function capRow(r, done){ const el=document.createElement('div'); el.className='
 // re-sent every time (delete one only if you want it out of your contribution).
 async function renderCaptured(){ const rows=await idbAll(); document.getElementById('capcount').textContent=rows.length;
   savedKeys=new Set(rows.map(r=>r.match_id+':'+r.game_no));
+  renderWelcome();
   rows.sort((a,b)=>b.captured_at.localeCompare(a.captured_at));
   const fresh=rows.filter(r=>!r.published), done=rows.filter(r=>r.published);
   const pub=document.getElementById('publish'); if(pub) pub.disabled=!fresh.length;   // enabled when there's new work to push
@@ -1133,7 +1328,7 @@ function el(html){ const t=document.createElement('template'); t.innerHTML=html.
 // ---------- pop-out overlay (Document PiP): full scouting console over OW ----------
 // Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
 // always match the current map — the whole loop runs with no alt-tab.
-function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.document;
+function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; const d=pipWin.document;
   const main=d.getElementById('prow-main'), side=d.getElementById('prow-side'),
     sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'); if(!main) return;
   const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
@@ -1171,8 +1366,9 @@ function renderPipControls(){ if(!pipWin||pipWin.closed) return; const d=pipWin.
     mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
   else atk.className='prow';
 }
-async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).'); return; }
-  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w;
+async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).','warn'); return; }
+  if(pipWin&&!pipWin.closed) return;   // already open — keep the one window
+  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w; pipAutoShown=true; setPopBtn();
     w.document.body.style.cssText='margin:0;background:#0d1015;color:#e7ebf2;font:13px system-ui,sans-serif';
     const st=w.document.createElement('style'); st.textContent=
       '#pinfo{padding:6px 10px 1px;color:#98a2b2;font-size:11px}'+
@@ -1184,7 +1380,8 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
       'button.go{background:#8087ff;color:#0b1020;font-weight:700;border:0;flex:1 1 100%}'+
       'button.fin{border-color:#34b877;color:#34b877}button.on{background:#8087ff;color:#0b1020;border:0;font-weight:600}'+
       '.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:#98a2b2;text-transform:uppercase}'+
-      '.slot{display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #252c37;font-size:12px}.slot:first-of-type{border-top:0}'+
+      '.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid #252c37;font-size:12px}.slot:first-of-type{border-top:0}'+
+      '.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}'+
       '.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}.warn{color:#e5624a}.ok{color:#34b877}';
     w.document.head.appendChild(st);
     w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
@@ -1194,10 +1391,29 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ alert('Flo
     const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
       if(el) el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; };
     w._tick=setInterval(tick,600); tick();
-    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
-  }catch(err){ alert('Pop-out failed: '+err); } }
+    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; setPopBtn(); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
+  }catch(err){ toast('Pop-out failed: '+esc(err&&err.message?err.message:String(err)),'bad'); } }
+// Reflect the overlay's open/closed state on the (now prominent) button.
+function setPopBtn(){ const b=document.getElementById('pop'); if(!b) return;
+  const on=!!(pipWin&&!pipWin.closed);
+  b.classList.toggle('on',on);
+  b.textContent=on?'⇱ Overlay open':'⇱ Floating overlay'; }
+// Auto-open the overlay: the tool is "ready for capture" when the screen is
+// shared, both boxes are set, and a replay code is picked. Browsers only allow
+// requestWindow() inside a user gesture, so we can't open it the moment `ready`
+// flips by itself — instead we ARM it then, and fire it on the next click or
+// capture keypress. Only ever auto-opens once per page load; after the scout
+// closes it themselves we don't fight them, the button reopens it.
+function readyForCapture(){ return !!(vid.srcObject&&boxes.a&&boxes.b&&selectedCode()); }
+function maybeAutoPop(){
+  if(pipAutoShown||!('documentPictureInPicture' in window)) return;
+  if(!readyForCapture()){ pipAutoPending=false; return; }
+  if(!pipAutoPending){ pipAutoPending=true; toast('Floating overlay opens on your next click or keypress — capture without alt-tab','info',4500); }
+}
+function gestureAutoPop(){ if(!pipAutoPending||drawMode) return; pipAutoPending=false; popout(); }
+document.addEventListener('pointerdown',gestureAutoPop);
 
-// ---------- publish (Phase 2): build contribution + upload to the worker ----------
+// ---------- publish: build contribution + upload to the worker ----------
 const ENDPOINT='https://owscout-upload.owscout.workers.dev';
 function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
 
@@ -1231,10 +1447,9 @@ function onClaimMsg(m){ if(m.type==='snapshot') CLAIMS=m.claims||{};
   syncCodeOptions(); showClaimNote(); }
 function wsSend(o){ if(claimWS && claimWS.readyState===1){ try{ claimWS.send(JSON.stringify(o)); return true; }catch(e){} } return false; }
 // Prefer the live socket; fall back to an HTTP POST (same DO) if it's not open.
-// Prefer the live socket; else HTTP. On the HTTP claim path we MUST read the
-// reply — if the map is held by someone else the server says so, and (unlike the
-// WS claimresult) a fire-and-forget POST would otherwise leave us thinking we own
-// it and never show the lock.
+// On the HTTP claim path we MUST read the reply — if the map is held by someone
+// else the server says so, and (unlike the WS claimresult) a fire-and-forget POST
+// would otherwise leave us thinking we own it and never show the lock.
 function claimOp(wsMsg, path, body){ if(wsSend(wsMsg)) return;
   fetch(ENDPOINT+path,{method:'POST',headers:claimHeaders(),body:JSON.stringify(body)})
     .then(r=>r.json()).then(j=>{
@@ -1264,7 +1479,7 @@ function releaseClaim(){ if(!myClaimKey) return; const k=myClaimKey; myClaimKey=
 // calibrated) — the earliest honest "I'm starting this map" signal.
 function maybeClaim(){ if(!(vid.srcObject&&boxes.a&&boxes.b)) return; const c=selectedCode(); if(c) claimCode(c); }
 function showClaimNote(){ const c=selectedCode(); if(!c) return; const k=codeKey(c); const note=document.getElementById('codenote');
-  if(note && CLAIMS[k] && k!==myClaimKey) note.innerHTML='<span class="warn">🔒 '+esc(CLAIMS[k].by)+' is scouting this now — Skip ⏭ to another (re-scouting still adds player data if you want it).</span>'; }
+  if(note && CLAIMS[k] && k!==myClaimKey) note.innerHTML='<span class="warn">'+ico('lock')+' '+esc(CLAIMS[k].by)+' is scouting this now — Skip to another (re-scouting still adds player data if you want it).</span>'; }
 function buildContribution(name, maps){
   // Custom (operator-added) heroes referenced by these maps travel WITH the
   // contribution so the merge can name a guid it's never seen (owscout does the same).
@@ -1286,12 +1501,57 @@ async function publish(){ const note=document.getElementById('pubnote'); const m
     const j=await res.json().catch(()=>({}));
     if(res.ok){ for(const m of maps){ if(!m.published){ m.published=true; m.published_at=Date.now(); await idbPut(m); } }
       await renderCaptured();   // uploaded maps collapse into the "uploaded" section (kept for re-send)
-      note.innerHTML=`<span class="ok">published as ${esc(name)}: ${j.action} · ${j.maps} maps — moved to “uploaded” below. Site rebuilds in ~2 min.</span>`; }
-    else note.innerHTML='<span class="warn">publish failed: '+esc(j.error||('HTTP '+res.status))+'</span>';
-  }catch(e){ note.innerHTML='<span class="warn">publish failed ('+esc(e.message||e)+'). Use Download JSON and send it to the curator.</span>'; } }
+      renderImpact(name, maps, j);
+      note.innerHTML=`<span class="ok">published as ${esc(name)}: ${j.action} · ${j.maps} maps — moved to “uploaded” below. Site rebuilds in ~2 min.</span>`;
+      toast(`published as <b>${esc(name)}</b> — ${j.maps} map${j.maps===1?'':'s'} ${j.action==='created'?'added':'updated'}. The site rebuilds in ~2 min.`,'ok',8000); }
+    else { note.innerHTML='<span class="warn">publish failed: '+esc(j.error||('HTTP '+res.status))+'</span>';
+      toast('publish failed: '+esc(j.error||('HTTP '+res.status)),'bad',8000); }
+  }catch(e){ note.innerHTML='<span class="warn">publish failed ('+esc(e.message||e)+'). Use Download JSON and send it to the curator.</span>';
+    toast('publish failed ('+esc(e.message||e)+'). Use <b>Download JSON</b> and send it to the curator.','bad',9000); } }
 async function downloadContrib(){ const maps=await idbAll(); const name=((document.getElementById('pubname').value||'operator').trim().toLowerCase())||'operator';
   const blob=new Blob([JSON.stringify(buildContribution(name,maps),null,2)],{type:'application/json'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name+'.json'; a.click(); }
+
+// Post-publish impact: which teams the just-published maps unlock scouting for,
+// linked straight into the site's team pages (site/#scout=<team> auto-resolves
+// the right division). The link target is the dashboard, not this page.
+function renderImpact(name, maps, j){
+  const box=document.getElementById('pubimpact'); if(!box) return;
+  const teams=[];
+  for(const m of maps){
+    const a=(m.side_a_team||'').trim(), b=(m.side_b_team||'').trim();
+    if(a && !teams.includes(a)) teams.push(a);
+    if(b && !teams.includes(b)) teams.push(b);
+  }
+  const teamChips=teams.length
+    ? teams.slice(0,4).map(t=>`<a class="team" href="../#scout=${encodeURIComponent(t)}" title="Open ${esc(t)} on the site">${esc(t)}</a>`).join('')
+    : '<span class="faint">no team pages to point at yet</span>';
+  box.innerHTML=`<b>You’re live on the site.</b> Published ${j.maps} map${j.maps===1?'':'s'} as <b>${esc(name)}</b> — the site rebuilds in ~2 min.
+    <div class="teams">${teamChips}</div>
+    <span class="faint">Click a team to see what your captures unlocked (comps, hero pools, coverage).</span>`;
+  box.style.display='block';
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// Welcome-back strip for a returning scout: name + maps published from THIS
+// browser + how many saved maps are still awaiting publish. Purely local state
+// (localStorage name + IndexedDB published flags) — no server round-trip.
+async function renderWelcome(){
+  const w=document.getElementById('welcome'); if(!w) return;
+  try{
+    const rows=await idbAll();
+    const pub=rows.filter(r=>r.published).length, pending=rows.length-pub;
+    const name=(localStorage.getItem('owscout_name')||'').trim();
+    if(!name && !pub){ w.style.display='none'; return; }
+    let html=`Welcome back, <b>${esc(name||'scout')}</b>`;
+    const bits=[];
+    if(pub) bits.push(`<b>${pub}</b> map${pub===1?'':'s'} published from this browser`);
+    if(pending) bits.push(`<b>${pending}</b> saved, awaiting publish`);
+    if(bits.length) html+=' — '+bits.join(' · ');
+    w.innerHTML=html;
+    w.style.display='block';
+  }catch(e){ w.style.display='none'; }
+}
 
 // ---------- Discord login (optional; ties publishes to a Discord account) ----------
 // The session token's payload is readable here just for display; the Worker
@@ -1356,6 +1616,7 @@ document.getElementById('autosnapint').onchange=()=>{ localStorage.setItem('owsc
 // for). Ignore keys while typing in a field. Actions self-guard on session state.
 function isTyping(el){ return el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable); }
 function handleKey(e){ if(e.ctrlKey||e.metaKey||e.altKey||isTyping(e.target)) return; const k=e.key.toLowerCase(); let hit=true;
+  if(hit) gestureAutoPop();
   if(k==='s'||k===' ') snapshot(false); else if(k==='r') nextRound(); else if(k==='z') undo();
   else if(k==='f') finishMap(); else if(k==='d'){ if(!document.getElementById('autodetect').disabled) autoDetect(); }
   else hit=false; if(hit) e.preventDefault(); }
@@ -1389,7 +1650,7 @@ document.getElementById('imprefs').onchange=e=>{ const f=e.target.files[0]; if(f
 document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
 window.addEventListener('pagehide',releaseClaim);            // clean release; the room also frees it when the socket drops
-updateBtns(); loadFeeds();
+updateBtns(); loadFeeds(); renderWelcome();
 connectClaims(); fetchClaims(); setInterval(fetchClaims, 15000);   // WS = instant; always-on 15s poll keeps an open page current without a refresh
 // Self-correcting claim: every few seconds ensure the lock follows the selected
 // code (no-op once it matches). Event-based claims (select/share/snapshot) are

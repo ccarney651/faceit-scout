@@ -17,21 +17,21 @@ HTML_TEMPLATE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OW Scout &mdash; FACEIT League</title>
-<meta name="description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every EMEA team.">
+<meta name="description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every team — EMEA and NA.">
 <meta name="theme-color" content="#0d1015">
 <link rel="canonical" href="https://owscout.com/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="OW Scout">
 <meta property="og:title" content="OW Scout &mdash; FACEIT League scouting">
-<meta property="og:description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every EMEA team.">
+<meta property="og:description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every team — EMEA and NA.">
 <meta property="og:url" content="https://owscout.com/">
 <meta property="og:image" content="https://owscout.com/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="OW Scout &mdash; FACEIT League scouting">
-<meta name="twitter:description" content="Overwatch 2 composition scouting for the FACEIT League: comps, bans, map picks & a draft simulator.">
+<meta name="twitter:description" content="Overwatch 2 composition scouting for the FACEIT League: comps, bans, map picks & a draft simulator — every team, EMEA and NA.">
 <meta name="twitter:image" content="https://owscout.com/og.png">
 <style>
 :root{
@@ -159,6 +159,11 @@ table.blocks thead th:hover{color:var(--faint)}
 .barrow{display:grid;grid-template-columns:minmax(110px,1.1fr) minmax(70px,2fr) 40px;align-items:center;gap:11px;padding:5px 2px}
 .barrow+.barrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 .barrow .lab{font-size:13px;display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.barrow.you{background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:7px;padding:5px 6px}
+.barrow.you .lab{color:var(--accent);font-weight:700}
+.medal{font-size:13px;line-height:1;flex:none}
+.you{font-weight:700}
+.youdot{flex:none;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:10px;padding:1px 7px}
 .track{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
 .fill{height:100%;border-radius:6px;background:var(--accent);min-width:3px;transition:width .2s ease}
 .barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -543,7 +548,7 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   <nav id="nav"></nav>
 </div></div>
 <div id="hero" class="card hero">
-  <span class="note" style="margin:0;font-size:13px">OW Scout — FACEIT League scouting, built from real match data + fan-captured comps.</span>
+  <span class="note" style="margin:0;font-size:13px;max-width:760px">OW Scout — FACEIT League scouting, built from real match data + fan-captured comps.<span id="wipenote" style="display:block;margin-top:5px;font-size:12.5px"></span></span>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn" id="heroScout" type="button">Scout a team →</button>
     <button class="btn" id="heroCapture" type="button">Contribute a capture →</button>
@@ -734,6 +739,34 @@ function scoutedCount(m, capturedIds){
   return {done, total:played.length};
 }
 
+// League-wide capture queue: every played game that (a) has a replay code, (b)
+// no one has captured yet, and (c) can still be scouted — a code is dead only
+// once a patch wiped it AND the game was never captured. Newest first. This one
+// list powers the nav badge, the Overview "Most wanted" card and the wipe line,
+// so it must agree with what the capture tool's feed can actually offer.
+function scoutQueue(divs, captured, wipe){
+  const out=[];
+  for(const cid in divs){
+    const d=divs[cid];
+    (d.matches||[]).forEach(m=>(m.games||[]).forEach(g=>{
+      if(!g.demo_code||!g.map) return;
+      const key=m.id+':'+g.game_no;
+      if(captured.has(key)) return;
+      if(wipe && m.finished_at && String(m.finished_at).slice(0,10)<=wipe) return;
+      out.push({mid:m.id, gno:g.game_no, code:g.demo_code, map:g.map, f1:m.f1, f2:m.f2,
+        when:m.finished_at||'', div:(d.summary&&d.summary.championship)||cid});
+    }));
+  }
+  return out.sort((a,b)=>String(b.when).localeCompare(String(a.when)));
+}
+// Within ONE match, the games still worth scouting: coded, not captured, and
+// with a live code (finished after the latest wipe). Pre-wipe codes are dead
+// unless someone already captured them, which this excludes.
+function matchLiveTodo(m, captured, wipe){
+  return (m.games||[]).filter(g=>g.demo_code&&g.map&&!captured.has(m.id+':'+g.game_no)&&
+    !(wipe&&m.finished_at&&String(m.finished_at).slice(0,10)<=wipe));
+}
+
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
 // (single-file/offline builds) or fetched from data.json (the shell build). This
 // split is what lets next-season gating be a config change — point the fetch at
@@ -818,6 +851,12 @@ const CAPTURED=new Set(DATA.owscout_captured||[]);
 // date can never be replayed, so it is only "scoutable" if already captured.
 const CODE_WIPE=DATA.code_wipe||null;
 const codeDead=(when)=>!!(CODE_WIPE&&when&&String(when).slice(0,10)<=CODE_WIPE);
+// League-wide queue of still-scoutable games (see scoutQueue above), computed
+// once per page load — matches don't change mid-session, and every consumer
+// (nav badge, Most wanted, wipe line) wants the same stable number.
+let _leagueQueue;
+const leagueQueue=()=> _leagueQueue!==undefined ? _leagueQueue
+  : (_leagueQueue=scoutQueue(DIVS, CAPTURED, CODE_WIPE));
 // Capture sections append the sample's REAL date range to their subtitle. The
 // old label read "captures since <wipe date>", which claimed the comps were
 // post-patch when in practice the whole sample usually predates the wipe that
@@ -1191,12 +1230,15 @@ function matchCard(m, opts={}){
     });
     c.appendChild(score);
     const sc=scoutedCount(m, CAPTURED);
-    if(sc.total) c.appendChild(el(`<p class="note mscouted">🎥 ${sc.done}/${sc.total} scouted</p>`));
+    const live=matchLiveTodo(m, CAPTURED, CODE_WIPE);
+    if(sc.total) c.appendChild(el(`<p class="note mscouted"${live.length?' style="display:flex;align-items:center;gap:8px"':''}>`+
+      `🎥 ${sc.done}/${sc.total} scouted`+
+      (live.length?` <a class="btn" href="${captureCodeUrl(live[live.length-1].demo_code)}" title="Open this match's newest unscouted replay in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:11.5px;margin-left:auto;white-space:nowrap">Scout →</a>`:'')+`</p>`));
   }
   // Whole-card click opens the detail page, except a team name (click-to-scout)
-  // or a replay-code chip (click-to-copy) inside a pip — same guard pattern the
-  // old per-game rosters toggle used for `.rc`.
-  c.onclick=(e)=>{ if(e.target.closest('[data-scout]')||e.target.closest('.rc')) return; openMatch(m.id); };
+  // or a replay-code chip (click-to-copy) or a Scout button (deep-link) inside a
+  // pip — same guard pattern the old per-game rosters toggle used for `.rc`.
+  c.onclick=(e)=>{ if(e.target.closest('[data-scout]')||e.target.closest('.rc')||e.target.closest('a')) return; openMatch(m.id); };
   return c;
 }
 
@@ -1298,7 +1340,8 @@ function barList(items){
   const max=Math.max(1,...items.map(i=>i.value));
   return `<div>`+items.map(i=>{
     const w=Math.max(2,Math.round(100*i.value/max));
-    return `<div class="barrow"><div class="lab">${i.label}</div>`+
+    const you=i.you?' you':'';
+    return `<div class="barrow${you}"><div class="lab">${i.label}${i.you?`<span class="youdot">you</span>`:''}</div>`+
       `<div class="track"><div class="fill" style="width:${w}%;background:${i.color||'var(--accent)'}"></div></div>`+
       `<div class="barval">${i.value}</div></div>`;
   }).join('')+`</div>`;
@@ -1441,6 +1484,10 @@ const regionOf=(name)=>['EMEA','NA'].find(r=>String(name||'').toUpperCase().repl
 // tools/build_capture_data.py emits — a bare tier merges both regions there.
 const captureUrl=(team)=>{ const c=String((D().summary||{}).championship||''), t=tierOf(c), r=regionOf(c);
   const d=(r&&t)?r+' '+t:''; return 'capture/?team='+encodeURIComponent(team)+(d?'&division='+encodeURIComponent(d):''); };
+// Deep-link into the capture tool by replay code alone. A code is unique across
+// the whole feed (unlike a match id, which is only unique within its division),
+// so the capture page can locate it without a team/division hint.
+const captureCodeUrl=(code)=>'capture/?code='+encodeURIComponent(code);
 const nextPow2=(n)=>{let k=1;while(k<n)k*=2;return k;};
 // Standard bracket seed order so 1 & 2 can only meet in the final:
 // seeds(4)=[1,4,2,3]; seeds(8)=[1,8,4,5,2,7,3,6].
@@ -1617,6 +1664,24 @@ function renderOverview(){
   tiles.forEach(([v,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${v}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
   wrap.appendChild(g);
 
+  // Most wanted — the live replay codes no one has captured yet, newest first.
+  // A concrete one-minute task for a cold visitor, with the leaderboard below as
+  // proof it's a real community effort. Hidden when nothing is scoutable.
+  const qq=leagueQueue();
+  if(qq.length){
+    const mw=el(`<div class="card" style="margin-top:20px"></div>`);
+    mw.appendChild(el(`<p class="eyebrow">Most wanted · ${qq.length} live replay code${qq.length===1?'':'s'} waiting</p>`));
+    mw.appendChild(el(`<p class="note" style="margin:0 0 6px">Each code stops working at the next patch${CODE_WIPE?` (last wipe: <b>${esc(CODE_WIPE)}</b>)`:''}, so a capture is a one-time window — about a minute per map in the capture tool.</p>`));
+    qq.slice(0,5).forEach(r=>{
+      const row=el(`<div style="display:flex;align-items:center;gap:10px;padding:7px 2px;border-top:1px solid var(--line);flex-wrap:wrap"></div>`);
+      row.appendChild(el(`<div style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(r.f1)}</b> <span class="faint">vs</span> <b>${esc(r.f2)}</b> <span class="faint">· ${esc(r.map)} · ${dshort(r.when)}</span>${r.div?` <span class="faint">· ${esc(r.div)}</span>`:''}</div>`));
+      row.appendChild(el(`<a class="btn" href="${captureCodeUrl(r.code)}" title="Open this replay in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:12px;white-space:nowrap">Scout ${esc(r.code)} →</a>`));
+      mw.appendChild(row);
+    });
+    if(qq.length>5) mw.appendChild(el(`<p class="note" style="margin-top:6px">…and ${qq.length-5} more. <a href="capture/" style="color:var(--accent);font-weight:600;text-decoration:none">Open the capture tool →</a></p>`));
+    wrap.appendChild(mw);
+  }
+
   wrap.appendChild(el(sectionH('Standings')));
   wrap.appendChild(table(
     [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},
@@ -1635,7 +1700,14 @@ function renderOverview(){
     const lc=el(`<div class="card" style="margin-top:20px"></div>`);
     lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
     lc.appendChild(el(`<p class="note" style="margin:0 0 8px">Maps each scout has contributed this season — every capture sharpens the data here. 🙏</p>`));
-    lc.appendChild(el(barList(contribs.slice(0,15).map(c=>({label:esc(c.name),value:c.maps})))));
+    const meName=((localStorage.getItem('owscout_name')||'').trim()||'').toLowerCase();
+    lc.appendChild(el(barList(contribs.slice(0,15).map((c,i)=>{
+      const nm=String(c.name||'');
+      const medals=['🥇','🥈','🥉'];
+      const medal=i<3?`<span class="medal">${medals[i]}</span>`:'';
+      const you=!!meName && nm.toLowerCase()===meName;
+      return {label:`${medal}${you?`<span class="you">${esc(nm)}</span>`:esc(nm)}`,value:c.maps,you};
+    }))));
     const total=contribs.reduce((x,c)=>x+(c.maps||0),0);
     lc.appendChild(el(`<p class="note" style="margin-top:8px">${contribs.length} scout${contribs.length===1?'':'s'} · ${nf(total)} maps captured league-wide.</p>`));
     wrap.appendChild(lc);
@@ -3343,6 +3415,17 @@ function setDivision(id){
   const cur=document.querySelector('nav button.active');
   show(cur?cur.dataset.id:'overview');
 }
+// Wipe-urgency line under the hero: replay codes die at each patch, so the live
+// queue is a countdown, not a static number. Hidden when there's nothing left to
+// scout or the feed has no wipe date on record.
+function updateWipeNote(){
+  const el=document.getElementById('wipenote'); if(!el) return;
+  const q=leagueQueue();
+  if(!CODE_WIPE || !q.length){ el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML=`<span style="color:var(--mid)">Replay codes wiped <b>${esc(CODE_WIPE)}</b> — ${q.length} live replay code${q.length===1?'':'s'} still need a capture before the next patch.</span> `+
+    `<a href="capture/" style="color:var(--accent);font-weight:700;text-decoration:none">Pick one →</a>`;
+}
 function init(){
   recomputeDivision();
   const dsel=document.getElementById('division');
@@ -3353,7 +3436,10 @@ function init(){
   updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
-  nav.appendChild(el(`<a class="navcap" href="capture/" title="Scout comps in your browser — no install, no exe">＋ Capture comps</a>`));
+  nav.appendChild(el(`<a class="navcap" href="capture/" title="Scout comps in your browser — no install, no exe">＋ Capture comps <span id="navcapcount"></span></a>`));
+  const ncl=document.getElementById('navcapcount');
+  if(ncl){ const nq=leagueQueue().length; if(nq) ncl.textContent='· '+nq+' left'; }
+  updateWipeNote();
   document.getElementById('heroScout').onclick=()=>{ if(!SCOUT_TEAM) SCOUT_TEAM=(D().team_names||[])[0]||null; show('scout'); };
   document.getElementById('heroCapture').onclick=()=>{ location.href='capture/'; };
   hashDispatch();
