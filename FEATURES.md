@@ -154,6 +154,15 @@ bracket (seeded from current standings until real playoff matches exist) and
 becomes the default view automatically once real playoff matches are ingested
 for the active division.
 
+**Scrims** — private comp captures from the browser app's scrim mode, read
+straight out of this browser's IndexedDB (`owscout-capture`, the same store the
+capture app writes). Because `docs/capture/` and `docs/` share an origin the
+dashboard can read them without any upload or server round-trip. Each scrim
+(our team vs opponent, date, notes) lists its maps with the captured hero comps;
+an empty state points to the capture app. Scrims are deliberately invisible to
+every other tab and to the public site — league maps stay public, scrim maps
+stay private. See §2.3 (Scrim mode) below for the capture side.
+
 ### Cross-cutting conventions
 
 - **Map ordering** — grouped into labelled mode blocks (Control → Escort → Hybrid
@@ -353,6 +362,21 @@ guess for older captures.
 
 **Temporal smoothing** takes the modal hero per slot across a window, so one bad
 frame cannot corrupt a slot.
+
+**Scrim mode in the browser capture app** (`docs/capture/`, §0 / the Capture
+tab's segmented League↔Private scrim switch) is the same snapshot pipeline with
+no FACEIT match behind it. Our team, opponent, date and notes are saved into a
+local scrim session (IndexedDB store `scrims`); each map you capture — picked
+from a static map list, optionally with a replay code — goes to `scrim_maps`
+with observations, hero crops and scoreboard reads exactly like a league map,
+just with `side_a_team`/`side_b_team` labelled from the scrim's teams. Sides are
+always manual (there are no rosters to auto-detect against). Records are
+**local-only**: never claimed, never published, never merged into
+`data/captures/` — they surface only on the dashboard's **Scrims tab**, which
+reads the same IndexedDB from the shared origin. Export/Import buttons back the
+scrims up as a JSON bundle. The replay-code field is optional but a **known
+FACEIT league code is hard-blocked**: it stays public, so the app explains why
+and offers to switch over to League capture and load that code instead.
 
 ## 2.4 Integrity and the review gate
 

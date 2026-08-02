@@ -358,7 +358,7 @@ def _dashboard_data(db: Database, cid: str,
         t["roster"] = team_rosters.get(t["name"], [])
 
     heroes = rows(f"""
-      SELECT h.name, h.role, COUNT(*) bans
+      SELECT h.name, h.role, h.guid, COUNT(*) bans
       FROM hero_bans b JOIN heroes h ON h.guid=b.hero_guid
       WHERE b.match_id IN {in_champ} GROUP BY b.hero_guid ORDER BY bans DESC""", {"c": cid})
     bans_by_role = rows(f"""
@@ -594,7 +594,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         if not d["summary"]["matches"]:
             continue
         for h in d.pop("heroes"):
-            heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"]})
+            heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"], "guid": h.get("guid")})
         for m in d.pop("maps"):
             maps.setdefault(m["name"], {"name": m["name"], "category": m["category"]})
         for name, url in d.pop("team_avatars", {}).items():
@@ -674,9 +674,9 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     # Full hero roster (every hero, not just those banned this season) so the draft
     # simulator can ban off-meta picks like Torbjörn that never show up in the data.
     roster = [
-        {"name": r["name"], "role": r["role"]}
+        {"name": r["name"], "role": r["role"], "guid": r["guid"]}
         for r in db.conn.execute(
-            "SELECT name, role FROM heroes ORDER BY name"
+            "SELECT name, role, guid FROM heroes ORDER BY name"
         ).fetchall()
     ]
 

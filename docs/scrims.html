@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OW Scout · Private Scrims</title>
+<meta name="description" content="Private scrim tracking dashboard — browser-local, never published. Hero frequencies, map stats, and composition breakdowns from your scrim captures.">
+<meta name="theme-color" content="#0d1015">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
+<style>
+:root{color-scheme:dark;
+  --bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;
+  --faint:#6b7686;--line:#252c37;--line2:#313a48;--accent:#8087ff;--accent-weak:rgba(128,135,255,.16);
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* app shell */
+.topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:min(1500px,96vw);margin:0 auto;padding:12px 18px 0}
+.prodname{display:block;font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--accent);margin-bottom:2px}
+.prodname span{color:var(--faint);font-weight:600;letter-spacing:.08em}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+nav{display:flex;gap:2px;margin-top:10px}
+nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:8px 8px 0 0;
+  cursor:pointer;font-size:13.5px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+nav button:hover{color:var(--fg)}
+nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.sidebox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
+.sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface2)}
+.sidetoggle a,.sidetoggle span{padding:6px 14px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap;color:var(--muted)}
+.sidetoggle span.on{background:var(--accent);color:#0b1020}
+.sidetoggle a:hover{color:var(--fg)}
+.modebtns{display:flex;gap:6px}
+.navcap{background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
+.navcapdim{background:transparent;color:var(--muted);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:650;border:1px solid var(--line);white-space:nowrap}
+.navcapdim:hover{border-color:var(--accent);color:var(--fg)}
+main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
+
+/* primitives */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
+.eyebrow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
+.grid{display:grid;gap:10px}
+.cols-2{grid-template-columns:1fr 1fr}
+.cols-3{grid-template-columns:1fr 1fr 1fr}
+.cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
+.cols-auto{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+@media(max-width:720px){.cols-2,.cols-3,.cols-4{grid-template-columns:1fr}}
+@media(max-width:980px) and (min-width:721px){.cols-3{grid-template-columns:1fr 1fr}.cols-4{grid-template-columns:1fr 1fr}}
+.section-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin:22px 2px 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.section-h h2{margin:0;font-size:14.5px;font-weight:650}
+.note{color:var(--muted);font-size:12.5px;margin:8px 2px 0}
+.stack>*+*{margin-top:14px}
+.mt8{margin-top:8px}.mt10{margin-top:10px}.mt14{margin-top:14px}
+
+/* tile stats */
+.tile{text-align:center}
+.tile .n{font-size:27px;font-weight:680;letter-spacing:-.02em}
+.tile .l{color:var(--muted);font-size:12px;margin-top:1px}
+.tile .sub{color:var(--faint);font-size:11.5px;margin-top:3px}
+
+/* table */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:13.5px}
+thead th{color:var(--faint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface)}
+thead th:hover{color:var(--fg)}
+thead th.sorted{color:var(--fg)}
+thead th .sar{margin-left:4px;font-size:8px;color:var(--accent);vertical-align:middle}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--surface2)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.scroll table{font-size:13.5px}
+
+/* bars */
+.barrow{display:grid;grid-template-columns:minmax(110px,1.1fr) minmax(70px,2fr) 40px;align-items:center;gap:11px;padding:5px 2px}
+.barrow+.barrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.barrow .lab{font-size:13px;display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
+.fill{height:100%;border-radius:6px;background:var(--accent);min-width:3px;transition:width .2s ease}
+.barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
+  border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+.pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:7px}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
+  padding:1px 6px;border-radius:5px;background:var(--surface2);color:var(--faint)}
+
+/* mode headings */
+.modeh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.modeh:first-child{margin-top:4px}
+
+/* scrim cards */
+.scrim-card{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.scrim-hd{cursor:pointer;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.scrim-hd:hover{background:var(--surface2)}
+.scrim-hd .sh-teams{font-weight:650;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scrim-hd .sh-vs{color:var(--faint);font-weight:400}
+.scrim-hd .sh-meta{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.scrim-hd .sh-date{color:var(--faint);font-size:12px}
+.scrim-hd .sh-toggle{color:var(--muted);font-size:12px;transition:transform .15s}
+.scrim-hd[aria-expanded=true] .sh-toggle{transform:rotate(180deg)}
+.scrim-body{padding:0 14px 12px}
+.scrim-body .map-row{padding:9px 0;border-top:1px solid var(--line);font-size:13px}
+.scrim-body .map-row:first-child{border-top:0}
+.map-row .mr-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.map-row .mr-name{font-weight:650;color:var(--fg)}
+.map-row .mr-meta{font-size:12px;color:var(--muted)}
+.map-row .hero-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+
+/* hero role colors */
+.role-Tank{color:var(--tank)}.role-Damage{color:var(--damage)}.role-Support{color:var(--support)}
+
+/* empty state */
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty h2{font-size:18px;margin:0 0 8px;color:var(--fg)}
+.empty p{margin:0 0 16px;font-size:14px}
+.empty a{color:var(--accent);font-weight:650;text-decoration:none}
+.empty a:hover{text-decoration:underline}
+
+/* loading */
+.loading{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
+
+@media(max-width:640px){
+  main{padding:12px 10px 48px}
+  .topbar-in{padding:10px 10px 0}
+  nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  nav button{white-space:nowrap;padding:9px 10px;font-size:13px}
+  .card{padding:10px}
+  th,td{padding:6px 7px;font-size:12.5px}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="toprow">
+      <div>
+        <span class="prodname">OW SCOUT<span> · Private Scrims</span></span>
+        <div class="brand">
+          <h1>Scrim Tracking</h1>
+        </div>
+      </div>
+      <div class="sidebox">
+        <div class="sidetoggle"><a href="index.html">League</a><span class="on">Scrims</span></div>
+        <div class="modebtns"><span class="navcap">Data</span><a class="navcapdim" href="capture/scrim.html">Capture</a></div>
+      </div>
+    </div>
+    <nav id="nav"></nav>
+  </div>
+</div>
+<main id="content"><div class="loading">Reading scrims from this browser…</div></main>
+<script>
+// ---------- tiny helpers ----------
+const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
+const esc = (s)=> (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dshort = (s)=> s? String(s).slice(0,10) : '?';
+let GUID_TO_NAME = {};
+let HERO_ROLE = {};
+
+// ---------- hero role inference (refs.json gives name only, not role) ----------
+const ROLE_MAP = {
+  tank: ['D.Va','Doomfist','Hazard','Junker Queen','Mauga','Orisa','Ramattra','Reinhardt','Roadhog','Sigma','Winston','Wrecking Ball','Zarya'],
+  damage: ['Ashe','Bastion','Cassidy','Echo','Genji','Hanzo','Junkrat','Mei','Pharah','Reaper','Sojourn','Soldier: 76','Sombra','Symmetra','Torbjorn','Tracer','Venture','Widowmaker'],
+  support: ['Ana','Baptiste','Brigitte','Illari','Juno','Kiriko','Lifeweaver','Lucio','Mercy','Moira','Zenyatta']
+};
+function inferRole(name){
+  if(!name) return null;
+  const n = name.toLowerCase();
+  for(const [role,heroes] of Object.entries(ROLE_MAP)){
+    if(heroes.some(h => h.toLowerCase()===n)) return role.charAt(0).toUpperCase()+role.slice(1);
+  }
+  return null;
+}
+
+// ---------- IndexedDB ----------
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open('owscout-capture');
+    r.onsuccess = ()=> res(r.result);
+    r.onerror = ()=> rej(r.error);
+  });
+}
+async function idbGetAll(store){
+  const db = await openDB();
+  if(!db.objectStoreNames.contains(store)) return [];
+  return new Promise(res=>{
+    const rq = db.transaction(store,'readonly').objectStore(store).getAll();
+    rq.onsuccess = ()=> res(rq.result||[]);
+    rq.onerror = ()=> res([]);
+  });
+}
+
+// ---------- load refs.json for hero name resolution ----------
+async function loadRefs(){
+  try{
+    const r = await fetch('capture/refs.json',{cache:'no-store'});
+    const j = await r.json();
+    for(const ref of (j.refs||[])){ if(ref.g && ref.n) GUID_TO_NAME[ref.g] = ref.n; }
+    // also check for any custom heroes in IndexedDB
+    try{
+      const heroes = await idbGetAll('heroes');
+      for(const h of heroes){ if(h.g && h.name) GUID_TO_NAME[h.g] = h.name; }
+    }catch(e){}
+  }catch(e){
+    console.warn('Could not load refs.json:', e);
+  }
+  // infer roles
+  for(const [g,n] of Object.entries(GUID_TO_NAME)){
+    const role = inferRole(n);
+    if(role) HERO_ROLE[g] = role;
+  }
+}
+
+function heroName(guid){
+  if(!guid) return '?';
+  if(GUID_TO_NAME[guid]) return GUID_TO_NAME[guid];
+  return '0x'+guid.slice(2,10)+'…';
+}
+
+function heroRoleClass(guid){
+  const r = HERO_ROLE[guid];
+  return r ? 'role-'+r : '';
+}
+
+// ---------- data processing ----------
+async function loadData(){
+  await loadRefs();
+  const scrims = await idbGetAll('scrims');
+  const maps = await idbGetAll('scrim_maps');
+  // Sort scrims newest first
+  scrims.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
+  // Index maps by scrim_id
+  const mapsByScrim = {};
+  for(const m of maps){
+    if(!mapsByScrim[m.scrim_id]) mapsByScrim[m.scrim_id] = [];
+    mapsByScrim[m.scrim_id].push(m);
+  }
+  // Sort maps within each scrim by map_no
+  for(const id in mapsByScrim){
+    mapsByScrim[id].sort((a,b)=> (a.map_no||0)-(b.map_no||0));
+  }
+  return {scrims, maps, mapsByScrim};
+}
+
+function countObservations(map){
+  let total = 0;
+  for(const o of (map.observations||[])){
+    total += (o.heroes||[]).filter(Boolean).length;
+  }
+  return total;
+}
+
+function heroFrequency(observations, sideFilter){
+  const counts = {};
+  for(const o of observations){
+    if(sideFilter && o.side!==sideFilter) continue;
+    for(const g of (o.heroes||[])){
+      if(!g) continue;
+      counts[g] = (counts[g]||0)+1;
+    }
+  }
+  return Object.entries(counts).sort((a,b)=> b[1]-a[1]);
+}
+
+function uniqueHeroes(observations, sideFilter){
+  const set = new Set();
+  for(const o of observations){
+    if(sideFilter && o.side!==sideFilter) continue;
+    for(const g of (o.heroes||[])){
+      if(g) set.add(g);
+    }
+  }
+  return [...set];
+}
+
+function totalObservations(observations, sideFilter){
+  let n = 0;
+  for(const o of observations){
+    if(sideFilter && o.side!==sideFilter) continue;
+    n += (o.heroes||[]).filter(Boolean).length;
+  }
+  return n;
+}
+
+function allObservations(maps){
+  return [].concat(...maps.map(m=>m.observations||[]));
+}
+
+// ---------- render helpers ----------
+function heroBar(guid, count, total, maxCount){
+  const pct = maxCount ? Math.round(100*count/maxCount) : 0;
+  const name = heroName(guid);
+  const rc = heroRoleClass(guid);
+  return `<div class="barrow">
+    <span class="lab ${rc}">${esc(name)}</span>
+    <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+    <span class="barval">${count}</span>
+  </div>`;
+}
+
+function topHeroes(observations, sideFilter, n){
+  const freq = heroFrequency(observations, sideFilter);
+  const maxCount = freq.length ? freq[0][1] : 1;
+  return freq.slice(0, n||10).map(([g,c])=> heroBar(g, c, null, maxCount)).join('');
+}
+
+function statTile(n, label, sub){
+  sub = sub||'';
+  return `<div class="card tile"><div class="n">${esc(String(n))}</div><div class="l">${esc(label)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
+}
+
+// ---------- TABS ----------
+
+// Overview
+function renderOverview(data){
+  const {scrims, maps, mapsByScrim} = data;
+  if(!scrims.length) return emptyState();
+
+  const totalMaps = maps.length;
+  const totalObs = allObservations(maps).reduce((sum,o)=> sum+(o.heroes||[]).filter(Boolean).length, 0);
+  const dates = scrims.map(s=>s.date||'').filter(Boolean).sort();
+  const dateRange = dates.length ? (dates[0]===dates[dates.length-1] ? dshort(dates[0]) : dshort(dates[0])+' → '+dshort(dates[dates.length-1])) : '';
+
+  let html = '<div class="grid cols-4 mt10">';
+  html += statTile(scrims.length, 'Scrims recorded');
+  html += statTile(totalMaps, 'Maps captured');
+  html += statTile(totalObs, 'Hero observations');
+  html += statTile(dateRange||'—', 'Date range');
+  html += '</div>';
+
+  // Recent activity
+  html += '<div class="section-h"><h2>Recent activity</h2></div>';
+  const recent = scrims.slice(0, 5);
+  for(const s of recent){
+    const sMaps = mapsByScrim[s.id]||[];
+    const sObs = allObservations(sMaps);
+    const topH = heroFrequency(sObs).slice(0, 6);
+    html += `<div class="card mt10">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <span style="font-weight:650;font-size:14px">${esc(s.team_us||'us')} <span style="color:var(--faint);font-weight:400">vs</span> ${esc(s.opponent||'opponent')}</span>
+        <span style="font-size:12px;color:var(--faint)">${esc(s.date||'')} · ${sMaps.length} map${sMaps.length===1?'':'s'}</span>
+      </div>`;
+    if(topH.length){
+      html += `<div class="mt8" style="display:flex;gap:4px;flex-wrap:wrap">`;
+      for(const [g,c] of topH){
+        html += `<span class="chip role-${HERO_ROLE[g]||''}">${esc(heroName(g))} <span style="color:var(--faint)">${c}</span></span>`;
+      }
+      html += '</div>';
+    }
+    if(s.notes) html += `<div class="mt8" style="font-size:12px;color:var(--muted)">${esc(s.notes)}</div>`;
+    html += '</div>';
+  }
+
+  return html;
+}
+
+// Teams
+function renderTeams(data){
+  const {scrims, maps, mapsByScrim} = data;
+  if(!scrims.length) return emptyState();
+
+  // Build opponent stats
+  const teamStats = {};
+  for(const s of scrims){
+    const opp = s.opponent||'Unknown';
+    if(!teamStats[opp]) teamStats[opp] = {scrims:[], maps:[], observations:[]};
+    teamStats[opp].scrims.push(s);
+    const sMaps = mapsByScrim[s.id]||[];
+    teamStats[opp].maps.push(...sMaps);
+    for(const m of sMaps){
+      teamStats[opp].observations.push(...(m.observations||[]));
+    }
+  }
+
+  const entries = Object.entries(teamStats).sort((a,b)=>{
+    const aLast = a[1].scrims.map(s=>s.created_at||'').sort().reverse()[0]||'';
+    const bLast = b[1].scrims.map(s=>s.created_at||'').sort().reverse()[0]||'';
+    return bLast.localeCompare(aLast);
+  });
+
+  let html = '';
+  for(const [opp, ts] of entries){
+    const oppObs = allObservations(ts.maps);
+    const ourObs = ts.observations;
+    html += `<div class="card mt10">
+      <div class="section-h" style="margin-top:0;border-bottom:0">
+        <h2>${esc(opp)}</h2>
+        <span class="note">${ts.maps.length} map${ts.maps.length===1?'':'s'} · ${ts.scrims.length} scrim${ts.scrims.length===1?'':'s'}</span>
+      </div>`;
+
+    // Their heroes
+    const theirFreq = heroFrequency(ts.observations, 'b');
+    const ourFreq = heroFrequency(ts.observations, 'a');
+    const maxTheir = theirFreq.length ? theirFreq[0][1] : 1;
+    const maxOur = ourFreq.length ? ourFreq[0][1] : 1;
+
+    html += '<div class="grid cols-2" style="margin-top:0">';
+    html += '<div>';
+    html += '<div class="eyebrow">Their heroes</div>';
+    if(theirFreq.length){
+      html += theirFreq.slice(0,8).map(([g,c])=> heroBar(g, c, null, maxTheir)).join('');
+    } else {
+      html += '<div class="note">No observations</div>';
+    }
+    html += '</div>';
+    html += '<div>';
+    html += '<div class="eyebrow">Our heroes</div>';
+    if(ourFreq.length){
+      html += ourFreq.slice(0,8).map(([g,c])=> heroBar(g, c, null, maxOur)).join('');
+    } else {
+      html += '<div class="note">No observations</div>';
+    }
+    html += '</div>';
+    html += '</div></div>';
+  }
+  return html;
+}
+
+// Maps
+function renderMaps(data){
+  const {maps} = data;
+  if(!maps.length) return emptyState();
+
+  const categories = ['Control','Escort','Hybrid','Push','Flashpoint','Clash'];
+  const byCategory = {};
+  for(const cat of categories) byCategory[cat] = [];
+  for(const m of maps){
+    const cat = m.map_category||'Other';
+    if(!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(m);
+  }
+
+  // Build map stats
+  const mapStats = {};
+  for(const m of maps){
+    const name = m.map_name||'Unknown';
+    if(!mapStats[name]) mapStats[name] = {category:m.map_category||'', observations:[], count:0};
+    mapStats[name].count++;
+    mapStats[name].observations.push(...(m.observations||[]));
+  }
+
+  let html = '';
+  for(const cat of categories){
+    const catMaps = Object.entries(mapStats).filter(([n,s])=> s.category===cat);
+    if(!catMaps.length) continue;
+    html += `<div class="modeh">${esc(cat)}</div>`;
+    for(const [name, stats] of catMaps.sort((a,b)=>b[1].count-a[1].count)){
+      const ourHeroes = topHeroes(stats.observations, 'a', 5);
+      const theirHeroes = topHeroes(stats.observations, 'b', 5);
+      const totalObs = totalObservations(stats.observations);
+      html += `<div class="card mt10">
+        <div class="section-h" style="margin-top:0;border-bottom:0">
+          <h2>${esc(name)}</h2>
+          <span class="note">${stats.count} time${stats.count===1?'':'s'} · ${totalObs} hero obs</span>
+        </div>
+        <div class="grid cols-2" style="margin-top:0">`;
+      html += '<div><div class="eyebrow">Our picks</div>';
+      html += ourHeroes || '<div class="note">No observations</div>';
+      html += '</div><div><div class="eyebrow">Their picks</div>';
+      html += theirHeroes || '<div class="note">No observations</div>';
+      html += '</div></div></div>';
+    }
+  }
+  return html;
+}
+
+// Scrims
+function renderScrims(data){
+  const {scrims, mapsByScrim} = data;
+  if(!scrims.length) return emptyState();
+
+  let html = '';
+  for(const s of scrims){
+    const sMaps = mapsByScrim[s.id]||[];
+    const sObs = allObservations(sMaps);
+    const topH = heroFrequency(sObs).slice(0, 6);
+    const scrimId = 'scrim-'+s.id.replace(/[^a-zA-Z0-9]/g,'-');
+
+    html += `<div class="scrim-card" id="${scrimId}">
+      <div class="scrim-hd" onclick="toggleScrim('${scrimId}')" aria-expanded="false">
+        <div class="sh-teams">${esc(s.team_us||'us')} <span class="sh-vs">vs</span> ${esc(s.opponent||'opponent')}</div>
+        <div class="sh-meta">
+          <span class="sh-date">${esc(s.date||'')}</span>
+          <span class="chip" style="background:transparent;border-color:var(--line)">${sMaps.length} map${sMaps.length===1?'':'s'}</span>
+          <span class="sh-toggle">▾</span>
+        </div>
+      </div>
+      <div class="scrim-body" style="display:none">`;
+
+    if(s.notes){
+      html += `<div style="font-size:13px;color:var(--muted);padding-top:4px">${esc(s.notes)}</div>`;
+    }
+
+    if(topH.length){
+      html += `<div class="mt8" style="display:flex;gap:4px;flex-wrap:wrap">`;
+      html += '<span style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin-right:4px">Top heroes:</span>';
+      for(const [g,c] of topH){
+        html += `<span class="chip">${esc(heroName(g))} <span style="color:var(--faint)">${c}</span></span>`;
+      }
+      html += '</div>';
+    }
+
+    for(const m of sMaps){
+      const totalObs = countObservations(m);
+      const ourFreq = heroFrequency(m.observations||[], 'a').slice(0, 5);
+      const theirFreq = heroFrequency(m.observations||[], 'b').slice(0, 5);
+      const codeStr = m.code ? ` · ${esc(m.code)}` : '';
+      html += `<div class="map-row">
+        <div class="mr-hd">
+          <span class="mr-name">${esc(m.map_name||'?')}</span>
+          <span class="mr-meta">${esc(m.map_category||'')}${codeStr} · ${(m.observations||[]).length} round${(m.observations||[]).length===1?'':'s'} · ${totalObs} heroes</span>
+        </div>`;
+      html += '<div class="hero-chips">';
+      if(ourFreq.length){
+        html += '<span style="font-size:12px;color:var(--good);margin-right:4px">Us:</span>';
+        for(const [g,c] of ourFreq){
+          html += `<span class="chip">${esc(heroName(g))} <span style="color:var(--faint)">${c}</span></span>`;
+        }
+      }
+      if(ourFreq.length && theirFreq.length) html += '<span style="color:var(--faint);margin:0 4px">|</span>';
+      if(theirFreq.length){
+        html += '<span style="font-size:12px;color:var(--bad);margin-right:4px">Them:</span>';
+        for(const [g,c] of theirFreq){
+          html += `<span class="chip">${esc(heroName(g))} <span style="color:var(--faint)">${c}</span></span>`;
+        }
+      }
+      html += '</div></div>';
+    }
+
+    html += '</div></div>';
+  }
+  return html;
+}
+
+function toggleScrim(id){
+  const card = document.getElementById(id);
+  if(!card) return;
+  const hd = card.querySelector('.scrim-hd');
+  const body = card.querySelector('.scrim-body');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  hd.setAttribute('aria-expanded', String(!open));
+}
+
+function emptyState(){
+  return `<div class="empty">
+    <h2>No scrims yet</h2>
+    <p>Capture your first scrim to see stats here. Everything stays private on this browser.</p>
+    <a href="capture/scrim.html">+ Capture a scrim →</a>
+  </div>`;
+}
+
+// ---------- routing ----------
+const TABS = [
+  {id:'overview', label:'Overview', render:d=>renderOverview(d)},
+  {id:'teams', label:'Teams', render:d=>renderTeams(d)},
+  {id:'maps', label:'Maps', render:d=>renderMaps(d)},
+  {id:'scrims', label:'Scrims', render:d=>renderScrims(d)},
+];
+
+let DATA = null;
+let HANDLED_HASH = '';
+
+function show(id){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  const c = document.getElementById('content');
+  const tab = TABS.find(t=>t.id===id)||TABS[0];
+  c.innerHTML = tab.render(DATA);
+  try{window.scrollTo(0,0)}catch(e){}
+  HANDLED_HASH = '#'+id;
+  if(location.hash !== HANDLED_HASH) location.hash = id;
+}
+
+function hashDispatch(){
+  const h = location.hash||'#overview';
+  if(h === HANDLED_HASH) return;
+  const id = h.slice(1);
+  const valid = TABS.some(t=>t.id===id);
+  show(valid?id:'overview');
+}
+
+// ---------- boot ----------
+async function boot(){
+  const nav = document.getElementById('nav');
+  TABS.forEach(t=>{
+    const b = el(`<button data-id="${t.id}">${esc(t.label)}</button>`);
+    b.onclick = ()=>show(t.id);
+    nav.appendChild(b);
+  });
+
+  DATA = await loadData();
+  hashDispatch();
+}
+
+window.addEventListener('hashchange', hashDispatch);
+boot().catch(err=>{
+  document.getElementById('content').innerHTML = '<div class="note" style="padding:24px">Could not read scrim data ('+esc(err.message||err)+').</div>';
+});
+</script>
+</body>
+</html>

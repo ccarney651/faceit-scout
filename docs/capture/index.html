@@ -96,7 +96,18 @@
   .warn{color:var(--bad)} .ok{color:var(--good)} .faint{color:var(--faint)}
   .eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:800}
   .hrow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-  .backlink{text-decoration:none;border-radius:7px;padding:8px 13px;font-weight:650;font-size:13px}
+  .mode{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface2)}
+  .mode button{background:transparent;color:var(--muted);border:0;padding:6px 14px;font-weight:650;border-radius:0}
+  .mode button.on{background:var(--accent);color:#0b1020}
+  .navcap{background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
+  .navcapdim{background:transparent;color:var(--muted);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:650;border:1px solid var(--line);white-space:nowrap}
+  .navcapdim:hover{border-color:var(--accent);color:var(--fg)}
+  .sidebox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0;margin-left:auto}
+  .sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface2)}
+  .sidetoggle a,.sidetoggle span{padding:6px 14px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap;color:var(--muted)}
+  .sidetoggle span.on{background:var(--accent);color:#0b1020}
+  .sidetoggle a:hover{color:var(--fg)}
+  .modebtns{display:flex;gap:6px}
   .welcome{background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:8px;padding:8px 13px;font-size:13px;margin-top:10px}
   #pubimpact{margin-top:8px;border:1px solid var(--good);background:color-mix(in srgb,var(--good) 9%,var(--surface));border-radius:9px;padding:11px 13px;font-size:13px;line-height:1.6}
   #pubimpact b{color:var(--fg)}
@@ -160,9 +171,12 @@
   <div class="hrow">
     <div>
       <div class="eyebrow">OW Scout · FACEIT League</div>
-      <h1>Capture comps</h1>
+      <h1>Capture comps — League</h1>
     </div>
-    <a href="../" class="ghost backlink">← Back to OW Scout site</a>
+    <div class="sidebox">
+      <div class="sidetoggle"><span class="on">League</span><a href="scrim.html">Scrims</a></div>
+      <div class="modebtns"><a class="navcapdim" href="../">Data</a><span class="navcap">Capture</span></div>
+    </div>
   </div>
   <div class="sub">Zero-install scouting: share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
   <div id="welcome" class="welcome" style="display:none"></div>
@@ -191,6 +205,8 @@
       <button id="autocal" disabled>Auto-calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
       <button id="setL" class="ghost" disabled>Set LEFT box (blue)</button>
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
+      <button id="setSb" class="ghost" disabled title="Drag a box over the scrim scoreboard panel (top-left, below the portraits) — read at map end">Set SCOREBOARD box</button>
+      <button id="setSr" class="ghost" disabled title="Drag a box over the top-centre score readout (e.g. 2 - 3) — read at map end">Set SCORE box</button>
       <button id="fscal" class="ghost" disabled title="Enlarge the preview to the whole screen so the boxes are easy to place">Fullscreen calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="clearcal" class="ghost">reset boxes</button>
       <button id="hidep" class="ghost" disabled>Hide preview</button>
@@ -200,27 +216,31 @@
   </div>
 
   <div class="card">
-    <h2>2 · Pick a replay</h2>
-    <div class="row" style="margin-bottom:8px">
-      <button id="refresh" class="ghost"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.5 2.4v2.4H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Refresh codes</button>
-      <span class="status skel" id="feedmeta">loading the codes feed…</span>
+    <div class="hrow" style="margin-bottom:10px">
+      <h2 style="margin:0">2 · Pick a replay</h2>
     </div>
-    <div class="row">
-      <label class="f">Region<select id="reg"></select></label>
-      <label class="f">Division<select id="div"></select></label>
-      <label class="f">Opponent<select id="opp"></select></label>
-      <label class="f" style="justify-content:flex-end"><span>&nbsp;</span><label class="status"><input type="checkbox" id="hide" checked> hide already-scouted</label></label>
+    <div id="leaguepane">
+      <div class="row" style="margin-bottom:8px">
+        <button id="refresh" class="ghost"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.5 2.4v2.4H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Refresh codes</button>
+        <span class="status skel" id="feedmeta">loading the codes feed…</span>
+      </div>
+      <div class="row">
+        <label class="f">Region<select id="reg"></select></label>
+        <label class="f">Division<select id="div"></select></label>
+        <label class="f">Opponent<select id="opp"></select></label>
+        <label class="f" style="justify-content:flex-end"><span>&nbsp;</span><label class="status"><input type="checkbox" id="hide" checked> hide already-scouted</label></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="code" class="skel" disabled></select>
+        <button id="copy" class="ghost">Copy code</button>
+        <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
+      </div>
+      <div id="roster" style="margin-top:6px"></div>
+      <div class="status" id="codenote" style="margin-top:4px">loading codes…</div>
     </div>
-    <div class="row" style="margin-top:8px">
-      <select id="code" class="skel" disabled></select>
-      <button id="copy" class="ghost">Copy code</button>
-      <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
-    </div>
-    <div id="roster" style="margin-top:6px"></div>
-    <div class="status" id="codenote" style="margin-top:4px">loading codes…</div>
   </div>
 
   <div class="card">
@@ -318,6 +338,8 @@
           <div class="stagebar" id="stagebar">
             <button id="fsL" type="button">Set LEFT (blue)</button>
             <button id="fsR" type="button">Set RIGHT (red)</button>
+            <button id="fsSb" type="button">Set SCOREBOARD</button>
+            <button id="fsSr" type="button">Set SCORE</button>
             <button id="fsAuto" type="button">Auto-calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
             <span id="stagehint" class="shint">Click a Set button, then drag a box over that team's 5 portraits.</span>
             <button id="fsExit" type="button" style="margin-left:auto">Exit <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -328,6 +350,7 @@
   </div>
 </main>
 <div id="mback" role="dialog" aria-modal="true"></div>
+<script src="scoreboard.js"></script>
 <script>
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
@@ -339,6 +362,7 @@ let CLAIMS={}, myClaimKey=null, claimHb=null;   // live scouting claims (match:g
 const CONTROL_SUBMAPS={ilios:["Lighthouse","Ruins","Well"],"lijiang tower":["Control Center","Garden","Night Market"],nepal:["Sanctum","Shrine","Village"],oasis:["City Center","Gardens","University"],"antarctic peninsula":["Icebreaker","Labs","Sublevel"],samoa:["Beach","Downtown","Volcano"],busan:["Downtown","Sanctuary","MEKA Base"]};
 const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
 function submapsFor(m){ if(!m) return []; let k=m.trim().toLowerCase(); k=MAP_ALIASES[k]||k; return CONTROL_SUBMAPS[k]||[]; }
+
 
 // Capture is desktop-only: getDisplayMedia is absent on phones, and you scout
 // while watching Overwatch on a PC anyway. Gate + steer people to the desktop.
@@ -449,29 +473,33 @@ async function loadFeeds(){
   // Deep-link from the dashboard's per-match "Scout" buttons: ?code= pre-selects
   // a replay code and copies it so you can paste straight into Overwatch.
   const cd=q.get('code');
-  if(cd){
-    const c=DATA.codes.find(x=>x.code===cd);
-    if(c){
-      // Jump the picker to this code's division and drop any filter that could
-      // hide it — it may already be scouted by someone else, but re-scouting it
-      // still adds player data.
-      const sr=splitDiv(c.division||''), reg=document.getElementById('reg'), div=document.getElementById('div');
-      if(sr.region && [...reg.options].some(o=>o.value===sr.region)){ reg.value=sr.region; savePref('reg'); buildDivisions(); }
-      if([...div.options].some(o=>o.value===sr.tier)){ div.value=sr.tier; savePref('div'); }
-      const opp=document.getElementById('opp'); opp.value='all'; savePref('opp');
-      document.getElementById('hide').checked=false; savePref('hide');
-      refreshCodes();
-      const idx=currentCodes().findIndex(x=>x.code===cd);
-      if(idx>=0){ const sel=document.getElementById('code'); sel.value=String(idx); onCode(); }
-      let copied=false;
-      try{ if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(cd); copied=true; } }catch(e){}
-      document.getElementById('codenote').textContent=`loaded ${cd}${copied?' — copied, paste into OW':' — click Copy, then paste into OW'}`;
-      toast('<b>'+esc(cd)+'</b> pre-loaded'+(copied?' &amp; copied':'')+' — paste into Overwatch (<b>Ctrl+V</b>)','ok',6000);
-    } else {
-      toast('Code <b>'+esc(cd)+'</b> isn\'t in the live feed — it may have been wiped or captured already.','warn',6000);
-    }
-  }
+  if(cd) selectLeagueCode(cd);
   setFeedMeta();
+}
+// Select a specific FACEIT replay code in the league picker: jump to its
+// division, drop filters that could hide it, select + start the map, copy it.
+// Returns the code object if it was found, else null. Shared by the ?code=
+// deep-link and the scrim FACEIT-code redirect.
+function selectLeagueCode(cd){
+  if(!DATA||!(DATA.codes||[]).length) return null;
+  const c=DATA.codes.find(x=>x.code===cd);
+  if(!c){ toast('Code <b>'+esc(cd)+'</b> isn\'t in the live feed — it may have been wiped or captured already.','warn',6000); return null; }
+  // Jump the picker to this code's division and drop any filter that could
+  // hide it — it may already be scouted by someone else, but re-scouting it
+  // still adds player data.
+  const sr=splitDiv(c.division||''), reg=document.getElementById('reg'), div=document.getElementById('div');
+  if(sr.region && [...reg.options].some(o=>o.value===sr.region)){ reg.value=sr.region; savePref('reg'); buildDivisions(); }
+  if([...div.options].some(o=>o.value===sr.tier)){ div.value=sr.tier; savePref('div'); }
+  const opp=document.getElementById('opp'); opp.value='all'; savePref('opp');
+  document.getElementById('hide').checked=false; savePref('hide');
+  refreshCodes();
+  const idx=currentCodes().findIndex(x=>x.code===cd);
+  if(idx>=0){ const sel=document.getElementById('code'); sel.value=String(idx); onCode(); }
+  let copied=false;
+  try{ if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(cd); copied=true; } }catch(e){}
+  document.getElementById('codenote').textContent=`loaded ${cd}${copied?' — copied, paste into OW':' — click Copy, then paste into OW'}`;
+  toast('<b>'+esc(cd)+'</b> pre-loaded'+(copied?' &amp; copied':'')+' — paste into Overwatch (<b>Ctrl+V</b>)','ok',6000);
+  return c;
 }
 function setFeedMeta(){ const el=document.getElementById('feedmeta'); if(!el) return; el.classList.remove('skel');
   if(feedError){ el.innerHTML='<span class="warn">'+esc(feedError)+'</span>'; return; }
@@ -581,15 +609,19 @@ function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scl();
   for(const side of ['a','b']){ const b=boxes[side]; if(!b) continue;
     octx.strokeStyle=side==='a'?css('--blue'):css('--red'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
     octx.setLineDash([3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
+  for(const side of ['scoreboard','score_readout']){ const b=boxes[side]; if(!b) continue;
+    octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s); }
   if(dragS&&dragC){ octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); } }
 function evp(e){ const r=ov.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
   const x=Math.min(dragS.x,p.x)/s,y=Math.min(dragS.y,p.y)/s,w=Math.abs(p.x-dragS.x)/s,h=Math.abs(p.y-dragS.y)/s;
-  if(w>10&&h>10){ boxes[drawMode]={x,y,w,h}; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); }
+  const mode=drawMode;
+  if(w>10&&h>10){ boxes[mode]={x,y,w,h}; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); }
   drawMode=null;dragS=null;dragC=null;
-  const done=boxes.a&&boxes.b, t=done?'Box saved.':'Box saved — now set the other box.';
+  const done=boxes.a&&boxes.b, t = mode==='scoreboard'||mode==='score_readout'
+    ? 'Box saved.' : (done?'Box saved.':'Box saved — now set the other box.');
   document.getElementById('calhint').textContent=t; setStageHint(t);
   drawOverlay(); updateBtns(); if(done) selfTest(); });
 function setStageHint(html){ const e=document.getElementById('stagehint'); if(e) e.innerHTML=html; }
@@ -637,13 +669,19 @@ function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share
     for(let dyi=-8;dyi<=8;dyi++) for(let dxi=-2;dxi<=2;dxi++){ if(!dyi&&!dxi) continue;
       const cand=boxesFromStrips(R, dxi*0.01, dyi*0.01), sc=scoreBoxes(frame,cand);
       if(sc>bestScore){ bestScore=sc; best=cand; } } }
+  // Auto-calibrate only re-places the two portrait strips; preserve any manually
+  // drawn scoreboard / score-readout boxes.
+  for(const extra of ['scoreboard','score_readout']) if(boxes[extra]) best[extra]=boxes[extra];
   boxes=best; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); drawOverlay(); updateBtns(); selfTest(); }
 function stopCapture(){ if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
   releaseClaim(); drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
 // Set which box we're about to draw, updating the hint in both the page and the
 // (fullscreen) stage. Used by the setup buttons and the in-stage buttons alike.
 function pickBox(side){ drawMode=side;
-  const t = side==='a' ? 'Drag a box over the 5 BLUE (left) portraits.' : 'Drag a box over the 5 RED (right) portraits.';
+  const t = side==='a' ? 'Drag a box over the 5 BLUE (left) portraits.'
+    : side==='b' ? 'Drag a box over the 5 RED (right) portraits.'
+    : side==='scoreboard' ? 'Drag a box over the scrim scoreboard panel (top-left, below the portraits).'
+    : 'Drag a box over the top-centre score readout (e.g. 2 - 3).';
   document.getElementById('calhint').textContent=t; setStageHint(t); }
 // Fullscreen calibration: blow the preview up to the whole screen so the boxes
 // are easy to place on a 2K/4K monitor. The overlay canvas is re-fitted on the
@@ -664,6 +702,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('autocal').disabled=!vid.srcObject;
   document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
+  document.getElementById('setSb').disabled=!vid.srcObject; document.getElementById('setSr').disabled=!vid.srcObject;
   document.getElementById('fscal').disabled=!vid.srcObject;
   document.getElementById('snap').disabled=!ready; document.getElementById('nextr').disabled=!ready;
   document.getElementById('autodetect').disabled=!ready;
@@ -674,10 +713,10 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
   const steps=[
-    {t:'Share screen', done:!!vid.srcObject, hint:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) — auto-calibrate needs the full frame.'},
-    {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
-    {t:'Pick a code', done:!!selectedCode(), hint:'Pick a replay code in step 2 — Copy code, then paste into Overwatch.'},
-    {t:'Capture &amp; publish', done:!!(session&&session.snaps.length), hint:'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.'}];
+        {t:'Share screen', done:!!vid.srcObject, hint:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) — auto-calibrate needs the full frame.'},
+        {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
+        {t:'Pick a code', done:!!selectedCode(), hint:'Pick a replay code in step 2 — Copy code, then paste into Overwatch.'},
+        {t:'Capture &amp; publish', done:!!(session&&session.snaps.length), hint:'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.'}];
   const cur=steps.findIndex(s=>!s.done);
   const pills=steps.map((s,i)=>{
     const st=s.done?'done':(i===cur?'cur':'todo');
@@ -796,6 +835,35 @@ async function ocrNames(){ const w=await ocrWorker(); const frame=grabFrame(); c
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       setDetectMsg('reading HUD names… '+(++done)+'/10'); ocrProgress(done/10); } }
   return out; }
+// End-of-map read of the scrim scoreboard + score readout boxes (calibrated as
+// `scoreboard` / `score_readout` draw modes). Best-effort: any failure returns
+// null so the map still saves. The scoreboard HUD is a left-stacked pile of
+// single-line Workshop texts, so we OCR the whole box in block mode and re-parse
+// per line with Scoreboard.parse, then restore single-line mode for name bars.
+function scoreCanvas(frame, box, sc){ sc=sc||8;
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(box.w*sc)); cv.height=Math.max(1,Math.round(box.h*sc));
+  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(frame, box.x,box.y,box.w,box.h, 0,0,cv.width,cv.height); return cv; }
+async function readScoreboard(frame){
+  try{
+    if(!window.Scoreboard) return null;
+    const sb=boxes.scoreboard, sr=boxes.score_readout;
+    if(!sb&&!sr) return null;
+    const w=await ocrWorker();
+    const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser' };
+    if(sb){
+      await w.setParameters({ tessedit_pageseg_mode:'6' });      // uniform block for the scoreboard
+      const {data}=await w.recognize(scoreCanvas(frame,sb));
+      await w.setParameters({ tessedit_pageseg_mode:'7' });      // restore single-line for name bars
+      const lines=(data.text||'').split('\n').map(s=>s.replace(/\s+/g,' ').trim()).filter(Boolean);
+      const parsed=Scoreboard.parse(lines);
+      if(parsed.entries.length){ Scoreboard.assignTeams(parsed,{ dps:2, tank:1, support:2 });
+        out.roles=parsed.roles; out.entries=parsed.entries; out.matchTime=parsed.matchTime; }
+    }
+    if(sr){ const {data}=await w.recognize(scoreCanvas(frame,sr));
+      out.readout=Scoreboard.parseScoreReadout((data.text||'')); }
+    return out;
+  }catch(e){ console.warn('scoreboard read skipped:',e); return null; } }
 function teamRoster(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
   const t=((DATA.rosters||{})[c.match_id]||{})[teamId]; if(!t||!t.players) return [];
   return t.players.map(p=>({ id:p.id||null, name:(p.game_name||p.nick||'').trim() })).filter(x=>x.name); }
@@ -1077,7 +1145,7 @@ async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
       nh.push(g); np.push([g, pid!=null?pid:null]); }
     o.heroes=nh; o.pairs=np; }
   rec.published=false;   // an edited map needs re-publishing; keep the review open, just re-enable Publish
-  await idbPut(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
+  await saveReviewRec(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
   renderReview(rec, host); }
 // Fill in a player for every observation where this hero+side is still
 // unattributed (the Player attribution picker's one-click chips).
@@ -1085,8 +1153,10 @@ async function assignPlayer(rec, side, heroGuid, playerId, host){
   for(const o of rec.observations||[]){ if(o.side!==side) continue;
     for(const pair of (o.pairs||[])){ if(pair[0]===heroGuid && !pair[1]) pair[1]=playerId; } }
   rec.published=false;
-  await idbPut(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
+  await saveReviewRec(rec); const pub=document.getElementById('publish'); if(pub) pub.disabled=false;
   renderReview(rec, host); }
+// Persist a reviewed + corrected map to the maps store so edits stick.
+async function saveReviewRec(rec){ await idbPut(rec); }
 function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
   const payload={format:'owscout-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
     refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
@@ -1122,8 +1192,8 @@ function startMap(){ const c=selectedCode();
   refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
 }
 function sideNames(){ const c=selectedCode(); if(!c) return {leftName:'left',rightName:'right'};
-  const rs=(DATA.rosters||{})[c.match_id]||{};
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
+  const rs=(DATA.rosters||{})[c.match_id]||{};
   const leftName = sideId? ((rs[sideId]&&rs[sideId].name)||'?') : (c.team_a||'left');
   const rightName = sideId? (sideId===c.t1? (c.team_b||'?') : (c.team_a||'?')) : (c.team_b||'right');
   return {leftName,rightName}; }
@@ -1257,11 +1327,12 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 }
 
 // ---------- save map -> IndexedDB (keyed match:game, replace) ----------
-function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',3);
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',4);
   r.onupgradeneeded=()=>{ const db=r.result;
     if(!db.objectStoreNames.contains('maps')) db.createObjectStore('maps',{keyPath:'id'});
     if(!db.objectStoreNames.contains('refs')) db.createObjectStore('refs',{keyPath:'id'});      // learned hero refs
-    if(!db.objectStoreNames.contains('heroes')) db.createObjectStore('heroes',{keyPath:'g'}); };  // operator-added heroes
+    if(!db.objectStoreNames.contains('heroes')) db.createObjectStore('heroes',{keyPath:'g'});   // operator-added heroes
+  };
   r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 function idbGetAll(store){ return idb().then(db=>new Promise(res=>{ const rq=db.transaction(store,'readonly').objectStore(store).getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); })); }
 function idbPutIn(store,rec){ return idb().then(db=>new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); })); }
@@ -1269,6 +1340,7 @@ function idbClear(store){ return idb().then(db=>new Promise(res=>{ const tx=db.t
 async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('maps','readonly').objectStore('maps').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
 async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }
+
 async function finishMap(){ if(!session||!session.snaps.length) return; const c=session.code;
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
   const leftId = sideId||c.t1, rightId = (leftId===c.t1)?c.t2:c.t1;
@@ -1285,36 +1357,21 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
     winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
-    captured_at:new Date().toISOString(), bans:[], observations, crops:session.crops||null };
+    captured_at:new Date().toISOString(), bans:[], observations, crops:session.crops||null,
+    scoreboard: await readScoreboard(grabFrame()) };
   await idbPut(rec);
   savedKeys.add(c.match_id+':'+c.game_no); await renderCaptured();
   const savedMsg=`saved ${c.code} — ${session.snaps.length} snapshots`;
   toast('<b>'+esc(c.code)+'</b> saved — '+session.snaps.length+' snapshot'+(session.snaps.length===1?'':'s')+' captured','ok');
-  advanceAfterSave(savedMsg, document.getElementById('autofetch').checked);
+  document.getElementById('codenote').innerHTML='<span class="ok">'+savedMsg+'</span>';
+  session=null; updateBtns();
 }
-// After saving a map: rebuild the picker (the just-saved map drops out when
-// "hide already-scouted" is on) and move to the next map that isn't captured
-// yet, continuing FORWARD from where we were. With auto-fetch on, also copy the
-// next code + carry the overlay; off, just land on it. Rebuilding the options is
-// what keeps captured maps from lingering in the dropdown mid-loop.
-function advanceAfterSave(savedMsg, auto){
-  const sel=document.getElementById('code'), oldIdx=+sel.value;
-  const cs=currentCodes(); sel._codes=cs; sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
-  document.getElementById('codenote').textContent=`${cs.length} codes shown`;
-  // Prefer the next un-captured AND unclaimed map (steer scouts apart); fall back
-  // to a claimed one only if every remaining map is already being scouted.
-  let idx=-1, fallback=-1; for(let k=0;k<cs.length;k++){ const j=(oldIdx+k)%cs.length; if(savedKeys.has(codeKey(cs[j]))) continue;
-    if(fallback<0) fallback=j; if(!claimedByOther(cs[j])){ idx=j; break; } }
-  if(idx<0) idx=fallback;
-  if(idx<0){ startMap(); document.getElementById('codenote').innerHTML='<span class="ok">'+(savedMsg?savedMsg+' · ':'')+'all maps in this filter are captured. Nice.</span>';
-    if(pipWin&&!pipWin.closed) pipWin.close(); return; }
-  sel.value=String(idx); onCode();                            // -> startMap(new session) -> renderPipControls
-  if(auto){ const c=cs[idx]; try{ navigator.clipboard.writeText(c.code); }catch(e){}
-    const m=`${savedMsg?savedMsg+' · ':''}▶ next: ${c.code} ${c.map||''} — code copied, paste into OW`;
-    document.getElementById('codenote').innerHTML='<span class="ok">'+m+'</span>';
-    if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML='<span class="ok">▶ next: '+c.code+' — copied</span>'; }
-  } else { document.getElementById('codenote').innerHTML='<span class="ok">'+savedMsg+'</span>'; if(pipWin&&!pipWin.closed) pipWin.close(); }
-}
+
+
+
+
+
+
 // One captured-map row (used for both new and uploaded lists).
 function capRow(r, done){ const el=document.createElement('div'); el.className='cap'+(done?' done':'');
   el.innerHTML=`<span><b style="color:var(--fg)">${esc(r.code)}</b> <span class="status">${esc(r.map_name||'')} · ${esc(r.division)} · ${r.observations.length} obs${done?' · ✓ uploaded':''}</span><br><span class="status">${esc(r.side_a_team)} vs ${esc(r.side_b_team)}</span></span>`+
@@ -1650,9 +1707,13 @@ document.getElementById('download').onclick=downloadContrib;
 document.getElementById('share').onclick=share;
 document.getElementById('setL').onclick=()=>pickBox('a');
 document.getElementById('setR').onclick=()=>pickBox('b');
+document.getElementById('setSb').onclick=()=>pickBox('scoreboard');
+document.getElementById('setSr').onclick=()=>pickBox('score_readout');
 document.getElementById('fscal').onclick=enterFsCal;
 document.getElementById('fsL').onclick=()=>pickBox('a');
 document.getElementById('fsR').onclick=()=>pickBox('b');
+document.getElementById('fsSb').onclick=()=>pickBox('scoreboard');
+document.getElementById('fsSr').onclick=()=>pickBox('score_readout');
 document.getElementById('fsAuto').onclick=autoCalibrate;
 document.getElementById('fsExit').onclick=()=>{ if(document.exitFullscreen) document.exitFullscreen(); };
 document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owscout_cap_boxes');drawOverlay();updateBtns();};

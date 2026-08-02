@@ -64,6 +64,12 @@ FACEIT API ──fetch──► faceit.sqlite3 ──export──► docs/index.
                        (read-only ATTACH)              │ (captures merged at build)
                             ▼                          │
 OW replay ──capture──► owscout.sqlite3 ──publish──► data/captures/<you>.json
+                            ▲
+               (browser IndexedDB "owscout-capture")
+               docs/capture/ ──scrim──► private scrims (this browser only)
+                                            │
+                                            ▼ (same origin: /docs/)
+                               docs/index.html  Scrims tab
 ```
 
 **Data-flow facts that carry the operational risk:**
@@ -79,6 +85,17 @@ OW replay ──capture──► owscout.sqlite3 ──publish──► data/cap
    does first-wins on contested maps by commit date.
 4. **`owscout` never writes the faceit DB** — it `ATTACH`es it read-only
    (`mode=ro` URI, see `owscout/db.py::attach_faceit`) for cross-DB context.
+5. **Private scrims live only in the browser.** The capture app's scrim mode
+   (`docs/capture/index.html`, IndexedDB `owscout-capture` v4, stores `scrims` +
+   `scrim_maps`) is a local-first side-channel: never published to the worker,
+   never merged into `data/captures/`, and — because `docs/capture/` and `docs/`
+   share an origin — readable by the dashboard's **Scrims tab**, which opens the
+   same DB read-only (it must NOT bump the capture app's schema version). The
+   replay code field in scrim mode is optional but **hard-blocks known FACEIT
+   league codes** (it checks the `data.json` feed) and offers to switch over to
+   League capture, so league maps stay public. Scrim records carry hero *guids*;
+   `export.py` includes `guid` in the `heroes`/`roster` payloads so the Scrims
+   tab can map them back to names.
 
 **`faceit_sync` ingest** (`sync.py` orchestrates; `client.py` HTTP; `db.py` schema
 + idempotent writes; `models.py` typed records):

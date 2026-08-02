@@ -79,9 +79,17 @@ nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;b
   cursor:pointer;font-size:13.5px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
 nav button:hover{color:var(--fg)}
 nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
-nav .navcap{margin-left:auto;align-self:center;background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
-nav .navcap:hover{background:var(--accent);color:#fff}
 nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.sidebox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
+.sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface2)}
+.sidetoggle a,.sidetoggle span{padding:6px 14px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap;color:var(--muted)}
+.sidetoggle span.on{background:var(--accent);color:#0b1020}
+.sidetoggle a:hover{color:var(--fg)}
+.modebtns{display:flex;gap:6px}
+.navcap{background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
+.navcapdim{background:transparent;color:var(--muted);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:650;border:1px solid var(--line);white-space:nowrap}
+.navcapdim:hover{border-color:var(--accent);color:var(--fg)}
 main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
@@ -563,10 +571,16 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 </head>
 <body>
 <div class="topbar"><div class="topbar-in">
-  <div class="brand"><span class="prodname">OW SCOUT <span>FACEIT League</span></span>
-    <h1 id="title"></h1>
-    <select id="division" class="hidden" aria-label="Division"></select>
-    <span class="meta" id="subtitle"></span></div>
+  <div class="toprow">
+    <div class="brand"><span class="prodname">OW SCOUT <span>FACEIT League</span></span>
+      <h1 id="title"></h1>
+      <select id="division" class="hidden" aria-label="Division"></select>
+      <span class="meta" id="subtitle"></span></div>
+    <div class="sidebox">
+      <div class="sidetoggle"><span class="on">League</span><a href="scrims.html">Scrims</a></div>
+      <div class="modebtns"><span class="navcap">Data</span><a class="navcapdim" href="capture/" title="Scout comps in your browser &mdash; no install, no exe">Capture <span id="navcapcount"></span></a></div>
+    </div>
+  </div>
   <nav id="nav"></nav>
 </div></div>
 <div id="hero" class="card hero">
@@ -862,6 +876,9 @@ const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 // Full roster (all heroes, incl. never-banned ones) for the draft simulator's hero picker.
 const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
 ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
+// Guid → name, for the Scrims tab: capture observations store hero guids, and
+// hero portraits/roles are all keyed by name in this dashboard.
+const HERO_BY_GUID={}; (DATA.roster||DATA.heroes||[]).forEach(h=>{ if(h.guid) HERO_BY_GUID[h.guid]=h.name; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 // Competitive seats (Tank / Hitscan / Flex DPS / Main Support / Flex Support).
 // Unclassified heroes have no seat and fall back to base role everywhere.
@@ -1627,7 +1644,7 @@ const TABS=[
  {id:'scout',label:'Teams',render:renderScout},
  {id:'players',label:'Players',render:renderPlayers},
  {id:'meta',label:'League meta',render:renderMeta},
- {id:'matches',label:'Matches',render:renderMatches},
+  {id:'matches',label:'Matches',render:renderMatches},
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
@@ -3406,6 +3423,8 @@ function hashDispatch(){
 function show(id){
   const navId = id==='matchdetail' ? 'matches' : id;   // no dedicated nav entry - it's a drill-in under Matches
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
+  const heroScout=document.getElementById('heroScout');
+  if(heroScout) heroScout.classList.toggle('hidden', navId==='scout');   // already scouting on this tab - the button would just re-open it
   const c=document.getElementById('content'); c.innerHTML='';
   if(id==='matchdetail'){
     const m=findMatch(MATCH_ID);
@@ -3472,7 +3491,6 @@ function init(){
   updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
-  nav.appendChild(el(`<a class="navcap" href="capture/" title="Scout comps in your browser — no install, no exe">＋ Capture comps <span id="navcapcount"></span></a>`));
   const ncl=document.getElementById('navcapcount');
   if(ncl){ const nq=leagueQueue().length; if(nq) ncl.textContent='· '+nq+' left'; }
   updateWipeNote();
