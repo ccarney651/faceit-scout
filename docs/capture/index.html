@@ -613,7 +613,7 @@ function detectContentRect(){ const W=vid.videoWidth,H=vid.videoHeight; if(!W) r
 function boxesFromStrips(R,dx,dy){ const o={}; for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s];
   o[s]={x:R.x+(fx+dx)*R.w, y:R.y+(fy+dy)*R.h, w:fw*R.w, h:fh*R.h}; } return o; }
 // Sum of the 10 cells' best centre-match scores — higher = better aligned.
-function scoreBoxes(frame, bxs){ let sum=0;
+function scoreBoxes(frame, bxs){ ensureWork(); let sum=0;
   for(const side of ['a','b']){ const b=bxs[side];
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       sum += bestMatch(cellGrayPadded(frame,cell), side, true).score; } }
