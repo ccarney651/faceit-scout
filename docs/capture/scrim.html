@@ -74,6 +74,8 @@
   .capbtns{display:flex;gap:6px}.cap .review{flex-basis:100%;margin-top:4px;padding:6px 8px;background:var(--surface2);border-radius:8px}
   .cap:first-of-type{border-top:0}
   .warn{color:var(--bad)} .ok{color:var(--good)} .faint{color:var(--faint)}
+  .wip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0b1020;background:var(--mid);border-radius:6px;padding:2px 7px;vertical-align:1px;flex:none}
+  .wip::before{content:'\26A0';font-size:9px;line-height:1}
   .eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:800}
   .hrow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
   .navcap{background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
@@ -97,11 +99,11 @@
   .pbar>div{height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .2s}
   #mback{position:fixed;inset:0;background:rgba(4,7,12,.62);backdrop-filter:blur(2px);z-index:900;display:none;align-items:center;justify-content:center}
   #mback.open{display:flex}
-  .modal{background:var(--surface);border:1px solid var(--line2,#313a48);border-radius:12px;padding:16px 18px;max-width:min(440px,92vw);width:100%;box-shadow:0 12px 40px rgba(0,0,0,.55);animation:tin .16s ease-out}
-  .modal h3{margin:0 0 8px;font-size:14px}
-  .modal .mbody{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .modal{background:var(--surface);border:1px solid var(--line2,#313a48);border-radius:12px;padding:16px 18px;max-width:min(440px,92vw);max-height:min(760px,92vh);width:100%;box-shadow:0 12px 40px rgba(0,0,0,.55);animation:tin .16s ease-out;display:flex;flex-direction:column}
+  .modal h3{margin:0 0 8px;font-size:14px;flex:none}
+  .modal .mbody{font-size:13px;color:var(--muted);margin-bottom:14px;overflow-y:auto;flex:1 1 auto;max-height:min(560px,72vh)}
   .modal .mbody label.f{color:var(--muted)}
-  .modal .mrow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .modal .mrow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;flex:none}
   .modal input[type=text],.modal select{width:100%;margin-top:2px}
   .poprow{border-top:1px solid var(--line);padding-top:10px}
   #pop{background:var(--accent);color:#0b1020;border:0;border-radius:8px;padding:10px 16px;font-weight:750;font-size:13.5px;box-shadow:0 2px 12px rgba(128,135,255,.3)}
@@ -165,7 +167,7 @@
       <button id="setL" class="ghost" disabled>Set LEFT box (blue)</button>
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
       <button id="setSb" class="ghost" disabled title="Drag a box over the scrim scoreboard panel (top-left, below the portraits) — read at map end">Set SCOREBOARD box</button>
-      <button id="setSr" class="ghost" disabled title="Drag a box over the top-centre score readout (e.g. 2 - 3) — read at map end">Set SCORE box</button>
+      <button id="setSr" class="ghost" disabled title="Drag a box over the top-centre score readout (e.g. 2 - 3) — read at map end">Set SCORE box</button><span class="wip" title="Experimental — reads the scoreboard with OCR at map end to auto-fill scores and win/loss. Set both boxes and calibrate before relying on it.">WIP</span>
       <button id="fscal" class="ghost" disabled title="Enlarge the preview to the whole screen so the boxes are easy to place">Fullscreen calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="clearcal" class="ghost">reset boxes</button>
       <button id="hidep" class="ghost" disabled>Hide preview</button>
@@ -190,17 +192,31 @@
       <button id="scsave">Save scrim</button>
     </div>
     <div class="row" style="margin-bottom:8px">
-      <label class="f">Map<select id="scrimmap"></select></label>
+      <label class="f">Mode<select id="scrimmode"></select></label>
       <label class="f">Replay code <span class="status">(optional)</span><input type="text" id="scrimcode" placeholder="paste code or leave blank"></label>
+    </div>
+    <div class="row" style="margin-bottom:8px;align-items:flex-start">
+      <label class="f" style="display:block;width:100%">Map<div id="scrimmapbtns" class="row" style="margin-top:6px"></div></label>
+      <input type="hidden" id="scrimmapidx">
     </div>
     <div class="row" style="margin-bottom:8px">
       <button id="scstart">Start map</button>
     </div>
     <div class="row" style="margin-bottom:6px">
       <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
+      <button id="detectsides" class="ghost">Detect sides</button><span class="wip" title="Experimental — reads player names off the HUD with OCR and matches them against known rosters. May fail on custom UI colors or unfamiliar rosters.">WIP</span>
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
       <h2>Scrim maps (saved in this browser)</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button id="scrimpscrbtn" class="ghost">Import session from screenshot…</button><span class="wip" title="Experimental — OCRs an Overwatch end-of-session screenshot to pre-fill map codes and scores. Verify every row in the review dialog.">WIP</span>
+        <span class="status">(or paste an image)</span>
+        <input id="scrimpscr" type="file" accept="image/*" style="display:none">
+      </div>
+      <div id="scrimqueue" style="display:none;margin-bottom:8px">
+        <h3 style="margin-bottom:6px">Session queue</h3>
+        <div id="scrimqueuelist"></div>
+      </div>
       <div id="scrimmaplist" class="status">Pick or create a scrim — its maps will appear here.</div>
       <div class="row" style="margin-top:10px">
         <button id="screxport" class="ghost">Export scrims</button>
@@ -349,7 +365,7 @@ function uiModal(opts){ return new Promise(res=>{
   const row=document.createElement('div'); row.className='mrow';
   const done=v=>{ back.classList.remove('open'); back.innerHTML=''; document.removeEventListener('keydown',onkey,true);
     if(!opts.collect){ res(v); return; }
-    const fields={}; m.querySelectorAll('input,select').forEach(el=>{ fields[el.id]=el.value; }); res({value:v, fields}); };
+    const fields={}; m.querySelectorAll('input,select,textarea').forEach(el=>{ fields[el.id]=el.value; }); res({value:v, fields}); };
   const acts=opts.actions||[{label:'OK',value:true}];
   acts.forEach(a=>{ const b=document.createElement('button'); b.type='button'; b.textContent=a.label; if(a.ghost) b.className='ghost'; b.onclick=()=>done(a.value); row.appendChild(b); });
   m.appendChild(row); back.appendChild(m); back.classList.add('open');
@@ -376,18 +392,91 @@ async function loadRefs(){
 }
 
 // ---------- load FACEIT team names for autocomplete ----------
-let LEAGUE_TEAMS=[];
+let LEAGUE_TEAMS=[], FACEIT_ROSTERS={};
 async function loadTeamNames(){
   try{
     const d=await (await fetch('data.json',{cache:'no-store'})).json();
     const seen=new Set();
+    FACEIT_ROSTERS={};
+    for(const mid in (d.rosters||{})){
+      const match=d.rosters[mid];
+      for(const tid in match){
+        const t=match[tid];
+        if(t && t.name && t.players){
+          seen.add(t.name);
+          const key=t.name.trim().toLowerCase();
+          FACEIT_ROSTERS[key]=t;
+        }
+      }
+    }
     for(const c of (d.codes||[])){
       if(c.team_a){seen.add(c.team_a);} if(c.team_b){seen.add(c.team_b);}
     }
     LEAGUE_TEAMS=[...seen].sort();
     const dl=document.getElementById('teamnames'); if(dl) dl.innerHTML=LEAGUE_TEAMS.map(t=>`<option value="${esc(t)}">`).join('');
-  }catch(e){}
+  }catch(e){ FACEIT_ROSTERS={}; }
 }
+function faceitRoster(teamName){
+  const key=(teamName||'').trim().toLowerCase();
+  const t=FACEIT_ROSTERS[key]; if(!t||!t.players) return [];
+  return t.players.map(p=>(p.game_name||p.nick||'').trim()).filter(Boolean); }
+async function buildLearnedRosters(){
+  const maps=await idbScrimMaps(); const rosters={};
+  const add=(team,name)=>{ const key=(team||'').trim().toLowerCase(); if(!key||!name) return; (rosters[key]||(rosters[key]=new Set())).add(name); };
+  for(const m of maps){
+    const leftTeam=m.side_a_team||'', rightTeam=m.side_b_team||'';
+    for(const o of (m.observations||[])){
+      for(const [g,name] of (o.pairs||[])) add(o.side==='a'?leftTeam:rightTeam, name);
+    }
+  }
+  const out={}; for(const k in rosters) out[k]=[...rosters[k]]; return out; }
+const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=2;
+function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
+  for(let i=ai;i<aj;i++){ const nj={};
+    for(let j=bi;j<bj;j++){ if(a[i]===b[j]){ const k=(j2[j-1]||0)+1; nj[j]=k;
+      if(k>best){besti=i-k+1;bestj=j-k+1;best=k;} } } j2=nj; }
+  let tot=best;
+  if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
+  return tot; }
+function simScore(a,b){ a=(a||'').toLowerCase().trim(); b=(b||'').toLowerCase().trim();
+  const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }
+function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
+  let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
+function confidentOrientation(leftNames,rightNames,aRoster,bRoster){
+  const direct=affinity(leftNames,aRoster)+affinity(rightNames,bRoster);
+  const swap=affinity(leftNames,bRoster)+affinity(rightNames,aRoster);
+  let got,lead,rosters;
+  if(direct>=swap){ got='a'; lead=direct-swap; rosters=[aRoster,bRoster]; }
+  else { got='b'; lead=swap-direct; rosters=[bRoster,aRoster]; }
+  if(lead<AUTO_SIDE_MARGIN) return null;
+  let strong=0; const sides=[leftNames,rightNames];
+  for(let k=0;k<2;k++) for(const n of sides[k]){ if(!n) continue;
+    let best=0; for(const r of rosters[k]) best=Math.max(best,simScore(n,r));
+    if(best>=STRONG_NAME_SCORE) strong++; }
+  return strong>=MIN_STRONG_NAMES ? got : null; }
+async function detectScrimSides(){
+  const c=selectedCode(); if(!c) return {left:null, source:null};
+  const names=await readHudNames(); if(!names) return {left:null, source:null};
+  if(session) session.players=names;
+  const learned=await buildLearnedRosters();
+  const usKey=(c.team_a||'').trim().toLowerCase(), themKey=(c.team_b||'').trim().toLowerCase();
+  let left=confidentOrientation(names.a,names.b,learned[usKey]||[],learned[themKey]||[]);
+  if(left) return {left, source:'learned'};
+  left=confidentOrientation(names.a,names.b,faceitRoster(c.team_a),faceitRoster(c.team_b));
+  if(left) return {left, source:'FACEIT'};
+  return {left:null, source:null}; }
+async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
+  if(s._detecting) return false;
+  s._detecting=true;
+  try{
+    const res=await detectScrimSides();
+    if(res.left){ const val=res.left==='a'?'us':'them';
+      document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===val); });
+      onSideChange(); s.sideResolved=true;
+      snapMsg(`sides auto-detected (${res.source}) \u2014 ${val==='us'?'us':'them'} on left`, false); return true; }
+    snapMsg('could not auto-detect sides \u2014 pick the left team above, then Snapshot again', true); return false;
+  }catch(e){ snapMsg('side detection failed \u2014 set the left team manually, then Snapshot again', true); return false; }
+  finally{ s._detecting=false; } }
 
 // ---------- selected code ----------
 function selectedCode(){ return scrimPseudoCode(); }
@@ -686,9 +775,9 @@ function onSideChange(){ if(session){ session.sideResolved=!!((document.querySel
   relabelTeams(); }
 function swapSides(){ const c=selectedCode(); if(!c) return;
   const radios=document.querySelectorAll('input[name=side]');
-  if(radios.length===2){ const cur=radios[0].checked?radios[0].value:radios[1].value;
-    const newVal=cur==='us'?'them':'us';
-    radios.forEach(r=>{ r.checked=(r.value===newVal); }); }
+  const cur=[...radios].find(r=>r.checked)?.value||'us';
+  const newVal=cur==='them'?'us':'them';
+  radios.forEach(r=>{ r.checked=(r.value===newVal); });
   onSideChange(); }
 function refreshSession(){ if(!session) return;
   document.getElementById('roundpill').textContent='Round '+session.round;
@@ -697,8 +786,8 @@ function refreshSession(){ if(!session) return;
   document.getElementById('obscount').textContent=session.snaps.length+' snapshot'+(session.snaps.length===1?'':'s');
   const ol=document.getElementById('obslist'); ol.innerHTML='';
   session.snaps.slice().reverse().forEach(s=>{ const el=document.createElement('div'); el.className='obs';
-    const fmt=names=>names.join('/');
-    el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames)}  vs  ${fmt(s.bNames)}`; ol.appendChild(el); });
+    const fmt=(names,players)=>names.map((n,i)=>(players&&players[i])?`${n} (${players[i]})`:n).join('/');
+    el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames,s.aPlayers)}  vs  ${fmt(s.bNames,s.bPlayers)}`; ol.appendChild(el); });
   updateBtns(); renderPipControls();
 }
 function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
@@ -710,13 +799,16 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   if(!attackerGateOk(session)){
     snapMsg('confirm who is attacking before capturing (round 3+ is time-bank, not parity)',true); return; }
+  if(!(await ensureSideResolved())) return;
   const comp=readComp(); if(!comp) return;
   const aG=comp.a.map(s=>s.guid), bG=comp.b.map(s=>s.guid);
   const lk=session.lastKept;
   if(lk && lk.round===session.round && lk.sub===session.sub && onlyLostKnown(lk.a,aG) && onlyLostKnown(lk.b,bG)){ if(!auto) snapMsg('unchanged \u2014 nothing new'); return; }
+  if(!session.players){ const names=await readHudNames(); if(names) session.players=names; }
+  const pA=(session.players&&session.players.a)||[], pB=(session.players&&session.players.b)||[];
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
     a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name),
-    aPlayers:[], bPlayers:[], ts:session.snaps.length*1000};
+    aPlayers:pA, bPlayers:pB, ts:session.snaps.length*1000};
   if(!session.crops){ const cr={a:[],b:[]}; for(const s of ['a','b']) for(let i=0;i<5;i++) cr[s].push(learnCrop(s,i)); session.crops=cr; }
   session.snaps.push(snap); session.history.push({type:'snap'}); session.lastKept={round:session.round, sub:session.sub, a:aG, b:bG};
   refreshSession(); snapMsg('\u2713 snapshot '+session.snaps.length+' kept');
@@ -824,43 +916,75 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
     await w.setParameters({ tessedit_pageseg_mode:'7' });
     _ocrWorker=w; return w; })();
   return _ocrLoading; }
+// Name bar sits at ~48-90% of each portrait cell's height; grayscale + 6x upscale +
+// a light contrast stretch lift the ~10px text enough for OCR.
+function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
+  const sx=Math.max(0,cell.x-padX), sy=cell.y+cell.h*0.48, sw=cell.w+2*padX, sh=cell.h*0.42, sc=6;
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(sw*sc)); cv.height=Math.max(1,Math.round(sh*sc));
+  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(frame, sx,sy,sw,sh, 0,0,cv.width,cv.height);
+  const im=cx.getImageData(0,0,cv.width,cv.height), d=im.data;
+  for(let i=0;i<d.length;i+=4){ let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
+  cx.putImageData(im,0,0); return cv; }
+async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return null;
+  const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
+  for(const side of ['a','b']){ const b=boxes[side];
+    for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
+      const {data}=await w.recognize(nameCanvas(frame,cell));
+      out[side].push((data.text||'').replace(/\s+/g,' ').trim());
+      snapMsg('reading HUD names… '+(++done)+'/10'); } }
+  return out; }
 async function finishScrimMap(c){
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
   const leftLabel = sideId==='them' ? c.team_b : c.team_a;
   const rightLabel = sideId==='them' ? c.team_a : c.team_b;
   const observations=[];
   for(const s of session.snaps){ for(const side of ['a','b']){ const slots=(side==='a'?s.a:s.b);
+    const players=(side==='a'?s.aPlayers:s.bPlayers)||[];
     const heroes=[], pairs=[];
-    for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue; heroes.push(g); pairs.push([g,null]); }
+    for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue; heroes.push(g); pairs.push([g, players[i]||null]); }
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: session.phased? (s.attacker===side?'attack':'defend') : null,
       heroes, pairs }); } }
+  const sb = await readScoreboard(grabFrame());
+  let score=null, winner_side=null, result=null;
+  if(sb && sb.readout && sb.readout.a!=null && sb.readout.b!=null){
+    const usIsA = sideId !== 'them';
+    score={ us: usIsA ? sb.readout.a : sb.readout.b, them: usIsA ? sb.readout.b : sb.readout.a };
+    winner_side = sb.readout.a > sb.readout.b ? 'a' : (sb.readout.b > sb.readout.a ? 'b' : null);
+    result = score.us > score.them ? 'win' : (score.them > score.us ? 'loss' : 'draw');
+  }
   const rec={ id:activeScrim.id+':'+activeScrimMap.map_no, scrim_id:activeScrim.id, map_no:activeScrimMap.map_no,
     code:activeScrimMap.code||null, map_name:c.map, map_category:c.map_category, map_guid:null,
-    side_a_team:leftLabel, side_b_team:rightLabel, winner_side:null,
+    side_a_team:leftLabel, side_b_team:rightLabel, winner_side, score, result,
     profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
     captured_at:new Date().toISOString(), bans:[], observations, crops:session.crops||null,
-    scoreboard: await readScoreboard(grabFrame()), scrim:true };
+    scoreboard: sb, scrim:true };
   await idbPutScrimMap(rec);
-  activeScrim.map_no=(activeScrim.map_no||1)+1; await idbPutScrim(activeScrim);
+  const wasQueued=activeScrimMap.queued;
+  if(!wasQueued) activeScrim.map_no=(activeScrim.map_no||1)+1;
+  await idbPutScrim(activeScrim);
   const done=session.snaps.length;
   session=null; activeScrimMap=null;
   await renderScrimMaps();
   toast('<b>'+esc(c.map||'map')+'</b> saved to scrim \u2014 '+done+' snapshot'+(done===1?'':'s')+' captured (private)','ok');
   updateBtns();
+  if(wasQueued){ const maps=await idbScrimMaps(); const next=maps.filter(m=>m.scrim_id===activeScrim.id&&m.queued&&m.map_no>rec.map_no).sort((a,b)=>a.map_no-b.map_no)[0]; if(next) startQueuedMap(next); }
 }
 
 // ---------- Private scrim mode ----------
 function startScrimSession(c){
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   session={code:c, submaps, phased, round:1, sub: submaps.length?null:null,
-    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:true, snaps:[], lastKept:null, history:[]};
+    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[]};
   document.getElementById('mapinfo').textContent=`${c.map||'?'} \u00B7 ${c.map_category||'?'} \u2014 ${c.team_a||'?'} vs ${c.team_b||'?'}`;
   const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
   document.getElementById('subpill').style.display=submaps.length?'':'none';
   if(submaps.length) submaps.forEach(s=>{ const b=document.createElement('button'); b.className='mk'; b.textContent=s; b.onclick=()=>pickSub(s); subbtns.appendChild(b); });
   const sr=document.getElementById('sideradios');
-  sr.innerHTML=`<label class="status"><input type="radio" name="side" value="us" checked> ${esc(c.team_a||'us')}</label>`+
+  sr.innerHTML=`<label class="status"><input type="radio" name="side" value="" checked> auto</label>`+
+    `<label class="status"><input type="radio" name="side" value="us"> ${esc(c.team_a||'us')}</label>`+
     `<label class="status"><input type="radio" name="side" value="them"> ${esc(c.team_b||'them')}</label>`;
   sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=onSideChange);
   refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
@@ -900,24 +1024,83 @@ async function saveScrim(){
 }
 async function startScrimMap(){
   if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
-  const mi=document.getElementById('scrimmap').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
+  const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
   const code=(document.getElementById('scrimcode').value||'').trim();
-  activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1};
+  activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1, queued:false};
   document.getElementById('scrimcode').value=code;
   startScrimSession(scrimPseudoCode());
   toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
 }
-function buildScrimMapOptions(){ const sel=document.getElementById('scrimmap');
-  sel.innerHTML=SCRIM_MAPS.map((m,i)=>`<option value="${i}">${esc(m.name)} \u2014 ${m.cat}</option>`).join(''); }
+function startQueuedMap(m){
+  if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
+  if(session){ toast('finish the current map first','warn'); return; }
+  activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
+  document.getElementById('scrimcode').value=m.code||'';
+  startScrimSession(scrimPseudoCode());
+  toast('<b>'+esc(m.map_name)+'</b> started from queue'+(m.code?' \u00B7 '+esc(m.code):'')+' \u2014 capture, then Finish + save','ok');
+}
+function buildScrimMapOptions(){
+  const modes=[...new Set(SCRIM_MAPS.map(m=>m.cat))];
+  const sel=document.getElementById('scrimmode');
+  sel.innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  sel.onchange=onScrimModeChange;
+  sel.value=modes[0];
+  onScrimModeChange();
+}
+function onScrimModeChange(){
+  const mode=document.getElementById('scrimmode').value;
+  const host=document.getElementById('scrimmapbtns');
+  host.innerHTML='';
+  SCRIM_MAPS.forEach((m,i)=>{
+    if(m.cat!==mode) return;
+    const b=document.createElement('button'); b.className='mk'; b.textContent=m.name; b.dataset.idx=i;
+    b.onclick=()=>selectScrimMap(i,b);
+    host.appendChild(b);
+  });
+  const first=host.querySelector('button');
+  if(first) selectScrimMap(+first.dataset.idx, first);
+}
+function selectScrimMap(idx, btn){
+  document.getElementById('scrimmapidx').value=idx;
+  if(btn){
+    Array.from(document.getElementById('scrimmapbtns').children).forEach(b=>{
+      b.style.background=''; b.style.color=''; b.style.borderColor=''; b.style.fontWeight='';
+    });
+    btn.style.background='var(--accent)'; btn.style.color='#0b1020'; btn.style.borderColor='var(--accent)'; btn.style.fontWeight='700';
+  }
+}
 async function renderScrimMaps(){
   const host=document.getElementById('scrimmaplist'); if(!host) return;
-  if(!activeScrim){ host.textContent='Pick or create a scrim \u2014 its maps will appear here.'; return; }
-  const maps=(await idbScrimMaps()).filter(m=>m.scrim_id===activeScrim.id).sort((a,b)=>b.captured_at.localeCompare(a.captured_at));
+  const qhost=document.getElementById('scrimqueuelist');
+  const qwrap=document.getElementById('scrimqueue');
+  if(!activeScrim){ host.textContent='Pick or create a scrim \u2014 its maps will appear here.'; if(qwrap) qwrap.style.display='none'; return; }
+  const all=await idbScrimMaps();
+  const queue=all.filter(m=>m.scrim_id===activeScrim.id&&m.queued).sort((a,b)=>a.map_no-b.map_no);
+  const maps=all.filter(m=>m.scrim_id===activeScrim.id&&!m.queued).sort((a,b)=>b.captured_at.localeCompare(a.captured_at));
+  if(qhost){
+    if(queue.length){
+      qwrap.style.display='block';
+      qhost.innerHTML='';
+      queue.forEach(m=>{
+        const row=document.createElement('div'); row.className='cap';
+        const scoreStr=m.score?` \u00B7 ${m.score.us}-${m.score.them}`:'';
+        const resStr=m.result?(m.result==='win'?' \u00B7 Win':(m.result==='loss'?' \u00B7 Loss':' \u00B7 Draw')):'';
+        row.innerHTML=`<span><b style="color:var(--fg)">${esc(m.map_name||'?')}</b> <span class="status">${esc(m.map_category||'')}${scoreStr}${resStr}</span>`+
+          `${m.code?'<br><span class="status">'+esc(m.code)+'</span>':''}</span>`+
+          `<span class="capbtns"><button class="ghost scout">scout</button><button class="ghost del">delete</button></span>`;
+        row.querySelector('.del').onclick=async()=>{ await idbDelScrimMap(m.id); renderScrimMaps(); };
+        row.querySelector('.scout').onclick=()=>startQueuedMap(m);
+        qhost.appendChild(row);
+      });
+    } else { qwrap.style.display='none'; if(qhost) qhost.innerHTML=''; }
+  }
   if(!maps.length){ host.textContent='No maps captured under this scrim yet.'; return; }
   host.innerHTML='';
   maps.forEach(m=>{
     const row=document.createElement('div'); row.className='cap';
-    row.innerHTML=`<span><b style="color:var(--fg)">${esc(m.map_name||'?')}</b> <span class="status">${esc(m.map_category||'')} \u00B7 ${m.observations.length} obs</span>`+
+    const scoreStr=m.score?` \u00B7 ${m.score.us}-${m.score.them}`:'';
+    const resStr=m.result?(m.result==='win'?' \u00B7 Win':(m.result==='loss'?' \u00B7 Loss':' \u00B7 Draw')):'';
+    row.innerHTML=`<span><b style="color:var(--fg)">${esc(m.map_name||'?')}</b> <span class="status">${esc(m.map_category||'')}${scoreStr}${resStr} \u00B7 ${m.observations.length} obs</span>`+
       `${m.code?'<br><span class="status">'+esc(m.code)+'</span>':''}</span>`+
       '<span class="capbtns"><button class="ghost rev">review</button><button class="ghost del">delete</button></span>';
     const rev=document.createElement('div'); rev.className='review'; rev.style.display='none';
@@ -940,6 +1123,160 @@ async function importScrims(file){
   toast('imported '+j.scrims.length+' scrims \u00B7 '+j.maps.length+' maps','ok');
   await renderScrimPanel();
 }
+function bestMapMatch(text){
+  const t=(text||'').toLowerCase();
+  let best=null, bestScore=0, bestLen=0;
+  for(const m of SCRIM_MAPS){
+    const name=m.name.toLowerCase();
+    const idx=t.indexOf(name);
+    if(idx!==-1){ if(name.length>bestLen){ bestLen=name.length; best=m; bestScore=100; } continue; }
+    const s=simScore(t,name); if(s>bestScore){ bestScore=s; best=m; } }
+  return bestScore>=45 ? best : null; }
+function parseScrimSessionText(text){
+  const lines=(text||'').split('\n').map(s=>s.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const byCode=new Map();
+  const codeToMapIndex=new Map();
+  const mapIndexToKey=new Map();
+  // Pass 1: lines that contain a score at the end.
+  for(const line of lines){
+    const scoreMatch=line.match(/(\d+)\s*[-\u2013\u2014]\s*(\d+)\s*$/);
+    if(!scoreMatch) continue;
+    const us=+scoreMatch[1], them=+scoreMatch[2];
+    let remainder=line.slice(0, scoreMatch.index).trim();
+    remainder=remainder.replace(/[|\u2014\u2013-]\s*$/,'').trim();
+    const resultMatch=remainder.match(/\b(VICTORY|DEFEAT|DRAW|WIN|LOSS)\s*$/i);
+    const rawResult=resultMatch ? resultMatch[1].toLowerCase() : null;
+    if(resultMatch) remainder=remainder.slice(0, resultMatch.index).trim();
+    const codeMatch=remainder.match(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{6}\b/i);
+    const code=codeMatch ? codeMatch[0].toUpperCase() : null;
+    if(codeMatch) remainder=remainder.replace(codeMatch[0],'').trim();
+    const map=bestMapMatch(remainder);
+    if(!map) continue;
+    const result=rawResult==='victory'||rawResult==='win'?'win':(rawResult==='defeat'||rawResult==='loss'?'loss':(rawResult==='draw'||us===them?'draw':null));
+    const key=code||`${map.name}-${us}-${them}`;
+    byCode.set(key, { map_name:map.name, map_category:map.cat, code, score:{us,them}, result }); }
+  // Pass 2: Overwatch replay-history style (code + map may be on separate lines, score optional).
+  const mapLines=[], codeLines=[];
+  for(let i=0;i<lines.length;i++){ const map=bestMapMatch(lines[i]); if(map) mapLines.push({i,map,line:lines[i]}); }
+  for(let i=0;i<lines.length;i++){ const m=lines[i].match(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{6}\b/i); if(m) codeLines.push({i,code:m[0].toUpperCase()}); }
+  const usedMaps=new Set();
+  for(const {i:ci,code} of codeLines){
+    if(byCode.has(code)) continue;
+    let best=null, bestDist=Infinity;
+    for(const {i:mi,map,line:mapLine} of mapLines){
+      if(usedMaps.has(mi)) continue;
+      const dist=Math.abs(mi-ci);
+      if(dist>4) continue;
+      // Prefer maps after the code; only consider maps before if strictly closer.
+      if(mi<ci && best && best.mi>ci) continue;
+      if(dist<bestDist){ bestDist=dist; best={mi,map,mapLine}; } }
+    if(best){
+      usedMaps.add(best.mi);
+      const mapLineNoCode=best.mapLine.replace(code,'').trim();
+      const scoreMatch=mapLineNoCode.match(/(\d+)\s*[-\u2013\u2014]\s*(\d+)/);
+      const us=scoreMatch?+scoreMatch[1]:0, them=scoreMatch?+scoreMatch[2]:0;
+      const resultMatch=mapLineNoCode.match(/\b(VICTORY|DEFEAT|DRAW|WIN|LOSS)\b/i);
+      let result=null;
+      if(resultMatch){ const raw=resultMatch[1].toLowerCase(); result=raw==='victory'||raw==='win'?'win':(raw==='defeat'||raw==='loss'?'loss':(raw==='draw'?'draw':null)); }
+      else if(us===them && (us>0||them>0)) result='draw';
+      byCode.set(code, { map_name:best.map.name, map_category:best.map.cat, code, score:{us,them}, result });
+      codeToMapIndex.set(code, best.mi); mapIndexToKey.set(best.mi, code); } }
+  // Pass 3: add any map lines that still have no paired code.
+  for(const {i:mi,map,line:mapLine} of mapLines){
+    if(usedMaps.has(mi)) continue;
+    if(/(\d+)\s*[-\u2013\u2014]\s*(\d+)\s*$/.test(mapLine)) continue; // already handled by pass 1
+    const mapLineClean=mapLine.replace(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{6}\b/gi,'').trim();
+    const scoreMatch=mapLineClean.match(/(\d+)\s*[-\u2013\u2014]\s*(\d+)/);
+    const us=scoreMatch?+scoreMatch[1]:0, them=scoreMatch?+scoreMatch[2]:0;
+    const resultMatch=mapLineClean.match(/\b(VICTORY|DEFEAT|DRAW|WIN|LOSS)\b/i);
+    let result=null;
+    if(resultMatch){ const raw=resultMatch[1].toLowerCase(); result=raw==='victory'||raw==='win'?'win':(raw==='defeat'||raw==='loss'?'loss':(raw==='draw'?'draw':null)); }
+    else if(us===them && (us>0||them>0)) result='draw';
+    const key=`${map.name}-${mi}`;
+    byCode.set(key, { map_name:map.name, map_category:map.cat, code:null, score:{us,them}, result });
+    mapIndexToKey.set(mi, key); }
+  // Pass 4: result+score lines that are on their own (e.g. right column of Overwatch UI) can be paired to the nearest map.
+  const resultScoreLines=[];
+  for(let i=0;i<lines.length;i++){
+    const m=lines[i].match(/\b(VICTORY|DEFEAT|WIN|LOSS|DRAW)\s*[^\d]*?(\d+)\s*[-\u2013\u2014]\s*(\d+)/i);
+    if(m) resultScoreLines.push({i,result:m[1].toLowerCase(),us:+m[2],them:+m[3]}); }
+  for(const {i:ri,result,us,them} of resultScoreLines){
+    let best=null, bestDist=Infinity;
+    for(const {i:mi} of mapLines){
+      const dist=Math.abs(mi-ri);
+      if(dist>4) continue;
+      if(dist<bestDist){ bestDist=dist; best=mi; } }
+    if(best==null) continue;
+    const key=mapIndexToKey.get(best); if(!key) continue;
+    const row=byCode.get(key); if(!row) continue;
+    row.score.us=us; row.score.them=them;
+    row.result=result==='victory'||result==='win'?'win':(result==='defeat'||result==='loss'?'loss':(result==='draw'?'draw':null)); }
+  return Array.from(byCode.values()); }
+async function ocrTextFromImage(file){
+  const w=await ocrWorker(); await w.setParameters({ tessedit_pageseg_mode:'6' });
+  const {data}=await w.recognize(file); let text=data.text||'';
+  // If the first pass found nothing mappable, try sparse-text mode which can pick up
+  // disjoint UI text. If maps were already found, stay with the cleaner reading.
+  if(!bestMapMatch(text)){
+    await w.setParameters({ tessedit_pageseg_mode:'11' });
+    const {data:d11}=await w.recognize(file);
+    const lines6=text.split('\n').map(s=>s.trim()).filter(Boolean);
+    const seen=new Set(lines6);
+    const lines11=(d11.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    for(const l of lines11) if(!seen.has(l)) lines6.push(l);
+    text=lines6.join('\n'); }
+  await w.setParameters({ tessedit_pageseg_mode:'7' });
+  return text; }
+async function importSessionFromScreenshot(file){
+  if(!file) return;
+  const team_us=(document.getElementById('scus').value||'').trim();
+  const opponent=(document.getElementById('scopp').value||'').trim();
+  if(!team_us||!opponent){ toast('enter Our team and Opponent first','warn'); return; }
+  const ocrText=await ocrTextFromImage(file);
+  let rows=parseScrimSessionText(ocrText);
+  if(!rows.length){
+    const debug=await uiModal({title:'No map rows recognized', bodyHtml:`<p class="status">Tesseract saw the text below. Edit it so each map line ends with <b>us - them</b> (e.g. <code>Ilios 3 - 2</code>), then click Parse.</p><textarea id="rawocr" rows="10" style="width:100%;background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px;font:13px/1.45 monospace">${esc(ocrText)}</textarea>`, collect:true, escapeValue:null,
+      actions:[{label:'Cancel',value:null,ghost:true},{label:'Parse',value:true}]});
+    if(!debug||!debug.value) return;
+    rows=parseScrimSessionText(debug.fields.rawocr||'');
+    if(!rows.length){ toast('still no map rows found after editing','warn'); return; }
+  }
+  const bodyHtml=`<div class="status" style="margin-bottom:10px">Found ${rows.length} map row${rows.length===1?'':'s'}.</div>`+rows.map((r,i)=>`
+    <div class="row" style="align-items:flex-start;margin-bottom:8px">
+      <label class="f">Map<input type="text" id="map_${i}" value="${esc(r.map_name)}"></label>
+      <label class="f">Code<input type="text" id="code_${i}" value="${esc(r.code||'')}"></label>
+      <label class="f">Us<input type="number" id="us_${i}" value="${r.score.us}" style="width:60px"></label>
+      <label class="f">Them<input type="number" id="them_${i}" value="${r.score.them}" style="width:60px"></label>
+      <label class="f">Result<select id="res_${i}"><option value=""></option><option value="win"${r.result==='win'?' selected':''}>Win</option><option value="loss"${r.result==='loss'?' selected':''}>Loss</option><option value="draw"${r.result==='draw'?' selected':''}>Draw</option></select></label>
+    </div>`).join('')+`<details style="margin-top:12px"><summary class="cardsum">Debug OCR text</summary><textarea rows="6" readonly style="width:100%;margin-top:8px;background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px;font:12px/1.45 monospace">${esc(ocrText)}</textarea></details>`;
+  const review=await uiModal({title:'Review imported session', bodyHtml, collect:true, escapeValue:null,
+    actions:[{label:'Cancel',value:null,ghost:true},{label:'Import',value:true}]});
+  if(!review||!review.value) return;
+  rows.forEach((r,i)=>{
+    const editedMap=review.fields[`map_${i}`]||r.map_name;
+    const map=SCRIM_MAPS.find(m=>m.name.toLowerCase()===(editedMap||'').trim().toLowerCase())||bestMapMatch(editedMap);
+    r.map_name=map?map.name:editedMap; r.map_category=map?map.cat:r.map_category;
+    r.code=(review.fields[`code_${i}`]||r.code||'').toUpperCase();
+    r.score.us=+review.fields[`us_${i}`] || r.score.us; r.score.them=+review.fields[`them_${i}`] || r.score.them;
+    r.result=review.fields[`res_${i}`] || r.result; });
+  if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
+  Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
+    date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
+    updated_at:new Date().toISOString()});
+  await idbPutScrim(activeScrim); localStorage.setItem('owscout_cap_scrim', activeScrim.id);
+  const startNo=activeScrim.map_no||1;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i]; const mapNo=startNo+i;
+    await idbPutScrimMap({ id:activeScrim.id+':'+mapNo, scrim_id:activeScrim.id, map_no:mapNo,
+      code:r.code||null, map_name:r.map_name, map_category:r.map_category, map_guid:null,
+      side_a_team:activeScrim.team_us, side_b_team:activeScrim.opponent,
+      winner_side:null, score:r.score, result:r.result,
+      profile:null, captured_at:null, bans:[], observations:[], crops:null, scoreboard:null,
+      scrim:true, queued:true }); }
+  activeScrim.map_no=startNo+rows.length; await idbPutScrim(activeScrim);
+  await renderScrimPanel();
+  toast('imported '+rows.length+' maps \u2014 click Scout on the first one','ok');
+}
 
 // ---------- pop-out overlay ----------
 function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; const d=pipWin.document;
@@ -949,8 +1286,8 @@ function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; co
   main.className='prow'; main.innerHTML='';
   mk(main,'\u25C9 Snapshot',()=>snapshot(false),'go');
   mk(main,'Round \u25B8',nextRound); mk(main,'\u21B6 Undo',undo); mk(main,'\u2713 Finish',()=>finishMap(),'fin');
-  side.className='prow';
-  const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides'; side.appendChild(l);
+  side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
+  const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
   mk(side,'\u21C4 Swap L/R',swapSides);
   sub.innerHTML='';
   if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
@@ -1062,9 +1399,19 @@ document.getElementById('pop').onclick=popout;
 document.getElementById('scsave').onclick=saveScrim;
 document.getElementById('scrimpick').onchange=onScrimPick;
 document.getElementById('scstart').onclick=startScrimMap;
+document.getElementById('detectsides').onclick=async()=>{
+  if(!session){ snapMsg('start a map first',true); return; }
+  if(!(boxes.a&&boxes.b&&vid.srcObject)){ snapMsg('share your screen and calibrate first',true); return; }
+  session.sideResolved=false; await ensureSideResolved(); };
 document.getElementById('screxport').onclick=exportScrims;
 document.getElementById('scimportbtn').onclick=()=>document.getElementById('scimport').click();
 document.getElementById('scimport').onchange=e=>{ const f=e.target.files[0]; if(f) importScrims(f); e.target.value=''; };
+document.getElementById('scrimpscrbtn').onclick=()=>document.getElementById('scrimpscr').click();
+document.getElementById('scrimpscr').onchange=e=>{ const f=e.target.files[0]; if(f) importSessionFromScreenshot(f); e.target.value=''; };
+document.addEventListener('paste', e=>{
+  const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
+  for(const item of items){ if(item.type.startsWith('image/')){ const f=item.getAsFile(); if(f){ e.preventDefault(); importSessionFromScreenshot(f); } break; } }
+});
 
 buildScrimMapOptions();
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
