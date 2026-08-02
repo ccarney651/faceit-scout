@@ -79,7 +79,7 @@
   @media(max-width:680px){.grid2{grid-template-columns:1fr}}
   .team{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface2)}
   .team h3{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-  .slot{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-top:1px solid var(--line)}
+  .slot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;padding:3px 0;border-top:1px solid var(--line)}
   .slot:first-of-type{border-top:0}.sc{font-variant-numeric:tabular-nums;font-size:12px}
   .hi{color:var(--good)}.mid{color:var(--mid)}.lo{color:var(--bad)}
   .rosterline{font-size:12.5px;color:var(--muted);padding:2px 0}
@@ -147,8 +147,14 @@
   /* ---- live preview hero portraits (colored, from hero_icons.json) ---- */
   .hp{width:22px;height:22px;border-radius:4px;flex:none;object-fit:cover;background:var(--surface2)}
   .slot{align-items:center}
-  .slot .hp{margin-right:auto;order:-1}
-  .slot .pn{display:block;font-style:normal;color:var(--muted);font-size:10.5px;line-height:1.15;font-weight:400}
+  .slot .hp{margin-right:6px}
+  .hd{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
+  .hdc{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700;padding:2px 0 3px}
+  .hdc:last-child{text-align:right}
+  .slot .hcell{display:flex;align-items:center;gap:6px;min-width:0}
+  .slot .cn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slot .pn{font-style:normal;color:var(--muted);font-size:12px}
+  .slot .sc{text-align:right}
 </style></head><body>
 <header>
   <div class="hrow">
@@ -702,11 +708,12 @@ function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
 function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
   for(const side of ['a','b']){ const b=boxes[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
+    if(host){ const hd=document.createElement('div'); hd.className='hd'; hd.innerHTML='<span class="hdc">Hero</span><span class="hdc">Player</span><span class="hdc sc">Conf</span>'; host.appendChild(hd); }
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
       if(host){ const row=document.createElement('div'); row.className='slot'; const pid=(session&&session.players&&session.players[side])?session.players[side][i]:null;
         const pn=pid?playerName(pid):'';
-        row.innerHTML=`${heroPortrait(r.name)}<span>${ok?r.name:'??'}${pn?` <i class="pn">${esc(pn)}</i>`:''}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">${pn?esc(pn):'—'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 
 // ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
