@@ -6,9 +6,10 @@ double-clicking, works offline, and is safe under a strict CSP.
 
 Design: a refined, information-first scouting tool. Cool slate neutrals with a
 single indigo accent; Overwatch role colours (Tank/Damage/Support) as the only
-categorical hues; a green→amber→red scale reserved for win rates. Four views:
-Overview (league at a glance) → Scout (opponent drill-down) → Meta (league-wide
-ban/map trends) → Matches (searchable, per-game bans + rosters).
+categorical hues; a green→amber→red scale reserved for win rates. Five views:
+Overview (league at a glance) → Teams (opponent drill-down) → Players (rosters,
+seats &amp; leaderboard) → League meta (ban/map trends) → Matches (searchable,
+per-game bans + rosters, plus the playoff bracket).
 """
 
 HTML_TEMPLATE = r"""<!doctype html>
@@ -85,6 +86,8 @@ main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
 .eyebrow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
+.eyebrow .note,.eyebrow .faint{text-transform:none;letter-spacing:0;font-weight:600;font-size:11.5px;margin-left:8px}
+.eyebrow .note{color:var(--muted)}
 .opener{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:4px;padding:0 4px;margin-left:3px;vertical-align:middle}
 .bvs{display:block;font-size:10.5px;font-weight:400;line-height:1.2;color:var(--faint)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
@@ -103,6 +106,10 @@ main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 .tile .n{font-size:27px;font-weight:680;letter-spacing:-.02em}
 .tile .l{color:var(--muted);font-size:12px;margin-top:1px}
 .tile .sub{color:var(--faint);font-size:11.5px;margin-top:3px}
+/* Uniform vertical rhythm: section-level cards stack 14px apart; tight/small
+   offsets are one-off utilities rather than inline styles. */
+.stack>*+*{margin-top:14px}
+.mt8{margin-top:8px}.mt10{margin-top:10px}.mt14{margin-top:14px}.mt20{margin-top:20px}
 
 /* controls */
 select,input,.btn{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line2);
@@ -148,7 +155,6 @@ table.blocks thead th:hover{color:var(--faint)}
 .scrollbox{max-height:min(60vh,560px);overflow-y:auto;overscroll-behavior:contain;
   border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)}
 .scrollbox>*+*{margin-top:8px}
-.ctlrow{display:flex;gap:8px;align-items:center;margin:0 0 8px}
 .sortbtn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--fg);
   background:var(--surface2);border:1px solid var(--line2);border-radius:8px;padding:4px 10px}
 .sortbtn:hover{border-color:var(--accent);color:var(--accent)}
@@ -263,6 +269,8 @@ table.blocks thead th:hover{color:var(--faint)}
 .crow+.crow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 .crow .rec{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
 .crow.thin{opacity:.55}                      /* n=1: present, but visibly weak evidence */
+.crowgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 20px}
+.crowgrid .crow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
 /* Clickable history row in map scouting: behaves like .crow but with hover cue. */
 a.crow.hrow{display:flex;text-decoration:none;color:inherit;border-radius:6px;margin:0 -4px;padding:7px 4px}
 a.crow.hrow:hover{background:var(--surface2);color:var(--fg)}
@@ -513,16 +521,30 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 /* ---- playoffs bracket ---- */
 .bracket{overflow-x:auto;padding-bottom:6px}
 .br-flow{display:flex;gap:16px;align-items:stretch;min-width:min-content}
-.br-col{display:flex;flex-direction:column;min-width:160px}
+.br-col{display:flex;flex-direction:column;min-width:176px}
 .br-col h4{margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);white-space:nowrap}
-.br-col-body{display:flex;flex-direction:column;justify-content:space-around;gap:10px;flex:1}
-.br-match{border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface2)}
-.br-team{display:flex;align-items:center;gap:7px;padding:5px 8px;font-size:12.5px;border-top:1px solid var(--line);white-space:nowrap}
-.br-team:first-child{border-top:0}
+.br-col-body{display:flex;flex-direction:column;justify-content:space-around;gap:12px;flex:1}
 .br-seed{color:var(--faint);font-variant-numeric:tabular-nums;min-width:15px;font-size:11px;text-align:right}
-.br-nm{overflow:hidden;text-overflow:ellipsis}
-.br-wp{margin-left:auto;color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums}
-.br-team.tbd,.br-team.bye{color:var(--faint)}
+/* Playoff match nodes reuse the Matches → Played card language, compressed to the
+   series level (the bracket feed carries no per-map data). Winner side gets a
+   good-colored edge like the per-map scoreboards; upcoming slots dim. */
+.pcard{border:1px solid var(--line2);border-radius:10px;background:var(--surface);overflow:hidden}
+.pcard.f1win{border-left:3px solid var(--good)} .pcard.f2win{border-right:3px solid var(--good)}
+.pcard.soon{opacity:.85}
+.pcard.proj{border-style:dashed}
+.pteams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;padding:7px 8px}
+.pside{display:inline-flex;align-items:center;gap:5px;min-width:0;overflow:hidden;cursor:pointer}
+.pside .tlogo{width:16px;height:16px;border-radius:3px;flex:none}
+.pside .pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;color:var(--fg)}
+.pside.lose .pn{color:var(--muted)}
+.pside.tbd,.pside.proj .pn{color:var(--faint)}
+.pside .br-seed{color:var(--faint);font-size:10.5px;text-align:left;min-width:0}
+.pscore{font-weight:750;font-size:13px;font-variant-numeric:tabular-nums;color:var(--fg)}
+.pscore.vs{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:var(--faint)}
+.pfoot{display:flex;align-items:center;gap:8px;padding:3px 8px;border-top:1px solid var(--line);font-size:10.5px}
+.pbo{font-weight:700;color:var(--faint);font-variant-numeric:tabular-nums}
+.pwhen{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pcard.soon .pwhen{color:var(--faint)}
 .muted{color:var(--muted)} .faint{color:var(--faint)}
 .rc{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;
   background:var(--surface2);color:var(--fg);padding:1.5px 7px;border-radius:6px;cursor:pointer;
@@ -1474,7 +1496,7 @@ function aggregate(matches,team){
 
 /* ============================================================ PLAYOFFS */
 // Qualifier count per tier (FACEIT League S8 EMEA; update when S9 formats post).
-// Every division is double elimination, Ft3, Grand Final Ft4. 24 (Advanced) seeds
+// Every division is double elimination, Ft5, Grand Final Ft7. 24 (Advanced) seeds
 // into a 32-slot bracket, so the top 8 draw byes automatically — no special case.
 const PLAYOFF_QUALIFIERS={Master:8,Expert:16,Advanced:24,Open:32};
 const tierOf=(name)=>['Master','Expert','Advanced','Open'].find(t=>(name||'').includes(t))||null;
@@ -1495,7 +1517,7 @@ function seedOrder(k){let s=[1];while(s.length<k){const m=s.length*2+1,t=[];for(
 const ubRoundName=(m)=> m===1?'Final':m===2?'Semifinals':m===4?'Quarterfinals':'Round of '+(2*m);
 
 function renderPlayoffs(){
-  const wrap=el(`<div></div>`);
+  const wrap=el(`<div class="stack"></div>`);
   const tier=tierOf(String((D().summary||{}).championship||''));
   if(!tier){
     wrap.appendChild(el(`<div class="card"><p class="eyebrow">Playoffs</p>`+
@@ -1505,83 +1527,97 @@ function renderPlayoffs(){
   const N=PLAYOFF_QUALIFIERS[tier]||8, teams=D().teams||[], k=nextPow2(N);
   const ubRounds=Math.round(Math.log2(k)), order=seedOrder(k);
   const po=D().playoffs||[];   // real bracket matches (finished + scheduled), attached from the playoff championship (empty until it exists)
+  const done=po.filter(m=>m.status==='FINISHED').length, up=po.length-done;
 
-  // Real bracket (once the playoff championship is ingested): every match grouped
-  // by round — finished series with the winner highlighted, and upcoming slots
-  // with their kickoff time (TBD where teams aren't resolved yet). Shown above the
-  // standings-based projection.
-  if(po.length){
-    const done=po.filter(m=>m.status==='FINISHED').length, up=po.length-done;
-    const rc=el(`<div class="card"></div>`);
-    rc.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — bracket</p>`));
-    rc.appendChild(el(`<p class="note" style="margin:2px 0 8px">${done} played${up?` · ${up} upcoming`:''} · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
-    const nm=(n)=> n? teamLink(n) : '<span class="faint">TBD</span>';
-    const byRound={}; po.forEach(m=>{const r=m.round||0;(byRound[r]=byRound[r]||[]).push(m);});
-    Object.keys(byRound).map(Number).sort((a,b)=>a-b).forEach(rd=>{
-      rc.appendChild(el(`<p class="note" style="margin:8px 0 2px"><b>Round ${rd||'—'}</b></p>`));
-      byRound[rd].sort((a,b)=>String(a.finished_at||a.scheduled_at||'').localeCompare(String(b.finished_at||b.scheduled_at||''))).forEach(m=>{
-        const fin=m.status==='FINISHED';
-        const w1=fin&&m.winner_team&&m.winner_team===m.f1, w2=fin&&m.winner_team&&m.winner_team===m.f2;
-        const right = fin ? `<span class="st">${esc(m.series||'')}</span>`
-                          : `<span class="faint" style="font-size:11.5px">${m.scheduled_at?esc(fmtWhen(m.scheduled_at)):'upcoming'}</span>`;
-        rc.appendChild(el(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:12.5px${fin?'':';opacity:.85'}">`+
-          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis"><b style="color:${w1?'var(--good)':'var(--fg)'}">${nm(m.f1)}</b> <span class="faint">vs</span> <b style="color:${w2?'var(--good)':'var(--fg)'}">${nm(m.f2)}</b>${m.forfeit?' <span class="faint">(FF)</span>':''}</span>`+
-          right+`</div>`));
-      });
-    });
-    wrap.appendChild(rc);
-  }
-
-  const hd=el(`<div class="card"${po.length?' style="margin-top:14px"':''}></div>`);
-  hd.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — projected</p>`));
-  hd.appendChild(el(`<p style="margin:2px 0 0;font-size:14px">Top <b>${N}</b> · double elimination · Ft3 <span class="faint">(Grand Final Ft4)</span></p>`));
-  hd.appendChild(el(`<p class="note" style="margin-top:6px">${po.length?'The real bracket is shown above; the seeds and bracket below are the standings-based projection.':'Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches exist yet.'} Format from FACEIT League S8; will re-confirm when S9 brackets are posted.</p>`));
-  wrap.appendChild(hd);
-
-  // Projected seeds
-  const seedCard=el(`<div class="card" style="margin-top:14px"></div>`);
-  seedCard.appendChild(el(`<p class="eyebrow">Projected seeds (top ${N})</p>`));
-  const sg=el(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1px 20px"></div>`);
-  for(let i=0;i<N;i++){const t=teams[i];
-    sg.appendChild(el(`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:12.5px">`+
-      `<span class="br-seed">${i+1}</span>`+
-      `<span style="flex:1;overflow:hidden;text-overflow:ellipsis">${t?esc(t.name):'<span class="faint">— not enough teams yet —</span>'}</span>`+
-      `<span class="st">${t?t.win_pct+'%':''}</span></div>`));
-  }
-  seedCard.appendChild(sg); wrap.appendChild(seedCard);
-
-  // Bracket
-  const teamCell=(seed)=>{
-    if(seed==null) return `<div class="br-team tbd">TBD</div>`;
-    if(seed>N) return `<div class="br-team bye"><span class="br-seed">${seed}</span>— bye —</div>`;
-    const t=teams[seed-1];
-    return t? `<div class="br-team"><span class="br-seed">${seed}</span><span class="br-nm">${esc(t.name)}</span><span class="br-wp">${t.win_pct}%</span></div>`
-            : `<div class="br-team tbd"><span class="br-seed">${seed}</span>—</div>`;
+  // One tree merges both sources: real matches sit in their bracket stage and the
+  // empty slots are the standings-based projection (dashed). Nodes reuse the
+  // Matches → Played card language, compressed to the series level — winner gets a
+  // good-colored edge, losers dim, upcoming slots show kickoff instead of a score.
+  const side=(n,cls)=> n
+    ? `<span class="pside ${cls} tscout" data-scout="${esc(n)}" title="Scout ${esc(n)}">${teamAvatar(n,16)}<span class="pn">${esc(n)}</span></span>`
+    : `<span class="pside tbd">TBD</span>`;
+  const node=(m)=>{
+    const fin=m.status==='FINISHED';
+    const w1=fin&&m.winner_team&&m.winner_team===m.f1, w2=fin&&m.winner_team&&m.winner_team===m.f2;
+    const cls=fin?(w1?' f1win':w2?' f2win':''):' soon';
+    return `<div class="pcard${cls}"><div class="pteams">`+
+      side(m.f1, fin?(w1?'':'lose'):'')+
+      `<span class="pscore${fin?'':' vs'}">${fin?esc(m.series||'—'):'vs'}</span>`+
+      side(m.f2, fin?(w2?'':'lose'):'')+
+      `</div><div class="pfoot"><span class="pbo">Bo${m.best_of||5}</span>`+
+      (m.forfeit?'<span class="tag bad" style="margin-left:4px">FF</span>':'')+
+      `<span class="pwhen">${fin?dshort(m.finished_at):(m.scheduled_at?fmtWhen(m.scheduled_at):'time TBD')}</span>`+
+      `</div></div>`;
   };
-  const tbd=`<div class="br-match"><div class="br-team tbd">TBD</div><div class="br-team tbd">TBD</div></div>`;
+  const projSide=(seed)=>{
+    if(seed==null||seed>N) return null;
+    const t=teams[seed-1];
+    return t?{seed,name:t.name}:null;
+  };
+  const proj=(p)=> p
+    ? `<span class="pside proj tscout" data-scout="${esc(p.name)}" title="Scout ${esc(p.name)}">${teamAvatar(p.name,16)}<span class="pn">${esc(p.name)}</span></span>`
+    : `<span class="pside tbd">TBD</span>`;
+  const blank=(a,b,bo)=>`<div class="pcard proj"><div class="pteams">${proj(a)}<span class="pscore vs">vs</span>${proj(b)}</div>`+
+    `<div class="pfoot"><span class="pbo">Bo${bo||5}</span><span class="pwhen">—</span></div></div>`;
+
+  // Real matches bucketed by bracket stage (FACEIT's `group`, falling back to
+  // `round`) in stage order; each column consumes its own stage so a partially
+  // played round never bleeds into the next one.
+  const stageKey=(m)=> (m.group!=null?m.group:(m.round!=null?m.round:0));
+  const pool=po.slice().sort((a,b)=> (stageKey(a)-stageKey(b)) || String(a.finished_at||a.scheduled_at||'').localeCompare(String(b.finished_at||b.scheduled_at||'')));
+  const buckets=[];
+  pool.forEach(m=>{ const g=stageKey(m); let b=buckets[buckets.length-1];
+    if(!b||b.key!==g){ b={key:g,ms:[]}; buckets.push(b); } b.ms.push(m); });
+  const fill=(i,cnt,seeds,bo)=>{
+    const ms=(buckets[i]||{ms:[]}).ms, pairs=seeds||[];
+    let out='';
+    for(let j=0;j<cnt;j++){
+      const m=ms[j];
+      if(m) out+=node(m);
+      else out+=(pairs[j]?blank(projSide(pairs[j][0]),projSide(pairs[j][1]),bo):blank(null,null,bo));
+    }
+    return out;
+  };
+
+  const seedPairs=[]; for(let i=0;i<k/2;i++) seedPairs.push([order[2*i],order[2*i+1]]);
+  const ubSizes=[]; for(let m=k/2;m>=1;m/=2) ubSizes.push(m);
+  const lbRounds=2*(ubRounds-1);
+  const lbSizes=[]; for(let j=1;j<=lbRounds;j++) lbSizes.push(Math.pow(2,(ubRounds-1)-Math.ceil(j/2)));
   const col=(title,inner)=>{const c=el(`<div class="br-col"></div>`);c.appendChild(el(`<h4>${esc(title)}</h4>`));c.appendChild(el(`<div class="br-col-body">${inner}</div>`));return c;};
   const flow=()=>{const b=el(`<div class="bracket"><div class="br-flow"></div></div>`);return[b,b.querySelector('.br-flow')];};
 
-  const brCard=el(`<div class="card" style="margin-top:14px"></div>`);
-  brCard.appendChild(el(`<p class="eyebrow">Bracket</p>`));
+  const brCard=el(`<div class="card"></div>`);
+  brCard.appendChild(el(`<p class="eyebrow">${esc(tier)} playoffs — bracket</p>`));
+  brCard.appendChild(el(`<p style="margin:2px 0 0;font-size:14px">Top <b>${N}</b> · double elimination · Ft5 <span class="faint">(Grand Final Ft7)</span></p>`));
+  brCard.appendChild(el(`<p class="note">${po.length?`${done} played${up?` · ${up} upcoming`:''} — blank slots are the standings-based projection.`:'Seeded by current standings (win %). Bracket slots fill in once playoffs begin — no playoff matches exist yet.'} S9 playoffs run <b>Aug 3–16</b>.</p>`));
 
   brCard.appendChild(el(`<p class="note" style="margin:0 0 4px"><b>Upper bracket</b></p>`));
   const [ub,ubFlow]=flow();
-  let r1=''; for(let i=0;i<k/2;i++) r1+=`<div class="br-match">${teamCell(order[2*i])}${teamCell(order[2*i+1])}</div>`;
-  ubFlow.appendChild(col(ubRoundName(k/2), r1));
-  for(let m=k/4;m>=1;m/=2){ let inner=''; for(let i=0;i<m;i++) inner+=tbd; ubFlow.appendChild(col(ubRoundName(m), inner)); }
+  ubSizes.forEach((s,i)=>{ ubFlow.appendChild(col(ubRoundName(s), fill(i, s, i===0?seedPairs:null))); });
   brCard.appendChild(ub);
 
-  brCard.appendChild(el(`<p class="note" style="margin:14px 0 4px"><b>Lower bracket</b> <span class="faint">— filled by upper-bracket losers</span></p>`));
+  brCard.appendChild(el(`<p class="note mt14"><b>Lower bracket</b> <span class="faint">— filled by upper-bracket losers</span></p>`));
   const [lb,lbFlow]=flow();
-  const lbRounds=2*(ubRounds-1);
-  for(let j=1;j<=lbRounds;j++){ const cnt=Math.pow(2,(ubRounds-1)-Math.ceil(j/2)); let inner=''; for(let i=0;i<cnt;i++) inner+=tbd; lbFlow.appendChild(col('LB round '+j, inner)); }
+  lbSizes.forEach((s,i)=>{ lbFlow.appendChild(col('LB round '+(i+1), fill(ubSizes.length+i, s, null))); });
   brCard.appendChild(lb);
 
-  brCard.appendChild(el(`<p class="note" style="margin:14px 0 4px"><b>Grand Final</b></p>`));
-  const [gf,gfFlow]=flow(); gfFlow.appendChild(col('Grand Final (Ft4)', tbd)); brCard.appendChild(gf);
+  brCard.appendChild(el(`<p class="note mt14"><b>Grand Final</b></p>`));
+  const [gf,gfFlow]=flow();
+  gfFlow.appendChild(col('Grand Final (Ft7)', fill(ubSizes.length+lbSizes.length, 1, null, 7)));
+  brCard.appendChild(gf);
 
   wrap.appendChild(brCard);
+
+  // Projected seeds
+  const seedCard=el(`<div class="card"></div>`);
+  seedCard.appendChild(el(`<p class="eyebrow">Projected seeds (top ${N})</p>`));
+  const sg=el(`<div class="crowgrid"></div>`);
+  for(let i=0;i<N;i++){const t=teams[i];
+    sg.appendChild(el(`<div class="crow">`+
+      `<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis"><span class="br-seed">${i+1}</span> ${t?esc(t.name):'<span class="faint">— not enough teams yet —</span>'}</span>`+
+      `<span class="rec">${t?t.win_pct+'%':''}</span></div>`));
+  }
+  seedCard.appendChild(sg); wrap.appendChild(seedCard);
   return wrap;
 }
 
@@ -1669,13 +1705,13 @@ function renderOverview(){
   // proof it's a real community effort. Hidden when nothing is scoutable.
   const qq=leagueQueue();
   if(qq.length){
-    const mw=el(`<div class="card" style="margin-top:20px"></div>`);
+    const mw=el(`<div class="card mt20"></div>`);
     mw.appendChild(el(`<p class="eyebrow">Most wanted · ${qq.length} live replay code${qq.length===1?'':'s'} waiting</p>`));
     mw.appendChild(el(`<p class="note" style="margin:0 0 6px">Each code stops working at the next patch${CODE_WIPE?` (last wipe: <b>${esc(CODE_WIPE)}</b>)`:''}, so a capture is a one-time window — about a minute per map in the capture tool.</p>`));
     qq.slice(0,5).forEach(r=>{
-      const row=el(`<div style="display:flex;align-items:center;gap:10px;padding:7px 2px;border-top:1px solid var(--line);flex-wrap:wrap"></div>`);
-      row.appendChild(el(`<div style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(r.f1)}</b> <span class="faint">vs</span> <b>${esc(r.f2)}</b> <span class="faint">· ${esc(r.map)} · ${dshort(r.when)}</span>${r.div?` <span class="faint">· ${esc(r.div)}</span>`:''}</div>`));
-      row.appendChild(el(`<a class="btn" href="${captureCodeUrl(r.code)}" title="Open this replay in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:12px;white-space:nowrap">Scout ${esc(r.code)} →</a>`));
+      const row=el(`<div class="crow"></div>`);
+      row.appendChild(el(`<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(r.f1)}</b> <span class="faint">vs</span> <b>${esc(r.f2)}</b> <span class="faint">· ${esc(r.map)} · ${dshort(r.when)}</span>${r.div?` <span class="faint">· ${esc(r.div)}</span>`:''}</span>`));
+      row.appendChild(el(`<span class="rec"><a class="btn" href="${captureCodeUrl(r.code)}" title="Open this replay in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:12px;white-space:nowrap">Scout ${esc(r.code)} →</a></span>`));
       mw.appendChild(row);
     });
     if(qq.length>5) mw.appendChild(el(`<p class="note" style="margin-top:6px">…and ${qq.length-5} more. <a href="capture/" style="color:var(--accent);font-weight:600;text-decoration:none">Open the capture tool →</a></p>`));
@@ -1697,7 +1733,7 @@ function renderOverview(){
   // orientation info a cold visitor needs first (that's the hero strip above).
   const contribs=DATA.owscout_contributors||[];
   if(contribs.length){
-    const lc=el(`<div class="card" style="margin-top:20px"></div>`);
+    const lc=el(`<div class="card mt20"></div>`);
     lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
     lc.appendChild(el(`<p class="note" style="margin:0 0 8px">Maps each scout has contributed this season — every capture sharpens the data here. 🙏</p>`));
     const meName=((localStorage.getItem('owscout_name')||'').trim()||'').toLowerCase();
@@ -1742,7 +1778,7 @@ function renderPrepBody(t){
         (ad.loss_followups?` · changed comp after a loss ${ad.changed_after_loss}/${ad.loss_followups}`:'')+`</span>`:'')
     +`</div>`));
 
-  const grid=el(`<div class="grid cols-2" style="margin-top:10px;align-items:start"></div>`);
+  const grid=el(`<div class="grid cols-2 mt10" style="align-items:start"></div>`);
 
   // What to take away from THEM: their most-relied-on heroes.
   const banC=el(`<div class="card"></div>`);
@@ -1781,7 +1817,7 @@ function renderPrepBody(t){
   const weak=el(`<div class="card"></div>`);
   const ws=worstMaps(t.mapStats);
   weak.appendChild(el(`<p class="eyebrow">Target these maps - their worst`+
-    (ws.baseline!=null?` <span class="note" style="text-transform:none;letter-spacing:0">vs their ${ws.baseline}% overall</span>`:'')+`</p>`));
+    (ws.baseline!=null?` <span class="note">vs their ${ws.baseline}% overall</span>`:'')+`</p>`));
   if(!ws.rows.length){
     // A dominant (or too-thin) record has no weak map. Saying so beats handing
     // the coach four maps the opponent has never lost on.
@@ -1806,7 +1842,7 @@ function renderPrepBody(t){
     }
     const br=(sc.ban_response||[]).slice(0,2);
     if(br.length){
-      const card=el(`<div class="card" style="margin-top:10px"></div>`);
+      const card=el(`<div class="card mt10"></div>`);
       card.appendChild(el(`<p class="eyebrow">If a key hero is banned</p>`));
       br.forEach(b=>{
         const open=(b.opens||[])[0];
@@ -2007,7 +2043,7 @@ function renderScoutBody(t){
     const pool=((sc&&sc.hero_pool)||[]).slice().sort((a,b)=>(b.rounds||0)-(a.rounds||0)).slice(0,8);
     const playRows=pool.map(h=>({label:heroChip(h.hero),value:h.rounds||0,color:roleVar(h.role||HERO_ROLE[h.hero])}));
     if(banRows.length||playRows.length){
-      const two=el(`<div class="grid cols-2" style="margin-top:14px"></div>`);
+      const two=el(`<div class="grid cols-2 mt14"></div>`);
       const bc=el(`<div class="card"></div>`);
       bc.appendChild(el(`<p class="eyebrow">Most-banned heroes</p>`));
       bc.appendChild(el(`<p class="note" style="margin:0 0 8px">How many times ${esc(t.team)} banned each hero${capSince()}.</p>`));
@@ -2032,9 +2068,9 @@ function renderScoutBody(t){
     const todo=scoutable.filter(r=>!CAPTURED.has(r.mid+':'+r.gno))
       .sort((a,b)=>(b.when||'').localeCompare(a.when||''));
     const cst=coverageState(t.replays.length,scoutable.length,done.length,CODE_WIPE);
-    const cov=el(`<div class="card" style="margin-top:10px"></div>`);
+    const cov=el(`<div class="card mt10"></div>`);
     cov.appendChild(el(`<p class="eyebrow">Scouting coverage · ${done.length} of ${scoutable.length} scoutable games captured`+
-      (lost?` <span class="faint" style="text-transform:none;letter-spacing:0">· ${lost} lost to the ${esc(CODE_WIPE)} code wipe</span>`:'')+`</p>`));
+      (lost?` <span class="faint">· ${lost} lost to the ${esc(CODE_WIPE)} code wipe</span>`:'')+`</p>`));
     if(cst&&cst.kind==='wiped'){
       cov.appendChild(el(`<p class="note" style="margin:0">${esc(cst.text)}</p>`));
     } else if(todo.length){
@@ -2068,7 +2104,7 @@ function renderScoutBody(t){
   // Honest degrade: don't let the hero sections silently vanish for an uncaptured
   // team - say so, and point at the rail so they get scouted.
   if(!scout){
-    const ns=el(`<div class="card" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"></div>`);
+    const ns=el(`<div class="card mt10" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"></div>`);
     ns.appendChild(el(`<div><p class="eyebrow" style="margin:0 0 2px">Not scouted yet</p>`+
       `<span class="note">No captured comps for ${esc(t.team)} <b>(0 of ${t.games} maps played)</b>. Everything below is FACEIT draft data only.</span></div>`));
     const cb=el(`<a class="btn" href="${captureUrl(t.team)}" style="text-decoration:none;white-space:nowrap">Capture ${esc(t.team)} →</a>`);
@@ -2093,7 +2129,7 @@ function renderScoutBody(t){
       tells.push(`<span class="then">map</span> on ${esc(sig.m)} they pick &amp; open the ban`+
         (tb?` on ${heroChip(tb[0])}`:'')+` <span class="faint">${sig.v.games}x, self-chosen</span>`); }
     if(tells.length){
-      const card=el(`<div class="card" style="margin-top:10px"><p class="eyebrow">Scouting tells</p></div>`);
+      const card=el(`<div class="card mt10"><p class="eyebrow">Scouting tells</p></div>`);
       tells.forEach(tx=>card.appendChild(el(`<div class="crow" style="border:none;padding:4px 2px"><span class="swapline">${tx}</span></div>`)));
       w.appendChild(card);
     }
@@ -2156,7 +2192,7 @@ function renderScoutBody(t){
       const pgrid=el(`<div class="grid cols-3"></div>`);
       ppools.forEach(p=>{
         const card=el(`<div class="card"></div>`);
-        card.appendChild(el(`<p class="eyebrow">${esc(p.player)} <span class="note" style="text-transform:none;letter-spacing:0">${p.rounds} rounds seen</span></p>`));
+        card.appendChild(el(`<p class="eyebrow">${esc(p.player)} <span class="note">${p.rounds} rounds seen</span></p>`));
         p.heroes.slice(0,5).forEach(h=>{
           // Factual pool only: the hero, its share of this player's rounds, and
           // their raw averages on hover. No skill rank — see the Players tab note.
@@ -2454,13 +2490,13 @@ function renderScoutBody(t){
 
   // Preferred bans + Maps picks/win rate - the side-by-side pair, restored
   // by operator request after the reorg had split it across the clusters.
-  const two=el(`<div class="grid cols-2" style="margin-top:16px;align-items:start"></div>`);
+  const two=el(`<div class="grid cols-2 mt14" style="align-items:start"></div>`);
   const banC=el(`<div class="card"></div>`);
   const banBase=divBanBaseline();
-  banC.appendChild(el(`<p class="eyebrow">Ban tendencies <span class="note" style="text-transform:none;letter-spacing:0">· compared to the league average, not raw counts</span></p>`));
+  banC.appendChild(el(`<p class="eyebrow">Ban tendencies <span class="note">· compared to the league average, not raw counts</span></p>`));
   banC.appendChild(el(banLiftList(banLiftRows(t.bans, banBase.all, undefined, t.bansGk, lookup))));
   if(t.firstBanGames){
-    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note" style="text-transform:none;letter-spacing:0">· when they draft first (${t.firstBanGames} maps) — the intentional one</span></p>`));
+    banC.appendChild(el(`<p class="eyebrow" style="margin-top:16px">First ban <span class="note">· when they draft first (${t.firstBanGames} maps) — the intentional one</span></p>`));
     banC.appendChild(el(banLiftList(banLiftRows(t.firstBans, banBase.first, undefined, t.firstBansGk, lookup))));
   }
   two.appendChild(banC);
@@ -2608,7 +2644,7 @@ function renderScoutBody(t){
   // aggregating each team's ban/pick history.
   {
     const openSim=SCOUT_SIM_OPEN; SCOUT_SIM_OPEN=false;
-    const dsCard=el(`<details class="card" style="margin-top:14px"${openSim?' open':''}></details>`);
+    const dsCard=el(`<details class="card mt14"${openSim?' open':''}></details>`);
     dsCard.appendChild(el(`<summary style="cursor:pointer"><span class="eyebrow" style="display:inline;margin:0">Draft simulator</span> <span class="opener">beta</span></summary>`));
     const dsBody=el(`<div style="margin-top:10px"></div>`);
     dsCard.appendChild(dsBody);
@@ -2730,7 +2766,7 @@ function renderPlayers(){
       const list=(bySeat[seat]||[]).sort((a,b)=>b.maps-a.maps); if(!list.length) return; any=true;
       const baseRole = seat==='Tank'?'Tank' : /Support/.test(seat)?'Support':'Damage';
       const card=el(`<div class="card"></div>`);
-      card.appendChild(el(`<p class="eyebrow role-${baseRole}">${esc(seat)} <span class="note" style="text-transform:none;letter-spacing:0">${list.length} player${list.length===1?'':'s'}</span></p>`));
+      card.appendChild(el(`<p class="eyebrow role-${baseRole}">${esc(seat)} <span class="note">${list.length} player${list.length===1?'':'s'}</span></p>`));
       // Stats come from FACEIT's season feed (every map they played), not just the
       // captured ones - the seat itself is what needs a capture, not the numbers.
       list.forEach(p=>{ const av=faceitAvg(p), hs=topHeroes(p.cap,3);
@@ -2751,12 +2787,12 @@ function renderPlayers(){
   function drawRanks(){
     body.innerHTML='';
     const col=LB_COLS.find(c=>c.k===PLAYERS_SORT)||LB_COLS[0];
-    const ctl=el(`<div class="ctlrow" style="flex-wrap:wrap;gap:8px"></div>`);
-    const rsel=el(`<select class="sortbtn">`+
+    const ctl=el(`<div class="card controls" style="margin:0 0 10px"></div>`);
+    const rsel=el(`<select>`+
       ['All','Tank','Damage','Support'].map(r=>`<option${r===PLAYERS_ROLE?' selected':''}>${r}</option>`).join('')+
       `</select>`);
     rsel.onchange=()=>{ PLAYERS_ROLE=rsel.value; drawRanks(); };
-    ctl.append(el(`<span class="note" style="margin:0">Role</span>`), rsel,
+    ctl.append(el(`<label>Role</label>`), rsel,
       el(`<span class="note" style="margin:0">sorted by <b>${esc(col.label)}</b> · click a column to re-sort`+
          `${col.rate?` · needs ${LB_MIN_GAMES}+ maps`:''}</span>`));
     body.appendChild(ctl);
@@ -3098,7 +3134,7 @@ function renderMeta(){
     body.innerHTML='';
     const v=el(`<div></div>`);
     v.appendChild(el(`<p class="note">${ms.length<MATCHES_RECENT.length?`last ${ms.length} of ${MATCHES_RECENT.length}`:`all ${ms.length}`} matches · ${dshort(from)} → ${dshort(to)}</p>`));
-    const two=el(`<div class="grid cols-2" style="margin-top:8px"></div>`);
+    const two=el(`<div class="grid cols-2 mt8"></div>`);
     const bc=el(`<div class="card"></div>`); bc.appendChild(el(`<p class="eyebrow">Most banned</p>`));
     bc.appendChild(el(barList(rank(a.bans).slice(0,16).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])})))));
     const rc=el(`<div class="card"></div>`); rc.appendChild(el(`<p class="eyebrow">Bans by role</p>`));
@@ -3194,7 +3230,7 @@ function renderMeta(){
     const maps=Object.entries(pool[c]).map(([m,e])=>({map:m,picks:e.picks,plays:e.plays})).sort((a,b)=>b.picks-a.picks||b.plays-a.plays);
     const tot=maps.reduce((s,m)=>s+m.picks,0);
     const card=el(`<div class="card"></div>`);
-    card.appendChild(el(`<p class="eyebrow">${esc(c)} <span class="note" style="text-transform:none;letter-spacing:0">${tot} pick${tot===1?'':'s'}</span></p>`));
+    card.appendChild(el(`<p class="eyebrow">${esc(c)} <span class="note">${tot} pick${tot===1?'':'s'}</span></p>`));
     card.appendChild(el(`<div>`+maps.map(m=>
       `<div class="poolrow"><span class="pm">${esc(m.map)}</span>`+
       `<span class="pr"><span class="pk">${m.picks}</span><span class="pp">${m.plays} played</span></span></div>`).join('')+`</div>`));
@@ -3224,15 +3260,15 @@ function renderMeta(){
 
 function renderMatches(){
   const wrap=el(`<div></div>`);
-  const bar=el(`<div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap"></div>`);
+  const bar=el(`<div class="card controls"></div>`);
   // Region + Division filters (FACEIT-style). They drive the shared division
   // view, so the rest of the page follows and the header switcher stays in sync.
   const suffix=(v)=> v.region? v.label.slice(v.region.length+1) : v.label;   // "Master"/"Combined"
   const regions=[...new Set(VIEWS.map(v=>v.region).filter(Boolean))];
   const curRegion=(viewOf(CURRENT_VIEW).region)||regions[0];
-  const regSel=el(`<select title="Region" style="font-size:15px;padding:11px 13px"></select>`);
+  const regSel=el(`<select title="Region"></select>`);
   regions.forEach(r=>regSel.appendChild(el(`<option${r===curRegion?' selected':''}>${esc(r)}</option>`)));
-  const divSel=el(`<select title="Division" style="font-size:15px;padding:11px 13px"></select>`);
+  const divSel=el(`<select title="Division"></select>`);
   const fillDivs=()=>{ divSel.innerHTML='';
     VIEWS.filter(v=>v.region===regSel.value).forEach(v=>
       divSel.appendChild(el(`<option value="${v.id}"${v.id===CURRENT_VIEW?' selected':''}>${esc(suffix(v))}</option>`))); };
@@ -3241,8 +3277,8 @@ function renderMatches(){
   divSel.onchange=()=>setDivision(divSel.value);
   if(regions.length) bar.appendChild(regSel);
   if(VIEWS.length>1) bar.appendChild(divSel);
-  const search=el(`<input placeholder="search team, player, hero, or map…" style="flex:1;min-width:200px;font-size:15px;padding:11px 13px">`);
-  const sort=el(`<select title="Sort by date" style="font-size:15px;padding:11px 13px"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
+  const search=el(`<input placeholder="search team, player, hero, or map…" style="flex:1;min-width:200px">`);
+  const sort=el(`<select title="Sort by date"><option value="new">Newest first</option><option value="old">Oldest first</option></select>`);
   bar.append(search,sort);
   // Played history vs upcoming fixtures vs the playoff bracket. A full-season
   // schedule can be large, so each lives in its own view (toggle) rather than
@@ -3250,7 +3286,7 @@ function renderMatches(){
   // declared above bootApp) so it's independently testable.
   const up0=D().upcoming||[];
   if(!MATCHES_MODE_SET){ MATCHES_MODE=defaultMatchesMode(D().playoffs||[]); MATCHES_MODE_SET=true; }
-  const modeBar=el(`<div class="wsel" style="margin:0 2px 12px"></div>`);
+  const modeBar=el(`<div class="wsel" style="margin:12px 2px 12px"></div>`);
   const mkMode=(m,lbl)=>{ const b=el(`<span class="wbtn">${lbl}</span>`); b.onclick=()=>{ MATCHES_MODE=m; MATCHES_MODE_SET=true; draw(); }; return b; };
   modeBar.append(mkMode('played','Played'), mkMode('upcoming',`Upcoming${up0.length?' · '+up0.length:''}`), mkMode('playoffs','Playoffs'));
   // In a single round-robin every team has faced the same opponents, so a team's
