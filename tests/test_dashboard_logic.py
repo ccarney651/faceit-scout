@@ -458,3 +458,75 @@ def test_scout_queue_without_a_wipe_treats_every_code_as_live(tmp_path) -> None:
     got = _run(f"return scoutQueue({_DIVS2}, new Set(), null).map(r=>r.code);", tmp_path)
     assert len(got) == 4
 
+
+# ---------------------------------------------------------------------------
+# Capture recommendations (mapCoverage)
+# ---------------------------------------------------------------------------
+# Numbani (Hybrid): 5 played, 0 captured. Ilios (Control): 4 played, 0 captured.
+# Rialto (Escort): 1 played (below the 3-game floor).
+_MATCHES = (
+    "[{id:'m1',finished_at:'2026-08-01',games:["
+    "{game_no:1,map:'Numbani',demo_code:'A1',map_category:'Hybrid'},"
+    "{game_no:2,map:'Numbani',demo_code:'A2',map_category:'Hybrid'},"
+    "{game_no:3,map:'Numbani',demo_code:'A3',map_category:'Hybrid'}]},"
+    "{id:'m2',finished_at:'2026-08-02',games:["
+    "{game_no:1,map:'Numbani',demo_code:'B1',map_category:'Hybrid'},"
+    "{game_no:2,map:'Numbani',demo_code:'B2',map_category:'Hybrid'}]},"
+    "{id:'m3',finished_at:'2026-08-03',games:["
+    "{game_no:1,map:'Ilios',demo_code:'C1',map_category:'Control'},"
+    "{game_no:2,map:'Ilios',demo_code:'C2',map_category:'Control'},"
+    "{game_no:3,map:'Ilios',demo_code:'C3',map_category:'Control'},"
+    "{game_no:4,map:'Ilios',demo_code:'C4',map_category:'Control'}]},"
+    "{id:'m4',finished_at:'2026-08-04',games:["
+    "{game_no:1,map:'Rialto',demo_code:'D1',map_category:'Escort'}]}]"
+)
+
+
+def test_map_coverage_ranks_by_unseen_playtime_and_drops_below_the_floor(
+        tmp_path) -> None:
+    got = _run(f"return mapCoverage({_MATCHES}, new Set(), null);", tmp_path)
+    names = [r["map"] for r in got]
+    # Numbani: 5 unseen Hybrid games (100 est. min) beats Ilios' 4 Control (56).
+    assert names == ["Numbani", "Ilios"]   # Rialto's 1 game is below the floor
+    numb = got[0]
+    assert numb["played"] == 5 and numb["captured"] == 0 and numb["pct"] == 0
+    assert numb["needed"] == 3             # ceil(5 * 0.5) - 0
+    assert numb["unseenMin"] == 100        # 5 * 20 (Hybrid)
+    assert numb["liveCode"] == "B1"        # newest live unscouted code (m2), for the link
+
+
+def test_map_coverage_drops_a_map_that_reached_the_target(tmp_path) -> None:
+    # Capture 3 of Numbani's 5 games -> 60% covered -> needed 0 -> not listed.
+    got = _run(
+        "return mapCoverage(%s, new Set(['m1:1','m1:2','m1:3']), null).map(r=>r.map);" %
+        _MATCHES, tmp_path)
+    assert got == ["Ilios"]
+
+
+def test_map_coverage_counts_only_live_codes_as_capturable(tmp_path) -> None:
+    # Wipe on 2026-08-01: m1's codes are dead, so Numbani's live code is the
+    # first from m2 ('B1'). It stays recommendable (2 live games) — but a map
+    # whose ONLY uncaptured games are pre-wipe would drop out entirely.
+    got = _run(f"return mapCoverage({_MATCHES}, new Set(), '2026-08-01');", tmp_path)
+    numb = got[0]
+    assert numb["map"] == "Numbani" and numb["liveCode"] == "B1"
+    # All-Ilios map below floor excluded; a fully-dead map is never recommended.
+    dead = _run(
+        "return mapCoverage([{id:'m9',finished_at:'2026-07-01',games:["
+        "{game_no:1,map:'Nepal',demo_code:'Z9',map_category:'Control'},"
+        "{game_no:2,map:'Nepal',demo_code:'Z8',map_category:'Control'},"
+        "{game_no:3,map:'Nepal',demo_code:'Z7',map_category:'Control'}]}],"
+        " new Set(), '2026-08-01');", tmp_path)
+    assert dead == []   # 3 games played but every code is pre-wipe -> not capturable
+
+
+def test_map_coverage_needed_is_clamped_at_zero_when_fully_captured(tmp_path) -> None:
+    # Capture every Numbani game: needed must clamp to 0, and the map drops out.
+    got = _run(
+        "return mapCoverage(%s, new Set(['m1:1','m1:2','m1:3','m2:1','m2:2']), null);" %
+        _MATCHES, tmp_path)
+    assert not any(r["map"] == "Numbani" for r in got)
+    for r in got:
+        assert r["needed"] >= 0
+
+

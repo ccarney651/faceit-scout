@@ -811,6 +811,54 @@ function matchLiveTodo(m, captured, wipe){
     !(wipe&&m.finished_at&&String(m.finished_at).slice(0,10)<=wipe));
 }
 
+// ---- capture recommendations (Phase 4) ------------------------------------
+// Average per-game length by mode, minutes. Used to turn game counts into an
+// ESTIMATE of league playtime — the panel labels it as such; the logic only
+// needs the proportion right. Control is a BO3 (~14), escort/hybrid run a full
+// game (~20), the push-style modes are short (~11).
+const MODE_MINUTES={Control:14,Escort:20,Hybrid:20,Push:11,Flashpoint:11,Clash:10};
+// A map is "under-covered" until half its league play is captured, and maps
+// played fewer than this many times sit below the noise floor (one game on a
+// map is not a coverage gap).
+const MAP_MIN_GAMES=3, MAP_COVER_TARGET=0.5;
+// Which maps most need captures, per division. For every map: how much it's
+// been played, how much of that is captured, and how many games still have a
+// live replay code. A wiped-and-unseen game can never be fixed, so a map only
+// becomes recommendable when it has a live code left to capture. Rows are
+// ranked by unseen playtime (games uncaptured × typical length) — the maps
+// where the most league minutes are still unobserved. `liveCode` is the newest
+// capturable code on the map, for a straight "Scout →" deep link.
+function mapCoverage(matches, captured, wipe){
+  const agg={};
+  (matches||[]).forEach(m=>(m.games||[]).forEach(g=>{
+    if(!g.map) return;
+    const key=m.id+':'+g.game_no;
+    const e=agg[g.map]||(agg[g.map]={map:g.map, mode:g.map_category||'', played:0, captured:0, live:0, liveCode:null});
+    e.played++;
+    const dead=!!(wipe&&m.finished_at&&String(m.finished_at).slice(0,10)<=wipe);
+    if(captured.has(key)){ e.captured++; return; }
+    if(g.demo_code&&!dead){
+      e.live++;
+      // Newest capturable code on the map, for the "Scout →" link — freshest
+      // replay is least likely to have been captured since the last build.
+      const w=m.finished_at||'';
+      if(!e.liveWhen || String(w).localeCompare(e.liveWhen)>0){ e.liveWhen=w; e.liveCode=g.demo_code; }
+    }
+  }));
+  const out=[];
+  for(const e of Object.values(agg)){
+    const mp=MODE_MINUTES[e.mode]||12;
+    e.minutes=e.played*mp;
+    e.unseen=e.played-e.captured;
+    e.unseenMin=e.unseen*mp;
+    e.pct=e.played?Math.round(100*e.captured/e.played):0;
+    e.needed=Math.max(0, Math.ceil(e.played*MAP_COVER_TARGET)-e.captured);
+    delete e.liveWhen;
+    if(e.played>=MAP_MIN_GAMES && e.needed>0 && e.live>0) out.push(e);
+  }
+  return out.sort((a,b)=> b.unseenMin-a.unseenMin || b.played-a.played);
+}
+
 // The whole app runs inside bootApp(DATA); DATA arrives either inlined above
 // (single-file/offline builds) or fetched from data.json (the shell build). This
 // split is what lets next-season gating be a config change — point the fetch at
@@ -1741,6 +1789,28 @@ function renderOverview(){
     });
     if(qq.length>5) mw.appendChild(el(`<p class="note" style="margin-top:6px">…and ${qq.length-5} more. <a href="capture/" style="color:var(--accent);font-weight:600;text-decoration:none">Open the capture tool →</a></p>`));
     wrap.appendChild(mw);
+  }
+
+  // Capture recommendations — the strategic sibling of "Most wanted". That card
+  // lists fresh codes; this one says which MAPS are under-covered relative to
+  // how much they're played, so a scout works the maps that most need data.
+  // Playtime is an estimate (games × typical mode length); a map is listed
+  // until at least half its league play is captured and it still has a live
+  // code left to capture.
+  const recs=mapCoverage(D().matches, CAPTURED, CODE_WIPE);
+  if(recs.length){
+    const rc=el(`<div class="card mt20"></div>`);
+    rc.appendChild(el(`<p class="eyebrow">Capture recommendations · ${recs.length} map${recs.length===1?'':'s'} under-covered</p>`));
+    rc.appendChild(el(`<p class="note" style="margin:0 0 6px">Coverage of each map's league play. Playtime is an <b>estimate</b> (games × typical game length for the mode). The more a map is played, the more captures it needs to read reliably — capture until at least half its play is covered.</p>`));
+    recs.slice(0,8).forEach(r=>{
+      const row=el(`<div class="crow"></div>`);
+      row.appendChild(el(`<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(r.map)}</b> <span class="faint">${esc(r.mode||'')}</span> <span class="faint">· ${r.captured}/${r.played} captured (${r.pct}%) · ~${nf(r.unseenMin)} min unseen</span></span>`));
+      row.appendChild(el(`<span style="flex:none"><span class="track" style="display:inline-block;width:110px;height:7px;vertical-align:middle"><span class="fill" style="display:block;width:${Math.min(100,r.pct)}%;background:${r.pct>=50?'var(--good)':'var(--mid)'}"></span></span></span>`));
+      row.appendChild(el(`<span class="rec"><a class="btn" href="${captureCodeUrl(r.liveCode)}" title="Open a live replay on ${esc(r.map)} in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:12px;white-space:nowrap">Scout →</a></span>`));
+      rc.appendChild(row);
+    });
+    if(recs.length>8) rc.appendChild(el(`<p class="note" style="margin-top:6px">…and ${recs.length-8} more map${recs.length-8===1?'':'s'} under-covered.</p>`));
+    wrap.appendChild(rc);
   }
 
   wrap.appendChild(el(sectionH('Standings')));

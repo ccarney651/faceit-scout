@@ -646,7 +646,7 @@ async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMed
     clearCalPreview();
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     const trk=st.getVideoTracks()[0];
-    if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
+    if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; clearCalPreview(); drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
     document.getElementById('calhint').textContent='Screen shared \u2014 click Auto-calibrate (or set the boxes by hand).'; updateBtns();
     // First-visit: pulse the auto-calibrate button and prompt. The calibration
     // preview shows confidence before commit, so a first-timer knows it's
