@@ -178,6 +178,14 @@ table.blocks thead th:hover{color:var(--faint)}
 .medal{font-size:13px;line-height:1;flex:none}
 .you{font-weight:700}
 .youdot{flex:none;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:10px;padding:1px 7px}
+/* Contributor profile card on Overview */
+.profcard{background:color-mix(in srgb,var(--accent) 4%,var(--surface));border-color:color-mix(in srgb,var(--accent) 18%,var(--line))}
+.profile{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.prank{font-size:30px;line-height:1;flex:none}
+.pinfo{min-width:0;flex:1}
+.pname{display:block;font-size:16px;font-weight:700;color:var(--accent)}
+.pstat{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.pcta{flex:none}
 .track{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
 .fill{height:100%;border-radius:6px;background:var(--accent);min-width:3px;transition:width .2s ease}
 .barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -1744,16 +1752,36 @@ function renderOverview(){
     D().teams));
   wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
 
-  // Scout leaderboard — maps each contributor owns (first-wins credited), the
-  // same count the future contribute-or-pay threshold will use. League-wide.
-  // Below standings, not above: a trust signal for a returning visitor, not
-  // orientation info a cold visitor needs first (that's the hero strip above).
+  // Scout leaderboard — maps each contributor owns (first-wins credited). League-wide.
   const contribs=DATA.owscout_contributors||[];
+  const meName=((localStorage.getItem('owscout_name')||'').trim()||'').toLowerCase();
+  const meIdx=meName?contribs.findIndex(c=>String(c.name||'').toLowerCase()===meName):-1;
+
+  // Personalised contributor impact card — the scout's own profile, shown when
+  // their browser name matches a contributor. A clear reward signal that makes
+  // the capture-leaderboard loop tangible for a returning contributor.
+  if(meIdx>=0 && contribs.length){
+    const me=contribs[meIdx];
+    const rankStr=meIdx===0?'🥇':meIdx===1?'🥈':meIdx===2?'🥉':'#'+(meIdx+1);
+    const pct=CAPTURED.size?Math.round(100*me.maps/CAPTURED.size):0;
+    const ci=el(`<div class="card mt20 profcard"></div>`);
+    ci.appendChild(el(`<div class="profile">
+      <span class="prank">${rankStr}</span>
+      <div class="pinfo">
+        <span class="pname">${esc(me.name)}</span>
+        <span class="pstat">Rank ${meIdx+1} of ${contribs.length} scouts · <b>${nf(me.maps)}</b> maps contributed${pct>0?` · ${pct}% of captured maps`:''}</span>
+      </div>
+      <div class="pcta">
+        <a class="btn" href="capture/">Capture another →</a>
+      </div>
+    </div>`));
+    wrap.appendChild(ci);
+  }
+
   if(contribs.length){
     const lc=el(`<div class="card mt20"></div>`);
     lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
     lc.appendChild(el(`<p class="note" style="margin:0 0 8px">Maps each scout has contributed this season — every capture sharpens the data here. 🙏</p>`));
-    const meName=((localStorage.getItem('owscout_name')||'').trim()||'').toLowerCase();
     lc.appendChild(el(barList(contribs.slice(0,15).map((c,i)=>{
       const nm=String(c.name||'');
       const medals=['🥇','🥈','🥉'];

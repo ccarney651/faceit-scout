@@ -41,6 +41,8 @@
   button{background:var(--accent);color:#0b1020;border:0;border-radius:7px;padding:9px 13px;font-weight:650;cursor:pointer}
   button.ghost{background:var(--surface2);color:var(--fg);border:1px solid var(--line)}
   button.mk{background:var(--surface2);color:var(--fg);border:1px solid var(--line);font-weight:600}
+  button.pulse{animation:pulse 1.2s ease-in-out 3;box-shadow:0 0 0 3px var(--accent)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px var(--accent)}50%{box-shadow:0 0 0 8px transparent}}
   button:disabled{opacity:.45;cursor:default}
   select,input[type=text],input[type=date]{background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:13px}
   .stage{position:relative;display:inline-block;max-width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000}
@@ -56,6 +58,16 @@
   .stagebar button:hover{border-color:var(--accent)}
   .stagebar .shint{color:#e7ebf2;font-size:13.5px;background:#000a;padding:4px 9px;border-radius:6px}
   .stagebar .shint .ok{color:#34b877}.stagebar .shint .warn{color:#e5624a}
+  /* Auto-calibrate confidence preview — dark panel over the live preview, works
+     in normal view and fullscreen (it lives inside the stage). */
+  .calprev{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:7;width:min(92%,480px);
+    background:#161a21;border:1px solid #313a48;border-radius:10px;padding:10px 13px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+  .calprev-msg{font-size:13px;color:#e7ebf2;margin-bottom:8px;line-height:1.45}
+  .calprev-msg .ok{color:#34b877}.calprev-msg .warn{color:#e5624a}
+  .calprev-row{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
+  .calprev-row button{padding:7px 11px;font-size:12.5px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:7px;cursor:pointer}
+  .calprev-row button#calUse{background:var(--accent);color:#0b1020;border:0;font-weight:700}
+  .calprev-row button:hover{border-color:var(--accent)}
   .status{color:var(--muted);font-size:12.5px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:680px){.grid2{grid-template-columns:1fr}}
@@ -105,6 +117,22 @@
   .modal .mbody label.f{color:var(--muted)}
   .modal .mrow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;flex:none}
   .modal input[type=text],.modal select{width:100%;margin-top:2px}
+  /* ---- guided first-capture tour (non-blocking walkthrough) ---- */
+  #tour{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2000;display:none;max-width:min(92vw,470px);width:100%}
+  #tour.open{display:block}
+  .tour-card{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:12px;padding:13px 16px;box-shadow:0 10px 34px rgba(0,0,0,.28);animation:tin .18s ease-out}
+  .tour-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+  .tour-count{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+  .tour-x{border:0;background:transparent;color:var(--faint);font-size:15px;line-height:1;padding:2px 5px;cursor:pointer}
+  .tour-x:hover{color:var(--fg)}
+  .tour-card h4{margin:0 0 4px;font-size:14px;color:var(--fg)}
+  .tour-card .tour-body{font-size:13px;color:var(--muted);margin:0 0 11px;line-height:1.5}
+  .tour-card .tour-body b{color:var(--fg)}
+  .tour-row{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+  .tour-arrow{width:32px;height:32px;padding:0;font-size:17px;line-height:1;margin-right:auto;border-radius:8px}
+  /* highlight ring around the step's target control */
+  .tour-highlight{position:relative;z-index:2001;outline:3px solid var(--accent);outline-offset:3px;border-radius:8px;animation:tourPulse 1.6s ease-in-out infinite}
+  @keyframes tourPulse{0%,100%{box-shadow:0 0 0 8px color-mix(in srgb,var(--accent) 25%,transparent)}50%{box-shadow:0 0 0 14px color-mix(in srgb,var(--accent) 10%,transparent)}}
   .poprow{border-top:1px solid var(--line);padding-top:10px}
   #pop{background:var(--accent);color:#0b1020;border:0;border-radius:8px;padding:10px 16px;font-weight:750;font-size:13.5px;box-shadow:0 2px 12px rgba(128,135,255,.3)}
   #pop:hover{box-shadow:0 2px 16px rgba(128,135,255,.5)}
@@ -149,7 +177,7 @@
     <div class="steps">
       <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
       <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
-      <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits and self-tests (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
+      <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits, shows you the confidence, and you confirm (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
       <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below, choose a map, and press <b>Start map</b>. A replay code is optional and stays private.</div>
       <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — use the side radios or <b>Swap teams</b> to set which team is on the left. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Save</span></div><b>Finish + save</b> — the map is saved privately in this browser. Review, export, or import scrims under the scrim panel.</div>
@@ -166,7 +194,7 @@
       <button id="autocal" disabled>Auto-calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
       <button id="setL" class="ghost" disabled>Set LEFT box (blue)</button>
       <button id="setR" class="ghost" disabled>Set RIGHT box (red)</button>
-      <button id="setSb" class="ghost" disabled title="Drag a box over the scrim scoreboard panel (top-left, below the portraits) — read at map end">Set SCOREBOARD box</button>
+      <button id="setSb" class="ghost" disabled title="Drag a box over the scrim scoreboard panel (top-left, below the portraits) — read at map end">Set SCOREBOARD box</button><span class="wip" title="Experimental — reads the scoreboard with OCR at map end to auto-fill scores and win/loss. Set both boxes and calibrate before relying on it.">WIP</span>
       <button id="setSr" class="ghost" disabled title="Drag a box over the top-centre score readout (e.g. 2 - 3) — read at map end">Set SCORE box</button><span class="wip" title="Experimental — reads the scoreboard with OCR at map end to auto-fill scores and win/loss. Set both boxes and calibrate before relying on it.">WIP</span>
       <button id="fscal" class="ghost" disabled title="Enlarge the preview to the whole screen so the boxes are easy to place">Fullscreen calibrate <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="clearcal" class="ghost">reset boxes</button>
@@ -297,12 +325,38 @@
             <span id="stagehint" class="shint">Click a Set button, then drag a box over that team's 5 portraits.</span>
             <button id="fsExit" type="button" style="margin-left:auto">Exit <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
+          <!-- Auto-calibrate confidence preview: lives INSIDE the stage so it's
+               visible in normal view and fullscreen calibration. Nothing is
+               committed until the scout confirms. -->
+          <div id="calpreview" class="calprev" style="display:none">
+            <div class="calprev-msg"></div>
+            <div class="calprev-row">
+              <button id="calMan" class="ghost" type="button">Adjust manually</button>
+              <button id="calRetry" class="ghost" type="button">Try again</button>
+              <button id="calUse" type="button">Use these boxes</button>
+            </div>
+          </div>
         </div>
       </div>
     </aside>
   </div>
 </main>
 <div id="mback" role="dialog" aria-modal="true"></div>
+<div id="tour" aria-label="First capture tour">
+  <div class="tour-card">
+    <div class="tour-head">
+      <span class="tour-count">1 / 6</span>
+      <button class="tour-x" id="tourX" type="button" title="Close tour">✕</button>
+    </div>
+    <h4 class="tour-title"></h4>
+    <div class="tour-body"></div>
+    <div class="tour-row">
+      <button class="tour-arrow ghost" id="tourPrev" type="button" title="Previous step">‹</button>
+      <button id="tourSkip" class="ghost" type="button">Skip tour</button>
+      <button id="tourNext" type="button">Next</button>
+    </div>
+  </div>
+</div>
 <script src="scoreboard.js"></script><script>
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45;
@@ -342,6 +396,7 @@ const ICONS={
   ok:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 8.2l2 2 3.6-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   warn:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.3l6 10.4H2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.6v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.1" r="1" fill="currentColor"/></svg>',
   bad:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  sparkle:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
   overlay:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg>',
   swap:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   nophone:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="4" y="2" width="8" height="12" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 11.5h3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 2l12 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'};
@@ -494,9 +549,13 @@ function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
 addEventListener('resize', fitOverlay);
 function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scl();
-  for(const side of ['a','b']){ const b=boxes[side]; if(!b) continue;
-    octx.strokeStyle=side==='a'?css('--blue'):css('--red'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
-    octx.setLineDash([3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
+  // During a calibration preview, draw the PROPOSED boxes (accent, dashed)
+  // instead of the committed ones — the scout reviews the candidate placement
+  // before committing it.
+  const src=pendingCal?pendingCal.boxes:boxes;
+  for(const side of ['a','b']){ const b=src[side]; if(!b) continue;
+    octx.strokeStyle=pendingCal?css('--accent'):(side==='a'?css('--blue'):css('--red')); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
+    octx.setLineDash(pendingCal?[4,3]:[3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
   for(const side of ['scoreboard','score_readout']){ const b=boxes[side]; if(!b) continue;
     octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s); }
   if(dragS&&dragC){ octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); } }
@@ -513,12 +572,12 @@ ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s
   document.getElementById('calhint').textContent=t; setStageHint(t);
   drawOverlay(); updateBtns(); if(done) selfTest(); });
 function setStageHint(html){ const e=document.getElementById('stagehint'); if(e) e.innerHTML=html; }
-function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const comp=readComp(); if(!comp) return;
-  const ok=[...comp.a,...comp.b].filter(s=>s.score>=0.55).length;
-  const msg = ok>=8?`<span class="ok">calibration looks good \u2014 ${ok}/10 portraits recognised.</span>`
+function calOk(bx){ const comp=readComp(bx); if(!comp) return null; return [...comp.a,...comp.b].filter(s=>s.score>=0.55).length; }
+function calMsg(ok){ return ok>=8?`<span class="ok">calibration looks good \u2014 ${ok}/10 portraits recognised.</span>`
     : ok>=5?`calibration: ${ok}/10 recognised \u2014 usable; nudge the boxes if some read ??.`
-    : `<span class="warn">only ${ok}/10 recognised \u2014 boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`;
-  document.getElementById('calhint').innerHTML=msg; setStageHint(msg); }
+    : `<span class="warn">only ${ok}/10 recognised \u2014 boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`; }
+function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const ok=calOk(boxes); if(ok==null) return;
+  const msg=calMsg(ok); document.getElementById('calhint').innerHTML=msg; setStageHint(msg); }
 const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
 function detectContentRect(){ const W=vid.videoWidth,H=vid.videoHeight; if(!W) return {x:0,y:0,w:W,h:H};
   const sw=Math.min(320,W), sh=Math.max(1,Math.round(H*sw/W));
@@ -538,6 +597,7 @@ function scoreBoxes(frame, bxs){ ensureWork(); let sum=0;
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       sum += bestMatch(cellGrayPadded(frame,cell), side, true).score; } }
   return sum; }
+let pendingCal=null;   // {boxes, ok} — candidate placement awaiting the scout's confirmation
 function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share your screen first.</span>';
     document.getElementById('calhint').innerHTML=w; setStageHint(w); return; }
   const R=detectContentRect();
@@ -547,24 +607,57 @@ function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share
       const cand=boxesFromStrips(R, dxi*0.01, dyi*0.01), sc=scoreBoxes(frame,cand);
       if(sc>bestScore){ bestScore=sc; best=cand; } } }
   for(const extra of ['scoreboard','score_readout']) if(boxes[extra]) best[extra]=boxes[extra];
-  boxes=best; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); drawOverlay(); updateBtns(); selfTest(); }
-function stopCapture(){ if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
+  // Preview BEFORE commit: show where the boxes WOULD go and how confident the
+  // read is, so a bad placement is rejected instead of silently saved. Nothing
+  // is written until the scout clicks "Use these boxes".
+  pendingCal={boxes:best, ok:calOk(best)};
+  renderCalPreview(); drawOverlay(); }
+function renderCalPreview(){ const p=document.getElementById('calpreview'); if(!p||!pendingCal) return;
+  const ok=pendingCal.ok, head=ok==null?`Auto-calibrate found the boxes \u2014 review the placement below.`
+    : ok>=8?`<span class="ok">${ok}/10 portraits confident \u2014 this looks right.</span>`
+    : ok>=5?`${ok}/10 portraits confident \u2014 usable, but check the boxes below.`
+    : `<span class="warn">only ${ok}/10 portraits confident \u2014 the placement is likely off.</span>`;
+  p.querySelector('.calprev-msg').innerHTML=head;
+  p.style.display='block';
+  document.getElementById('calhint').innerHTML=head; setStageHint(head); }
+function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal=null;
+  localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes));
+  const p=document.getElementById('calpreview'); if(p) p.style.display='none';
+  drawOverlay(); updateBtns(); selfTest(); }
+function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
+function clearCalPreview(){ pendingCal=null; const p=document.getElementById('calpreview'); if(p) p.style.display='none'; drawOverlay(); }
+function stopCapture(){ clearCalPreview(); if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
   drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
-function pickBox(side){ drawMode=side;
+function pickBox(side){ clearCalPreview(); drawMode=side;
   const t = side==='a' ? 'Drag a box over the 5 BLUE (left) portraits.'
     : side==='b' ? 'Drag a box over the 5 RED (right) portraits.'
     : side==='scoreboard' ? 'Drag a box over the scrim scoreboard panel (top-left, below the portraits).'
     : 'Drag a box over the top-centre score readout (e.g. 2 - 3).';
   document.getElementById('calhint').textContent=t; setStageHint(t); }
 function enterFsCal(){ const s=document.getElementById('stage'); if(s.requestFullscreen) s.requestFullscreen().catch(()=>{}); }
-document.addEventListener('fullscreenchange',()=>{ setTimeout(()=>{ fitOverlay(); drawOverlay(); }, 60); });
+document.addEventListener('fullscreenchange',()=>{ setTimeout(()=>{ fitOverlay(); drawOverlay(); }, 60);
+  // The tour panel is outside the fullscreen node, so it would vanish during
+  // fullscreen calibration — hide it there, bring it back on exit.
+  const t=document.getElementById('tour'), fs=!!(document.fullscreenElement);
+  if(t){ t.style.display = (fs||tourIdx<0) ? 'none' : 'block'; } });
 function togglePreview(){ const L=document.getElementById('layout'); L.classList.toggle('nopreview');
   document.getElementById('hidep').textContent=L.classList.contains('nopreview')?'Show preview':'Hide preview'; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
+    clearCalPreview();
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
     const trk=st.getVideoTracks()[0];
     if(trk) trk.addEventListener('ended',()=>{ vid.srcObject=null; drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen sharing ended.'; });
     document.getElementById('calhint').textContent='Screen shared \u2014 click Auto-calibrate (or set the boxes by hand).'; updateBtns();
+    // First-visit: pulse the auto-calibrate button and prompt. The calibration
+    // preview shows confidence before commit, so a first-timer knows it's
+    // working before they ever set up a scrim map.
+    if(isFirstVisit()&&!(boxes.a&&boxes.b)){
+      const btn=document.getElementById('autocal');
+      btn.classList.add('pulse');
+      document.getElementById('calhint').innerHTML='Screen shared. <b>Click <u>Auto-calibrate</u></b> \u2014 it finds the 10 hero portraits, shows you how confident it is, and you confirm.';
+      const chk=()=>{ if(boxes.a&&boxes.b){ btn.classList.remove('pulse'); } else requestAnimationFrame(chk); };
+      requestAnimationFrame(chk);
+    }
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Screen share was cancelled or blocked \u2014 click <b>Share my screen</b> to try again, and pick your whole screen.</span>';
     toast('Screen share failed: '+esc(err&&err.message?err.message:String(err)),'bad',7000); } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
@@ -579,20 +672,100 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('undo').disabled=!(session&&session.history.length);
   document.getElementById('finish').disabled=!(session&&session.snaps.length);
   maybeAutoPop(); updateGuide(); }
+let _firstVisit=null;
+function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit; return (_firstVisit=!(boxes.a&&boxes.b)); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> \u2014 open this on your PC (you scout while watching Overwatch).'; return; }
+  const fv=isFirstVisit();
   const steps=[
     {t:'Share screen', done:!!vid.srcObject, hint:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) \u2014 auto-calibrate needs the full frame.'},
-    {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
-    {t:'Start scrim map', done:!!activeScrimMap, hint:'Set up the scrim and press <b>Start map</b> in step 2.'},
-    {t:'Capture &amp; save', done:!!(session&&session.snaps.length), hint:'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b> \u2014 it stays private on this browser.'}];
+    {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:fv?'<b>Click Auto-calibrate</b> \u2014 it finds the 10 hero portraits, shows the confidence, then <b>Use these boxes</b> to confirm.':'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
+    {t:'Start scrim map', done:!!activeScrimMap, hint:fv?'Pick or create a scrim, choose a map, and press <b>Start map</b> \u2014 a replay code is optional and stays private.':'Set up the scrim and press <b>Start map</b> in step 2.'},
+    {t:'Capture &amp; save', done:!!(session&&session.snaps.length), hint:fv?'Press <b>Snapshot</b> to read the comp, <b>Next round</b> as it advances, then <b>Finish + save</b> \u2014 it stays private on this browser.':'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b> \u2014 it stays private on this browser.'}];
   const cur=steps.findIndex(s=>!s.done);
+  if(cur<0) _firstVisit=false;
   const pills=steps.map((s,i)=>{
     const st=s.done?'done':(i===cur?'cur':'todo');
     const mark=s.done?'<svg viewBox="0 0 16 16" fill="none"><path d="M3.2 8.4l3.2 3.2 6-6.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>':String(i+1);
     return `<span class="sstep ${st}"><span class="sc">${mark}</span><span>${s.t}</span></span>`;
   }).join('');
-  g.innerHTML=`<div class="stepper">${pills}</div>`+(cur>=0?`<div class="shint">${steps[cur].hint}</div>`:`<div class="shint ok">all set \u2014 go capture!</div>`); }
+  const header=fv?'<div style="font-size:15px;font-weight:700;margin-bottom:6px">'+ico('sparkle')+' Welcome! Let\'s capture your first scrim map</div>':'';
+  g.innerHTML=header+`<div class="stepper">${pills}</div>`+(cur>=0?`<div class="shint">${steps[cur].hint}</div>`:`<div class="shint ok">all set \u2014 go capture!</div>`); }
+
+// ---------- guided first-capture tour (scrim flow) ----------
+// Same non-blocking walkthrough as the League app, adapted for the local-only
+// scrim flow: no replay-code or publish step — set up a scrim map and save.
+// Separate dismissal key so completing the League tour doesn't suppress this one.
+const TOUR_KEY='owscout_tour_done_scrim';
+let tourSteps=[], tourIdx=-1;
+function tourDefs(){
+  return [
+    {t:"Let's capture your first scrim map", target:null, btn:'Start',
+      body:'Welcome! In the next minute you\'ll <b>share your screen</b>, <b>auto-calibrate</b> the hero boxes, <b>set up a scrim map</b> and <b>capture</b> its comps. Everything stays private on this browser.',
+      done:()=>false},
+    {t:'Share your screen', target:'share',
+      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9). Auto-calibrate needs the full frame.',
+      done:()=>!!vid.srcObject},
+    {t:'Auto-calibrate', target:'autocal',
+      body:'Click <b>Auto-calibrate</b> \u2014 it finds the 10 hero portraits, then <b>review the result</b> and click <b>Use these boxes</b> to confirm. Nothing is saved until you do.',
+      done:()=>!!(boxes.a&&boxes.b)},
+    {t:'Start a scrim map', target:'scstart',
+      body:'Pick or create a private scrim, choose a map, and press <b>Start map</b>. A replay code is optional and stays private \u2014 league codes are blocked.',
+      done:()=>!!activeScrimMap},
+    {t:'Capture the comps', target:'snap',
+      body:'Press <b>Snapshot</b> as each comp appears and <b>Next round</b> as the game advances. Sides are set manually for scrims (there are no rosters to auto-detect against).',
+      done:()=>!!(session&&session.snaps.length)},
+    {t:'Finish + save', target:'finish',
+      body:'Press <b>Finish + save</b> to store the map \u2014 it stays private in this browser and shows up on the dashboard\'s Scrims tab.',
+      done:()=>false}
+  ];
+}
+function tourHighlight(targetId){
+  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
+  if(!targetId) return;
+  const el=document.getElementById(targetId); if(!el) return;
+  el.classList.add('tour-highlight');
+  try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
+}
+function tourRender(){
+  const t=document.getElementById('tour'), s=tourSteps[tourIdx]; if(!t||!s) return;
+  t.querySelector('.tour-count').textContent=(tourIdx+1)+' / '+tourSteps.length;
+  t.querySelector('.tour-title').textContent=s.t;
+  t.querySelector('.tour-body').innerHTML=s.body;
+  const nxt=t.querySelector('#tourNext');
+  nxt.textContent=s.btn||'Next';
+  // Back arrow: only once there's a step behind you.
+  t.querySelector('#tourPrev').style.visibility=(tourIdx===0)?'hidden':'visible';
+  tourHighlight(s.target);
+}
+function tourOpen(){
+  tourSteps=tourDefs();
+  tourIdx=tourSteps.findIndex(s=>!s.done());   // resume at first incomplete step
+  if(tourIdx<0){ localStorage.setItem(TOUR_KEY,'1'); return; }
+  const t=document.getElementById('tour'); t.classList.add('open'); t.style.display='block';
+  tourRender();
+}
+function tourDone(silent){
+  localStorage.setItem(TOUR_KEY,'1');
+  const t=document.getElementById('tour'); if(t){ t.classList.remove('open'); t.style.display='none'; }
+  tourHighlight(null);
+  if(!silent) toast('Tour closed \u2014 the <b>How it works</b> card above has the same steps any time.','info');
+}
+let tourManualAt=0;   // last manual prev/next click — pauses auto-advance briefly so a reviewed step doesn't bounce forward instantly
+function tourNext(){ if(tourIdx>=0&&tourIdx<tourSteps.length-1){ tourIdx++; tourManualAt=Date.now(); tourRender(); } else { tourDone(true); } }
+function tourPrev(){ if(tourIdx>0){ tourIdx--; tourManualAt=Date.now(); tourRender(); } }
+function tourTick(){
+  if(tourIdx<0) return;
+  if(Date.now()-tourManualAt<2500) return;   // grace period after a manual step
+  if(tourSteps[tourIdx].done()) tourNext();   // auto-advance as each action happens
+}
+function maybeShowTour(){
+  if(!HAS_CAPTURE) return;
+  if(localStorage.getItem(TOUR_KEY)==='1') return;
+  // A returning scrimmer who already saved maps is clearly not new — never tour.
+  if(activeScrim&&activeScrimMap){ localStorage.setItem(TOUR_KEY,'1'); return; }
+  tourOpen();
+}
 
 // ---------- matcher ----------
 const work=document.createElement('canvas'); let wctx;
@@ -613,8 +786,8 @@ function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
 function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
-function readComp(){ if(!boxes.a||!boxes.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
-  for(const side of ['a','b']){ const b=boxes[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
+function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
+  for(const side of ['a','b']){ const b=bxs[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
     if(host){ const hd=document.createElement('div'); hd.className='hd'; hd.innerHTML='<span class="hdc">Hero</span><span class="hdc">Player</span><span class="hdc sc">Conf</span>'; host.appendChild(hd); }
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
@@ -1370,6 +1543,11 @@ document.addEventListener('keydown',handleKey);
 
 // ---------- wire ----------
 document.getElementById('autocal').onclick=autoCalibrate;
+document.getElementById('calUse').onclick=commitCal;
+document.getElementById('calRetry').onclick=retryCal;
+document.getElementById('calMan').onclick=()=>{ clearCalPreview();
+  const t='Preview cancelled \u2014 drag the LEFT/RIGHT boxes by hand, or run Auto-calibrate again.';
+  document.getElementById('calhint').innerHTML=t; setStageHint(t); };
 document.getElementById('stopcap').onclick=stopCapture;
 document.getElementById('hidep').onclick=togglePreview;
 document.getElementById('share').onclick=share;
@@ -1396,6 +1574,11 @@ document.getElementById('imprefsbtn').onclick=()=>document.getElementById('impre
 document.getElementById('imprefs').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
 document.getElementById('clearrefs').onclick=clearLearnedRefs;
 document.getElementById('pop').onclick=popout;
+document.getElementById('tourX').onclick=()=>tourDone();
+document.getElementById('tourSkip').onclick=()=>tourDone();
+document.getElementById('tourPrev').onclick=tourPrev;
+document.getElementById('tourNext').onclick=tourNext;
+setInterval(tourTick, 1500);   // advance the tour as each action completes
 document.getElementById('scsave').onclick=saveScrim;
 document.getElementById('scrimpick').onchange=onScrimPick;
 document.getElementById('scstart').onclick=startScrimMap;
@@ -1417,4 +1600,5 @@ buildScrimMapOptions();
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();
 updateBtns(); loadRefs(); loadTeamNames(); renderScrimPanel();
+setTimeout(maybeShowTour, 900);   // after feeds kick off, so nothing feels jumpy
 </script></body></html>

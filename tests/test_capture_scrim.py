@@ -224,6 +224,35 @@ def test_scrim_html_inline_script_is_syntactically_valid() -> None:
         check.unlink(missing_ok=True)
 
 
+def test_league_capture_html_inline_script_is_syntactically_valid() -> None:
+    """docs/capture/index.html inline script must pass node --check.
+
+    The League capture app is a sibling of scrim.html and gets hand-edited just
+    as often — a single JS syntax error blanks the whole capture tool, and a
+    bracket-balance check won't catch it.
+    """
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available")
+    path = APP.parent / "index.html"
+    html = path.read_text(encoding="utf-8")
+    scripts = []
+    import re
+    for m in re.finditer(r"<script[^>]*>(.*?)</script>", html, re.DOTALL):
+        if "src=" in m.group(0).split(">")[0]:
+            continue
+        scripts.append(m.group(1))
+    js = "\n".join(scripts)
+    assert js, "no inline script found in index.html"
+    check = Path("league_capture_inline_check.js")
+    check.write_text(js, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, "--check", str(check)], capture_output=True, text=True)
+        assert proc.returncode == 0, f"node --check failed on index.html:\n{proc.stderr}"
+    finally:
+        check.unlink(missing_ok=True)
+
+
 def test_scrims_html_script_is_syntactically_valid() -> None:
     """docs/scrims.html inline script must pass node --check."""
     node = shutil.which("node")

@@ -146,3 +146,45 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
   sends a descriptive `faceit-sync/…` UA — don't change it to impersonate a browser.
 - The stats endpoint is `…/stats/v1/stats/matches/{id}` (the documented `/time`
   segment 404s).
+
+## Roadmap & conventions
+
+### Priorities (ordered)
+
+1. **Unblock capture adoption** — the binding constraint. Coverage is thin everywhere
+   except FACEIT Masters. The tool is ~1 min/map so time isn't the problem; the
+   friction points are calibration intimidation, absent onboarding flow, and no
+   contribution reward loop. A guided first-capture tour, one-click auto-calibrate
+   preview, and contributor impact panel would address these.
+2. **Ship scrim mode** — graduate WIP features (auto-side detection for scrims,
+   scoreboard score read, screenshot import) from experimental badges. Bring scrim
+   analytics to parity with league scouting (hero pools, swap detection, comp
+   families). Consolidate the two scrims implementations (standalone
+   `docs/scrims.html` + Scrims tab in dashboard).
+3. **OWCS expansion** — scrape from FACEIT where possible (OWCS uses FACEIT for
+   some events); VOD-based capture from YouTube/Twitch for the rest; manual entry
+   as fallback.
+4. **Statistical capture recommendations** — maps with N minutes of playtime need
+   at least M observations for reliable comp data. Pure analysis, no new infra.
+
+### Audience
+
+Organised play first (FACEIT League, scrims, OWCS). Aspiration to serve all
+audiences if the analytics are strong enough.
+
+### Codebase conventions
+
+- **Branding: "OWDB".** Rebranding in progress from "OW Scout". Chosen domain is
+  **owdb.gg** (gaming-native, currently available) — register it when closer to
+  shipping the final product. `owdb.com/.net/.org` are taken/expensive;
+  `owdb.dev/.app/.io/.sh/.me` are available fallbacks.
+- **Don't overengineer unless necessary for expandability.** The current single-template
+  dashboard works but should be modularized with a build step (concatenation, no
+  framework) before adding major new features.
+- The dead native GUI (`owscout/gui.py`, `owscout_app.py`, PyInstaller spec files,
+  `.cmd` launchers) is slated for removal — don't invest in it.
+- The two scrims implementations (`docs/scrims.html` standalone + Scrims tab in
+  dashboard) should be consolidated.
+- `docs/index.html` is the live site — never hand-edit, only regenerate via export.
+- Always run the dashboard JS syntax test after touching `_dashboard.py`:
+  `pytest tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`
