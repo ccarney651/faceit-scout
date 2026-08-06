@@ -394,6 +394,7 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .tag.warn{background:color-mix(in srgb,var(--mid) 20%,transparent);color:var(--mid)}
 .tag.ok{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
 .tag.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.tag.playoff{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
 .wl{display:inline-flex;gap:3px}
 .wl b{width:16px;height:16px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;
   display:inline-flex;align-items:center;justify-content:center}
@@ -438,6 +439,11 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 @media (max-width:640px){.rosters{grid-template-columns:1fr}}
 .backlink{display:block;padding:14px 16px 0;margin:0;color:var(--muted);text-decoration:none;font-size:13px}
 .backlink:hover{color:var(--accent)}
+/* Match-detail scout push: live replay codes in this match nobody has captured.
+   Reads as a slim banner under the header, above the map cards. */
+.scoutcta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;font-size:12.5px;
+  background:var(--surface2);border-bottom:1px solid var(--line)}
+.scoutcta .sct{flex:1;min-width:0}
 .mrow{cursor:pointer}
 /* Compact per-map scoreboard on the shared match card: one row per map. The main
    line is a 5-column grid (map | comp1 | vs | comp2 | code) so the comps always
@@ -554,6 +560,9 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
 .pcard.f1win{border-left:3px solid var(--good)} .pcard.f2win{border-right:3px solid var(--good)}
 .pcard.soon{opacity:.85}
 .pcard.proj{border-style:dashed}
+.pcard[data-match]{cursor:pointer}
+.pcard[data-match]:hover{border-color:var(--accent)}
+.pcard[data-match]:hover .pteams{background:var(--surface2)}
 .pteams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;padding:7px 8px}
 .pside{display:inline-flex;align-items:center;gap:5px;min-width:0;overflow:hidden;cursor:pointer}
 .pside .tlogo{width:16px;height:16px;border-radius:3px;flex:none}
@@ -883,7 +892,10 @@ function modeExplain(teamName, cat, leaguePct, teamModePicks){
 // shared #match= URL) needs to find which division owns it before switching
 // CURRENT_VIEW — the same move gotoScout already makes for a team name.
 function divisionOfMatch(divs, matchId){
-  for(const cid in divs){ if((divs[cid].matches||[]).some(m=>m.id===matchId)) return cid; }
+  for(const cid in divs){
+    if((divs[cid].matches||[]).some(m=>m.id===matchId)) return cid;
+    if((divs[cid].playoffs||[]).some(m=>m.id===matchId)) return cid;
+  }
   return null;
 }
 // The compact match card's per-map pip: win/loss is always read relative to
@@ -911,14 +923,17 @@ function scoutQueue(divs, captured, wipe){
   const out=[];
   for(const cid in divs){
     const d=divs[cid];
-    (d.matches||[]).forEach(m=>(m.games||[]).forEach(g=>{
+    // Finished matches + the playoff bracket both feed the queue — a live playoff
+    // code is the freshest, highest-value capture target on the site.
+    const lists=[[d.matches||[], ''],[d.playoffs||[], ' · playoffs']];
+    lists.forEach(([ms,label])=>ms.forEach(m=>(m.games||[]).forEach(g=>{
       if(!g.demo_code||!g.map) return;
       const key=m.id+':'+g.game_no;
       if(captured.has(key)) return;
       if(wipe && m.finished_at && String(m.finished_at).slice(0,10)<=wipe) return;
       out.push({mid:m.id, gno:g.game_no, code:g.demo_code, map:g.map, f1:m.f1, f2:m.f2,
-        when:m.finished_at||'', div:(d.summary&&d.summary.championship)||cid});
-    }));
+        when:m.finished_at||'', div:((d.summary&&d.summary.championship)||cid)+label});
+    })));
   }
   return out.sort((a,b)=>String(b.when).localeCompare(String(a.when)));
 }
@@ -1079,7 +1094,7 @@ let _capSampleAll;
 function capSampleAll(){
   if(_capSampleAll!==undefined) return _capSampleAll;
   const when={};
-  Object.values(DIVS).forEach(d=>(d.matches||[]).forEach(m=>{when[m.id]=m.finished_at||'';}));
+  Object.values(DIVS).forEach(d=>[(d.matches||[]),(d.playoffs||[])].forEach(ms=>ms.forEach(m=>{when[m.id]=m.finished_at||'';})));
   const dates=[...CAPTURED].map(k=>when[k.slice(0,k.lastIndexOf(':'))]);
   return (_capSampleAll=capSample(dates,CODE_WIPE));
 }
@@ -1096,7 +1111,7 @@ Object.values(DIVS).forEach(d=>d.matches.forEach(m=>m.games.forEach(g=>{
 // match_id -> match, so a captured comp (which carries only match_id/game_no) can
 // be dated by the real match date — capture order is not match order.
 const MATCH_BY_ID={};
-Object.values(DIVS).forEach(d=>d.matches.forEach(m=>{ MATCH_BY_ID[m.id]=m; }));
+Object.values(DIVS).forEach(d=>[(d.matches||[]),(d.playoffs||[])].forEach(ms=>ms.forEach(m=>{ MATCH_BY_ID[m.id]=m; })));
 const matchWhen=(mid)=> (MATCH_BY_ID[mid]&&MATCH_BY_ID[mid].finished_at)||'';
 function modeRank(mp){ const i=MODE_ORDER.indexOf(MAP_CAT[mp]||''); return i<0?MODE_ORDER.length:i; }
 function mapCmp(a,b){ return modeRank(a)-modeRank(b) || (MAP_POP[b]||0)-(MAP_POP[a]||0)
@@ -1256,6 +1271,11 @@ function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`
 function teamLink(name,extra){ return name?`<span class="tlink" data-scout="${esc(name)}" title="Scout ${esc(name)}" style="display:flex;align-items:center;gap:8px">${teamAvatar(name,24)}${esc(name)}</span>${extra||''}`:'<span class="faint">—</span>'; }
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
   if(t&&t.dataset.scout){ e.preventDefault(); gotoScout(t.dataset.scout); } });
+// Playoff bracket nodes: a finished match card opens its detail page. Guarded
+// the same way matchCard's own onclick is — a team name (data-scout) or replay
+// chip inside the card wins, and a plain click opens the match.
+document.addEventListener('click',e=>{ const t=e.target.closest('[data-match]');
+  if(t&&t.dataset.match&&!e.target.closest('[data-scout]')&&!e.target.closest('.rc')&&!e.target.closest('a')){ e.preventDefault(); openMatch(t.dataset.match); } });
 // Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
 function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Copy replay code — paste in Overwatch → Watch">${esc(code)}</code>`; }
 // Evidence-row codes cell: exactly one backing game -> the code chip inline,
@@ -1403,6 +1423,7 @@ function matchCard(m, opts={}){
   c.appendChild(el(`<div class="hd"><div class="teams">${teamName(m.f1,w1?'win':'lose')}`+
     `<span class="score">${esc(m.series)}</span>${teamName(m.f2,w2?'win':'lose')}</div>`+
     `<div class="tags">${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
+    `${m.playoff?tag('playoff','playoff'):''} `+
     // When it was played: a comp read from a 6-week-old match is weaker evidence
     // than last week's, and nothing else on the card says how old it is.
     `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
@@ -1526,7 +1547,21 @@ function renderMatchDetail(m){
   wrap.appendChild(el(`<div class="hd"><div class="teams">${_teamName(m.f1,w1?'win':'lose')}`+
     `<span class="score">${esc(m.series)}</span>${_teamName(m.f2,w2?'win':'lose')}</div>`+
     `<div class="tags">${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
+    `${m.playoff?tag('playoff','playoff'):''} `+
     `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
+  // Scout push: the live replay codes in THIS match that nobody has captured yet.
+  // The detail page doubles as a capture queue — the one place where the specific
+  // game, teams and map are already in front of the scout. Nothing renders when
+  // every code is captured (or wiped and uncapturable).
+  const todo=matchLiveTodo(m, CAPTURED, CODE_WIPE);
+  if(todo.length){
+    const sc=scoutedCount(m, CAPTURED);
+    const maps=[...new Set(todo.map(g=>g.map))].join(', ');
+    wrap.appendChild(el(`<div class="scoutcta">`+
+      `<span class="sct"><b>${sc.done}/${sc.total} scouted</b> — `+
+      `${esc(maps)} still open to capture — replay codes stop working at the next patch. About a minute per map in the capture tool.</span>`+
+      `<a class="btn" href="${captureCodeUrl(todo[todo.length-1].demo_code)}" title="Open this match's newest unscouted replay in the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12px;white-space:nowrap">Scout ${esc(todo[todo.length-1].demo_code)} →</a></div>`));
+  }
   const games=m.games.filter(g=>g.map);
   if(!games.length){ wrap.appendChild(el(`<p class="note" style="padding:0 16px 16px">No maps played.</p>`)); return wrap; }
   const panel=el(`<div></div>`);
@@ -1726,7 +1761,11 @@ function renderPlayoffs(){
     const fin=m.status==='FINISHED';
     const w1=fin&&m.winner_team&&m.winner_team===m.f1, w2=fin&&m.winner_team&&m.winner_team===m.f2;
     const cls=fin?(w1?' f1win':w2?' f2win':''):' soon';
-    return `<div class="pcard${cls}"><div class="pteams">`+
+    // A finished node opens the full match page (per-map scores, comps, bans) —
+    // the same detail view a regular-season match gets. Upcoming/TBD slots stay
+    // inert. Clicking a team name inside still goes to that team's scout page.
+    const open=fin&&m.id?` data-match="${esc(m.id)}"`:'';
+    return `<div class="pcard${cls}"${open}><div class="pteams">`+
       side(m.f1, fin?(w1?'':'lose'):'')+
       `<span class="pscore${fin?'':' vs'}">${fin?esc(m.series||'—'):'vs'}</span>`+
       side(m.f2, fin?(w2?'':'lose'):'')+
@@ -1858,9 +1897,10 @@ function gotoScout(team){
 
 // A match id is only unique within its own division (see divisionOfMatch),
 // so findMatch assumes CURRENT_VIEW is already correct — true by the time
-// it's called, since openMatch/init's match= branch always resolve the
-// division first.
-function findMatch(matchId){ return (D().matches||[]).find(m=>m.id===matchId)||null; }
+// it's called, since openMatch/init's match= branch always resolves the
+// division first. Playoff bracket matches live alongside the regular-season
+// list (same division), so both are searched.
+function findMatch(matchId){ return (D().matches||[]).find(m=>m.id===matchId)||(D().playoffs||[]).find(m=>m.id===matchId)||null; }
 function openMatch(matchId){
   const cid=divisionOfMatch(DIVS, matchId);
   if(cid){
@@ -3580,8 +3620,12 @@ function renderMatches(){
     });
   }
   function drawPlayed(q){
-    // MATCHES_RECENT is newest-first; reverse for oldest-first.
-    let shown=MATCHES_RECENT.filter(m=>!q||hay(m).includes(q));
+    // MATCHES_RECENT is newest-first (regular season). Finished playoff matches
+    // join the list tagged — the Played tab reads as one full season history,
+    // and their cards deep-link to the same match pages as the bracket.
+    let shown=MATCHES_RECENT.concat((D().playoffs||[]).filter(m=>m.status==='FINISHED'))
+      .sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);})
+      .filter(m=>!q||hay(m).includes(q));
     if(sort.value==='old') shown=[...shown].reverse();
     if(!shown.length){ list.appendChild(el(`<p class="note">No played matches${q?' match your search':''}.</p>`)); return; }
     const grid=el(`<div class="matches-grid"></div>`);

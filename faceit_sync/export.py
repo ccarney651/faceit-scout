@@ -627,17 +627,18 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             # A bracket entry per playoff match — finished (with a result) and
             # scheduled (upcoming slot). TBD slots (teams not yet resolved) carry
             # NULL team names. The Playoffs tab lays these out by round.
+            # Finished entries carry the FULL match object (id, per-game maps/
+            # scores/rosters/replay codes) so a scouted playoff game gets the same
+            # match page + comps preview as a regular-season one; the bracket and
+            # detail page both read this same array. `status` is added here — the
+            # finished match dict doesn't carry it, and the bracket lays finished
+            # vs upcoming out by it.
             bracket = [
-                {"round": m["round"], "group": m["group"], "f1": m["f1"], "f2": m["f2"],
-                 "series": m["series"], "winner_team": m["winner_team"],
-                 "finished_at": m["finished_at"], "best_of": m["best_of"],
-                 "forfeit": m["forfeit"], "status": "FINISHED"}
+                {**m, "status": "FINISHED", "playoff": True}
                 for m in pd["matches"]
             ] + [
-                {"round": u["round"], "group": u["group"], "f1": u["f1"], "f2": u["f2"],
-                 "series": None, "winner_team": None, "finished_at": None,
-                 "best_of": u["best_of"], "forfeit": False,
-                 "scheduled_at": u["scheduled_at"], "status": u["status"]}
+                {**u, "forfeit": False, "finished_at": None,
+                 "winner_team": None, "series": None, "playoff": True}
                 for u in pd["upcoming"]
             ]
             if bracket:

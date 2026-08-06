@@ -203,10 +203,48 @@ def test_playoff_bracket_attaches_finished_and_scheduled(db: Database) -> None:
                if "Master" in d["summary"]["championship"] and "Playoffs" not in d["summary"]["championship"])
     po_list = div.get("playoffs") or []
     assert sorted(x["status"] for x in po_list) == ["FINISHED", "SCHEDULED"]
+    assert all(x["playoff"] is True for x in po_list)
     fin = next(x for x in po_list if x["status"] == "FINISHED")
     assert fin["series"] == "2-1" and fin["winner_team"] == "Alpha"
     sch = next(x for x in po_list if x["status"] == "SCHEDULED")
     assert sch["scheduled_at"] == "2026-08-02T18:00:00Z" and sch["round"] == 2 and sch["f2"] == "Cabra"
+
+
+def test_playoff_bracket_carries_full_match_data(db: Database) -> None:
+    """Finished bracket entries are FULL match objects (id + per-game maps/scores/
+    codes), not series-level projections — so a scouted playoff game gets the same
+    match page and comps preview as a regular-season one."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo"), ("t3", "Cabra")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    reg, po = "reg-emea-master", "po-emea-master"
+    c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,?)",
+              (reg, "S9 EMEA Master Central - Regular Season", "ow2", "EMEA"))
+    c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,?)",
+              (po, "S9 EMEA Master Central - Playoffs", "ow2", "EMEA"))
+    _insert_match(db, reg, "r1", "FINISHED", "t1", "t2", "faction1", None,
+                  "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    _insert_match(db, po, "p1", "FINISHED", "t1", "t3", "faction1", None,
+                  "2026-07-29T20:00:00Z", 1, ["faction1", "faction2", "faction1"])
+    c.execute("UPDATE games SET demo_code='PO-XXXXX' WHERE match_id='p1' AND game_no=1")
+    db.conn.commit()
+
+    buf = io.StringIO()
+    export_html(db, buf, only_region="emea")
+    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+    div = next(d for d in data["divisions"].values()
+               if "Master" in d["summary"]["championship"] and "Playoffs" not in d["summary"]["championship"])
+    fin = next(x for x in div["playoffs"] if x["status"] == "FINISHED")
+    # The finished bracket entry is a real match: an id the detail page can
+    # resolve, a winner faction, and per-game data (maps, scores, demo codes).
+    assert fin["id"] == "p1"
+    assert fin["winner"] == "faction1"
+    assert [g["game_no"] for g in fin["games"]] == [1, 2, 3]
+    assert all(g["map"] == "Ilios" and g["map_category"] == "Control" for g in fin["games"])
+    assert fin["games"][0]["demo_code"] == "PO-XXXXX"
+    assert [g["winner_faction"] for g in fin["games"]] == ["faction1", "faction2", "faction1"]
 
 
 def test_is_playoff_classifies_championships() -> None:
