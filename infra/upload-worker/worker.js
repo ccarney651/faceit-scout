@@ -105,6 +105,10 @@ export default {
 
     // Admin roster: who is sending scout reports. Gated to ADMIN_IDS (Discord ids).
     if (url.pathname === "/admin/contributors") return adminContributors(request, env);
+    // Admin live view: who currently holds a scouting claim. Gated to ADMIN_IDS.
+    if (url.pathname === "/admin/claims") return adminClaims(request, env);
+    // Admin detail: what one contributor actually submitted. Gated to ADMIN_IDS.
+    if (url.pathname === "/admin/contributor") return adminContributorDetail(request, env);
 
     if (request.method !== "POST") {
       return json(405, { error: "POST a contribution with X-Owscout-Name and X-Owscout-Token" });
@@ -342,6 +346,70 @@ async function adminContributors(request, env) {
   } while (cursor);
   out.sort((a, b) => (b.last_upload || 0) - (a.last_upload || 0));
   return json(200, { contributors: out, count: out.length });
+}
+
+// Admin live view: which maps are currently being scouted. Forwards to the
+// ClaimRoom Durable Object, which is the single source of truth for live locks.
+// Gated to ADMIN_IDS - the session's own admin flag is only a UI hint.
+async function adminClaims(request, env) {
+  const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+  const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!sess || !admins.includes(String(sess.d))) return json(403, { error: "admins only" });
+  const stub = env.CLAIM_ROOM.get(env.CLAIM_ROOM.idFromName("global"));
+  const name = sanitizeName(sess.n) || ("scout-" + String(sess.d).slice(-6));
+  const fwd = new Request(request.url, request);
+  fwd.headers.set("x-owner", "u_" + sess.d);
+  fwd.headers.set("x-by", name);
+  return stub.fetch(fwd);
+}
+
+// Admin detail: the actual maps a contributor has submitted. Reads the
+// committed file from GitHub so the admin sees the same data the build does.
+// Gated to ADMIN_IDS.
+async function adminContributorDetail(request, env) {
+  const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+  const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!sess || !admins.includes(String(sess.d))) return json(403, { error: "admins only" });
+  const url = new URL(request.url);
+  const key = (url.searchParams.get("key") || "").trim();
+  if (!key) return json(400, { error: "missing key" });
+  if (key.includes("..") || key.includes("/") || key.includes("\\")) return json(400, { error: "invalid key" });
+  const gh = await fetch(`https://api.github.com/repos/${env.REPO}/contents/data/captures/${encodeURIComponent(key)}.json`, {
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "owscout-upload-worker",
+    },
+  });
+  if (gh.status === 404) return json(404, { error: "contributor file not found" });
+  if (!gh.ok) return json(502, { error: `github: HTTP ${gh.status}` });
+  let body, raw;
+  try {
+    body = await gh.json();
+    raw = new TextDecoder().decode(Uint8Array.from(atob(body.content), (c) => c.charCodeAt(0)));
+  } catch {
+    return json(502, { error: "could not decode contributor file" });
+  }
+  let content;
+  try { content = JSON.parse(raw); } catch { return json(502, { error: "contributor file is not valid JSON" }); }
+  const maps = (content.maps || []).map((m) => ({
+    match_id: m.match_id,
+    game_no: m.game_no,
+    demo_code: m.demo_code,
+    map_name: m.map_name,
+    map_category: m.map_category,
+    side_a_team: m.side_a_team,
+    side_b_team: m.side_b_team,
+    captured_at: m.captured_at,
+    observations: Array.isArray(m.observations) ? m.observations.length : null,
+  }));
+  return json(200, {
+    key,
+    name: content.contributor || key,
+    tool_version: content.tool_version || null,
+    maps_count: maps.length,
+    maps,
+  });
 }
 
 function json(status, obj) {

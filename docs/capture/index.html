@@ -354,9 +354,10 @@ button:disabled{opacity:.45;cursor:default}
   </div>
 
   <div class="card" id="admincard" style="display:none">
-    <h2>Admin — who's contributing</h2>
+    <h2>Admin — capture activity</h2>
     <div class="row"><button id="adminrefresh" class="ghost" type="button">Refresh</button><span id="adminnote" class="status"></span></div>
-    <div id="adminlist" class="status" style="margin-top:8px;overflow-x:auto"></div>
+    <div id="adminlive" style="margin-top:10px"></div>
+    <div id="adminlist" style="margin-top:14px"></div>
   </div>
     </div>
     <aside class="previewcol">
@@ -1845,20 +1846,81 @@ function renderAcct(){ const a=document.getElementById('acct'); if(!a) return; c
   } else { a.innerHTML=`<button id="dlogin" class="ghost" type="button">Log in with Discord</button> <span class="faint">optional — publishes your scouts under your account</span>`;
     document.getElementById('dlogin').onclick=()=>{ location.href=ENDPOINT+'/auth/login?redirect='+encodeURIComponent(location.href.split('#')[0]); };
     if(pn) pn.disabled=false; renderAdmin(null); } }
-// Admin roster (visible only to ADMIN_IDS): who is sending scout reports.
-async function renderAdmin(p){ const card=document.getElementById('admincard'); if(!card) return;
-  if(!(p&&p.admin)){ card.style.display='none'; return; } card.style.display='';
-  const note=document.getElementById('adminnote'), list=document.getElementById('adminlist'); note.textContent='loading…';
-  try{ const res=await fetch(ENDPOINT+'/admin/contributors',{headers:{'X-Owscout-Session':localStorage.getItem('owscout_session')||''}});
+// Admin panel (visible only to ADMIN_IDS): live scouts + contributor roster.
+async function renderAdmin(p){
+  const card=document.getElementById('admincard'); if(!card) return;
+  if(!(p&&p.admin)){ card.style.display='none'; return; }
+  card.style.display='';
+  const note=document.getElementById('adminnote'), live=document.getElementById('adminlive'), list=document.getElementById('adminlist');
+  note.textContent='loading…'; live.innerHTML=''; list.innerHTML='';
+  const sess=localStorage.getItem('owscout_session')||'';
+  try{
+    const [cr, lr]=await Promise.all([
+      fetch(ENDPOINT+'/admin/contributors',{headers:{'X-Owscout-Session':sess}}),
+      fetch(ENDPOINT+'/admin/claims',{headers:{'X-Owscout-Session':sess}})
+    ]);
+    const cj=await cr.json().catch(()=>({}));
+    const lj=await lr.json().catch(()=>({}));
+    if(!cr.ok){ note.innerHTML='<span class="warn">'+(cj.error||('HTTP '+cr.status))+'</span>'; return; }
+    if(!lr.ok){ note.innerHTML='<span class="warn">claims: '+(lj.error||('HTTP '+lr.status))+'</span>'; return; }
+    note.textContent=(cj.count||0)+' contributor'+(cj.count===1?'':'s');
+
+    const codeByKey={}; (DATA.codes||[]).forEach(c=>{ codeByKey[codeKey(c)]=c; });
+    function fmtAge(ms){
+      if(ms<60000) return Math.round(ms/1000)+'s';
+      if(ms<3600000) return Math.round(ms/60000)+'m';
+      return Math.round(ms/3600000)+'h';
+    }
+
+    const claims=lj.claims||{};
+    const keys=Object.keys(claims).sort((a,b)=>(claims[a].at||0)-(claims[b].at||0));
+    if(keys.length){
+      const rows=keys.map(k=>{
+        const c=claims[k], code=codeByKey[k];
+        const age=fmtAge(Date.now()-(c.at||0));
+        const detail=code
+          ? `<b>${esc(code.code)}</b> · ${esc(code.team_a)} <span class="faint">vs</span> ${esc(code.team_b)} · ${esc(code.map)} <span class="faint">(${esc(code.division||'')})</span>`
+          : `<span class="faint">${esc(k)}</span>`;
+        return `<tr style="border-top:1px solid var(--line)"><td style="padding:4px 6px">${esc(c.by||'unknown')}</td><td>${detail}</td><td class="faint" style="text-align:right">${esc(age)}</td></tr>`;
+      }).join('');
+      live.innerHTML='<p class="eyebrow" style="margin:0 0 6px">Live scouts · '+keys.length+' map'+(keys.length===1?'':'s')+'</p>'+
+        '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr class="faint" style="text-align:left"><th style="padding:4px 6px">scout</th><th>map</th><th style="text-align:right">held</th></tr>'+rows+'</table>';
+    } else {
+      live.innerHTML='<p class="eyebrow" style="margin:0 0 6px">Live scouts</p><span class="faint">no active scouting claims right now</span>';
+    }
+
+    if((cj.contributors||[]).length){
+      list.innerHTML = '<p class="eyebrow" style="margin:0 0 6px">Recent contributors</p>'+
+        '<table id="admincontribtbl" style="width:100%;border-collapse:collapse;font-size:12.5px"><tr class="faint" style="text-align:left"><th style="padding:3px 6px">name</th><th>login</th><th>discord id</th><th>last upload</th><th>maps</th><th></th></tr>'+
+        cj.contributors.map(c=>{
+          const nm=(''+c.name).replace(/[<>&"]/g,'');
+          return `<tr class="contribrow" data-key="${esc(c.key)}" data-name="${nm}" style="border-top:1px solid var(--line);cursor:pointer"><td style="padding:3px 6px">${nm}</td><td>${c.login?'✓':'—'}</td><td class="faint">${c.discord_id||'—'}</td><td>${c.last_upload?new Date(c.last_upload).toLocaleString():'—'}</td><td>${c.last_maps??'—'}</td><td style="text-align:right"><span class="faint">view →</span></td></tr>`;
+        }).join('')+
+        '</table><div id="contribdetail" style="margin-top:10px"></div>';
+      document.querySelectorAll('#admincontribtbl .contribrow').forEach(row=>{
+        row.onclick=()=>loadContributorDetail(row.dataset.key, row.dataset.name);
+      });
+    } else {
+      list.innerHTML='<span class="faint">no contributors yet</span>';
+    }
+  }catch(e){ note.innerHTML='<span class="warn">could not load ('+e+')</span>'; }
+}
+
+async function loadContributorDetail(key, name){
+  const detail=document.getElementById('contribdetail'); if(!detail) return;
+  detail.innerHTML='<span class="faint">loading '+esc(name)+'…</span>';
+  const sess=localStorage.getItem('owscout_session')||'';
+  try{
+    const res=await fetch(ENDPOINT+'/admin/contributor?key='+encodeURIComponent(key),{headers:{'X-Owscout-Session':sess}});
     const j=await res.json().catch(()=>({}));
-    if(!res.ok){ note.innerHTML='<span class="warn">'+(j.error||('HTTP '+res.status))+'</span>'; list.innerHTML=''; return; }
-    note.textContent=j.count+' contributor'+(j.count===1?'':'s');
-    list.innerHTML = (j.contributors||[]).length
-      ? '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr class="faint" style="text-align:left"><th style="padding:3px 6px">name</th><th>login</th><th>discord id</th><th>last upload</th><th>maps</th></tr>'+
-        j.contributors.map(c=>`<tr style="border-top:1px solid var(--line)"><td style="padding:3px 6px">${(''+c.name).replace(/[<>&]/g,'')}</td><td>${c.login?'✓':'—'}</td><td class="faint">${c.discord_id||'—'}</td><td>${c.last_upload?new Date(c.last_upload).toLocaleString():'—'}</td><td>${c.last_maps??'—'}</td></tr>`).join('')+
-        '</table>'
-      : '<span class="faint">no contributors yet</span>';
-  }catch(e){ note.innerHTML='<span class="warn">could not load ('+e+')</span>'; } }
+    if(!res.ok){ detail.innerHTML='<span class="warn">'+(j.error||('HTTP '+res.status))+'</span>'; return; }
+    const maps=j.maps||[];
+    if(!maps.length){ detail.innerHTML='<p class="eyebrow" style="margin:0 0 6px">'+esc(j.name||name)+'</p><span class="faint">no maps in this file</span>'; return; }
+    const rows=maps.map(m=>`<tr style="border-top:1px solid var(--line)"><td style="padding:3px 6px">${esc(m.demo_code||'—')}</td><td>${esc(m.side_a_team||'')} <span class="faint">vs</span> ${esc(m.side_b_team||'')}</td><td>${esc(m.map_name||'')} <span class="faint">${esc(m.map_category||'')}</span></td><td class="faint">${m.observations!=null?m.observations+' snaps':'—'}</td><td class="faint">${m.captured_at?new Date(m.captured_at).toLocaleString():'—'}</td></tr>`).join('');
+    detail.innerHTML='<p class="eyebrow" style="margin:0 0 6px">'+esc(j.name||name)+' · '+maps.length+' map'+(maps.length===1?'':'s')+'</p>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr class="faint" style="text-align:left"><th style="padding:3px 6px">code</th><th>match</th><th>map</th><th>snaps</th><th>captured</th></tr>'+rows+'</table>';
+  }catch(e){ detail.innerHTML='<span class="warn">could not load ('+e+')</span>'; }
+}
 
 // ---------- wire ----------
 document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
