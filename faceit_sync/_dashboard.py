@@ -218,6 +218,12 @@ table.blocks thead th:hover{color:var(--faint)}
 .wbtn.selB{background:color-mix(in srgb,var(--bad) 82%,#000);color:#fff;border-color:transparent}
 .simnext{font-size:11.5px;color:var(--faint);margin-top:8px}
 .simscore{font-variant-numeric:tabular-nums;font-weight:750}
+/* plain-language explainer under a focused game's map/ban rows */
+.whyline{font-size:12px;color:var(--muted);margin:2px 0 8px 95px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.whyline .thin{color:var(--bad);font-weight:600}
+.whyline .chip{border-color:var(--line2);background:var(--surface2)}
+.simlegend{margin:6px 2px 0;font-size:12px;color:var(--faint);display:flex;flex-direction:column;gap:3px}
+.simlegend .pp{font-weight:650}
 /* scenario tree */
 .stree{margin-top:12px}
 .stnode{min-width:0}
@@ -776,6 +782,102 @@ function codesFor(gkSet, lookup){
     .sort((a,b)=>String(b.when||'').localeCompare(String(a.when||'')));
 }
 
+/* draft simulator — pure decision helpers */
+const SIG_MIN=3, SIG_LIFT=2, SIM_MIN_MAPS=6;
+function simModelFrom(matches, team, limitGames){
+  const pick={}, banByMap={}, bansAll={}, gkPick={}, gkBanAll={}, gkBanMap={};
+  const inc=(o,k)=>o[k]=(o[k]||0)+1;
+  const add=(o,k,v)=>{(o[k]=o[k]||new Set()).add(v);};
+  const games=[];
+  (matches||[]).forEach(m=>{
+    const side=m.f1===team?'faction1':(m.f2===team?'faction2':null); if(!side) return;
+    (m.games||[]).forEach(g=>{ if(!g.map) return;
+      games.push({g,mid:m.id,at:m.finished_at||'',gno:g.game_no||0}); });
+  });
+  games.sort((a,b)=>(a.at<b.at?1:a.at>b.at?-1:0)||(b.gno-a.gno));
+  const use=(limitGames>0)?games.slice(0,limitGames):games;
+  use.forEach(({g,mid})=>{
+    const k=mid+':'+g.game_no;
+    if(g.map_picked_by===team){ inc(pick,g.map); add(gkPick,g.map,k); }
+    (g.bans||[]).filter(b=>b.team===team&&b.hero).forEach(b=>{
+      (banByMap[g.map]=banByMap[g.map]||{}); inc(banByMap[g.map],b.hero);
+      inc(bansAll,b.hero); add(gkBanAll,b.hero,k);
+      (gkBanMap[g.map]=gkBanMap[g.map]||{}); add(gkBanMap[g.map],b.hero,k); });
+  });
+  return {team,pick,banByMap,bansAll,gkPick,gkBanAll,gkBanMap,ngames:use.length};
+}
+function divBanBaseFrom(matches){
+  const all={}, first={};
+  (matches||[]).forEach(m=>(m.games||[]).forEach(g=>{
+    if(!g.map) return;
+    (g.bans||[]).forEach(b=>{ if(!b.hero) return;
+      all[b.hero]=(all[b.hero]||0)+1; if(b.order===1) first[b.hero]=(first[b.hero]||0)+1; }); }));
+  const shares=o=>{ const t=Object.values(o).reduce((a,b)=>a+b,0)||1; const s={};
+    Object.entries(o).forEach(([h,n])=>s[h]=n/t); return s; };
+  return {all:shares(all), first:shares(first)};
+}
+function mapsFrom(matches){
+  const s={}; (matches||[]).forEach(m=>(m.games||[]).forEach(g=>{
+    if(g.map&&!s[g.map]) s[g.map]=g.map_category||''; }));
+  return s;
+}
+function banSuggest(model, map, illegal){
+  const onMap=model.banByMap[map]||{}, all=model.bansAll||{}, keys=new Set([...Object.keys(onMap),...Object.keys(all)]);
+  const score=x=>x.onMap*2+x.all;
+  return [...keys].filter(h=>!illegal.has(h))
+    .map(h=>({hero:h,onMap:onMap[h]||0,all:all[h]||0}))
+    .sort((a,b)=>(score(b)-score(a))||(b.onMap-a.onMap)).slice(0,7);
+}
+function sigLift(model, divBase, hero){
+  const bans=model.bansAll[hero]||0;
+  if(bans<SIG_MIN) return {sig:false, bans, lift:null};
+  const tot=Object.values(model.bansAll).reduce((a,b)=>a+b,0)||1;
+  const share=divBase.all[hero];
+  const lift=share? (bans/tot)/share : null;
+  return {sig: lift!=null && lift>=SIG_LIFT, bans, lift};
+}
+function allowedCatsFor(g1, used, pool){
+  const MODES=['Control','Escort','Flashpoint','Hybrid','Push'];
+  if(g1) return ['Control'];
+  const usedCats=new Set([...used].map(mp=>pool[mp]));
+  const nc=MODES.filter(x=>x!=='Control'), fresh=nc.filter(x=>!usedCats.has(x));
+  return fresh.length? fresh : nc;
+}
+function mapCompare(a, b, teamPicks, divPicks, divPlay){
+  const ka=[teamPicks[a]||0,divPicks[a]||0,divPlay[a]||0];
+  const kb=[teamPicks[b]||0,divPicks[b]||0,divPlay[b]||0];
+  for(let i=0;i<3;i++){ if(kb[i]!==ka[i]) return kb[i]-ka[i]; } return a.localeCompare(b);
+}
+function autoMap(teamPicks, divPicks, divPlay, cats, used, pool){
+  const avail=Object.keys(pool).filter(mp=>!used.has(mp)&&cats.includes(pool[mp]));
+  avail.sort((a,b)=>mapCompare(a,b,teamPicks,divPicks,divPlay));
+  return avail[0]||null;
+}
+function autoBan(model, map, illegal){
+  const s=banSuggest(model, map, illegal); return s.length? s[0].hero : null;
+}
+function mapExplain(teamName, map, cat, teamPicks, divPicks, isTopInCat){
+  if(teamPicks>0) return {text:`${teamName} picked ${map} ${teamPicks}× this season`+
+    (isTopInCat?` — their most-picked ${cat} map`:''), thin: teamPicks===1};
+  if(divPicks>0) return {text:`no ${teamName} pick history on ${cat} — ${map} is the division's most-picked (${divPicks}× league-wide)`, thin:false};
+  return {text:`no pick data on ${cat} — nothing to read yet`, thin:false};
+}
+function banExplain(teamName, map, hero, all, onMap, isTopOverall, isTopOnMap, sig){
+  if(all===0) return {text:`no ban history for ${hero} — an experimental pick`, thin:false};
+  let t, saidHere=false;
+  if(isTopOverall) t = `${teamName}'s most-banned hero overall — ${all}× this season`;
+  else if(isTopOnMap){ t = `their most-banned hero on ${map} — ${onMap}× here${onMap<all?`, ${all}× this season`:''}`; saidHere=true; }
+  else t = `banned ${all}× this season`;
+  if(onMap>0 && !saidHere) t += `, ${onMap} of them on ${map}`;
+  if(sig) t += ` — ★ signature, well above the division rate`;
+  return {text:t, thin: all===1};
+}
+function modeExplain(teamName, cat, leaguePct, teamModePicks){
+  return {text:`${cat} — the league's most-picked remaining type (${leaguePct}% of picks)`+
+    (teamModePicks>0?`; ${teamName} picked ${cat} maps ${teamModePicks}× themselves`:''),
+    thin:false};
+}
+
 // Match detail page: a match id is unique only within its own division
 // (DIVS[cid].matches), so a cross-division link (the Scout-a-team rail, or a
 // shared #match= URL) needs to find which division owns it before switching
@@ -1031,13 +1133,7 @@ const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();r
 let DIV_BAN_BASE=null;
 function divBanBaseline(){
   if(DIV_BAN_BASE) return DIV_BAN_BASE;
-  const all={}, first={};
-  D().matches.forEach(m=>m.games.forEach(g=>{ if(!g.map) return;
-    (g.bans||[]).forEach(b=>{ if(!b.hero) return; inc(all,b.hero);
-      if(b.order===1) inc(first,b.hero); }); }));
-  const shares=(o)=>{ const t=Object.values(o).reduce((a,b)=>a+b,0)||1; const s={};
-    Object.entries(o).forEach(([h,n])=>s[h]=n/t); return s; };
-  DIV_BAN_BASE={all:shares(all), first:shares(first)};
+  DIV_BAN_BASE=divBanBaseFrom(D().matches);
   return DIV_BAN_BASE;
 }
 // A team's ban counts -> lift rows vs a baseline share map. Drops n<minN (a lone
@@ -1743,6 +1839,7 @@ let SIM_BO=3;       // wins needed: 2 = Bo3, 3 = Bo5 (default), 4 = Bo7 (playoff
 let SIM_RECENT=0;   // ban window: use each team's most recent N maps for BANS (0 = full season, default — a short window is too sparse to read ban tendencies)
 let SIM_OPEN=new Set();   // scenario tree: which branches (child paths) are expanded
 let SIM_FOCUS='';         // scenario tree: the one node shown full-size (others condense)
+let SIM_OPEN_ALL=false;   // one-shot: #simfull deep link renders the whole tree expanded (consumed on first sim draw)
 
 function gotoScout(team){
   // If the team isn't in the active view (e.g. click from a combined view),
@@ -2787,6 +2884,9 @@ function renderScoutBody(t){
     dsCard.addEventListener('toggle',()=>{ if(dsCard.open) buildSim(); });
     if(openSim) buildSim();
     root.appendChild(dsCard);
+    // The #sim deep link forces this section open; show() then scrolls the page
+    // to the top, so land the reader on the sim itself after that settles.
+    if(openSim){ setTimeout(()=>{ try{ dsCard.scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){} }, 150); }
   }
 
   return root;
@@ -2970,31 +3070,15 @@ function renderPlayers(){
 // Map-pick and ban tendencies for a team. limitGames>0 windows to that many of
 // the team's MOST RECENT maps (newest match first, then latest map in it) so a
 // shifting meta isn't buried under stale games; 0/undefined uses the full season.
+// The math lives in the tested pure layer (simModelFrom above bootApp); this is
+// just the bootApp-scoped data adapter.
 function simModel(team, limitGames){
-  const pick={}, banByMap={}, bansAll={};
-  const games=[];
-  D().matches.forEach(m=>{
-    const side=m.f1===team?'faction1':(m.f2===team?'faction2':null); if(!side)return;
-    m.games.forEach(g=>{ if(g.map) games.push({g,at:m.finished_at||'',gno:g.game_no||0}); });
-  });
-  games.sort((a,b)=> (a.at<b.at?1:a.at>b.at?-1:0) || (b.gno-a.gno));   // newest first
-  const use = (limitGames>0)? games.slice(0,limitGames) : games;
-  use.forEach(({g})=>{
-    if(g.map_picked_by===team) inc(pick,g.map);
-    g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{ (banByMap[g.map]=banByMap[g.map]||{}); inc(banByMap[g.map],b.hero); inc(bansAll,b.hero); });
-  });
-  return {team,pick,banByMap,bansAll,ngames:use.length};
+  return simModelFrom(D().matches, team, limitGames);
 }
-function divMaps(){ const s={}; D().matches.forEach(m=>m.games.forEach(g=>{ if(g.map) s[g.map]=g.map_category||MAP_CAT[g.map]||''; })); return s; }
-// Ranked ban suggestions for a team on a map. Blend on-map ("in this situation")
-// with overall tendency, weighting on-map so a hero they clearly target here
-// leads — but a single on-map ban doesn't outrank a strong overall staple.
-function banSuggest(model, map, illegal){
-  const onMap=model.banByMap[map]||{}, all=model.bansAll||{}, keys=new Set([...Object.keys(onMap),...Object.keys(all)]);
-  const score=x=>x.onMap*2+x.all;
-  return [...keys].filter(h=>!illegal.has(h))
-    .map(h=>({hero:h,onMap:onMap[h]||0,all:all[h]||0}))
-    .sort((a,b)=>(score(b)-score(a))||(b.onMap-a.onMap)).slice(0,7);
+function divMaps(){
+  const s=mapsFrom(D().matches);
+  Object.keys(MAP_CAT).forEach(k=>{ if(!s[k]) s[k]=MAP_CAT[k]; });
+  return s;
 }
 const ROLE_ORDER=['Tank','Damage','Support'];
 // Full-roster hero picker (grouped by role), excluding heroes already banned by this team.
@@ -3016,7 +3100,6 @@ function renderSim(){
   const wrap=el(`<div></div>`), tn=D().team_names, pool=divMaps();
   if(SIM_A==null){ SIM_A=tn[0]; SIM_B=tn[1]||tn[0]; }
   const nameOf=ab=>ab==='A'?SIM_A:SIM_B, opp=ab=>ab==='A'?'B':'A';
-  const MODES=['Control','Escort','Flashpoint','Hybrid','Push'];
   const dbase=divBanBaseline();
 
   const ctl=el(`<div class="card controls" style="flex-wrap:wrap;gap:12px 16px"></div>`);
@@ -3042,7 +3125,15 @@ function renderSim(){
   const reset=el(`<span class="wbtn" style="margin-left:auto">↺ Reset edits</span>`); reset.onclick=()=>{SIM_TREE={};draw();};
   ctl.appendChild(reset);
   wrap.appendChild(ctl);
-  wrap.appendChild(el(`<p class="note" style="margin:2px 2px 0">Start at Game 1 and <b>click an outcome</b> to plan that line — every map <b>branches</b> into who wins it, and the loser picks the next map, so each branch drafts differently. Every node is <b>pre-filled</b> from each team's record: the team on the clock <b>picks the map</b> and <b>bans first</b>. Game 1 is Control; later games pick a map <b>type</b> first. Change any map or ban and the branches below update. A team can't repeat its own bans down a line. <b>★</b> marks a signature ban — one they ban repeatedly and well above the division rate.</p>`));
+  // Compact legend — defines the chip counts and the ★ so the tree reads without
+  // a wall of prose. (The procedural line "who picks Game 1" lives in draw(),
+  // under the controls, so it reflects the First pick & ban toggle.)
+  wrap.appendChild(el(`<div class="simlegend">
+    <div><span class="pp">3×</span> on a map chip = times that team has picked it this season</div>
+    <div><span class="pp">2× here · 5×</span> on a ban chip = bans on this map · this season</div>
+    <div><span class="pp">★</span> = signature ban — repeated well above the division rate</div>
+    <div>A team can't repeat its own ban down a line</div>
+  </div>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
   // Division map tendencies — the fallback when a team has no pick history for a
@@ -3054,9 +3145,6 @@ function renderSim(){
   // Map picks are a stable, season-long tendency (maps don't get buffed/nerfed
   // like heroes), so we rank and count them over the WHOLE season — the recent
   // window governs bans only. Season picks, then division picks, then raw plays.
-  const mapKey=(mp,mf)=>[(mf.pick[mp]||0),(divPick[mp]||0),(divPlay[mp]||0)];
-  const cmpMap=(a,b,mf)=>{ const ka=mapKey(a,mf),kb=mapKey(b,mf);
-    for(let i=0;i<ka.length;i++){ if(kb[i]!==ka[i]) return kb[i]-ka[i]; } return a.localeCompare(b); };
   // League-wide type popularity (how often each non-Control mode is the pick).
   const divModePick={}; let divModeTot=0;
   Object.keys(divPick).forEach(mp=>{ const c=pool[mp]; if(c&&c!=='Control'){ divModePick[c]=(divModePick[c]||0)+divPick[mp]; divModeTot+=divPick[mp]; } });
@@ -3066,7 +3154,7 @@ function renderSim(){
   function mapButtons(cat, used, mf, current, onPick){
     const wrap=el(`<div class="mbtns"></div>`);
     Object.keys(pool).filter(mp=>pool[mp]===cat&&(!used.has(mp)||mp===current))
-      .sort((a,b)=>cmpMap(a,b,mf))
+      .sort((a,b)=>mapCompare(a,b,mf.pick,divPick,divPlay))
       .forEach(mp=>{ const n=mf.pick[mp]||0;
         const o=el(`<span class="opt${mp===current?' sel':''}">${esc(mp)} <span class="pp">${n}×</span></span>`);
         o.onclick=()=>onPick(mp); wrap.appendChild(o); });
@@ -3082,7 +3170,8 @@ function renderSim(){
       const sig=sigMark(model,s.hero);
       // On-map count (their bans in this same situation) leads when present; the
       // total is their overall tendency. Both feed the "commonly banned here" read.
-      const cnt = s.onMap>0 ? `${s.onMap}× here · ${s.all} total` : `${s.all}×`;
+      // Format is defined in the sim legend: "N× here · M×" = this map · this season.
+      const cnt = s.onMap>0 ? `${s.onMap}× here · ${s.all}×` : `${s.all}× total`;
       const o=el(`<span class="opt${s.hero===current?' sel':''}" title="${esc(s.hero)} — banned ${s.all}× overall${s.onMap?`, ${s.onMap}× on ${esc(map)}`:''}">${heroChip(s.hero)}<span class="pp">${cnt}</span>${sig}</span>`);
       o.onclick=()=>onPick(s.hero); wrap.appendChild(o); });
     if(current && !shown.has(current))
@@ -3090,43 +3179,48 @@ function renderSim(){
     wrap.appendChild(heroSelect(null, illegal, h=>{ if(h) onPick(h); }));
     return wrap;
   }
-  // Modes are one-per-series (validated in-data: 0/984 series repeat a mode). G1
-  // is Control; afterwards any non-Control mode not yet played this line — and if
-  // all are used (a deep Bo7), a repeat is allowed.
-  function allowedCatsFor(g1, used){
-    if(g1) return ['Control'];
-    const usedCats=new Set([...used].map(mp=>pool[mp]));
-    const nc=MODES.filter(x=>x!=='Control'), fresh=nc.filter(x=>!usedCats.has(x));
-    return fresh.length? fresh : nc;
-  }
-  function autoMap(mf, cats, used){
-    const avail=Object.keys(pool).filter(mp=>!used.has(mp)&&cats.includes(pool[mp]));
-    avail.sort((a,b)=>cmpMap(a,b,mf));
-    return avail[0]||null;
-  }
-  const autoBan=(model,map,illegal)=>{ const s=banSuggest(model,map,illegal); return s.length?s[0].hero:null; };
-  // Signature ban: a hero this team bans REPEATEDLY and well above the field.
-  // Qualitative on purpose — a raw "lift" explodes on tiny samples (one ban of a
-  // rarely-touched hero looks like ×40), which reads as noise, not signal. So we
-  // require a real sample (≥3 bans) and show a plain ★; the count is on the chip.
-  const SIG_MIN=3;
+  // Signature ban: the pure sigLift decision rendered as the ★ mark on a chip.
   function sigMark(model,hero){ if(!hero)return '';
-    const bans=model.bansAll[hero]||0; if(bans<SIG_MIN) return '';
-    const tot=Object.values(model.bansAll).reduce((a,b)=>a+b,0)||1;
-    const lift=dbase.all[hero]?((bans/tot)/dbase.all[hero]):0;
-    return lift>=2?`<span class="pp" style="color:var(--good)" title="Signature ban — ${bans}× banned, well above the division rate">★</span>`:''; }
+    const s=sigLift(model,dbase,hero);
+    return s.sig?`<span class="pp" style="color:var(--good)" title="Signature ban — ${s.bans}× banned, well above the division rate">★</span>`:''; }
   function setOv(path,patch){ SIM_TREE[path]=Object.assign({},SIM_TREE[path],patch); draw(); }
+  // True when a map is this team's most-picked within its mode — backs the
+  // explainer's "most-picked [mode]" claim so it's only ever said when true.
+  const isTopMapInCat = (mf, mp)=> (mf.pick[mp]||0)>0 && Object.keys(pool)
+    .filter(x=>pool[x]===pool[mp]).every(x=> (mf.pick[mp]||0) >= (mf.pick[x]||0));
 
   function draw(){
     body.innerHTML='';
     if(SIM_A===SIM_B){ body.appendChild(el(`<p class="note" style="margin-top:14px">Pick two different teams.</p>`)); return; }
     const A=simModel(SIM_A,SIM_RECENT), B=simModel(SIM_B,SIM_RECENT), modelOf=ab=>ab==='A'?A:B, target=SIM_BO;
+    // #simfull deep link: render the whole tree expanded on first draw. allOpen()
+    // is declared below in this same scope, so this consumes it before the nodes
+    // are drawn and never re-runs (the flag is one-shot).
+    if(SIM_OPEN_ALL){ SIM_OPEN=allOpen(); SIM_FOCUS=''; SIM_OPEN_ALL=false; }
     // Full-season models back the suggestion when the recent window is silent.
     const Af=simModel(SIM_A,0), Bf=simModel(SIM_B,0), modelFull=ab=>ab==='A'?Af:Bf;
+    // Evidence for the "why" strips: every gk key the models tracked resolves
+    // against this lookup (built over the same match list the models read).
+    const lookup=codeLookup(D().matches, SIM_A, CODE_WIPE);
     // Transparent about the window: show how many recent maps actually informed each side.
-    const status = SIM_RECENT>0
+    let status = SIM_RECENT>0
       ? `<b>Ban</b> reads use the most recent ${SIM_RECENT} maps — <b>${esc(SIM_A)}</b> ${A.ngames} · <b>${esc(SIM_B)}</b> ${B.ngames}. Map picks stay full-season.`
       : `Reads use each team's <b>full-season</b> record — <b>${esc(SIM_A)}</b> ${A.ngames} maps · <b>${esc(SIM_B)}</b> ${B.ngames}.`;
+    // Weak-sample honesty: below the window (or below SIM_MIN_MAPS on full-season)
+    // the bans read is a hint, not a pattern — say so instead of letting a small
+    // n look as strong as a big one.
+    const under = m => m.ngames < (SIM_RECENT>0? SIM_RECENT : SIM_MIN_MAPS);
+    if(under(A)||under(B)){
+      const bits=[];
+      if(under(A)) bits.push(SIM_RECENT>0
+        ? `only <b>${A.ngames}</b> of the last ${SIM_RECENT} games on record for <b>${esc(SIM_A)}</b>`
+        : `<b>${esc(SIM_A)}</b> has only ${A.ngames} map${A.ngames===1?'':'s'} of history`);
+      if(under(B)) bits.push(SIM_RECENT>0
+        ? `only <b>${B.ngames}</b> of the last ${SIM_RECENT} games on record for <b>${esc(SIM_B)}</b>`
+        : `<b>${esc(SIM_B)}</b> has only ${B.ngames} map${B.ngames===1?'':'s'} of history`);
+      status += ` ${bits.join(' · ')} — this read is a <b>hint</b>, not a pattern.`;
+    }
+    body.appendChild(el(`<p class="note" style="margin:8px 2px 0"><b>${esc(nameOf(SIM_FIRST))}</b> picks Game 1 and bans first. The loser of each map picks the next one.</p>`));
     body.appendChild(el(`<p class="note" style="margin:4px 2px 0">${status}</p>`));
 
     // Recursively draw the draft at `path` (string of prior winners) plus its two branches.
@@ -3142,8 +3236,8 @@ function renderSim(){
 
       // Resolve the map + both bans first — the compact view needs them too, and
       // they feed the child branches (one map per mode; no repeat bans down a line).
-      const allowedCats=allowedCatsFor(g1,used);
-      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mf,allowedCats,used);
+      const allowedCats=allowedCatsFor(g1,used,pool);
+      const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mf.pick,divPick,divPlay,allowedCats,used,pool);
       const ill1=banned[picker], ill2=banned[other];
       let b1=null,b2=null;
       if(map){
@@ -3159,6 +3253,25 @@ function renderSim(){
         const card=el(`<div class="snode focus${g1?' g1':''}"></div>`); stn.appendChild(card);
         card.appendChild(el(`<div class="snhd"><span class="gno">M${k+1}</span> <b>${esc(nameOf(picker))}</b> pick &amp; ban first`+
           `<span class="simscore faint" style="margin-left:auto">series ${sa}–${sb}${g1?' · G1 Control':''}</span></div>`));
+        // Plain-language "why" for whatever is currently selected (auto or user-
+        // overridden). isTop* claims are measured against the legal suggestion set
+        // so an override is never mislabelled as "the most".
+        const mfNow = modelOf(picker);
+        const selMap = map;
+        const mapWhy = selMap? mapExplain(nameOf(picker), selMap, pool[selMap],
+          mfNow.pick[selMap]||0, divPick[selMap]||0, isTopMapInCat(mfNow, selMap)) : null;
+        const banWhy = (model, hero, ill)=>{
+          const all = model.bansAll[hero]||0, onMap = (model.banByMap[selMap]||{})[hero]||0;
+          const maxAll = Math.max(0, ...Object.entries(model.bansAll||{})
+            .filter(([h])=>!ill.has(h)).map(([,n])=>n));
+          const maxOnMap = Math.max(0, ...Object.entries(model.banByMap[selMap]||{})
+            .filter(([h])=>!ill.has(h)).map(([,n])=>n));
+          const isTopOverall = all>0 && all===maxAll;
+          const isTopOnMap = onMap>0 && onMap===maxOnMap;
+          const sig = sigLift(model, dbase, hero).sig;
+          return banExplain(nameOf(model===A?'A':'B'), selMap, hero, all, onMap,
+            isTopOverall, isTopOnMap, sig);
+        };
         if(g1){
           // Game 1 is always Control: pick straight from the three maps, each
           // labelled with how many times this team has chosen it.
@@ -3172,12 +3285,18 @@ function renderSim(){
           const trow=el(`<div class="snrow"><span class="rl2">Map type</span></div>`);
           const tsel=el(`<select class="herosel" style="min-width:170px" title="How often teams pick each type"></select>`);
           allowedCats.forEach(cat=>tsel.appendChild(el(`<option value="${esc(cat)}" ${cat===curCat?'selected':''}>${esc(cat)} · ${modeShare(cat)}% of picks</option>`)));
-          tsel.onchange=()=>{ const top=autoMap(mf,[tsel.value],used); if(top) setOv(path,{map:top,b1:null,b2:null}); };
+          tsel.onchange=()=>{ const top=autoMap(mf.pick,divPick,divPlay,[tsel.value],used,pool); if(top) setOv(path,{map:top,b1:null,b2:null}); };
           trow.appendChild(tsel);
           card.appendChild(trow);
           const mrow=el(`<div class="snrow"><span class="rl2">Map</span></div>`);
           mrow.appendChild(mapButtons(curCat, used, mf, map, mp=>setOv(path,{map:mp,b1:null,b2:null})));
           card.appendChild(mrow);
+        }
+        // Why this map? Map picks are full-season, so the evidence comes from the
+        // full-season model; games with no replay code simply show no codes cell.
+        if(mapWhy){
+          const ev=codesFor(modelFull(picker).gkPick[selMap]||new Set(), lookup);
+          card.appendChild(el(`<p class="whyline">Why <b>${esc(selMap)}</b>? ${esc(mapWhy.text)}${mapWhy.thin?` <span class="thin">— a single case, not a pattern</span>`:''}${ev.length?' '+codesCell(ev):''}</p>`));
         }
         if(map){
           const r1=el(`<div class="snrow"><span class="rl2">${esc(nameOf(picker))} ban</span></div>`);
@@ -3187,6 +3306,16 @@ function renderSim(){
           r2.appendChild(banButtons(modelOf(other), map, ill2, b2, h=>setOv(path,{b2:h})));
           card.appendChild(r2);
         }
+        // Why each ban? Bans use the recent-window model (matching the chip counts);
+        // evidence prefers the on-map set, falling back to the overall set.
+        const whyRow = (hero, model, ill)=>{
+          const e = hero? banWhy(model, hero, ill) : null;
+          if(!e) return '';
+          const ev=codesFor(((model.gkBanMap[selMap]||{})[hero])||(model.gkBanAll[hero]||new Set()), lookup);
+          return `<p class="whyline">Why <b>${heroChip(hero)}</b>? ${esc(e.text)}${e.thin?` <span class="thin">— a single case, not a pattern</span>`:''}${ev.length?' '+codesCell(ev):''}</p>`;
+        };
+        card.appendChild(el(whyRow(b1, modelOf(picker), ill1)));
+        card.appendChild(el(whyRow(b2, modelOf(other), ill2)));
       } else {
         // Condensed — one glance-able row. Click to bring it into focus.
         const mini=el(`<div class="snode mini" title="Click to edit this game"></div>`);
@@ -3533,6 +3662,7 @@ function hashDispatch(){
   // through to Overview.
   if(start==='playoffs'){ MATCHES_MODE='playoffs'; MATCHES_MODE_SET=true; show('matches'); return; }
   if(start==='sim'){ SCOUT_PREP=false; SCOUT_SIM_OPEN=true; show('scout'); return; }
+  if(start==='simfull'){ SCOUT_PREP=false; SCOUT_SIM_OPEN=true; SIM_OPEN_ALL=true; show('scout'); return; }
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 function show(id){

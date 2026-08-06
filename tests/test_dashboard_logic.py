@@ -38,7 +38,8 @@ def _run(body: str, tmp_path) -> object:
         _pure_js() + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));",
         encoding="utf-8",
     )
-    proc = subprocess.run([node, str(src)], capture_output=True, text=True)
+    proc = subprocess.run([node, str(src)], capture_output=True, text=True,
+                          encoding="utf-8")
     assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
     return json.loads(proc.stdout)
 
@@ -582,3 +583,172 @@ def test_map_coverage_needed_is_clamped_at_zero_when_fully_captured(tmp_path) ->
         assert r["needed"] >= 0
 
 
+
+# --- draft simulator: pure decision engine + explainers ---------------------
+# simModelFrom/divBanBaseFrom/mapsFrom/banSuggest/sigLift/mapCompare/autoMap/
+# autoBan/allowedCatsFor and the explainers are pure (no DOM, no esc/inc/
+# MAP_CAT/CODE_WIPE), so they're declared above bootApp and directly testable.
+
+_ONE = ("[{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-01',"
+        "games:[{game_no:1,map:'Oasis',map_category:'Control',map_picked_by:'Alpha',"
+        "bans:[{team:'Alpha',hero:'D.Va',order:1},{team:'Bravo',hero:'Kiriko',order:2}]},"
+        "{game_no:2,map:'Runasapi',map_category:'Push',map_picked_by:'Bravo',"
+        "bans:[{team:'Alpha',hero:'D.Va',order:2},{team:'Bravo',hero:'Kiriko',order:1}]}]}]")
+
+
+def test_sim_model_counts_only_that_team_s_picks_and_bans(tmp_path) -> None:
+    got = _run(f"return simModelFrom({_ONE},'Alpha',0);", tmp_path)
+    assert got["pick"] == {"Oasis": 1}            # Bravo picked Runasapi, not Alpha
+    assert got["bansAll"] == {"D.Va": 2}          # Kiriko is Bravo's ban
+    assert got["banByMap"]["Oasis"] == {"D.Va": 1}
+    assert got["ngames"] == 2
+
+
+def test_sim_model_tracks_game_keys_for_drilldown(tmp_path) -> None:
+    # JSON.stringify turns a Set into {}, so spread the sets out to arrays in JS
+    # before returning them through the harness.
+    gkPick = _run(f"return [...simModelFrom({_ONE},'Alpha',0).gkPick['Oasis']].sort();",
+                  tmp_path)
+    assert gkPick == ["m1:1"]
+    gkBanAll = _run(f"return [...simModelFrom({_ONE},'Alpha',0).gkBanAll['D.Va']].sort();",
+                    tmp_path)
+    assert gkBanAll == ["m1:1", "m1:2"]
+    gkBanMap = _run(f"return [...simModelFrom({_ONE},'Alpha',0).gkBanMap['Oasis']['D.Va']].sort();",
+                    tmp_path)
+    assert gkBanMap == ["m1:1"]
+
+
+def test_sim_model_windows_to_the_newest_maps(tmp_path) -> None:
+    three = ("[{id:'w1',f1:'Alpha',f2:'B',finished_at:'2026-07-01',"
+             "games:[{game_no:1,map:'Oasis',map_category:'Control',map_picked_by:'Alpha',"
+             "bans:[{team:'Alpha',hero:'D.Va',order:1}]}]},"
+             "{id:'w2',f1:'Alpha',f2:'B',finished_at:'2026-07-02',"
+             "games:[{game_no:1,map:'Ilios',map_category:'Control',map_picked_by:'Alpha',"
+             "bans:[{team:'Alpha',hero:'D.Va',order:1}]}]},"
+             "{id:'w3',f1:'Alpha',f2:'B',finished_at:'2026-07-03',"
+             "games:[{game_no:1,map:'Nepal',map_category:'Control',map_picked_by:'Alpha',"
+             "bans:[{team:'Alpha',hero:'Zarya',order:1}]}]}]")
+    full = _run(f"return simModelFrom({three},'Alpha',0);", tmp_path)
+    assert full["pick"] == {"Oasis": 1, "Ilios": 1, "Nepal": 1} and full["ngames"] == 3
+    win = _run(f"return simModelFrom({three},'Alpha',2);", tmp_path)
+    assert win["pick"] == {"Ilios": 1, "Nepal": 1} and win["ngames"] == 2  # newest two
+
+
+_MODEL = ("{banByMap:{Oasis:{'D.Va':3,Zarya:1}},bansAll:{Zarya:10,'D.Va':3,Kiriko:2},"
+          "pick:{},gkPick:{},gkBanAll:{},gkBanMap:{}}")
+
+
+def test_ban_suggest_ranks_a_strong_overall_staple_above_one_on_map_ban(tmp_path) -> None:
+    got = _run(f"return banSuggest({_MODEL},'Oasis',new Set()).map(s=>s.hero);", tmp_path)
+    assert got == ["Zarya", "D.Va", "Kiriko"]   # 1*2+10 > 3*2+3 > 0+2
+
+
+def test_ban_suggest_excludes_illegal_heroes_and_caps_at_seven(tmp_path) -> None:
+    got = _run(f"return banSuggest({_MODEL},'Oasis',new Set(['Zarya'])).map(s=>s.hero);",
+               tmp_path)
+    assert got == ["D.Va", "Kiriko"]
+    big = ("{banByMap:{Oasis:{}},bansAll:"
+           "{A:8,B:7,C:6,D:5,E:4,F:3,G:2,H:1,I:0},pick:{},gkPick:{},gkBanAll:{},gkBanMap:{}}")
+    assert len(_run(f"return banSuggest({big},'Oasis',new Set());", tmp_path)) == 7
+
+
+def test_sig_lift_requires_a_real_sample_and_lift(tmp_path) -> None:
+    model = "{banByMap:{},bansAll:{'D.Va':5,Zarya:1},pick:{},gkPick:{},gkBanAll:{},gkBanMap:{}}"
+    base = "{all:{'D.Va':0.1},first:{}}"
+    assert _run(f"return sigLift({model},{base},'D.Va').sig;", tmp_path) is True
+    assert _run(f"return sigLift({model},{base},'Zarya').sig;", tmp_path) is False  # < SIG_MIN
+    assert _run(f"return sigLift({model},{{all:{{}},first:{{}}}},'D.Va').lift;",
+                tmp_path) is None  # no field baseline -> no lift, no sig
+
+
+def test_map_compare_prefers_team_picks_then_division_picks_then_plays(tmp_path) -> None:
+    assert _run("return mapCompare('Oasis','Ilios',{Oasis:2},{Oasis:5},{Oasis:5});",
+                tmp_path) < 0   # team picks beat everything
+    assert _run("return mapCompare('Ilios','Oasis',{}, {Oasis:5},{Oasis:5});",
+                tmp_path) > 0   # division picks beat nothing
+    assert _run("return mapCompare('Ilios','Oasis',{}, {}, {Oasis:3});",
+                tmp_path) > 0   # raw plays are the last resort
+    assert _run("return mapCompare('Ilios','Oasis',{}, {}, {});",
+                tmp_path) < 0   # ties break alphabetically (Ilios < Oasis)
+
+
+def test_auto_map_respects_used_and_category(tmp_path) -> None:
+    pool = "{Oasis:'Control',Ilios:'Control',Nepal:'Control',Blizzard:'Push'}"
+    got = _run("return autoMap({},{Oasis:5},{}, ['Control'], new Set(['Oasis']),"
+               f"{pool});", tmp_path)
+    assert got == "Ilios"
+
+
+def test_allowed_cats_g1_is_control_and_repeats_only_after_all_used(tmp_path) -> None:
+    pool = ("{Oasis:'Control',Blizzard:'Push',Midtown:'Escort',Runasapi:'Push',"
+            "Antarctic:'Flashpoint',Numbani:'Hybrid'}")
+    assert _run(f"return allowedCatsFor(true, new Set(), {pool});", tmp_path) == ["Control"]
+    fresh = _run(f"return allowedCatsFor(false, new Set(['Oasis']), {pool});", tmp_path)
+    assert len(fresh) == 4 and "Control" not in fresh          # all non-Control, all fresh
+    all4 = _run("return allowedCatsFor(false, new Set(['Blizzard','Midtown','Runasapi',"
+                f"'Antarctic','Numbani']), {pool});", tmp_path)
+    assert len(all4) == 4                                      # every mode used -> repeats
+
+
+def test_auto_ban_returns_null_when_everything_is_illegal(tmp_path) -> None:
+    assert _run(f"return autoBan({_MODEL},'Oasis',new Set(['Zarya','D.Va','Kiriko']));",
+                tmp_path) is None
+    assert _run(f"return autoBan({_MODEL},'Oasis',new Set());", tmp_path) == "Zarya"
+
+
+def test_map_explain_phrases_team_data_vs_division_fallback(tmp_path) -> None:
+    assert _run("return mapExplain('Alpha','Oasis','Control',5,10,true).text;",
+                tmp_path).startswith("Alpha picked Oasis 5×")
+    assert "most-picked Control" in _run(
+        "return mapExplain('Alpha','Oasis','Control',5,10,true).text;", tmp_path)
+    fall = _run("return mapExplain('Alpha','Oasis','Control',0,10,true);", tmp_path)
+    assert "no Alpha pick history" in fall["text"] and "division's most-picked" in fall["text"]
+    assert fall["thin"] is False   # the fallback text itself carries the caveat
+    none = _run("return mapExplain('Alpha','Oasis','Control',0,0,false);", tmp_path)
+    assert "no pick data" in none["text"] and none["thin"] is False
+
+
+def test_map_explain_flags_a_single_pick_as_thin(tmp_path) -> None:
+    got = _run("return mapExplain('Alpha','Oasis','Control',1,10,false);", tmp_path)
+    assert got["thin"] is True
+
+
+def test_ban_explain_phrases_overall_on_map_and_signature(tmp_path) -> None:
+    text = _run("return banExplain('Alpha','Oasis','D.Va',5,2,true,true,true).text;", tmp_path)
+    assert "most-banned hero overall" in text and "2 of them on Oasis" in text
+    assert "★ signature" in text
+    assert _run("return banExplain('Alpha','Oasis','D.Va',5,2,true,true,true).thin;",
+                tmp_path) is False
+
+
+def test_ban_explain_phrases_an_on_map_only_top(tmp_path) -> None:
+    text = _run("return banExplain('Alpha','Oasis','D.Va',4,3,false,true,false).text;",
+                tmp_path)
+    assert "most-banned hero on Oasis" in text and "3× here" in text and "4× this season" in text
+    assert "most-banned hero overall" not in text      # overall leader is someone else
+
+
+def test_ban_explain_never_claims_most_after_an_override(tmp_path) -> None:
+    text = _run("return banExplain('Alpha','Oasis','Zarya',4,0,false,false,false).text;",
+                tmp_path)
+    assert "banned 4× this season" in text and "most-banned" not in text
+
+
+def test_ban_explain_flags_no_history_and_single_case(tmp_path) -> None:
+    assert "no ban history" in _run(
+        "return banExplain('Alpha','Oasis','Zarya',0,0,false,false,false).text;", tmp_path)
+    assert _run("return banExplain('Alpha','Oasis','Zarya',1,1,false,false,false).thin;",
+                tmp_path) is True
+
+
+def test_mode_explain_mentions_league_share_and_team_preference(tmp_path) -> None:
+    text = _run("return modeExplain('Alpha','Escort',38,2).text;", tmp_path)
+    assert "38% of picks" in text and "picked Escort maps 2×" in text
+
+
+def test_div_ban_base_shares_sum_to_one_and_guard_zero_total(tmp_path) -> None:
+    got = _run(f"return divBanBaseFrom({_ONE});", tmp_path)
+    assert round(got["all"]["D.Va"] + got["all"]["Kiriko"], 9) == 1
+    empty = _run("return divBanBaseFrom([{id:'m',f1:'A',f2:'B',games:"
+                 "[{game_no:1,map:'Oasis',map_category:'Control',bans:[]}]}]);", tmp_path)
+    assert empty["all"] == {}
