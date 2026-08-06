@@ -274,6 +274,58 @@ def test_default_matches_mode_is_playoffs_when_playoffs_are_finished(tmp_path) -
     assert got == "playoffs"
 
 
+# --- playoffs bracket: column placement ------------------------------------
+# FACEIT double-elim playoff matches carry `group` (bracket leg: 1 = upper,
+# 2 = lower) and `round` (stage within it). The bracket columns are upper
+# rounds (4/2/1), lower rounds (2/2/1/1), then the grand final — so the column
+# must come from BOTH fields, or every upper-bracket round collapses into one.
+
+def test_playoff_stage_key_upper_rounds_map_to_their_columns(tmp_path) -> None:
+    # 8-team Master bracket: ubRounds=3, lbRounds=4.
+    got = _run("return [" +
+               "playoffStageKey({group:1,round:1},3,4)," +
+               "playoffStageKey({group:1,round:2},3,4)," +
+               "playoffStageKey({group:1,round:3},3,4)];", tmp_path)
+    assert got == [0, 1, 2]
+
+
+def test_playoff_stage_key_lower_rounds_sit_after_the_upper_bracket(tmp_path) -> None:
+    got = _run("return [" +
+               "playoffStageKey({group:2,round:1},3,4)," +
+               "playoffStageKey({group:2,round:4},3,4)];", tmp_path)
+    assert got == [3, 6]
+
+
+def test_playoff_stage_key_unknown_leg_falls_to_the_grand_final_column(tmp_path) -> None:
+    got = _run("return [" +
+               "playoffStageKey({group:3,round:1},3,4)," +
+               "playoffStageKey({group:null,round:2},3,4)];", tmp_path)
+    assert got == [7, 7]   # 3 upper + 4 lower columns
+
+
+def test_playoff_stage_key_round_one_is_the_first_column_of_its_leg(tmp_path) -> None:
+    assert _run("return playoffStageKey({group:2,round:1},2,3);", tmp_path) == 2
+
+
+def test_playoff_stage_key_a_round_beyond_a_leg_is_the_grand_final(tmp_path) -> None:
+    # FACEIT numbers the grand final inside group 1/2 on real brackets: a round
+    # past the leg's configured span must land in the GF column, not a wrong stage.
+    got = _run("return [" +
+               "playoffStageKey({group:1,round:4},3,4)," +   # upper bracket has 3 rounds
+               "playoffStageKey({group:2,round:5},3,4)," +   # lower bracket has 4 rounds
+               "playoffStageKey({group:1,round:3},3,4)];", tmp_path)
+    assert got == [7, 7, 2]   # both over-spans -> GF; round 3 stays the upper final
+
+
+def test_playoff_stage_key_gf_clamp_scales_to_the_bracket_size(tmp_path) -> None:
+    # 16-team Expert bracket: ubRounds=4, lbRounds=6 -> GF column 10.
+    got = _run("return [" +
+               "playoffStageKey({group:1,round:5},4,6)," +
+               "playoffStageKey({group:2,round:7},4,6)," +
+               "playoffStageKey({group:2,round:6},4,6)];", tmp_path)
+    assert got == [10, 10, 9]   # over-span -> GF; LB round 6 is the last LB column
+
+
 # --- click-to-codes: code lookup + resolution -----------------------------
 # codeLookup/codesFor are pure data transforms (no DOM, no esc/el/rcChip), so
 # they're declared above bootApp and directly testable here.

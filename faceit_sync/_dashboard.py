@@ -735,6 +735,23 @@ function defaultMatchesMode(playoffsList){
   return (playoffsList && playoffsList.length) ? 'playoffs' : 'played';
 }
 
+// Playoffs bracket: which column a real FACEIT match belongs in. Playoff
+// championships are double-elimination; FACEIT's `group` is the bracket leg
+// (1 = upper, 2 = lower) and `round` is the stage within it, so the column is
+// derived from BOTH — using `group` alone would collapse every upper-bracket
+// round into one column. The bracket's columns are upper rounds (4/2/1), then
+// lower rounds (2/2/1/1), then the grand final. A match whose leg is unknown,
+// or whose round exceeds its leg's configured span, is the grand final — FACEIT
+// numbers it inside group 1/2 on the real brackets, so a bare (group, round)
+// lookup would otherwise land it in the wrong stage column.
+function playoffStageKey(m, ubRounds, lbRounds){
+  const g=m.group!=null?m.group:0, r=Math.max(0,(m.round!=null?m.round:0)-1);
+  const gfCol=ubRounds+lbRounds;
+  if(g===2) return r<lbRounds ? ubRounds+r : gfCol;   // lower bracket, else grand final
+  if(g===1) return r<ubRounds ? r : gfCol;            // upper bracket, else grand final
+  return gfCol;                                       // unknown leg -> grand final
+}
+
 // Click-to-codes: mid:gno -> the replay-code context an evidence row's popover
 // needs. `team` is whose perspective opp/won are read from (may be falsy).
 // `wipeDate` (CODE_WIPE) marks a game `dead` when it finished on/before the
@@ -1598,7 +1615,7 @@ function renderPlayoffs(){
     return wrap;
   }
   const N=PLAYOFF_QUALIFIERS[tier]||8, teams=D().teams||[], k=nextPow2(N);
-  const ubRounds=Math.round(Math.log2(k)), order=seedOrder(k);
+  const ubRounds=Math.round(Math.log2(k)), lbRounds=2*(ubRounds-1), order=seedOrder(k);
   const po=D().playoffs||[];   // real bracket matches (finished + scheduled), attached from the playoff championship (empty until it exists)
   const done=po.filter(m=>m.status==='FINISHED').length, up=po.length-done;
 
@@ -1633,16 +1650,17 @@ function renderPlayoffs(){
   const blank=(a,b,bo)=>`<div class="pcard proj"><div class="pteams">${proj(a)}<span class="pscore vs">vs</span>${proj(b)}</div>`+
     `<div class="pfoot"><span class="pbo">Bo${bo||5}</span><span class="pwhen">—</span></div></div>`;
 
-  // Real matches bucketed by bracket stage (FACEIT's `group`, falling back to
-  // `round`) in stage order; each column consumes its own stage so a partially
-  // played round never bleeds into the next one.
-  const stageKey=(m)=> (m.group!=null?m.group:(m.round!=null?m.round:0));
+  // Real matches bucketed by bracket column (see playoffStageKey): each column
+  // consumes its own stage so a partially played round never bleeds into the
+  // next one.
+  const stageKey=(m)=> playoffStageKey(m, ubRounds, lbRounds);
   const pool=po.slice().sort((a,b)=> (stageKey(a)-stageKey(b)) || String(a.finished_at||a.scheduled_at||'').localeCompare(String(b.finished_at||b.scheduled_at||'')));
-  const buckets=[];
-  pool.forEach(m=>{ const g=stageKey(m); let b=buckets[buckets.length-1];
-    if(!b||b.key!==g){ b={key:g,ms:[]}; buckets.push(b); } b.ms.push(m); });
+  // Bucket by stage-key VALUE, not insertion position — a round with no real
+  // match yet must not shift later matches into the wrong column.
+  const byStage=new Map();
+  pool.forEach(m=>{ const g=stageKey(m); if(!byStage.has(g)) byStage.set(g,[]); byStage.get(g).push(m); });
   const fill=(i,cnt,seeds,bo)=>{
-    const ms=(buckets[i]||{ms:[]}).ms, pairs=seeds||[];
+    const ms=byStage.get(i)||[], pairs=seeds||[];
     let out='';
     for(let j=0;j<cnt;j++){
       const m=ms[j];
@@ -1654,7 +1672,6 @@ function renderPlayoffs(){
 
   const seedPairs=[]; for(let i=0;i<k/2;i++) seedPairs.push([order[2*i],order[2*i+1]]);
   const ubSizes=[]; for(let m=k/2;m>=1;m/=2) ubSizes.push(m);
-  const lbRounds=2*(ubRounds-1);
   const lbSizes=[]; for(let j=1;j<=lbRounds;j++) lbSizes.push(Math.pow(2,(ubRounds-1)-Math.ceil(j/2)));
   const col=(title,inner)=>{const c=el(`<div class="br-col"></div>`);c.appendChild(el(`<h4>${esc(title)}</h4>`));c.appendChild(el(`<div class="br-col-body">${inner}</div>`));return c;};
   const flow=()=>{const b=el(`<div class="bracket"><div class="br-flow"></div></div>`);return[b,b.querySelector('.br-flow')];};

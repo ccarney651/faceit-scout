@@ -13,6 +13,7 @@ from typing import Any, Mapping, Optional, TextIO
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
 from .hero_icons import load_hero_icons
+from .models import is_playoff_name
 from .subroles import SEAT_ORDER, seat_of
 from .team_logos import build_team_logos
 
@@ -518,8 +519,7 @@ def _is_playoff(name: Optional[str]) -> bool:
     divisions. Its matches feed the Playoffs tab as real results but must NOT
     enter regular-season standings/meta — so it's classified out of the tier
     views and attached to the matching division instead."""
-    low = (name or "").lower()
-    return "playoff" in low or "knockout" in low
+    return is_playoff_name(name)
 
 
 def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,

@@ -47,6 +47,8 @@ from .models import (
     Player,
     RoundPlayer,
     Team,
+    is_playoff_name,
+    playoff_base_name,
 )
 
 log = logging.getLogger(__name__)
@@ -723,6 +725,36 @@ class SyncEngine:
         return [str(r[0]) for r in rows
                 if len(str(r[0])) == 36 and str(r[0]).count("-") == 4]
 
+    def _championship_name(self, cid: str) -> Optional[str]:
+        row = self.db.conn.execute(
+            "SELECT name FROM championships WHERE id=?", (cid,)
+        ).fetchone()
+        return row["name"] if row else None
+
+    def _related_division_teams(self, championship_id: str) -> set[str]:
+        """Sibling division's teams for a playoff championship.
+
+        Keyless discovery is transitive: it can only enumerate matches for teams
+        already known in a championship's match graph. A bracket's teams are the
+        regular season's qualifiers, so a team whose first playoff match is
+        against another not-yet-known team would stay invisible until it links
+        into a known one — late in a bracket. Unioning the matching regular-season
+        division's teams makes every bracket slot discoverable from the first run.
+        Non-playoff championships return nothing.
+        """
+        name = self._championship_name(championship_id)
+        base = playoff_base_name(name)
+        if not name or not base or not is_playoff_name(name):
+            return set()
+        rows = self.db.conn.execute(
+            "SELECT id FROM championships WHERE id != ? AND name LIKE ?",
+            (championship_id, base + "%"),
+        ).fetchall()
+        out: set[str] = set()
+        for r in rows:
+            out |= set(self.known_team_ids(str(r["id"])))
+        return out
+
     def _ingest_and_tally(
         self, mid: str, cid: str, result: "SyncResult", *,
         force_refresh: bool, dry_run: bool,
@@ -760,7 +792,11 @@ class SyncEngine:
         """
         result = SyncResult()
         seed_teams = self.known_team_ids(championship_id)
-        if not seed_teams:
+        # A playoff bracket's teams are the sibling regular-season division's
+        # qualifiers; unioning those in lets the crawl discover matches involving
+        # teams not yet in the bracket's own graph (see _related_division_teams).
+        extra = self._related_division_teams(championship_id)
+        if not seed_teams and not extra:
             if self.client.api_key:
                 for s in self.client.iter_championship_matches(championship_id):
                     mid = s.get("match_id") or s.get("id")
@@ -778,7 +814,8 @@ class SyncEngine:
         processed: set[str] = set()
         seen: set[str] = set()
         while True:
-            teams = [t for t in self.known_team_ids(championship_id) if t not in processed]
+            teams = [t for t in (set(self.known_team_ids(championship_id)) | extra)
+                     if t not in processed]
             if not teams:
                 break
             for tid in teams:
@@ -824,6 +861,10 @@ class SyncEngine:
             str(r[0]) for r in
             self.db.conn.execute("SELECT id FROM championships ORDER BY name").fetchall()
         ]
+        # Crawl regular-season divisions before their playoff siblings: a bracket
+        # is seeded with the sibling division's teams, so those teams must be fully
+        # discovered first for the bracket crawl to find every match in the same run.
+        cids.sort(key=lambda c: (is_playoff_name(self._championship_name(c)), c))
         for cid in cids:
             r = self.run(cid, force_refresh=force_refresh, dry_run=dry_run)
             total.matches_seen += r.matches_seen

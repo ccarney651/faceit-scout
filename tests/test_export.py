@@ -220,6 +220,20 @@ def test_is_playoff_classifies_championships() -> None:
     assert not _is_playoff(None)
 
 
+def test_playoff_base_name_pairs_playoff_and_regular_divisions() -> None:
+    """The base name is how ingest pairs a playoff championship with its
+    regular-season division (to seed the bracket crawl) and export attaches its
+    results — both must strip the same stage suffixes."""
+    from faceit_sync.models import is_playoff_name, playoff_base_name
+
+    assert is_playoff_name("S9 EMEA Master Central - Playoffs")
+    assert not is_playoff_name("S9 EMEA Master Central - Regular Season")
+    assert playoff_base_name("S9 EMEA Master Central - Playoffs") == "S9 EMEA Master Central"
+    assert playoff_base_name("S9 EMEA Master Central - Regular Season") == "S9 EMEA Master Central"
+    assert playoff_base_name("S9 NA Expert Central - Knockout Stage") == "S9 NA Expert Central"
+    assert playoff_base_name(None) is None
+
+
 def test_tier_and_region_classify_championship_names() -> None:
     """The site's region+tier switcher keys off these. Names carry both words."""
     from faceit_sync.export import _region_of, _tier_of

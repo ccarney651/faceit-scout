@@ -9,6 +9,7 @@ trivial to correct if FACEIT changes the schema.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -36,6 +37,31 @@ UNCAPTURED_ROLE_SENTINEL = "-"
 
 FACTION1 = "faction1"
 FACTION2 = "faction2"
+
+# Championship names carry the stage suffix ("S9 EMEA Master Central - Regular
+# Season" vs "S9 EMEA Master Central - Playoffs"). The playoff classification and
+# the base-name pairing are shared by ingest (which needs the sibling division's
+# teams to seed a bracket crawl) and export (which attaches playoff results to
+# the matching regular-season division).
+_PLAYOFF_STAGE_SUFFIX = re.compile(
+    r"\s*-\s*(regular season|playoffs?|playoff stage|knockout stage)\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_playoff_name(name: Optional[str]) -> bool:
+    """A playoff/knockout championship, separate from the regular-season division."""
+    low = (name or "").lower()
+    return "playoff" in low or "knockout" in low
+
+
+def playoff_base_name(name: Optional[str]) -> Optional[str]:
+    """The shared division name minus the stage suffix, used to pair a playoff
+    championship with its regular-season division."""
+    if not name:
+        return None
+    base = _PLAYOFF_STAGE_SUFFIX.sub("", name.strip())
+    return base or None
 
 
 @dataclass(slots=True)
