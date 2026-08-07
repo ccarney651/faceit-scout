@@ -96,6 +96,13 @@ jobs:
       - name: Update all divisions + rebuild dashboard
         env:
           EVENT: ${{ github.event_name }}
+          # Auto-discover playoff championships. Keyless transitive crawl covers
+          # regular season; finding the "... - Playoffs" championship needs the
+          # keyed Data API directory query (open.faceit.com/data/v4/championships).
+          # Without the secret, discovery is skipped and playoffs must be seeded
+          # manually in matches.txt. Add the free key at GitHub -> repo ->
+          # Settings -> Secrets and variables -> Actions as FACEIT_API_KEY.
+          FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
         run: |
           # FRESH data from FACEIT (the slow, rate-limited part) is only needed for
           # the daily schedule, a manual run, or the site's "Refresh now" button.
