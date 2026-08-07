@@ -136,3 +136,11 @@ https://www.faceit.com/en/ow2/room/1-8c961674-2cd4-481f-b8d7-d080b67761ea
 #     attached to their regular-season division by the Playoffs tab. ---
 # S9 EMEA Master Central - Playoffs
 https://www.faceit.com/en/ow2/room/1-53ea44f5-5f07-42d3-abb4-ffccee8dba10
+# S9 EMEA Expert Central - Playoffs
+https://www.faceit.com/en/ow2/room/1-3d480662-3707-477f-81f0-fbf6e5b828c4
+# S9 EMEA Advanced Central - Playoffs
+https://www.faceit.com/en/ow2/room/1-833bb9d5-d5a8-4d42-ad53-70caf541c018
+# S9 NA Master Central - Playoffs
+https://www.faceit.com/en/ow2/room/1-d626511d-01c8-40ef-b946-4ab562855833
+# S9 NA Expert Central - Playoffs
+https://www.faceit.com/en/ow2/room/1-ff098a30-3bb5-4227-a3cf-862f321d9286
