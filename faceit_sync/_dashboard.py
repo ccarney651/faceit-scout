@@ -3051,7 +3051,7 @@ function renderPlayers(){
     body.appendChild(any?grid:el(`<p class="note">No players with a known role yet.</p>`));
     const un=[]; const foot=(lbl,arr)=>{ if(arr.length) un.push(lbl+': '+arr.sort((a,b)=>b.maps-a.maps).map(p=>esc(p.nick)).join(', ')); };
     foot('Tank',unseated.Tank); foot('DPS',unseated.Damage); foot('Support',unseated.Support);
-    if(un.length) body.appendChild(el(`<p class="note" style="margin-top:10px">Not scouted yet <span class="faint">(seat shows once a player is captured)</span> — ${un.join(' · ')}</p>`));
+    if(un.length) body.appendChild(el(`<p class="note" style="margin-top:10px">Not scouted yet <span class="faint">(role shows once a player is captured)</span> — ${un.join(' · ')}</p>`));
   }
   // Leaderboard: pure FACEIT signal (elo + per-map averages), so unlike the hero
   // pools it is fully populated in every division, captured or not. Rate columns
@@ -3099,7 +3099,7 @@ function renderPlayers(){
   }
   const draw=()=>{ [...modebar.children].forEach(b=>b.classList.toggle('selA', b.dataset.v===PLAYERS_VIEW));
     if(PLAYERS_VIEW==='role') drawRole(); else if(PLAYERS_VIEW==='rank') drawRanks(); else drawTeam(); };
-  [['team','By team'],['role','By seat'],['rank','Leaderboard']].forEach(([v,label])=>{
+  [['team','By team'],['role','By role'],['rank','Leaderboard']].forEach(([v,label])=>{
     const b=el(`<span class="wbtn" data-v="${v}">${esc(label)}</span>`);
     b.onclick=()=>{ PLAYERS_VIEW=v; draw(); }; modebar.appendChild(b);
   });

@@ -1,8 +1,9 @@
 # OW Scout — backlog
 
-Compiled 2026-08-01. Everything the project is tracking but is not (yet) a
-dated plan/design spec. Items move out of here into `specs/<date>-<topic>-*`
-docs when they get scoped for implementation.
+Compiled 2026-08-01; updated 2026-08-07 (post-playoffs audit). Everything the
+project is tracking but is not (yet) a dated plan/design spec. Items move out
+of here into `specs/<date>-<topic>-*` docs when they get scoped for
+implementation.
 
 Priority levels:
 - **P1** — should be next; closes a known data gap or a directly-asked-for fix.
@@ -31,14 +32,40 @@ on owscout.com 2026-08-01. Treat them as historical records, not pending work:
   evidence rows across all 8 Scout-page sites resolve to replay codes
   (`codeslink`/`codespop` in the deployed page).
 
-## In flight (committed, not yet re-exported to the live site)
+Shipped and verified live since the 2026-08-01 audit (all six carry tests; the
+2026-08-07 audit re-verified them in the deployed `docs/index.html`):
 
-- **Players → By seat grid layout fix** (`faceit_sync/_dashboard.py`, commit
-  `1ae09bb`, 2026-08-01). `.seatrow` CSS + the By-seat renderer: name/heroes/stats
-  in fixed grid columns so rows stop staggering on variable-width content.
-  Correction: the prior version of this doc called it "uncommitted" — it's on
-  `main`, just ahead of the last CI export (`bced1e4`), so `docs/index.html`
-  hasn't picked it up yet. Gate: JS-syntax test + headless-Edge screenshot.
+- **Players → By seat grid layout fix** (`1ae09bb`, 2026-08-01) — was "in
+  flight" below; exported long ago.
+- **Capture onboarding** (`c104e86`, 2026-08-04) — guided first-capture tour
+  (league + scrim apps), auto-calibrate confidence preview that only commits on
+  "Use these boxes", contributor impact card above the scout leaderboard, WIP
+  badges on the experimental OCR reads. These are exactly the three friction
+  fixes roadmap priority 1 named. Tests: `test_capture_onboarding.py` +
+  capture-app syntax guard.
+- **Capture recommendations** (`93b0496`, 2026-08-04) — Overview panel ranking
+  maps by unseen league minutes (games × per-mode length estimate), withheld
+  when nothing is under-covered. Pure `mapCoverage()` + tests. Roadmap
+  priority 4, shipped ahead of 2 and 3.
+- **Playoff bracket crawl + layout** (`61e3552`, 2026-08-06) — a playoff
+  championship's keyless crawl seeds from the sibling regular-season division's
+  teams (`_related_division_teams`), so bracket matches are discoverable from
+  the first run; bracket columns keyed by (group, round) via pure
+  `playoffStageKey` (lower bracket + grand final land correctly).
+- **Playoff match pages + scout CTA** (`a5c47ef`, 2026-08-06) — finished
+  bracket entries are full match objects, so a scouted playoff game gets the
+  same match page as a regular-season one; match detail pages carry a capture
+  banner for their own live unscouted codes; finished playoff matches join the
+  Played tab tagged.
+- **Draft-sim explainability** (`6a401cc`, spec
+  `2026-08-05-draft-sim-explainable-{design,plan}.md`) — every auto map/ban
+  suggestion carries a plain-language "why" plus replay-code evidence; weak
+  samples are labelled "a hint, not a pattern"; decision helpers moved to the
+  tested pure layer.
+- **Admin capture panel** (`6a4c61a`, 2026-08-06) — worker endpoints
+  `/admin/claims` + `/admin/contributor`, gated server-side by `ADMIN_IDS`;
+  the capture app shows live scout claims and per-contributor submitted-map
+  detail.
 
 ---
 
@@ -122,13 +149,43 @@ captured comps, our compare can be deeper than owscouter's (which is FACEIT
 stats only). Natural fit: an extension of the Scout a team page / draft
 simulator rather than a new surface.
 
-### P3 — Player performance index + timeline
+### P2 — Player efficiency rating (PER-style), role-relative
 
-Composite per-player score (owscouter calls theirs MPI), radar vs same-role
-peers, elo/stats trajectory over the season. Rated "kinda cool, not super
-important". Design caution: an opaque composite index fights the repo's
-"say what the number rests on" rule — if built, show components + sample floor,
-never a bare opaque number.
+Requested by a league player (boomed/SHKI, Discord, 2026-08-06): a PER-like
+composite — damage/healing/mitigation averages + K:D — "role by role, meta
+independent, relative to peers". Was P3 as "player performance index +
+timeline" (owscouter's MPI); an explicit user request bumps it. All inputs
+already sit in `round_players` at FULL league coverage (no capture needed),
+and the Players leaderboard's 5-map sample floor is the natural base.
+
+Vocabulary (decided 2026-08-07): user-facing copy calls the five buckets
+**"Role"** — the values (Tank / Hitscan / Flex DPS / Main Support / Flex
+Support) shown alongside self-disambiguate from the game's three roles, and
+it's the word organised players already use. "Seat" never appears in UI
+(Players-tab toggle relabelled "By seat" → "By role" 2026-08-07); in prose
+that needs it, "competitive role". "Subrole" is off-limits — Blizzard shipped
+official in-game Sub-Roles with the perk system — so the internal
+`subroles.py` module name now collides with a real game mechanic: harmless
+until we surface hero sub-roles, then rename to `seats.py`. Internal code
+keeps `seat`/`seat_of` (short, grep-able, users never see it).
+
+Design steers that keep it inside the repo's honesty rules:
+
+- **Rank against peers in the same competitive role** (Tank / Hitscan /
+  Flex DPS / Main Support / Flex Support — `subroles.py`), not the game's
+  three roles — hero pick within a role swings stat lines more than skill
+  does (Mercy vs Zen). Percentile or z-score within role+division is "meta
+  independent" for free: a meta shift moves the whole peer group together.
+- **Show the components.** The composite is a summary line over the existing
+  per-map stats, never a bare opaque number (the repo rule). Components + `n`
+  visible; below the sample floor, no rating renders at all.
+- Per-map rates, not raw totals (map length confounds raw damage/healing).
+- Disclose, don't solve: players on strong teams post better lines (more
+  elims, fewer deaths) — the rating doesn't control for team strength.
+- boomed's "chances:goals / takes:makes" note — OW's analog is elims:deaths,
+  already shipped as K:D. The new value is cross-stat normalization, not
+  another ratio.
+- Timeline (elo/stat trajectory over the season) stays bundled as before.
 
 ### P3 — Per-map scoreboard context
 
@@ -144,3 +201,67 @@ of it; do not clone it. If it ever ships, it should be OW Scout's own take —
 the obvious spin is tying markers to *real captured data* (mark a position,
 attach the comps/comps that were run there, export a prep image) rather than a
 blank whiteboard. Idea-level until that angle is defined.
+
+---
+
+## Added 2026-08-07 — audit of the Aug 4–6 wave
+
+Findings from auditing the six shipped features above (full suite + mypy clean,
+all verified live). Ordered.
+
+### P2 — FEATURES.md is six features behind
+
+The authoritative feature reference documents none of: the capture
+recommendations panel, the contributor impact card, the onboarding tour /
+auto-calibrate preview / WIP badges, playoff match pages + scout CTA + the
+Played-tab merge, draft-sim explainers + legend + `#simfull`, or the admin
+capture panel. Touch §1.2 (Tabs: Overview, Matches), §3 (scout page / draft
+sim), §2.3 (capture onboarding), §2.8 (admin panel). Same pass: CLAUDE.md's
+roadmap still describes priorities 1 and 4 as future work though their named
+items shipped — reword to "delivered; iterate on adoption".
+
+### P2 — Capture recommendations ignore playoff matches
+
+`mapCoverage(D().matches, …)` reads regular-season games only, while
+`scoutQueue`/`capSampleAll`/`MATCH_BY_ID` all union in `d.playoffs` and the
+code itself calls a live playoff code "the freshest, highest-value capture
+target on the site". Either feed playoffs into coverage too (one-line change,
+matches the established pattern) or write down why they're excluded.
+
+### P2 — Consolidate the two scrims implementations
+
+Standalone `docs/scrims.html` vs the dashboard Scrims tab, both reading the
+same IndexedDB store. CLAUDE.md flags the consolidation as part of roadmap
+priority 2 (ship scrim mode); it has no other tracking home.
+
+### P2 — Dashboard modularization before the next major feature
+
+CLAUDE.md convention: `_dashboard.py` is one ~3,700-line template string and
+grew ~500 lines in a week (draft sim, playoffs, capture recs). The agreed
+shape is a concatenation build step, no framework. Cheaper now than after the
+next feature lands.
+
+### P3 — Playoff sibling pairing is a LIKE prefix
+
+`_related_division_teams` matches `name LIKE base || '%'`; a future division
+whose base name is a prefix of another's (e.g. "Master" vs "Master 2") would
+cross-seed the crawl. Anchor the pairing (exact stage-suffix match) when a
+second real pairing case appears.
+
+### P3 — `MODE_MINUTES` are hardcoded guesses
+
+Capture-recs playtime weights (Control 14, Escort/Hybrid 20, Push/Flashpoint
+11) are estimates; only the proportions matter today. If the stats feed
+exposes real game durations, derive them.
+
+### P3 — Retire the dead native GUI
+
+`owscout/gui.py`, `owscout_app.py`, the PyInstaller specs and `.cmd` launchers
+are slated for removal per CLAUDE.md. No one is pointed at them; deleting them
+shrinks the repo and the test-import surface.
+
+### P3 — OWDB rebrand mechanics
+
+Branding decision is made (owdb.gg, per CLAUDE.md) but untracked: register the
+domain when closer to shipping, then a rename pass over user-visible strings
+(site title, capture app, worker messages, docs).
