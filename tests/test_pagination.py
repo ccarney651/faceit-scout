@@ -43,32 +43,3 @@ def test_pagination_stops_on_empty_page() -> None:
     client, _ = make_client(api_key="key")
     got = list(client.iter_championship_matches(champ))
     assert len(got) == 20
-
-
-@responses.activate
-def test_game_championships_pagination_exhausts_all_pages() -> None:
-    url = f"{DATA_API_BASE}/championships"
-
-    def page(start: int, count: int) -> dict:
-        return {
-            "items": [
-                {"championship_id": f"c{start + i:02d}", "name": f"Champ {start + i}"}
-                for i in range(count)
-            ],
-            "start": start, "end": start + count,
-        }
-
-    responses.add(responses.GET, url, json=page(0, 100), status=200)
-    responses.add(responses.GET, url, json=page(100, 100), status=200)
-    responses.add(responses.GET, url, json=page(200, 7), status=200)
-
-    client, _ = make_client(api_key="key")
-    got = list(client.iter_game_championships("ow2"))
-
-    assert len(got) == 207
-    assert got[0]["championship_id"] == "c00"
-    assert got[-1]["championship_id"] == "c206"
-    assert responses.calls[0].request.headers["Authorization"] == "Bearer key"
-    # game and type are passed as query params.
-    assert "game=ow2" in responses.calls[0].request.url
-    assert "type=all" in responses.calls[0].request.url

@@ -70,7 +70,6 @@ class Championship:
     name: Optional[str]
     game: Optional[str]
     region: Optional[str]
-    organizer_id: Optional[str] = None
 
 
 @dataclass(slots=True)
