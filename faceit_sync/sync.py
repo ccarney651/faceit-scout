@@ -691,6 +691,7 @@ class SyncEngine:
             name=entity.get("name"),
             game=match_payload.get("game"),
             region=match_payload.get("region"),
+            organizer_id=match_payload.get("organizerId") or entity.get("organizer_id"),
         )
         with self.db.transaction():
             self.db.upsert_championship(champ)
@@ -854,6 +855,62 @@ class SyncEngine:
             warnings=result.warnings, errors=result.errors,
         )
 
+    def _discover_playoff_championships(
+        self, game_id: str
+    ) -> list[tuple[str, str, Optional[str]]]:
+        """Find playoff championships for known regular-season divisions.
+
+        Uses the Data API ``/championships`` list (requires a key). For every
+        stored regular-season division, look for same-organizer championships
+        whose name is a known playoff variant of that division's base name.
+        Returns ``(championship_id, name, organizer_id)`` triples not already
+        present in the DB.
+        """
+        rows = self.db.conn.execute(
+            """SELECT id, name, organizer_id FROM championships
+               WHERE name IS NOT NULL AND organizer_id IS NOT NULL"""
+        ).fetchall()
+        by_base: dict[str, list[tuple[str, str]]] = {}  # base -> [(cid, name), ...]
+        orgs: set[str] = set()
+        for cid, name, org in rows:
+            if is_playoff_name(name):
+                continue
+            base = playoff_base_name(name)
+            if not base:
+                continue
+            by_base.setdefault(base, []).append((cid, name))
+            orgs.add(org)
+        if not orgs:
+            return []
+
+        known_ids = {str(r[0]) for r in
+                     self.db.conn.execute("SELECT id FROM championships").fetchall()}
+        discovered: list[tuple[str, str, Optional[str]]] = []
+        seen: set[str] = set()
+        try:
+            items = list(self.client.iter_game_championships(game_id))
+        except Exception:  # noqa: BLE001 - discovery must never abort a normal run
+            log.exception("playoff discovery failed for game %s", game_id)
+            return []
+
+        for item in items:
+            cid = item.get("championship_id") or item.get("id")
+            name = item.get("name")
+            org = item.get("organizer_id")
+            if not cid or not name or not org or org not in orgs:
+                continue
+            if not is_playoff_name(name):
+                continue
+            base = playoff_base_name(name)
+            if not base or base not in by_base:
+                continue
+            if cid in known_ids or cid in seen:
+                continue
+            seen.add(cid)
+            discovered.append((cid, name, org))
+            log.info("discovered playoff championship: %s (%s)", cid, name)
+        return discovered
+
     def run_all(self, *, force_refresh: bool = False, dry_run: bool = False) -> SyncResult:
         """Update every championship currently stored (all divisions)."""
         total = SyncResult()
@@ -865,15 +922,45 @@ class SyncEngine:
         # is seeded with the sibling division's teams, so those teams must be fully
         # discovered first for the bracket crawl to find every match in the same run.
         cids.sort(key=lambda c: (is_playoff_name(self._championship_name(c)), c))
-        for cid in cids:
+        regular_cids = [c for c in cids if not is_playoff_name(self._championship_name(c))]
+        playoff_cids = [c for c in cids if is_playoff_name(self._championship_name(c))]
+
+        for cid in regular_cids:
             r = self.run(cid, force_refresh=force_refresh, dry_run=dry_run)
-            total.matches_seen += r.matches_seen
-            total.inserted += r.inserted
-            total.updated += r.updated
-            total.skipped += r.skipped
-            total.warnings += r.warnings
-            total.errors += r.errors
+            self._accumulate(total, r)
+
+        # Auto-discover playoff championships that share an organizer with a known
+        # regular-season division. This removes the need to manually seed playoff
+        # brackets via matches.txt.
+        if self.client.api_key and regular_cids:
+            game_id = self.db.conn.execute(
+                "SELECT game FROM championships WHERE id=? LIMIT 1", (regular_cids[0],)
+            ).fetchone()[0]
+            if game_id:
+                for pcid, pname, porg in self._discover_playoff_championships(game_id):
+                    if pcid in playoff_cids:
+                        continue
+                    playoff_cids.append(pcid)
+                    # Persist the discovered championship so the build sees the
+                    # bracket even before it has any matches (and so the next run
+                    # skips re-discovery).
+                    self.db.upsert_championship(Championship(
+                        id=pcid, name=pname, game=game_id, region=None,
+                        organizer_id=porg))
+
+        for cid in playoff_cids:
+            r = self.run(cid, force_refresh=force_refresh, dry_run=dry_run)
+            self._accumulate(total, r)
         return total
+
+    @staticmethod
+    def _accumulate(total: SyncResult, r: SyncResult) -> None:
+        total.matches_seen += r.matches_seen
+        total.inserted += r.inserted
+        total.updated += r.updated
+        total.skipped += r.skipped
+        total.warnings += r.warnings
+        total.errors += r.errors
 
     def backfill_game_names(
         self, *, limit: Optional[int] = None,

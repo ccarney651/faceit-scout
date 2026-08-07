@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import responses
 
-from faceit_sync.client import CHAMP_MATCHES_URL
+from faceit_sync.client import CHAMP_MATCHES_URL, DATA_API_BASE
 from faceit_sync.db import Database
 from faceit_sync.sync import SyncEngine
 from conftest import NORMAL_30_ID, make_client, register_match
@@ -117,3 +117,93 @@ def test_run_all_crawls_regular_divisions_before_playoff(db: Database) -> None:
     order = [r[0] for r in db.conn.execute(
         "SELECT championship_id FROM sync_log ORDER BY ran_at")]
     assert order == [REG, PO]
+
+
+ORG = "f0e8a591-08fd-4619-9d59-d97f0571842e"
+
+
+def _seed_with_organizer(db: Database) -> None:
+    """Regular-season division has an organizer_id so discovery can match."""
+    c = db.conn
+    c.execute(
+        "INSERT INTO championships(id,name,game,organizer_id) VALUES(?,?,?,?)",
+        (REG, "S9 EMEA Master Central - Regular Season", "ow2", ORG))
+    c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (TREG, "Regular Only Team"))
+    c.execute(
+        "INSERT INTO matches(id,championship_id,status,fetched_at,faction1_team_id,"
+        "faction2_team_id) VALUES('seed-reg',?,'FINISHED',datetime('now'),?,NULL)",
+        (REG, TREG))
+    c.commit()
+
+
+@responses.activate
+def test_discover_playoff_championships_finds_same_organizer_playoff(db: Database) -> None:
+    """Data API list is filtered to playoff championships matching a known base
+    name and sharing the regular-season division's organizer."""
+    _seed_with_organizer(db)
+    url = f"{DATA_API_BASE}/championships"
+    responses.add(responses.GET, url, json={
+        "items": [
+            {"championship_id": PO, "name": "S9 EMEA Master Central - Playoffs",
+             "organizer_id": ORG},
+            {"championship_id": "other-cid", "name": "Other League - Playoffs",
+             "organizer_id": "other-org"},
+            {"championship_id": REG, "name": "S9 EMEA Master Central - Regular Season",
+             "organizer_id": ORG},
+        ]
+    }, status=200)
+
+    engine = SyncEngine(make_client(api_key="key")[0], db)
+    found = engine._discover_playoff_championships("ow2")
+
+    assert found == [(PO, "S9 EMEA Master Central - Playoffs", ORG)]
+
+
+@responses.activate
+def test_run_all_discovers_and_crawls_new_playoff_championship(db: Database) -> None:
+    """If the DB has only the regular season, run_all discovers the playoff
+    championship via the Data API and then crawls it."""
+    _seed_with_organizer(db)
+    # Data API list finds the playoff championship.
+    list_url = f"{DATA_API_BASE}/championships"
+    responses.add(responses.GET, list_url, json={
+        "items": [
+            {"championship_id": PO, "name": "S9 EMEA Master Central - Playoffs",
+             "organizer_id": ORG},
+        ]
+    }, status=200)
+    # Regular-season crawl has no matches beyond the seed.
+    responses.add(
+        responses.GET, CHAMP_MATCHES_URL, json={"payload": {"items": []}},
+        status=200,
+        match=[responses.matchers.query_param_matcher({
+            "championshipId": REG, "participantType": "TEAM",
+            "participantId": TREG, "type": "past", "limit": 30, "offset": 0})])
+    # The discovered playoff championship has no matches.
+    for tid in (TPLAY, TREG):
+        responses.add(
+            responses.GET, CHAMP_MATCHES_URL, json={"payload": {"items": []}},
+            status=200,
+            match=[responses.matchers.query_param_matcher({
+                "championshipId": PO, "participantType": "TEAM",
+                "participantId": tid, "type": "past", "limit": 30, "offset": 0})])
+    # Keyed crawl of the discovered playoff championship (no teams in DB yet).
+    responses.add(
+        responses.GET, f"{DATA_API_BASE}/championships/{PO}/matches",
+        json={"items": []}, status=200)
+
+    engine = SyncEngine(make_client(api_key="key")[0], db)
+    engine.run_all()
+
+    order = [r[0] for r in db.conn.execute(
+        "SELECT championship_id FROM sync_log ORDER BY ran_at")]
+    assert order == [REG, PO]
+    stored = {r[0] for r in db.conn.execute("SELECT id FROM championships")}
+    assert PO in stored
+
+
+def test_discover_playoff_championships_skipped_without_api_key(db: Database) -> None:
+    """No Data API key means no discovery; existing divisions still crawl."""
+    _seed_with_organizer(db)
+    engine = SyncEngine(make_client()[0], db)
+    assert engine._discover_playoff_championships("ow2") == []

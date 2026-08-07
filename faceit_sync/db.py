@@ -34,10 +34,11 @@ SCHEMA = """
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS championships (
-    id     TEXT PRIMARY KEY,
-    name   TEXT,
-    game   TEXT,
-    region TEXT
+    id           TEXT PRIMARY KEY,
+    name         TEXT,
+    game         TEXT,
+    region       TEXT,
+    organizer_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS teams (
@@ -166,6 +167,7 @@ class Database:
         # DB is long-lived and updated in place, so CREATE TABLE IF NOT EXISTS
         # never re-runs for it).
         self._ensure_column("players", "game_name", "TEXT")
+        self._ensure_column("championships", "organizer_id", "TEXT")
         self.conn.commit()
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
@@ -240,11 +242,12 @@ class Database:
 
     def upsert_championship(self, c: Championship) -> None:
         self.conn.execute(
-            """INSERT INTO championships (id, name, game, region)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO championships (id, name, game, region, organizer_id)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
-                   name=excluded.name, game=excluded.game, region=excluded.region""",
-            (c.id, c.name, c.game, c.region),
+                   name=excluded.name, game=excluded.game, region=excluded.region,
+                   organizer_id=excluded.organizer_id""",
+            (c.id, c.name, c.game, c.region, c.organizer_id),
         )
 
     def upsert_team(self, t: Team) -> None:

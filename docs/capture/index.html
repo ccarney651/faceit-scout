@@ -1681,6 +1681,8 @@ document.addEventListener('pointerdown',gestureAutoPop);
 
 // ---------- publish: build contribution + upload to the worker ----------
 const ENDPOINT='https://owscout-upload.owscout.workers.dev';
+// Pre-launch test uploads before pixels' first real capture are hidden from the admin roster.
+const CONTRIBUTIONS_SINCE_MS=Date.parse('2026-07-26T20:30:00Z');
 function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
 
 // ---------- live scouting claims — real-time via a Durable Object WebSocket ----
@@ -1863,7 +1865,8 @@ async function renderAdmin(p){
     const lj=await lr.json().catch(()=>({}));
     if(!cr.ok){ note.innerHTML='<span class="warn">'+(cj.error||('HTTP '+cr.status))+'</span>'; return; }
     if(!lr.ok){ note.innerHTML='<span class="warn">claims: '+(lj.error||('HTTP '+lr.status))+'</span>'; return; }
-    note.textContent=(cj.count||0)+' contributor'+(cj.count===1?'':'s');
+    const contributors=(cj.contributors||[]).filter(c=>(c.last_upload||0)>=CONTRIBUTIONS_SINCE_MS);
+    note.textContent=contributors.length+' contributor'+(contributors.length===1?'':'s');
 
     const codeByKey={}; (DATA.codes||[]).forEach(c=>{ codeByKey[codeKey(c)]=c; });
     function fmtAge(ms){
@@ -1889,10 +1892,10 @@ async function renderAdmin(p){
       live.innerHTML='<p class="eyebrow" style="margin:0 0 6px">Live scouts</p><span class="faint">no active scouting claims right now</span>';
     }
 
-    if((cj.contributors||[]).length){
+    if(contributors.length){
       list.innerHTML = '<p class="eyebrow" style="margin:0 0 6px">Recent contributors</p>'+
         '<table id="admincontribtbl" style="width:100%;border-collapse:collapse;font-size:12.5px"><tr class="faint" style="text-align:left"><th style="padding:3px 6px">name</th><th>login</th><th>discord id</th><th>last upload</th><th>maps</th><th></th></tr>'+
-        cj.contributors.map(c=>{
+        contributors.map(c=>{
           const nm=(''+c.name).replace(/[<>&"]/g,'');
           return `<tr class="contribrow" data-key="${esc(c.key)}" data-name="${nm}" style="border-top:1px solid var(--line);cursor:pointer"><td style="padding:3px 6px">${nm}</td><td>${c.login?'✓':'—'}</td><td class="faint">${c.discord_id||'—'}</td><td>${c.last_upload?new Date(c.last_upload).toLocaleString():'—'}</td><td>${c.last_maps??'—'}</td><td style="text-align:right"><span class="faint">view →</span></td></tr>`;
         }).join('')+

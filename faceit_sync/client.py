@@ -155,6 +155,30 @@ class FaceitClient:
 
     # --- Data API: enumerate a championship's matches (needs key) ------------
 
+    def iter_game_championships(
+        self, game_id: str, *, type_: str = "all", page_size: int = 100
+    ) -> Iterator[dict[str, Any]]:
+        """Yield championship dicts for a game, paginating offset/limit.
+
+        Requires a Data API key. ``type_`` mirrors the API's ``type`` query
+        parameter (all/upcoming/ongoing/past) so callers can narrow the scan.
+        """
+        url = f"{DATA_API_BASE}/championships"
+        offset = 0
+        while True:
+            payload = self._get_json(
+                url,
+                params={"game": game_id, "type": type_, "offset": offset, "limit": page_size},
+                auth=True,
+            )
+            items = payload.get("items", []) if isinstance(payload, dict) else []
+            if not items:
+                return
+            yield from items
+            if len(items) < page_size:
+                return
+            offset += page_size
+
     def iter_championship_matches(
         self, championship_id: str, *, page_size: int = 20
     ) -> Iterator[dict[str, Any]]:

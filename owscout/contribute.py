@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import AbstractSet, Any, Iterable, Mapping, NamedTuple, Optional, Sequence
 
@@ -48,6 +49,23 @@ CONTRIB_DIR = "data/captures"
 # The deployed upload worker. Baked into builds so end users configure
 # NOTHING; empty until the curator deploys infra/upload-worker.
 DEFAULT_UPLOAD_ENDPOINT = "https://owscout-upload.owscout.workers.dev"
+
+# Real public contributions started with pixels on 2026-07-26. Anything captured
+# before that moment is pre-launch testing and should not appear on leaderboards.
+REAL_CONTRIBUTIONS_SINCE = datetime(2026, 7, 26, 20, 30, tzinfo=timezone.utc)
+
+
+def _parse_iso_ts(ts: Any) -> datetime | None:
+    """Parse an ISO-8601 timestamp, tolerating the trailing 'Z' shorthand."""
+    if not ts:
+        return None
+    try:
+        s = str(ts)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
 
 
 class MapKey(NamedTuple):
@@ -496,15 +514,31 @@ def merged_payload(
     for team, r in report.items():
         r["players"] = pools.get(team, [])
         teams.setdefault(team, {"maps_captured": 0, "comps": []})["scout"] = r
-    payload["contributors"] = sorted({str(c["contributor"]) for c in contributions})
+    all_contributors = sorted({str(c["contributor"]) for c in contributions})
     # Per-contributor credit = maps they OWN after first-wins (the same notion the
     # future contribute-or-pay threshold uses). Powers the site's scout leaderboard.
     _owned: dict[str, int] = {}
-    for who in merged.owner.values():
-        _owned[str(who)] = _owned.get(str(who), 0) + 1
+    _last_capture: dict[str, datetime] = {}
+    for key, who in merged.owner.items():
+        who = str(who)
+        _owned[who] = _owned.get(who, 0) + 1
+        ts = _parse_iso_ts(merged.maps[key].get("captured_at"))
+        if ts and (who not in _last_capture or ts > _last_capture[who]):
+            _last_capture[who] = ts
+
+    # Hide pre-launch test accounts from leaderboards (e.g. the uploads before
+    # pixels' first real capture). Keep contributors whose maps have no timestamp
+    # so legacy or mis-timestamped data does not silently vanish.
+    _visible = {
+        who for who, last in _last_capture.items()
+        if last >= REAL_CONTRIBUTIONS_SINCE
+    } | {who for who in _owned if who not in _last_capture}
+    payload["contributors"] = sorted(who for who in all_contributors if who in _visible)
     payload["contributor_stats"] = [
-        {"name": n, "maps": c}
+        {"name": n, "maps": c,
+         "last_capture": _last_capture[n].isoformat().replace("+00:00", "Z") if n in _last_capture else None}
         for n, c in sorted(_owned.items(), key=lambda kv: (-kv[1], kv[0]))
+        if n in _visible
     ]
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
@@ -526,7 +560,6 @@ def merged_payload(
             continue
         pgp.setdefault(f"{mid}:{gno}", {})[nick] = names.get(guid, guid)
     payload["per_game_players"] = pgp
-    from datetime import datetime, timezone
     payload["built_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Games on or before this date have DEAD replay codes: the site must not
     # count them as scoutable (unless someone captured them before the wipe).
