@@ -666,6 +666,25 @@ layer, and every auto suggestion carries its reasoning:
   much data each read rests on (ban reads use the most recent N maps; map picks
   stay full-season).
 
+**Team Compare** — two teams side-by-side, reached from the Scout page's
+"Compare…" button or the deep link `#compare=<A>|<B>` (both team names
+URL-encoded, pipe-separated; nav highlights Teams). A radar across **eight
+axes** sits over a two-column comparison. Five axes are pure FACEIT: map win
+rate, map pool breadth, ban pressure (bans per game), pick agency (maps
+picked per game) and **Team Eff** (mean of the roster's qualified Eff ratings —
+three or more players at the 5-map floor, else honest "not enough"). The three
+capture axes — comp diversity (family count), hero pool breadth (distinct
+heroes above a 5%-of-rounds floor) and adaptability (swaps per captured map) —
+render only where someone captured that side, and a team with no captures reads
+as dimmed rather than inflated. Values are capped per axis (fixed caps, not
+division-relative), so two weak teams stay two small shapes; an axis neither
+side sampled is dropped with a note. Under the radar, each team gets a card —
+**Maps** (mode-grouped win-rate table), **Bans** (what they value above the
+division rate), **Captured comps** (top families + hero pool) and **Top by
+Eff**. The **perspective toggle** flips which side is "you" (and which is
+"them"), re-reading the ban tables from that team's angle. A **Head to head**
+list ties the pair together — their matches with clickable details.
+
 ---
 
 # Part 4 — Design rules

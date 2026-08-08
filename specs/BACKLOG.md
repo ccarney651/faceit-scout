@@ -149,6 +149,40 @@ captured comps, our compare can be deeper than owscouter's (which is FACEIT
 stats only). Natural fit: an extension of the Scout a team page / draft
 simulator rather than a new surface.
 
+**Resolved 2026-08-08.** Shipped as a pseudo-tab reached via `#compare=<A>|<B>`
+(or the Scout page's "Compare…" button; nav highlights Teams). Radar across
+**8 mixed axes** — map win rate, map pool breadth, ban pressure, pick agency,
+Team Eff (mean of qualified players' `eff.eff`, ≥3 peers) + 3 capture-only
+dimensions (comp diversity, hero pool breadth, adaptability) that drop or dim
+when a side has no captures. Same-division only; perspective toggle flips the
+"you"/"them" tags and re-reads ban tables per team; per-team maps/bans/comps/
+top-by-Eff cards + a head-to-head match list. Pure layer:
+`compareAxes` / `radarPoints` / `COMPARE_CAPS` / `COMPARE_FLOORS` /
+`HERO_POOL_MIN_PICK` in `faceit_sync/dashboard/pure.js`; routing + rendering
+in `app.js` (`renderCompare`, `gotoCompare`, `COMPARE_A/B/PERSP`); radar CSS in
+`head.html`; tests in `tests/test_dashboard_logic.py`. Design + plan:
+`specs/2026-08-08-team-compare-{design,plan}.md`.
+
+**Follow-up polish, same day.** Post-ship review found the per-team Maps table
+wasn't actually grouping — `table()`'s group header only collapses *consecutive*
+same-group rows, but the rows were sorted by games-played, so every map got its
+own header. Fixed by sorting with the existing `mapCmp`/`byMode` convention
+(already used on the Team detail page) before handing rows to `table()`. Also
+found "Map pool breadth" saturating at 100 for most teams — its cap was a
+hardcoded 10 maps, well under a real season's ~13, so any active team maxed it
+out with no differentiation left. `compareAxes` now takes an optional `poolCap`
+arg; `renderCompare` derives it from the division's actual distinct maps played
+and falls back to the old constant only if unset (existing tests, which don't
+pass one, are unaffected). Every axis got an `AXIS_HELP` hover explanation (axis
+table `<td>` and radar spoke labels both), since none existed before. The
+team-picker header was rebuilt from two bare `<select>`s into a proper vs-layout
+(avatars, bold names, centered VS + swap) carrying a team-A/team-B color code
+(accent/support) through the header dot, axis-table columns, radar polygons and
+a top accent bar on each team card — one consistent visual thread instead of
+color meaning only lived in the chart. Radar/axis-table proportions tuned twice
+on user feedback (table columns in `head.html`: `.compare-radar-table`,
+`.compare-radar-svg`, `.cmp-*`).
+
 ### P2 — Player efficiency rating (PER-style), role-relative
 
 **Resolved 2026-08-08.** Shipped as the leaderboard's **Eff** column (Players →

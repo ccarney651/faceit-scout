@@ -410,3 +410,55 @@ function mapCoverage(matches, captured, wipe){
   return out.sort((a,b)=> b.unseenMin-a.unseenMin || b.played-a.played);
 }
 
+// ---- team compare (Phase 5) -----------------------------------------------
+// Two-team radar. The compare view hands this pre-computed per-team sources
+// (aggregate()'s output + the owscout_comps.scout object), and the pure layer
+// only normalizes: caps raw values to 0..100, applies per-axis sample floors
+// (below a floor the number is honest to show dimmed, never confident), and
+// drops an axis neither team has any sample for. Fixed caps keep two weak teams
+// reading as two small shapes instead of inflating to fill the chart.
+const COMPARE_CAPS={mapwr:100, pool:10, banpress:2, pick:100, eff:0.5, families:12, heropool:15, swaps:3};
+const COMPARE_FLOORS={mapwr:5, pool:5, banpress:5, pick:5, eff:3, families:3, heropool:20, swaps:3};
+const HERO_POOL_MIN_PICK=0.05;
+function compareAxes(aggA, aggB, scoutA, scoutB, effA, effB, poolCap){
+  const A=aggA||{}, B=aggB||{}, SA=(scoutA&&scoutA.scout)||{}, SB=(scoutB&&scoutB.scout)||{};
+  const ga=A.games||0, gb=B.games||0;
+  const sum=o=>Object.values(o||{}).reduce((x,y)=>x+y,0);
+  const mg=a=>{let g=0,w=0; Object.values(a.mapStats||{}).forEach(v=>{g+=v.games;w+=v.wins;}); return {g,w};};
+  const maps=a=>Object.keys(a.mapStats||{}).filter(m=>(a.mapStats[m].games||0)>0).length;
+  const heroes=a=>{ if(!a.hero_pool) return null; let c=0; (a.hero_pool||[]).forEach(h=>{ if((h.pick_rate||0)>=HERO_POOL_MIN_PICK) c++; }); return c;};
+  const effN=e=>(e&&e.n)||0, effMean=e=>(e&&e.mean!=null)?e.mean:null;
+  const adapt=a=>a.adapt||{};
+  const row=(id,label,ra,rb,na,nb,cap,floor,sym)=>(
+    (ra==null&&rb==null) ? null : {id,label,
+      a:{raw:ra, val:(ra==null?null:sym?Math.max(0,Math.min(100,50+(ra/cap)*50)):Math.min(ra/cap,1)*100), n:na||0, ok:!!(ra!=null&&na>=floor)},
+      b:{raw:rb, val:(rb==null?null:sym?Math.max(0,Math.min(100,50+(rb/cap)*50)):Math.min(rb/cap,1)*100), n:nb||0, ok:!!(rb!=null&&nb>=floor)}});
+  const mA=mg(A), mB=mg(B);
+  // Pool cap is the division's actual active map count when the caller knows it
+  // (a fixed 10 undercounts most seasons, so real teams saturate this axis at
+  // 100 with nothing left to differentiate them — see COMPARE_CAPS' comment).
+  const poolCapVal = poolCap>0 ? poolCap : COMPARE_CAPS.pool;
+  return [
+    row('mapwr','Map win rate', mA.g?100*mA.w/mA.g:null, mB.g?100*mB.w/mB.g:null, mA.g, mB.g, COMPARE_CAPS.mapwr, COMPARE_FLOORS.mapwr),
+    row('pool','Map pool breadth', maps(A), maps(B), ga, gb, poolCapVal, COMPARE_FLOORS.pool),
+    row('banpress','Ban pressure', ga?sum(A.bans)/ga:null, gb?sum(B.bans)/gb:null, ga, gb, COMPARE_CAPS.banpress, COMPARE_FLOORS.banpress),
+    row('pick','Pick agency', ga?100*sum(A.mapsPicked)/ga:null, gb?100*sum(B.mapsPicked)/gb:null, ga, gb, COMPARE_CAPS.pick, COMPARE_FLOORS.pick),
+    row('eff','Team Eff', effMean(effA), effMean(effB), effN(effA), effN(effB), COMPARE_CAPS.eff, COMPARE_FLOORS.eff, true),
+    row('families','Comp diversity', adapt(SA).families!=null?adapt(SA).families:null, adapt(SB).families!=null?adapt(SB).families:null, SA.games||0, SB.games||0, COMPARE_CAPS.families, COMPARE_FLOORS.families),
+    row('heropool','Hero pool breadth', heroes(SA), heroes(SB), SA.rounds||0, SB.rounds||0, COMPARE_CAPS.heropool, COMPARE_FLOORS.heropool),
+    row('swaps','Adaptability', adapt(SA).swaps_per_map!=null?adapt(SA).swaps_per_map:null, adapt(SB).swaps_per_map!=null?adapt(SB).swaps_per_map:null, SA.games||0, SB.games||0, COMPARE_CAPS.swaps, COMPARE_FLOORS.swaps),
+  ].filter(Boolean);
+}
+// Radar polygon vertices for one team, 12 o'clock, clockwise. Values are 0..100;
+// a null value (no data on that axis) is returned as null so the caller can
+// bridge the gap in the polygon. Radius 0 or fewer yields no shape at all.
+function radarPoints(vals, cx, cy, r){
+  if(!(r>0)||!vals||!vals.length) return [];
+  return vals.map((v,i)=>{
+    if(v==null) return null;
+    const t=-Math.PI/2+2*Math.PI*i/vals.length;
+    const rr=r*Math.min(100,Math.max(0,v))/100;
+    return {x:cx+rr*Math.cos(t), y:cy+rr*Math.sin(t)};
+  });
+}
+

@@ -866,3 +866,100 @@ def test_rank_players_by_efficiency_keeps_unrated_players_last(tmp_path) -> None
     assert got[-2:] == ["x1", "x2"]            # rated never sorts below unrated
     assert got[-3] == "t5"                     # lowest eff (-1.414) sits right before the unrated
     assert all(n in got for n in ("t1", "t5", "s5", "s1"))
+
+
+# --- team compare: radar math -------------------------------------------------
+# compareAxes/radarPoints are pure (no DOM, no DATA), declared above bootApp.
+# They take pre-computed per-team sources — aggregate()'s agg + owscout scout +
+# a team-eff summary — and only normalize: fixed caps to 0..100, sample floors
+# to dim, and axes neither side sampled are dropped outright.
+
+_COMPARE_A = ("({games:10, gwins:6, mapStats:{Oasis:{games:5,wins:3},Ilios:{games:5,wins:3}},"
+              " bans:{'D.Va':3,'Kiriko':2}, mapsPicked:{Oasis:4}})")
+_COMPARE_B = ("({games:10, gwins:3, mapStats:{Oasis:{games:10,wins:3}},"
+              " bans:{'D.Va':6}, mapsPicked:{Oasis:3}})")
+_COMPARE_SA = ("{scout:{adapt:{families:5,swaps_per_map:1.2},"
+               " hero_pool:[{hero:'D.Va',pick_rate:.4},{hero:'Winston',pick_rate:.1},{hero:'Rein',pick_rate:.02}],"
+               " games:8, rounds:40}}")
+_COMPARE_SB = "{scout:{adapt:{families:2,swaps_per_map:0.3}, hero_pool:[], games:4, rounds:10}}"
+
+
+def _axes(tmp_path, a=_COMPARE_A, b=_COMPARE_B, sa=_COMPARE_SA, sb=_COMPARE_SB,
+          ea="null", eb="null") -> object:
+    return _run(f"return compareAxes({a},{b},{sa},{sb},{ea},{eb});", tmp_path)
+
+
+def _byid(rows, axis_id) -> dict:
+    return next(r for r in rows if r["id"] == axis_id)
+
+
+def test_compare_axes_caps_raw_values_to_100(tmp_path) -> None:
+    got = _axes(tmp_path)
+    assert _byid(got, "mapwr")["a"]["val"] == 60.0        # 6/10 maps won
+    assert _byid(got, "mapwr")["b"]["val"] == 30.0        # 3/10 maps won
+    assert _byid(got, "pool")["a"]["val"] == 20.0         # 2 distinct maps, cap 10
+    assert _byid(got, "banpress")["a"]["val"] == 25.0     # 5 bans / 10 games, cap 2
+    assert _byid(got, "pick")["a"]["val"] == 40.0         # 4 picked / 10 games
+
+
+def test_compare_axes_caps_never_exceed_100(tmp_path) -> None:
+    big = "({games:2, gwins:2, mapStats:{a:{games:2,wins:2}}, bans:{}, mapsPicked:{}})"
+    got = _axes(tmp_path, a=big, b=big, sa="null", sb="null")
+    assert _byid(got, "mapwr")["a"]["val"] == 100.0
+    assert _byid(got, "mapwr")["b"]["val"] == 100.0
+    assert all(0 <= r["a"]["val"] <= 100 and 0 <= r["b"]["val"] <= 100 for r in got)
+
+
+def test_compare_axes_dims_below_floor(tmp_path) -> None:
+    # A has 2 games (below the 5-game floor); B has 10. A's mapwr is dimmed.
+    few = "({games:2, gwins:1, mapStats:{a:{games:2,wins:1}}, bans:{}, mapsPicked:{}})"
+    got = _axes(tmp_path, a=few, b=_COMPARE_B, sa="null", sb="null")
+    assert _byid(got, "mapwr")["a"]["ok"] is False
+    assert _byid(got, "mapwr")["b"]["ok"] is True
+    assert _byid(got, "mapwr")["a"]["n"] == 2
+
+
+def test_compare_axes_drops_axis_missing_on_both_sides(tmp_path) -> None:
+    got = _axes(tmp_path, sa="null", sb="null", ea="{mean:1,n:4}", eb="{mean:1,n:4}")
+    ids = {r["id"] for r in got}
+    assert not ids & {"families", "heropool", "swaps"}        # both sides lack captures -> dropped
+    assert {"mapwr", "pool", "banpress", "pick", "eff"} <= ids
+
+
+def test_compare_axes_one_sided_capture_dims_the_other(tmp_path) -> None:
+    got = _axes(tmp_path, sa=_COMPARE_SA, sb="null")
+    assert "families" in {r["id"] for r in got}              # A captured -> axis present
+    assert _byid(got, "families")["a"]["ok"] is True
+    assert _byid(got, "families")["b"]["ok"] is False        # B has no capture sample
+
+
+def test_compare_team_eff_uses_qualified_players_only(tmp_path) -> None:
+    got = _axes(tmp_path, ea="{mean:1.2,n:4}", eb="{mean:null,n:0}")
+    e = _byid(got, "eff")
+    assert e["a"]["raw"] == 1.2 and e["a"]["val"] == 100.0   # cap 0.5 → 1.2 exceeds cap, clamped to 100
+    assert e["a"]["ok"] is True                              # n=4 >= 3 peers
+    assert e["b"]["raw"] is None and e["b"]["ok"] is False
+
+
+def test_compare_team_eff_needs_three_qualified_players(tmp_path) -> None:
+    got = _axes(tmp_path, ea="{mean:0.5,n:2}", eb="{mean:0.5,n:2}")
+    e = _byid(got, "eff")
+    assert e["a"]["ok"] is False                             # 2 peers is not a rating
+
+
+def test_radar_points_vertices(tmp_path) -> None:
+    got = _run("return radarPoints([100,50,0,100],0,0,100);", tmp_path)
+    # 12 o'clock start, clockwise: up, right, down, left.
+    assert abs(got[0]["x"] - 0) < 1e-9 and abs(got[0]["y"] + 100) < 1e-9
+    assert abs(got[1]["x"] - 50) < 1e-9 and abs(got[1]["y"] - 0) < 1e-9
+    assert abs(got[2]["x"] - 0) < 1e-9 and abs(got[2]["y"] - 0) < 1e-9
+    assert abs(got[3]["x"] + 100) < 1e-9 and abs(got[3]["y"] - 0) < 1e-9
+
+
+def test_radar_points_null_skips_the_vertex_and_zero_radius_is_empty(tmp_path) -> None:
+    got = _run("return radarPoints([null,50,100,50],0,0,100);", tmp_path)
+    assert got[0] is None
+    assert abs(got[1]["x"] - 50) < 1e-9 and abs(got[1]["y"] - 0) < 1e-9
+    assert abs(got[2]["x"] - 0) < 1e-9 and abs(got[2]["y"] - 100) < 1e-9
+    assert abs(got[3]["x"] + 50) < 1e-9 and abs(got[3]["y"] - 0) < 1e-9
+    assert _run("return radarPoints([100,100],0,0,0);", tmp_path) == []

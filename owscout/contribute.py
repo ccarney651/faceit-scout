@@ -383,6 +383,9 @@ def to_obs_details(maps: Mapping[MapKey, Mapping[str, Any]]) -> list[ObsDetail]:
     out: list[ObsDetail] = []
     for idx, (key, m) in enumerate(sorted(maps.items()), start=1):
         for o in m.get("observations", []):
+            pairs = o.get("pairs") or []
+            pids = tuple(p[1] for p in pairs
+                         if isinstance(p, (list, tuple)) and len(p) > 1 and p[1])
             out.append(ObsDetail(
                 map_instance_id=idx,
                 side=str(o["side"]),
@@ -391,6 +394,7 @@ def to_obs_details(maps: Mapping[MapKey, Mapping[str, Any]]) -> list[ObsDetail]:
                 round_no=o.get("round_no"),
                 phase=o.get("phase"),
                 hero_guids=tuple(o.get("heroes") or ()),
+                player_ids=pids,
                 map_name=m.get("map_name"),
                 map_category=m.get("map_category"),
                 side_a_team=m.get("side_a_team"),

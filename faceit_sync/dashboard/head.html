@@ -360,6 +360,50 @@ b.wlw{color:var(--good)} b.wll{color:var(--bad)}
   .scout-side{position:static}
   .scout-side .scrollbox.rail{max-height:min(60vh,560px)}
 }
+/* Team compare (#compare=A|B): a vs header, radar card, two-column side-by-side.
+   Team A reads in --accent (purple), team B in --support (green) everywhere on
+   this page — header dot, axis-table column, radar polygon, card accent bar —
+   so the color alone tells you which side is which without re-reading a label. */
+.compare-hd{padding:14px 16px 6px;margin-bottom:12px}
+.cmp-vs-row{display:flex;align-items:center;justify-content:center;gap:22px;flex-wrap:wrap;padding:2px 0 10px}
+.cmp-side{display:flex;flex-direction:column;align-items:center;gap:5px;flex:0 1 260px;min-width:0;text-align:center}
+.cmp-avatar img{width:44px;height:44px;border-radius:10px;box-shadow:0 0 0 1px var(--line);object-fit:cover}
+.cmp-name{display:flex;align-items:center;gap:7px;font-size:17px;font-weight:750;max-width:100%}
+.cmp-name b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.cmp-select{margin-top:1px;background:transparent;border:1px solid transparent;color:var(--muted);
+  font-size:12px;font-weight:600;text-align:center;padding:3px 8px;border-radius:6px;cursor:pointer;max-width:100%}
+.cmp-select:hover,.cmp-select:focus{background:var(--surface2);border-color:var(--line);color:var(--fg)}
+.cmp-vs-mid{display:flex;flex-direction:column;align-items:center;gap:7px;flex:0 0 auto}
+.cmp-vs-label{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--faint)}
+.compare-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.compare-grid .card{margin:0;border-top-width:3px}
+.compare-grid .card.side-a{border-top-color:var(--accent)}
+.compare-grid .card.side-b{border-top-color:var(--support)}
+table.cmpaxis th.side-a{color:var(--accent)}
+table.cmpaxis th.side-b{color:var(--support)}
+.compare-radar-row{display:flex;gap:24px;align-items:center}
+.compare-radar-table{flex:1 1 380px;min-width:0}
+.compare-radar-table .scroll{overflow-x:auto}
+.compare-radar-table table{font-size:15px;width:100%}
+.compare-radar-table td,.compare-radar-table th{padding:7px 16px;white-space:nowrap}
+.compare-radar-svg{flex:0 0 460px;display:flex;justify-content:center;min-width:0}
+.radar{display:block;width:100%;max-width:460px;height:auto}
+.radar .rring{fill:none;stroke:var(--line);stroke-width:1}
+.radar .rspeak{stroke:var(--line2);stroke-width:1}
+.radar .rpoly-a{fill:var(--accent);fill-opacity:.18;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}
+.radar .rpoly-b{fill:var(--support);fill-opacity:.14;stroke:var(--support);stroke-width:2;stroke-linejoin:round}
+.radar .rlabel{fill:var(--fg);font-size:11px;cursor:help}
+table.cmpaxis{width:auto;margin-top:0;border-collapse:collapse}
+table.cmpaxis th,table.cmpaxis td{padding:3px 7px;white-space:nowrap}
+table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
+.axhelp{cursor:help;border-bottom:1px dotted var(--faint)}
+@media(max-width:900px){
+  .compare-grid{grid-template-columns:1fr}
+  .compare-radar-row{flex-direction:column}
+  .compare-radar-svg{align-self:center}
+  .cmp-vs-row{flex-direction:column;gap:10px}
+}
 /* At-a-glance band: four self-wrapping summary panels. */
 .glance{margin-top:10px}
 .glance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px 34px}

@@ -860,6 +860,7 @@ const TABS=[
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 let MATCH_ID=null;          // match detail page: which match, within the active division
+let COMPARE_A=null, COMPARE_B=null; // team compare page: the two teams being compared
 const PLANNED={};           // counter-scout: team -> Set of planned hero names
 let SCOUT_N=null, META_N=40;   // recent-match counts; null = all
 let PLAYERS_ROLE='All';         // Leaderboard role filter: All | Tank | Damage | Support
@@ -921,6 +922,231 @@ function gotoScout(team){
     }
   }
   SCOUT_TEAM=team; show('scout');
+}
+
+// Team compare shares the scout page's same-division discipline: a team only
+// resolves against the division that knows it, so the compare radar never mixes
+// elo/ban baselines from two different championships.
+function gotoCompare(a,b){
+  const names=D().team_names||[];
+  if(!names.includes(a)){
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(a)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        const dsel=document.getElementById('division'); if(dsel) dsel.value=v.id;
+        break;
+      }
+    }
+  }
+  COMPARE_A=names.includes(a)?a:null;
+  COMPARE_B=names.includes(b)?b:null;
+  show('compare');
+}
+
+// -----------------------------------------------------------------------------
+// Team compare (#compare=A|B): a radar across mixed FACEIT + capture axes, then
+// per-team maps/bans/comps/players side-by-side. The pure math (compareAxes,
+// radarPoints) lives in pure.js; this is only the DOM.
+// -----------------------------------------------------------------------------
+// The efficiency pass is identical to the Players tab's: every known player
+// z-scored against their same-role cohort, then we keep the qualified ones
+// (eff!=null) per team for the Team Eff axis.
+function compareRoster(){
+  const players=[];
+  D().teams.forEach(t=>(t.roster||[]).forEach(p=>{
+    players.push({nick:p.nick, team:t.name, role:p.role||'', maps:p.games||0,
+      elo:(p.elo==null?null:p.elo), stats:p.stats||null});
+  }));
+  const effs=efficiencyRatings(players.map(p=>({group:effGroupOf(p),stats:p.stats})));
+  players.forEach((p,i)=>{ p.eff=effs[i]; });
+  return players;
+}
+function teamEffSummary(players, team){
+  const q=players.filter(p=>p.team===team && p.eff && p.eff.eff!=null);
+  return q.length ? {mean: q.reduce((s,p)=>s+p.eff.eff,0)/q.length, n:q.length} : {mean:null, n:0};
+}
+// Octagon: rings at 25/50/75/100, spokes, axis labels at each vertex, then each
+// team's polygon. Null values (no data on an axis) bridge the gap in the polygon.
+function compareRadarSvg(rows, av, bv){
+  const cx=200, cy=170, r=120, lr=r+18;
+  const ring=(p)=>radarPoints(rows.map(()=>p), cx, cy, r)
+    .map(pt=>`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ');
+  const tips=radarPoints(rows.map(()=>100), cx, cy, r);
+  let s=`<svg viewBox="0 0 400 390" class="radar" role="img" aria-label="team compare radar">`;
+  [25,50,75,100].forEach(p=> s+=`<polygon points="${ring(p)}" class="rring"/>`);
+  rows.forEach((_,i)=>{ s+=`<line x1="${cx}" y1="${cy}" x2="${tips[i].x.toFixed(1)}" y2="${tips[i].y.toFixed(1)}" class="rspeak"/>`; });
+  // Axis labels at each spoke tip, anchored by angle quadrant.
+  rows.forEach((row,i)=>{
+    const t=-Math.PI/2+2*Math.PI*i/rows.length;
+    const lx=cx+lr*Math.cos(t), ly=cy+lr*Math.sin(t);
+    const cos=Math.cos(t);
+    const anchor=cos>0.3?'start':cos<-0.3?'end':'middle';
+    const dy=Math.sin(t)<-0.3?-4:Math.sin(t)>0.3?12:4;
+    s+=`<text x="${lx.toFixed(1)}" y="${(ly+dy).toFixed(1)}" text-anchor="${anchor}" class="rlabel"><title>${esc(AXIS_HELP[row.id]||'')}</title>${esc(row.label)}</text>`;
+  });
+  const poly=(vals,cls)=>`<polygon points="${radarPoints(vals, cx, cy, r)
+    .filter(Boolean).map(pt=>`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" class="${cls}"/>`;
+  s+=poly(av,'rpoly rpoly-a')+poly(bv,'rpoly rpoly-b');
+  // Color legend: two dots with team names, stacked below the octagon (names
+  // can be long, so side-by-side risks the labels overlapping).
+  const ly1=cy+r+46, ly2=ly1+20;
+  s+=`<circle cx="${cx-30}" cy="${ly1}" r="5" fill="var(--accent)"/>`;
+  s+=`<text x="${cx-18}" y="${ly1+4}" class="rlabel" text-anchor="start">${esc(COMPARE_A)}</text>`;
+  s+=`<circle cx="${cx-30}" cy="${ly2}" r="5" fill="var(--support)"/>`;
+  s+=`<text x="${cx-18}" y="${ly2+4}" class="rlabel" text-anchor="start">${esc(COMPARE_B)}</text>`;
+  s+=`</svg>`;
+  return s;
+}
+// What each axis actually measures — hover the axis name in the table.
+const AXIS_HELP={
+  mapwr:'Win rate across every map played this season.',
+  pool:'Share of this division’s active map pool the team has played at least once. Most teams reach the top of this one by mid-season — it says they’ve seen the whole pool, not that they’re good on it.',
+  banpress:'Bans thrown per game, capped at 2 — how often this team spends a veto instead of leaving the pool open.',
+  pick:'Share of games where this team named the map, rather than playing whatever was left after bans.',
+  eff:'Team-average Eff: each qualified player’s stats as a z-score against same-role peers this season, then averaged. +1 reads as one standard deviation above the average player in that role.',
+  families:'Distinct comp families seen across this team’s captured maps — higher means less predictable drafting.',
+  heropool:`Heroes played on at least ${Math.round(HERO_POOL_MIN_PICK*100)}% of this team’s captured rounds — their real, usable pool rather than one-off picks.`,
+  swaps:'Confirmed mid-map hero swaps per map, from captured comps — how often this team reacts instead of setting a comp and holding it.',
+};
+// Honest readout under the SVG: each axis, both team values, dimmed below a
+// sample floor. The SVG polygons show the shape; this table says the numbers.
+function compareAxisTable(rows){
+  const cell=(s)=> s.raw==null
+    ? `<span class="faint">—</span>`
+    : `<span class="${s.ok?'':'faint'}">${Math.round(s.val)} <span class="faint">(${s.n})</span></span>`;
+  return `<table class="table cmpaxis"><tr><th>Axis</th><th class="num side-a">${esc(COMPARE_A)}</th><th class="num side-b">${esc(COMPARE_B)}</th></tr>`+
+    rows.map(r=>`<tr><td><span class="axhelp" title="${esc(AXIS_HELP[r.id]||'')}">${esc(r.label)}</span></td><td class="num">${cell(r.a)}</td><td class="num">${cell(r.b)}</td></tr>`).join('')+`</table>`;
+}
+// One team's half of the side-by-side: maps, bans, comps, players.
+function teamCompareCard(team, opp, agg, scout, effSummary, roster){
+  const card=el(`<div class="card"></div>`);
+  // Build header directly instead of via sectionH — teamAvatar returns HTML
+  // that sectionH would escape, turning the <img> into raw visible tags.
+  card.appendChild(el(`<div class="section-h"><h2>${teamAvatar(team,24)} ${esc(team)}</h2></div>`));
+  const rec=agg.results||[];
+  const w=rec.filter(r=>r.won).length;
+  card.appendChild(el(`<p class="note" style="margin:2px 0 10px">${rec.length} matches · ${w}–${rec.length-w} `+
+    `${effSummary.mean!=null?`· Team Eff ${effSummary.mean>0?'+':''}${effSummary.mean.toFixed(2)} <span class="faint">(${effSummary.n} qualified)</span>`:'<span class="faint">· Team Eff: no qualified players</span>'}</p>`));
+  // Maps
+  const ms=Object.entries(agg.mapStats||{}).map(([map,v])=>({map, games:v.games, wins:v.wins, picked:v.picks||0}))
+    .sort((a,b)=>mapCmp(a.map,b.map));
+  card.appendChild(el(`<h4>Maps</h4>`));
+  if(ms.length){
+    card.appendChild(table(
+      [{k:'map',label:'Map'},{k:'games',label:'G',num:1},{k:'wins',label:'W',num:1},{k:'picked',label:'Pick',num:1},
+       {k:'wr',label:'WR',num:1,html:r=>wrCell(r.wins,r.games)}],
+      ms, byMode));
+  } else {
+    card.appendChild(el(`<p class="note">No maps played this season.</p>`));
+  }
+  // Bans — lift vs the shared division baseline: "what they ban MORE than the field."
+  card.appendChild(el(`<h4>Bans vs division avg</h4>`));
+  card.appendChild(el(banLiftList(banLiftRows(agg.bans, divBanBaseline().all, 2, agg.bansGk, codeLookup(MATCHES_RECENT, team, CODE_WIPE)))));
+  // Comps (capture analytics)
+  if(scout && scout.scout){
+    const s=scout.scout;
+    const fams=(s.overall||[]).slice(0,3);
+    card.appendChild(el(`<h4>Captured comps <span class="faint">${s.games||0} maps · ${s.rounds||0} rounds</span></h4>`));
+    if(fams.length){
+      card.appendChild(el(`<div>`+fams.map(f=>`<div class="crow"><span>${compRow(f.heroes)}</span>`+
+        `<span class="rec">${wrCell(f.wins,f.wins+f.losses)}${f.samples?` <span class="faint">${f.samples}</span>`:''}</span></div>`).join('')+`</div>`));
+    } else {
+      card.appendChild(el(`<p class="note">No captured comps for this team.</p>`));
+    }
+    const hp=(s.hero_pool||[]).filter(h=>(h.pick_rate||0)>=HERO_POOL_MIN_PICK).sort((a,b)=>b.rounds-a.rounds);
+    if(hp.length) card.appendChild(el(`<p class="crow"><span>${hp.map(h=>heroIconSmall(h.hero)).join('')}</span>`+
+      `<span class="rec">pool ${hp.length}</span></p>`));
+  }
+  // Players — top by Eff (unrated sorts last, so this reads honestly).
+  const mine=roster.filter(p=>p.team===team);
+  const top=rankPlayers(mine,{key:'eff'}).slice(0,5);
+  card.appendChild(el(`<h4>Top by Eff</h4>`));
+  card.appendChild(el(`<div>`+top.map(p=>`<div class="crow"><span>${esc(p.nick)}</span>`+
+    `<span class="rec">${p.eff&&p.eff.eff!=null
+      ? `${(p.eff.eff>0?'+':'')+p.eff.eff.toFixed(1)} <span class="faint">· ${p.maps}m</span>`
+      : `<span class="faint">${p.elo!=null?p.elo+' elo':'no rating'}</span>`}</span></div>`).join('')+`</div>`));
+  return card;
+}
+function renderCompare(){
+  const wrap=el(`<div></div>`);
+  const back=el(`<a class="backlink" href="#scout">‹ Teams</a>`);
+  back.onclick=(e)=>{ e.preventDefault(); show('scout'); };
+  wrap.appendChild(back);
+  const names=D().team_names||[];
+  if(names.length<2){ wrap.appendChild(el(`<p class="note" style="padding:16px">Not enough teams in this division to compare yet.</p>`)); return wrap; }
+  if(!COMPARE_A||!names.includes(COMPARE_A)) COMPARE_A=names[0];
+  if(!COMPARE_B||!names.includes(COMPARE_B)) COMPARE_B=names.find(n=>n!==COMPARE_A)||names[0];
+
+  const hd=el(`<div class="card compare-hd"></div>`);
+  wrap.appendChild(hd);
+  const body=el(`<div></div>`);
+  wrap.appendChild(body);
+  // The header rebuilds with the team state so a swap updates the select
+  // options, the perspective toggle labels and the stale-B note together.
+  function draw(){
+    const b=COMPARE_B||names.find(n=>n!==COMPARE_A)||null;
+    const mkSel=(cur,on)=>{
+      const s=el(`<select class="cmp-select">${names.map(n=>`<option ${n===cur?'selected':''}>${esc(n)}</option>`).join('')}</select>`);
+      s.onchange=()=>on(s.value); return s;
+    };
+    const selA=mkSel(COMPARE_A, v=>{ COMPARE_A=v; if(COMPARE_B===v)COMPARE_B=names.find(n=>n!==v)||null; draw(); });
+    const selB=mkSel(b, v=>{ COMPARE_B=v; if(COMPARE_A===v)COMPARE_A=names.find(n=>n!==v)||null; draw(); });
+    const swapBtn=el(`<button class="btn" type="button" style="padding:4px 10px" title="Swap the two teams">⇄</button>`);
+    swapBtn.onclick=()=>{ const t=COMPARE_A; COMPARE_A=COMPARE_B; COMPARE_B=t; draw(); };
+    const side=(name, dotVar, sel)=>{
+      const av=teamAvatar(name,44);
+      const d=el(`<div class="cmp-side"></div>`);
+      if(av) d.appendChild(el(`<div class="cmp-avatar">${av}</div>`));
+      d.appendChild(el(`<div class="cmp-name"><span class="cmp-dot" style="background:var(${dotVar})"></span><b>${esc(name)}</b></div>`));
+      d.appendChild(sel);
+      return d;
+    };
+    const mid=el(`<div class="cmp-vs-mid"><span class="cmp-vs-label">VS</span></div>`);
+    mid.appendChild(swapBtn);
+    const row=el(`<div class="cmp-vs-row"></div>`);
+    row.append(side(COMPARE_A,'--accent',selA), mid, side(b||'—','--support',selB));
+    hd.replaceChildren(row);
+    const note=b&&!names.includes(b)
+      ? el(`<p class="note" style="padding:0 4px 10px;text-align:center">${esc(b)} isn't in this division — only same-division comparisons are shown.</p>`)
+      : null;
+    if(note) hd.appendChild(note);
+    if(!b){ body.innerHTML=''; return; }
+    const roster=compareRoster();
+    const aggA=aggregate(D().matches, COMPARE_A), aggB=aggregate(D().matches, b);
+    const scoutA=(DATA.owscout_comps||{})[COMPARE_A]||null, scoutB=(DATA.owscout_comps||{})[b]||null;
+    const effA=teamEffSummary(roster, COMPARE_A), effB=teamEffSummary(roster, b);
+    // Real active map count for this division, not the axis's fallback cap —
+    // most seasons run well past 10 maps, which otherwise saturates every team.
+    const poolCap=new Set(D().matches.flatMap(m=>(m.games||[]).map(g=>g.map).filter(Boolean))).size;
+    const rows=compareAxes(aggA, aggB, scoutA, scoutB, effA, effB, poolCap);
+    // Radar card: axis table on the left, SVG + legend on the right.
+    const radar=el(`<div class="card"></div>`);
+    radar.appendChild(el(sectionH('Radar', `<span class="note">fixed caps — a strong league reads near the edge, a weak one near the middle</span>`)));
+    const radarInner=el(`<div class="compare-radar-row"></div>`);
+    const radarTable=el(`<div class="compare-radar-table">${compareAxisTable(rows)}</div>`);
+    const radarSvg=el(`<div class="compare-radar-svg">${compareRadarSvg(rows, rows.map(r=>r.a.val), rows.map(r=>r.b.val))}</div>`);
+    radarInner.append(radarTable, radarSvg);
+    radar.appendChild(radarInner);
+    const grid=el(`<div class="grid cols-2 compare-grid"></div>`);
+    const cardA=teamCompareCard(COMPARE_A, b, aggA, scoutA, effA, roster); cardA.classList.add('side-a');
+    const cardB=teamCompareCard(b, COMPARE_A, aggB, scoutB, effB, roster); cardB.classList.add('side-b');
+    grid.append(cardA, cardB);
+    // Head to head: matches where these two faced each other.
+    const h2h=D().matches.filter(m=>(m.f1===COMPARE_A&&m.f2===b)||(m.f1===b&&m.f2===COMPARE_A));
+    const h2=el(`<div class="card"></div>`);
+    h2.appendChild(el(sectionH('Head to head', `<span class="note">${h2h.length} meeting${h2h.length===1?'':'s'} this season</span>`)));
+    if(h2h.length){
+      h2.appendChild(el(`<div>`+h2h.map(m=>{
+        return `<div class="crow"><span>${dshort(m.finished_at)} · <b>${esc(m.f1)}</b> <span class="score">${esc(m.series)}</span> <b>${esc(m.f2)}</b>`+
+          ` <span class="faint">${esc(m.winner_team)} won</span></span><span class="rec"><span class="tlink" data-match="${esc(m.id)}" style="cursor:pointer">details →</span></span></div>`;
+      }).join('')+`</div>`));
+    } else {
+      h2.appendChild(el(`<p class="note">These two haven't met in ${esc(D().summary.championship||'this division')} this season.</p>`));
+    }
+    body.replaceChildren(radar, grid, h2);
+  }
+  draw();
+  return wrap;
 }
 
 // A match id is only unique within its own division (see divisionOfMatch),
@@ -1170,6 +1396,8 @@ function renderScout(){
   bar.appendChild(holder);
   const prepBtn=el(`<button class="btn" type="button" style="margin-left:auto;padding:4px 12px"></button>`);
   bar.appendChild(prepBtn);
+  const cmpBtn=el(`<button class="btn" type="button" style="padding:4px 12px" title="Two-team radar across maps, bans, eff and capture analytics">Compare…</button>`);
+  bar.appendChild(cmpBtn);
   const body=el(`<div></div>`);
   wrap.append(bar,body);
 
@@ -1180,6 +1408,10 @@ function renderScout(){
     body.appendChild(SCOUT_PREP?renderPrepBody(data):renderScoutBody(data));
   }
   prepBtn.onclick=()=>{ SCOUT_PREP=!SCOUT_PREP; location.hash=hashFor('scout'); renderBody(); };
+  cmpBtn.onclick=()=>{
+    const other=D().team_names.find(n=>n!==SCOUT_TEAM)||null;
+    if(other) gotoCompare(SCOUT_TEAM, other);
+  };
   function rebuild(){                       // per-team total → rebuild the control
     const total=Math.max(1,teamTotalMatches(SCOUT_TEAM));
     const smax=Math.max(15,total);          // let the window reach a full season
@@ -2714,6 +2946,7 @@ function renderMatches(){
 // a teammate directly on the right page: site/#scout=Redline
 function hashFor(id){
   if(id==='matchdetail'&&MATCH_ID) return 'match='+encodeURIComponent(MATCH_ID);
+  if(id==='compare'&&COMPARE_A&&COMPARE_B) return 'compare='+encodeURIComponent(COMPARE_A+'|'+COMPARE_B);
   if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
   return id;
 }
@@ -2763,6 +2996,23 @@ function hashDispatch(){
     }
     MATCH_ID=mid; show('matchdetail'); return;
   }
+  if(start.startsWith('compare=')){
+    // Two team names, '|'-separated. Same-division scope: B resolving against a
+    // different division (or a stale name) is a note on the page, never a guess.
+    const parts=start.slice(8).split('|');
+    const a=parts[0]||'', b=parts[1]||'';
+    for(const v of VIEWS){
+      if(v.divisions.length===1 && (DIVS[v.divisions[0]].team_names||[]).includes(a)){
+        CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+        document.getElementById('division').value=v.id;
+        break;
+      }
+    }
+    COMPARE_A=(D().team_names||[]).includes(a)?a:null;
+    COMPARE_B=(D().team_names||[]).includes(b)?b:null;
+    if(!COMPARE_A&&!COMPARE_B){ show(TABS.some(t=>t.id===start)?start:'overview'); return; }
+    show('compare'); return;
+  }
   // 'playoffs' and 'sim' were their own tabs before this redesign; a link
   // bookmarked from before still needs to resolve to real content, not fall
   // through to Overview.
@@ -2772,7 +3022,7 @@ function hashDispatch(){
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 function show(id){
-  const navId = id==='matchdetail' ? 'matches' : id;   // no dedicated nav entry - it's a drill-in under Matches
+  const navId = (id==='matchdetail'?'matches':(id==='compare'?'scout':id));   // drill-ins: no nav entry of their own - they hang off Matches / Teams
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
   const heroScout=document.getElementById('heroScout');
   if(heroScout) heroScout.classList.toggle('hidden', navId==='scout');   // already scouting on this tab - the button would just re-open it
@@ -2781,6 +3031,8 @@ function show(id){
     const m=findMatch(MATCH_ID);
     if(!m){ show('matches'); return; }   // stale/unresolvable link - land on the list, not a blank page
     c.appendChild(renderMatchDetail(m));
+  } else if(id==='compare'){
+    c.appendChild(renderCompare());
   } else {
     c.appendChild(TABS.find(t=>t.id===id).render());
   }
