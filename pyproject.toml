@@ -35,7 +35,6 @@ capture = [
 [project.scripts]
 faceit-sync = "faceit_sync.cli:main"
 owscout = "owscout.cli:main"
-owscout-app = "owscout.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["faceit_sync*", "owscout*"]
@@ -44,7 +43,13 @@ include = ["faceit_sync*", "owscout*"]
 # a portrait-less dashboard, which is a silent visual regression rather than an
 # error. Regenerate with `python -m faceit_sync.hero_icons <asset-dir>`.
 [tool.setuptools.package-data]
-faceit_sync = ["hero_icons.json"]
+faceit_sync = [
+    "hero_icons.json",
+    # The dashboard's template is assembled from these static parts at import
+    # (see _dashboard.py); a wheel needs them alongside the module.
+    "dashboard/*.html",
+    "dashboard/*.js",
+]
 
 [tool.mypy]
 # Analysis targets 3.12 (the dev/CI interpreter, and what numpy's current stubs
@@ -62,14 +67,6 @@ warn_return_any = false
 module = ["cv2", "dxcam", "mss", "numpy", "numpy.*", "keyboard"]
 ignore_missing_imports = true
 follow_imports = "skip"
-
-# The GUI is thin Tkinter glue (runtime-only, no-cover). Tkinter's partial stubs
-# make strict checks noisy (literal-typed pack/grid kwargs, dict-returning
-# configure()), so skip type-checking this one module — the logic it wraps is
-# typed and tested elsewhere.
-[[tool.mypy.overrides]]
-module = ["owscout.gui"]
-ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "owscout/tests"]

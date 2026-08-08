@@ -887,11 +887,6 @@ def cmd_scout_player(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_gui(args: argparse.Namespace) -> int:
-    from .gui import main as gui_main
-    return gui_main()
-
-
 def cmd_export(args: argparse.Namespace) -> int:
     import csv as _csv
     import json as _json
@@ -1228,9 +1223,6 @@ def build_parser() -> argparse.ArgumentParser:
     cu.add_argument("--undo", action="store_true",
                     help="REMOVE the code from the exclude list (re-allow scouting it)")
     cu.set_defaults(func=cmd_contribute_unscout)
-
-    gui = sub.add_parser("gui", help="launch the desktop app (clickable workflow)")
-    gui.set_defaults(func=cmd_gui)
 
     ex = sub.add_parser("export", help="export the comp table to csv/json")
     ex.add_argument("--format", choices=("csv", "json", "dashboard"), default="csv",

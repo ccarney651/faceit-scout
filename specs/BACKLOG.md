@@ -151,41 +151,19 @@ simulator rather than a new surface.
 
 ### P2 — Player efficiency rating (PER-style), role-relative
 
-Requested by a league player (boomed/SHKI, Discord, 2026-08-06): a PER-like
-composite — damage/healing/mitigation averages + K:D — "role by role, meta
-independent, relative to peers". Was P3 as "player performance index +
-timeline" (owscouter's MPI); an explicit user request bumps it. All inputs
-already sit in `round_players` at FULL league coverage (no capture needed),
-and the Players leaderboard's 5-map sample floor is the natural base.
-
-Vocabulary (decided 2026-08-07): user-facing copy calls the five buckets
-**"Role"** — the values (Tank / Hitscan / Flex DPS / Main Support / Flex
-Support) shown alongside self-disambiguate from the game's three roles, and
-it's the word organised players already use. "Seat" never appears in UI
-(Players-tab toggle relabelled "By seat" → "By role" 2026-08-07); in prose
-that needs it, "competitive role". "Subrole" is off-limits — Blizzard shipped
-official in-game Sub-Roles with the perk system — so the internal
-`subroles.py` module name now collides with a real game mechanic: harmless
-until we surface hero sub-roles, then rename to `seats.py`. Internal code
-keeps `seat`/`seat_of` (short, grep-able, users never see it).
-
-Design steers that keep it inside the repo's honesty rules:
-
-- **Rank against peers in the same competitive role** (Tank / Hitscan /
-  Flex DPS / Main Support / Flex Support — `subroles.py`), not the game's
-  three roles — hero pick within a role swings stat lines more than skill
-  does (Mercy vs Zen). Percentile or z-score within role+division is "meta
-  independent" for free: a meta shift moves the whole peer group together.
-- **Show the components.** The composite is a summary line over the existing
-  per-map stats, never a bare opaque number (the repo rule). Components + `n`
-  visible; below the sample floor, no rating renders at all.
-- Per-map rates, not raw totals (map length confounds raw damage/healing).
-- Disclose, don't solve: players on strong teams post better lines (more
-  elims, fewer deaths) — the rating doesn't control for team strength.
-- boomed's "chances:goals / takes:makes" note — OW's analog is elims:deaths,
-  already shipped as K:D. The new value is cross-stat normalization, not
-  another ratio.
-- Timeline (elo/stat trajectory over the season) stays bundled as before.
+**Resolved 2026-08-08.** Shipped as the leaderboard's **Eff** column (Players →
+Leaderboard). Per-map stat averages (dmg/heal/mit/kd) z-scored against the
+division's other players in the same competitive role and averaged across the
+stats that vary within the role; the component z's are shown under the composite
+(d/h/m/k); nothing renders below the 5-map sample floor or inside a cohort under
+4 peers; peer group = competitive role when scouted, else base role; the
+team-strength confound is disclosed in the leaderboard footnote. Pure layer:
+`efficiencyRatings` / `effZ` / `EFF_GROUP_MIN` in `faceit_sync/dashboard/pure.js`
+(`rankPlayers` gained an `eff` key); peer-group assignment `effGroupOf` in
+`app.js`; tests in `tests/test_dashboard_logic.py`. Vocabulary landed alongside:
+the Players-tab toggle reads "By role" and user-facing copy says "same role",
+never "seat" / "subrole". The timeline (elo/stat trajectory over the season)
+remains a future, bundled item.
 
 ### P3 — Per-map scoreboard context
 
@@ -228,6 +206,14 @@ code itself calls a live playoff code "the freshest, highest-value capture
 target on the site". Either feed playoffs into coverage too (one-line change,
 matches the established pattern) or write down why they're excluded.
 
+**Resolved 2026-08-08** — fed playoffs in. The Overview call site now passes
+`(D().matches||[]).concat(D().playoffs||[])` to `mapCoverage`, the same union
+`drawPlayed` uses; a captured playoff game still counts as covered, and a live
+playoff code is what the "Scout →" link prefers. Tests:
+`test_map_coverage_counts_finished_playoff_games_as_league_play` /
+`test_map_coverage_counts_a_captured_playoff_game`. Combined views remain
+playoff-free (no view merges `playoffs` anywhere, pre-existing).
+
 ### P2 — Consolidate the two scrims implementations
 
 Standalone `docs/scrims.html` vs the dashboard Scrims tab, both reading the
@@ -240,6 +226,14 @@ CLAUDE.md convention: `_dashboard.py` is one ~3,700-line template string and
 grew ~500 lines in a week (draft sim, playoffs, capture recs). The agreed
 shape is a concatenation build step, no framework. Cheaper now than after the
 next feature lands.
+
+**Resolved 2026-08-08.** `HTML_TEMPLATE` is now assembled at import from four
+static parts under `faceit_sync/dashboard/` (`head.html`, `pure.js`, `app.js`,
+`boot.js`) by `_dashboard.py` — plain concatenation, no framework. New pure,
+testable logic lands in `pure.js` (above `bootApp`); new page shell/CSS in
+`head.html`; rendering in `app.js`; data delivery in `boot.js`. The parts ship
+as package data (pyproject.toml). If `app.js` outgrows itself, split it the
+same way the pure layer was hoisted.
 
 ### P3 — Playoff sibling pairing is a LIKE prefix
 
@@ -256,9 +250,11 @@ exposes real game durations, derive them.
 
 ### P3 — Retire the dead native GUI
 
-`owscout/gui.py`, `owscout_app.py`, the PyInstaller specs and `.cmd` launchers
-are slated for removal per CLAUDE.md. No one is pointed at them; deleting them
-shrinks the repo and the test-import surface.
+**Resolved 2026-08-08.** `owscout/gui.py`, `owscout_app.py`, the PyInstaller
+specs and `Scout app.cmd` were deleted; the `owscout gui` subcommand, the
+`owscout-app` console script and the `owscout.gui` mypy override are gone. Its
+tested pure helpers were relocated to `owscout/firstrun.py` (tests moved to
+`tests/test_firstrun.py`) rather than thrown away.
 
 ### P3 — OWDB rebrand mechanics
 

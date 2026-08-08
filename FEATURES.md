@@ -124,21 +124,58 @@ Deliberately does not repeat content that has its own tab (ban/map meta lives
 in League meta; per-team rosters live on Scout a team and Players) — Overview
 is orientation, not a preview of everything else.
 
+A **capture recommendations** panel ranks the maps the league has played but is
+still under-covered. It scores by *unseen minutes* — games × a per-mode length
+estimate (Control 14, Escort 20, Hybrid 20, Push 11, Flashpoint 11, Clash 10) —
+so the maps costing the most unseen play sit at the top. A map qualifies only if
+it has been played at least 3 times, is still under half covered, and still has
+a *live* replay code to capture (a wiped-and-unseen game can never be fixed, so
+it is not listed). Each row shows the coverage fraction, `~N min unseen`, a
+coverage bar that turns green at the 50% target, and a **Scout →** link straight
+to the newest capturable code. The panel is withheld entirely when nothing is
+under-covered — the "withhold rather than fake" rule applied to the whole site,
+not just one row.
+
+When the visitor's own contributor name (their chosen publish name in
+`localStorage`) is on the leaderboard, a **contributor impact card** sits above
+it: their rank medal (🥇🥈🥉), how many maps they contributed, what share of the
+division's captured maps that is, and a *Capture another →* call-to-action into
+the capture app — the reward loop that makes a leaderboard row feel like it is
+yours.
+
 **Scout a team** — the main working view. Detailed in §3. The team picker is
 labelled *Team*, not *Opponent*: pointed at your own side the same sheet is a
 self-scout, showing what an opponent prepping you is looking at. Includes a
 collapsed **Draft simulator (beta)** section near the bottom — pick two teams
 and walk a draft; each team's real history drives the suggestions (map-pick
 frequency, per-map ban counts, overall ban rates), with already-banned heroes
-excluded from the picker. Opens pre-filled with the currently scouted team.
+excluded from the picker. Every suggestion explains itself in plain language,
+with the backing replay codes one click away (see §3, Draft simulator). Opens
+pre-filled with the currently scouted team; `#sim` opens the section and
+`#simfull` renders the whole suggested tree expanded.
 
 **Players** — every player on every roster, in three views. *By team* (rosters,
-starters over subs, elo, top-3 captured heroes), *By seat* (grouped by inferred
-subrole — Tank / Hitscan / Flex DPS / Main Support / Flex Support), and
-*Leaderboard* — a sortable table of elo, maps, K/D and per-map damage / healing /
-mitigation. The leaderboard runs purely off FACEIT's stat feed, so unlike hero
-pools it is fully populated in **every** division, captured or not. Rate columns
-carry a 5-map sample floor; counts and elo do not need one.
+starters over subs, elo, top-3 captured heroes), *By role* (grouped by
+competitive role — Tank / Hitscan / Flex DPS / Main Support / Flex Support),
+and *Leaderboard* — a sortable table of elo, maps, K/D, per-map damage /
+healing / mitigation, and **Eff**. The leaderboard runs purely off FACEIT's
+stat feed, so unlike hero pools it is fully populated in **every** division,
+captured or not. Rate columns carry a 5-map sample floor; counts and elo do not
+need one.
+
+**Eff** — the efficiency rating, a PER-style composite: each player's per-map
+stat averages (damage, healing, mitigation, K/D) z-scored against the
+division's other players in the same competitive role, then averaged across the
+stats that actually vary within that role — +1 means one standard deviation
+above the role average. It is a summary line, never a bare number: the
+component z-scores sit beneath it (d/h/m/k = damage, healing, mitigation, K/D),
+and a stat with no variance inside the role (healing for Tanks) drops out by
+itself rather than being weighted by hand. Below the 5-map sample floor, or
+against fewer than four same-role peers, no rating renders at all. The peer
+group is a player's competitive role when captured games place them in one,
+otherwise their base role (Tank / Damage / Support), so the column is populated
+in every division. It does not control for team strength: players on strong
+teams post better lines.
 
 **League meta** — cross-division hero ban rates, ban-by-role split, map
 popularity, attacking-first win rate per map (Escort/Hybrid only, since mirrored
@@ -152,7 +189,14 @@ and click-to-copy, expandable rosters, newest/oldest sort, and the match date. A
 **Played / Upcoming / Playoffs** toggle switches the list; Playoffs shows the
 bracket (seeded from current standings until real playoff matches exist) and
 becomes the default view automatically once real playoff matches are ingested
-for the active division.
+for the active division. Playoff championships are ingested keylessly, seeded
+from `matches.txt`. Finished bracket entries are full match objects — scores,
+rosters and replay codes — tagged `playoff` and opening the same match detail
+page as a regular-season game; unplayed slots are bare fixtures. Match detail
+pages carry a **scout push** banner whenever a game of theirs still has a live,
+uncaptured replay code: what is still open to capture, the wipe warning, and a
+*Scout <code> →* button to the newest one. Finished playoff games also join the
+**Played** tab, tagged, so a full season reads as one history.
 
 **Scrims** — private comp captures from the browser app's scrim mode, read
 straight out of this browser's IndexedDB (`owscout-capture`, the same store the
@@ -378,6 +422,30 @@ scrims up as a JSON bundle. The replay-code field is optional but a **known
 FACEIT league code is hard-blocked**: it stays public, so the app explains why
 and offers to switch over to League capture and load that code instead.
 
+**Onboarding — the first-capture tour.** Both apps (league and scrim) open with
+a guided, non-blocking walkthrough while nothing has been captured yet: six
+steps that point at the actual controls (with a highlight ring around them),
+advance automatically as each step's action completes, and can be stepped back
+through. A revisit resumes at the first unfinished step; dismissal is remembered
+per app (existing contributors are skipped). A first-time visitor also gets a
+welcome header and a pulsing *Auto-calibrate* button after screen share;
+publishing the first capture fires a celebration toast with a direct link to
+the dashboard's leaderboard. Returning contributors see a welcome-back strip
+with how many maps this browser has published and how many are pending. The
+tour yields to fullscreen capture and comes back when it ends.
+
+**Auto-calibrate is preview-first.** The one-click scan hunts candidate boxes
+over the live screen share and shows them with an X/10 confidence verdict
+("this looks right" / "usable but check the boxes" / "placement is likely
+off") — **nothing is written until you click *Use these boxes***, so a bad scan
+cannot silently lock a bad ROI. Retry and clear are one click each, and the
+preview disappears when screen sharing stops.
+
+**WIP badges.** Experimental OCR reads wear an amber ⚠ tag with a tooltip
+naming the feature: the scoreboard and score reads in the league app;
+scoreboard, auto side-detection and screenshot import in the scrim app.
+Known-limits features wear their warning on the button rather than being hidden.
+
 ## 2.4 Integrity and the review gate
 
 **Banned-hero detection.** A resolved hero that was banned this map is impossible,
@@ -425,23 +493,14 @@ opening and settled comps; recurring swaps with triggers, both overall and
 per map; hero pool counted in **rounds** with roles attached; and ban-response —
 how their opening comp shifts when a given hero is banned.
 
-## 2.7 GUI — dead, not the capture path
+## 2.7 GUI — removed, not the capture path
 
-**Superseded by the browser capture app at `docs/capture/`** (zero-install,
-runs in any modern browser). The native Tk GUI described below still exists
-in the repo (`owscout/gui.py`) but is unmaintained and not distributed —
-nothing should point a user at it. Kept here only as an accurate record of
-what the code still does, for anyone touching that file.
-
-Everything above behind buttons, for operators who never touch a CLI. Worker
-threads with a queue drained on the Tk main loop, so the window never freezes and
-no Tk call happens off-thread.
-
-Notable: the code list **filters by team** (scouting happens one opponent at a
-time); a **sync-freshness banner** turns amber when the faceit DB hasn't been
-synced for a day, because a stale database hides every code published since and
-looks identical to "no new matches"; and Publish states plainly that
-`owscout_comps.json` is the file to commit.
+The native Windows Tk GUI that used to live in `owscout/gui.py` was **removed in
+2026-08-08** — unmaintained, not distributed, superseded by the browser capture
+app at `docs/capture/` (zero-install, runs in any modern browser via
+`getDisplayMedia` + tesseract.js). That app is the only supported capture path.
+Its tested first-run helpers (ETA text, the read-only "faceit DB empty?" check,
+the "Step N of 3" setup hint) survived the removal in `owscout/firstrun.py`.
 
 ---
 
@@ -517,6 +576,19 @@ not a hidden knob. An override naming a contributor with no view of that map
 falls back to first-wins rather than making the map vanish, and a malformed file
 degrades to first-wins rather than blocking the build.
 
+## The admin capture panel
+
+The worker also exposes an admin view of capture activity, gated **server-side**
+by the `ADMIN_IDS` environment variable (comma-separated Discord ids) — the
+caller's own session flag is only a UI hint and never grants access. *Live
+scouts* (`/admin/claims`, forwarded to the claim room's Durable Object — the
+single source of truth for live locks) shows who currently holds a scouting
+claim and for how long; *recent contributors* lists every committed file with
+its owner, login status, last upload and map count, and drills into one
+contributor's submission (`/admin/contributor`) — read from GitHub, so the admin
+sees exactly the same data the build merges. The capture app renders both
+panels, for admins only.
+
 ---
 
 # Part 3 — The scouting page, section by section
@@ -566,6 +638,31 @@ responses.
 
 **Bans on maps they pick** — ordered by ban count, which also surfaces their
 most-picked map first.
+
+**Draft simulator (beta)** — the collapsed simulator from §1.2, detailed here
+because the sections above all feed it. Pick two teams and walk a draft (Game 1
+map + the ban rotation); suggestions are driven by each team's real history —
+map-pick frequency, per-map and overall ban counts — on a tested pure decision
+layer, and every auto suggestion carries its reasoning:
+
+- **Why <map>?** / **Why <hero>?** sit on every auto-suggestion card in plain
+  language, recomputed as the draft state changes — never hover-only. Map
+  claims say "their most-picked <mode> map"; ban claims say "most-banned
+  overall" or "most on this map", and a ban repeated well above the division
+  rate is marked **★ signature ban**. "The most" claims are computed against the
+  *current* legal suggestion set, so an override is never mislabelled as the top.
+- **The evidence is one click away.** Each suggestion's why-line also offers
+  the backing replay codes (preferring bans seen on this very map) in a
+  popover — a suggestion points at the games it came from rather than asserting.
+- **A hint is labelled a hint.** A read resting on a single case or a thin
+  sample appends "a single case, not a pattern" / "this read is a hint, not a
+  pattern" instead of presenting a guess as a finding.
+- **The legend is always visible.** Chip counts are defined inline ("3× on a
+  map chip = times that team has picked it this season"; "2× here · 5× on a ban
+  chip = bans on this map · this season"; "★ = signature ban"), along with the
+  rules of the draft ("A team can't repeat its own ban down a line") and how
+  much data each read rests on (ban reads use the most recent N maps; map picks
+  stay full-season).
 
 ---
 

@@ -32,8 +32,7 @@ dashboard.html
 auto-update.log
 *.log
 
-# Build input for the pre-trained exe - regenerated from the local DB with
-# `owscout refs export` right before `pyinstaller owscout.spec`.
+# Refs export bundle - regenerated from the local DB with `owscout refs export`.
 owscout_refs.zip
 
 # owscout runtime artifacts

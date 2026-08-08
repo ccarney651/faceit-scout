@@ -583,6 +583,39 @@ def test_map_coverage_needed_is_clamped_at_zero_when_fully_captured(tmp_path) ->
         assert r["needed"] >= 0
 
 
+def test_map_coverage_counts_finished_playoff_games_as_league_play(tmp_path) -> None:
+    # A finished bracket entry is a full match object, so playoff games are
+    # capturable league play like any other — and a live playoff code is the
+    # freshest capture target on the site (scoutQueue already unions playoffs).
+    got = _run(
+        "return mapCoverage(["
+        "{id:'r1',finished_at:'2026-08-05',games:["
+        "{game_no:1,map:'Numbani',demo_code:'R1',map_category:'Hybrid'}]},"
+        "{id:'p1',status:'FINISHED',playoff:true,finished_at:'2026-08-07',games:["
+        "{game_no:1,map:'Numbani',demo_code:'P1',map_category:'Hybrid'},"
+        "{game_no:2,map:'Numbani',demo_code:'P2',map_category:'Hybrid'},"
+        "{game_no:3,map:'Numbani',demo_code:'P3',map_category:'Hybrid'}]}],"
+        " new Set(), null);", tmp_path)
+    numb = got[0]
+    assert numb["map"] == "Numbani"
+    assert numb["played"] == 4          # 1 regular + 3 playoff games
+    assert numb["needed"] == 2          # ceil(4 * 0.5) - 0
+    assert numb["liveCode"] == "P1"     # freshest code is the playoff one
+
+
+def test_map_coverage_counts_a_captured_playoff_game(tmp_path) -> None:
+    # Capture keys are (match_id, game_no) for playoff matches too; a captured
+    # playoff game must count as covered, not as an unseen live code.
+    got = _run(
+        "return mapCoverage([{id:'p1',status:'FINISHED',playoff:true,"
+        "finished_at:'2026-08-07',games:["
+        "{game_no:1,map:'Numbani',demo_code:'P1',map_category:'Hybrid'},"
+        "{game_no:2,map:'Numbani',demo_code:'P2',map_category:'Hybrid'},"
+        "{game_no:3,map:'Numbani',demo_code:'P3',map_category:'Hybrid'}]}],"
+        " new Set(['p1:2']), null);", tmp_path)[0]
+    assert got["captured"] == 1 and got["played"] == 3 and got["live"] == 2
+
+
 
 # --- draft simulator: pure decision engine + explainers ---------------------
 # simModelFrom/divBanBaseFrom/mapsFrom/banSuggest/sigLift/mapCompare/autoMap/
@@ -752,3 +785,84 @@ def test_div_ban_base_shares_sum_to_one_and_guard_zero_total(tmp_path) -> None:
     empty = _run("return divBanBaseFrom([{id:'m',f1:'A',f2:'B',games:"
                  "[{game_no:1,map:'Oasis',map_category:'Control',bans:[]}]}]);", tmp_path)
     assert empty["all"] == {}
+
+
+# --- efficiency rating (PER-style) -----------------------------------------
+# Per-map stat averages z-scored against the division's same-role players, so a
+# rating is only ever relative to the role it was computed in. The rules under
+# test: nothing below the sample floor, nothing against fewer than EFF_GROUP_MIN
+# peers, and a stat with no variance inside the role is not part of the rating.
+
+_EFF = """[
+  {nick:'t1', team:'A', role:'Tank',    stats:{games:10,dmg:9000,heal:0,  mit:15000,kd:2.0}},
+  {nick:'t2', team:'A', role:'Tank',    stats:{games:10,dmg:8000,heal:0,  mit:14000,kd:1.6}},
+  {nick:'t3', team:'B', role:'Tank',    stats:{games:10,dmg:7000,heal:0,  mit:13000,kd:1.2}},
+  {nick:'t4', team:'B', role:'Tank',    stats:{games:10,dmg:6000,heal:0,  mit:12000,kd:0.8}},
+  {nick:'t5', team:'C', role:'Tank',    stats:{games:10,dmg:5000,heal:0,  mit:11000,kd:0.4}},
+  {nick:'s1', team:'C', role:'Support', stats:{games:10,dmg:300, heal:5000,mit:1200,kd:0.5}},
+  {nick:'s2', team:'D', role:'Support', stats:{games:10,dmg:600, heal:6000,mit:1400,kd:0.6}},
+  {nick:'s3', team:'D', role:'Support', stats:{games:10,dmg:900, heal:7000,mit:1600,kd:0.7}},
+  {nick:'s4', team:'E', role:'Support', stats:{games:10,dmg:1200,heal:8000,mit:1800,kd:0.8}},
+  {nick:'s5', team:'E', role:'Support', stats:{games:10,dmg:1500,heal:9000,mit:2000,kd:0.9}},
+  {nick:'cameo', team:'F', role:'Tank', stats:{games:2,  dmg:9999,heal:0,  mit:9999,kd:9.9}},
+  {nick:'x1', team:'G', role:'Damage',  stats:{games:10,dmg:6000,heal:0,  mit:12000,kd:1.0}},
+  {nick:'x2', team:'G', role:'Damage',  stats:{games:10,dmg:5000,heal:0,  mit:10000,kd:0.8}}
+]"""
+
+
+def _eff_players(tmp_path) -> object:
+    return _run(f"const ps={_EFF};"
+                f"const es=efficiencyRatings(ps.map(p=>({{group:p.role,stats:p.stats}})));"
+                f"ps.forEach((p,i)=>{{p.eff=es[i];}});"
+                "return ps;", tmp_path)
+
+
+def test_efficiency_rates_best_and_worst_within_the_cohort(tmp_path) -> None:
+    ps = _eff_players(tmp_path)
+    t1 = next(p for p in ps if p["nick"] == "t1")   # top tank
+    t5 = next(p for p in ps if p["nick"] == "t5")   # bottom tank
+    assert t1["eff"]["eff"] > 0 and t5["eff"]["eff"] < 0
+    assert t1["eff"]["eff"] > t5["eff"]["eff"]
+
+
+def test_efficiency_below_the_sample_floor_is_no_rating(tmp_path) -> None:
+    cameo = next(p for p in _eff_players(tmp_path) if p["nick"] == "cameo")
+    assert cameo["eff"]["eff"] is None
+
+
+def test_efficiency_needs_enough_same_role_peers(tmp_path) -> None:
+    x1 = next(p for p in _eff_players(tmp_path) if p["nick"] == "x1")
+    assert x1["eff"]["groupN"] == 2          # only one peer to compare against
+    assert x1["eff"]["eff"] is None          # a z vs one other player is not a rating
+
+
+def test_efficiency_drops_a_stat_with_no_variance_in_the_role(tmp_path) -> None:
+    t1 = next(p for p in _eff_players(tmp_path) if p["nick"] == "t1")
+    assert "heal" not in t1["eff"]["comps"]  # no tank heals: not part of the rating
+    assert t1["eff"]["eff"] > 1.3            # heal's absence must not drag it down
+
+
+def test_efficiency_composite_is_the_mean_of_its_components(tmp_path) -> None:
+    t1 = next(p for p in _eff_players(tmp_path) if p["nick"] == "t1")
+    e = t1["eff"]
+    zs = [e["comps"][k]["z"] for k in ("dmg", "mit", "kd")]   # heal excluded for tanks
+    assert abs(e["eff"] - sum(zs) / len(zs)) < 1e-9
+
+
+def test_efficiency_is_relative_within_the_support_role(tmp_path) -> None:
+    ps = _eff_players(tmp_path)
+    s5 = next(p for p in ps if p["nick"] == "s5")   # top support
+    s1 = next(p for p in ps if p["nick"] == "s1")   # bottom support
+    assert s5["eff"]["eff"] > 0 and s1["eff"]["eff"] < 0
+
+
+def test_rank_players_by_efficiency_keeps_unrated_players_last(tmp_path) -> None:
+    got = _run(f"const ps={_EFF};"
+               f"const es=efficiencyRatings(ps.map(p=>({{group:p.role,stats:p.stats}})));"
+               f"ps.forEach((p,i)=>{{p.eff=es[i];}});"
+               "return rankPlayers(ps,{key:'eff'}).map(p=>p.nick);", tmp_path)
+    assert got[0] in ("t1", "s5")              # the co-leaders (+1.414) lead, nick tie-break
+    assert "cameo" not in got                  # below the rate floor: filtered out
+    assert got[-2:] == ["x1", "x2"]            # rated never sorts below unrated
+    assert got[-3] == "t5"                     # lowest eff (-1.414) sits right before the unrated
+    assert all(n in got for n in ("t1", "t5", "s5", "s1"))

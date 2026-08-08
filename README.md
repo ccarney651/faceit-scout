@@ -295,7 +295,8 @@ faceit_sync/
   db.py          # schema, connection, idempotent writes
   sync.py        # extraction, reconciliation, orchestration, mass-import
   export.py      # csv/json/html export + team stats
-  _dashboard.py  # self-contained HTML dashboard template
+  _dashboard.py  # assembles the HTML dashboard template from dashboard/ parts
+  dashboard/     # template parts: head.html, pure.js, app.js, boot.js
 tests/           # pagination, backoff, idempotency, hazard A, hazard B, url-parse, html export
 ```
 

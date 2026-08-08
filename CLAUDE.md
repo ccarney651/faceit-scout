@@ -13,9 +13,9 @@ packages feed **one website** (`docs/index.html`):
   (screen capture + template matching) and turns them into per-team composition
   scouting shown on the same page. Capture happens through the browser app at
   `docs/capture/` (zero-install, `getDisplayMedia` + tesseract.js) — **the only
-  supported capture path.** A native Windows GUI (`owscout/gui.py`,
-  `owscout_app.py`) still exists in the repo but is dead: unmaintained, not
-  distributed, not documented to users. Don't point anyone at it.
+  supported capture path.** A native Windows GUI once existed here
+  (`owscout/gui.py`, `owscout_app.py`) but was removed in 2026-08-08 as dead
+  code; its tested first-run helpers survive in `owscout/firstrun.py`.
 
 `README.md` (faceit_sync ingest + data-quality hazards) and `FEATURES.md`
 (every feature in both packages) are the authoritative long-form docs — read them
@@ -33,8 +33,7 @@ Dev environment is **Windows**; use the venv Python directly:
 pip install -e ".[dev]"                            # install (add [capture] for owscout CV deps)
 ```
 
-`faceit-sync` / `owscout` are the console entry points (see `[project.scripts]`;
-`owscout-app` also exists but launches the dead native GUI — don't use it).
+`faceit-sync` / `owscout` are the console entry points (see `[project.scripts]`).
 Common flows:
 
 ```bash
@@ -51,7 +50,8 @@ The dashboard's **entire body is rendered in JavaScript** from an inlined data
 blob, so **one JS syntax error yields a completely blank page** that
 bracket-balance checks won't catch. Always:
 - Run `pytest tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`
-  (it runs `node --check` over the generated script) after editing `_dashboard.py`.
+  (it runs `node --check` over the generated script) after editing any dashboard
+  part file under `faceit_sync/dashboard/`.
 - For visual checks, build a local `.html` and screenshot with headless Edge
   (`msedge --headless --screenshot=FILE "file:///…#tab"`). On Windows use
   `--screenshot=FILE`, **not** `--dump-dom` (the GUI exe produces no stdout).
@@ -117,17 +117,23 @@ OW replay ──capture──► owscout.sqlite3 ──publish──► data/cap
 - Opaque FACEIT stat codes (`i8`, `i14`…) are mapped empirically in one place:
   `models.STAT_FIELD_MAP`. Correct them there if FACEIT changes them.
 
-**The dashboard** (`faceit_sync/_dashboard.py`) is one large `HTML_TEMPLATE`
-Python string; vanilla JS builds the DOM (`el()`/`esc()`, hash routing per tab).
-The app boots via `bootApp(DATA)` — DATA is inlined as `var __OWSCOUT_DATA__=…`
-by default, or fetched from a sibling `data.json` with `export --external-data`
-(the seam for future access-gating). Hero portraits come from the committed
-`faceit_sync/hero_icons.json` cache (a build without it silently renders text
-chips; regenerate with `python -m faceit_sync.hero_icons <asset-dir>`).
+**The dashboard** is assembled by `faceit_sync/_dashboard.py` from four static
+parts under `faceit_sync/dashboard/` — `head.html` (page shell + CSS + the
+`// __DATA_INLINE__` data placeholder), `pure.js` (the tested pure decision
+helpers), `app.js` (the `bootApp(DATA)` body), `boot.js` (data delivery) — via
+plain concatenation at import, no framework or build step. Vanilla JS builds the
+DOM (`el()`/`esc()`, hash routing per tab). The app boots via `bootApp(DATA)` —
+DATA is inlined as `var __OWSCOUT_DATA__=…` by default, or fetched from a
+sibling `data.json` with `export --external-data` (the seam for future
+access-gating). Pure logic that must be unit-testable goes in `pure.js` above
+`bootApp` (the `tests/test_dashboard_logic.py` harness executes that region in
+node). Hero portraits come from the committed `faceit_sync/hero_icons.json`
+cache (a build without it silently renders text chips; regenerate with
+`python -m faceit_sync.hero_icons <asset-dir>`).
 
-**`owscout`** keeps IO/CV/GUI thin and the logic in typed, tested modules
-(`gui.py` and the capture/CV stack are excluded from mypy for that reason;
-everything they wrap is tested elsewhere). Its CLI (`owscout/cli.py`) has many
+**`owscout`** keeps IO/CV thin and the logic in typed, tested modules (the
+capture/CV stack is excluded from mypy for that reason; everything it wraps is
+tested elsewhere). Its CLI (`owscout/cli.py`) has many
 subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
 `review`, `drafts`, `doctor`, …). SPEC.md is its design reference.
 
@@ -152,10 +158,11 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
 ### Priorities (ordered)
 
 1. **Unblock capture adoption** — the binding constraint. Coverage is thin everywhere
-   except FACEIT Masters. The tool is ~1 min/map so time isn't the problem; the
-   friction points are calibration intimidation, absent onboarding flow, and no
-   contribution reward loop. A guided first-capture tour, one-click auto-calibrate
-   preview, and contributor impact panel would address these.
+   except FACEIT Masters, and the tool is ~1 min/map so time isn't the problem. The
+   three friction fixes this priority named are **delivered** (guided first-capture
+   tour, auto-calibrate confidence preview, contributor impact card — all shipped
+   together in the 2026-08-04 onboarding commit); the priority now is to **iterate on
+   adoption** — watch where new scouts stall and remove the next friction.
 2. **Ship scrim mode** — graduate WIP features (auto-side detection for scrims,
    scoreboard score read, screenshot import) from experimental badges. Bring scrim
    analytics to parity with league scouting (hero pools, swap detection, comp
@@ -164,8 +171,10 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
 3. **OWCS expansion** — scrape from FACEIT where possible (OWCS uses FACEIT for
    some events); VOD-based capture from YouTube/Twitch for the rest; manual entry
    as fallback.
-4. **Statistical capture recommendations** — maps with N minutes of playtime need
-   at least M observations for reliable comp data. Pure analysis, no new infra.
+4. **Statistical capture recommendations** — **delivered** (the Overview panel
+   ranking under-covered maps by unseen minutes shipped ahead of priorities 2 and 3).
+   Iterate on adoption: the per-mode length estimates are hardcoded guesses, and
+   coverage currently counts regular-season games only (playoff games are a known gap).
 
 ### Audience
 
@@ -178,13 +187,13 @@ audiences if the analytics are strong enough.
   **owdb.gg** (gaming-native, currently available) — register it when closer to
   shipping the final product. `owdb.com/.net/.org` are taken/expensive;
   `owdb.dev/.app/.io/.sh/.me` are available fallbacks.
-- **Don't overengineer unless necessary for expandability.** The current single-template
-  dashboard works but should be modularized with a build step (concatenation, no
-  framework) before adding major new features.
-- The dead native GUI (`owscout/gui.py`, `owscout_app.py`, PyInstaller spec files,
-  `.cmd` launchers) is slated for removal — don't invest in it.
+- **Don't overengineer unless necessary for expandability.** The dashboard is
+  modularized into concatenated static parts (`faceit_sync/dashboard/`); keep
+  new features landing in the right part file rather than growing one string.
+- The dead native GUI (`owscout/gui.py`, `owscout_app.py`, PyInstaller spec
+  files, `Scout app.cmd`) was removed in 2026-08-08 — don't resurrect it.
 - The two scrims implementations (`docs/scrims.html` standalone + Scrims tab in
   dashboard) should be consolidated.
 - `docs/index.html` is the live site — never hand-edit, only regenerate via export.
-- Always run the dashboard JS syntax test after touching `_dashboard.py`:
+- Always run the dashboard JS syntax test after touching a dashboard part file:
   `pytest tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`
