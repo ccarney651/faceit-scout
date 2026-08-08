@@ -594,7 +594,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
         if not d["summary"]["matches"]:
             continue
         for h in d.pop("heroes"):
-            heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"], "guid": h.get("guid")})
+            heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"]})
         for m in d.pop("maps"):
             maps.setdefault(m["name"], {"name": m["name"], "category": m["category"]})
         for name, url in d.pop("team_avatars", {}).items():
@@ -675,9 +675,9 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     # Full hero roster (every hero, not just those banned this season) so the draft
     # simulator can ban off-meta picks like Torbjörn that never show up in the data.
     roster = [
-        {"name": r["name"], "role": r["role"], "guid": r["guid"]}
+        {"name": r["name"], "role": r["role"]}
         for r in db.conn.execute(
-            "SELECT name, role, guid FROM heroes ORDER BY name"
+            "SELECT name, role FROM heroes ORDER BY name"
         ).fetchall()
     ]
 

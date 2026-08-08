@@ -189,14 +189,13 @@ all verified live). Ordered.
 
 ### P2 — FEATURES.md is six features behind
 
-The authoritative feature reference documents none of: the capture
-recommendations panel, the contributor impact card, the onboarding tour /
-auto-calibrate preview / WIP badges, playoff match pages + scout CTA + the
-Played-tab merge, draft-sim explainers + legend + `#simfull`, or the admin
-capture panel. Touch §1.2 (Tabs: Overview, Matches), §3 (scout page / draft
-sim), §2.3 (capture onboarding), §2.8 (admin panel). Same pass: CLAUDE.md's
-roadmap still describes priorities 1 and 4 as future work though their named
-items shipped — reword to "delivered; iterate on adoption".
+**Resolved 2026-08-08.** FEATURES.md now documents all six: capture
+recommendations panel + contributor impact card (§1.2 Overview), onboarding
+tour / auto-calibrate preview / WIP badges (§2.3), playoff match pages + scout
+CTA + Played-tab merge (§1.2 Matches), draft-sim explainers + `#simfull` (§1.2
++ §3), and the admin capture panel (its own section). CLAUDE.md's roadmap was
+reworded in the same pass: priorities 1 and 4 read "delivered; iterate on
+adoption". The Eff rating landed in the Players section alongside.
 
 ### P2 — Capture recommendations ignore playoff matches
 
@@ -216,9 +215,16 @@ playoff-free (no view merges `playoffs` anywhere, pre-existing).
 
 ### P2 — Consolidate the two scrims implementations
 
-Standalone `docs/scrims.html` vs the dashboard Scrims tab, both reading the
-same IndexedDB store. CLAUDE.md flags the consolidation as part of roadmap
-priority 2 (ship scrim mode); it has no other tracking home.
+**Resolved 2026-08-08.** The audit found there was only ever one live viewer:
+`docs/scrims.html` reads the `owscout-capture` IndexedDB from the shared origin;
+the dashboard's "Scrims tab" was a phantom — a dead `HERO_BY_GUID` stub in
+`app.js` (never read) plus a `guid` field in the `heroes`/`roster` export
+payloads whose only documented consumer was that stub (`scrims.html` resolves
+guids via `capture/refs.json` instead). Both were removed, and the docs
+(CLAUDE.md diagram + fact 5, FEATURES.md, `_dashboard.py` docstring, capture
+tour copy, this backlog) now describe the one real path: the Scrims page via
+the top-bar League/Scrims toggle. The dashboard never touches the capture
+IndexedDB — keep it that way.
 
 ### P2 — Dashboard modularization before the next major feature
 

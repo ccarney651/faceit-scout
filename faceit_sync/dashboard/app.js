@@ -71,9 +71,6 @@ const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 // Full roster (all heroes, incl. never-banned ones) for the draft simulator's hero picker.
 const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
 ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
-// Guid → name, for the Scrims tab: capture observations store hero guids, and
-// hero portraits/roles are all keyed by name in this dashboard.
-const HERO_BY_GUID={}; (DATA.roster||DATA.heroes||[]).forEach(h=>{ if(h.guid) HERO_BY_GUID[h.guid]=h.name; });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 // Competitive seats (Tank / Hitscan / Flex DPS / Main Support / Flex Support).
 // Unclassified heroes have no seat and fall back to base role everywhere.

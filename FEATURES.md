@@ -200,12 +200,14 @@ uncaptured replay code: what is still open to capture, the wipe warning, and a
 
 **Scrims** — private comp captures from the browser app's scrim mode, read
 straight out of this browser's IndexedDB (`owscout-capture`, the same store the
-capture app writes). Because `docs/capture/` and `docs/` share an origin the
-dashboard can read them without any upload or server round-trip. Each scrim
-(our team vs opponent, date, notes) lists its maps with the captured hero comps;
-an empty state points to the capture app. Scrims are deliberately invisible to
-every other tab and to the public site — league maps stay public, scrim maps
-stay private. See §2.3 (Scrim mode) below for the capture side.
+capture app writes) by the standalone **Scrims page** (`docs/scrims.html`),
+reached via the League/Scrims side toggle in the top bar. Because `docs/capture/`
+and `docs/` share an origin it can read them without any upload or server
+round-trip. Each scrim (our team vs opponent, date, notes) lists its maps with
+the captured hero comps; an empty state points to the capture app. Scrims are
+deliberately invisible to the league dashboard and to the public site — league
+maps stay public, scrim maps stay private. See §2.3 (Scrim mode) below for the
+capture side.
 
 ### Cross-cutting conventions
 
@@ -416,8 +418,8 @@ with observations, hero crops and scoreboard reads exactly like a league map,
 just with `side_a_team`/`side_b_team` labelled from the scrim's teams. Sides are
 always manual (there are no rosters to auto-detect against). Records are
 **local-only**: never claimed, never published, never merged into
-`data/captures/` — they surface only on the dashboard's **Scrims tab**, which
-reads the same IndexedDB from the shared origin. Export/Import buttons back the
+`data/captures/` — they surface only on the **Scrims page** (`scrims.html`),
+which reads the same IndexedDB from the shared origin. Export/Import buttons back the
 scrims up as a JSON bundle. The replay-code field is optional but a **known
 FACEIT league code is hard-blocked**: it stays public, so the app explains why
 and offers to switch over to League capture and load that code instead.

@@ -69,7 +69,7 @@ OW replay ──capture──► owscout.sqlite3 ──publish──► data/cap
                docs/capture/ ──scrim──► private scrims (this browser only)
                                             │
                                             ▼ (same origin: /docs/)
-                               docs/index.html  Scrims tab
+                               docs/scrims.html  (Scrims page, via the top-bar toggle)
 ```
 
 **Data-flow facts that carry the operational risk:**
@@ -86,16 +86,18 @@ OW replay ──capture──► owscout.sqlite3 ──publish──► data/cap
 4. **`owscout` never writes the faceit DB** — it `ATTACH`es it read-only
    (`mode=ro` URI, see `owscout/db.py::attach_faceit`) for cross-DB context.
 5. **Private scrims live only in the browser.** The capture app's scrim mode
-   (`docs/capture/index.html`, IndexedDB `owscout-capture` v4, stores `scrims` +
+   (`docs/capture/scrim.html`, IndexedDB `owscout-capture` v4, stores `scrims` +
    `scrim_maps`) is a local-first side-channel: never published to the worker,
    never merged into `data/captures/`, and — because `docs/capture/` and `docs/`
-   share an origin — readable by the dashboard's **Scrims tab**, which opens the
-   same DB read-only (it must NOT bump the capture app's schema version). The
-   replay code field in scrim mode is optional but **hard-blocks known FACEIT
-   league codes** (it checks the `data.json` feed) and offers to switch over to
+   share an origin — readable by the **Scrims page** (`docs/scrims.html`, the
+   one scrims viewer, reached via the top-bar League/Scrims toggle), which opens
+   the same DB read-only (it must NOT bump the capture app's schema version).
+   The league dashboard itself never touches that IndexedDB. The replay code
+   field in scrim mode is optional but **hard-blocks known FACEIT league codes**
+   (it checks the capture app's `data.json` feed) and offers to switch over to
    League capture, so league maps stay public. Scrim records carry hero *guids*;
-   `export.py` includes `guid` in the `heroes`/`roster` payloads so the Scrims
-   tab can map them back to names.
+   `docs/scrims.html` resolves them via `capture/refs.json` + a small hero-role
+   table of its own (hero names/roles are not part of the league data payload).
 
 **`faceit_sync` ingest** (`sync.py` orchestrates; `client.py` HTTP; `db.py` schema
 + idempotent writes; `models.py` typed records):
@@ -166,8 +168,10 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
 2. **Ship scrim mode** — graduate WIP features (auto-side detection for scrims,
    scoreboard score read, screenshot import) from experimental badges. Bring scrim
    analytics to parity with league scouting (hero pools, swap detection, comp
-   families). Consolidate the two scrims implementations (standalone
-   `docs/scrims.html` + Scrims tab in dashboard).
+   families). The two scrims implementations were **consolidated 2026-08-08**:
+   `docs/scrims.html` (via the top-bar League/Scrims toggle) is the one viewer —
+   the dashboard's phantom "Scrims tab" was a dead `HERO_BY_GUID` stub plus a
+   `guid` payload field, both removed.
 3. **OWCS expansion** — scrape from FACEIT where possible (OWCS uses FACEIT for
    some events); VOD-based capture from YouTube/Twitch for the rest; manual entry
    as fallback.
@@ -192,8 +196,11 @@ audiences if the analytics are strong enough.
   new features landing in the right part file rather than growing one string.
 - The dead native GUI (`owscout/gui.py`, `owscout_app.py`, PyInstaller spec
   files, `Scout app.cmd`) was removed in 2026-08-08 — don't resurrect it.
-- The two scrims implementations (`docs/scrims.html` standalone + Scrims tab in
-  dashboard) should be consolidated.
+- The two scrims implementations were consolidated in 2026-08-08 — the
+  standalone `docs/scrims.html` page (reached via the top-bar League/Scrims
+  toggle) is the single scrims viewer; the dashboard's "Scrims tab" vestige
+  (an unused `HERO_BY_GUID` map and the `guid` field it read) was removed.
+  Don't add scrims into the dashboard build — keep the private side separate.
 - `docs/index.html` is the live site — never hand-edit, only regenerate via export.
 - Always run the dashboard JS syntax test after touching a dashboard part file:
   `pytest tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`

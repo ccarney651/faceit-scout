@@ -7,8 +7,9 @@ double-clicking, works offline, and is safe under a strict CSP.
 Design: a refined, information-first scouting tool. Cool slate neutrals with a
 single indigo accent; Overwatch role colours (Tank/Damage/Support) as the only
 categorical hues; a green→amber→red scale reserved for win rates. Tabs:
-Overview → Scout a team → Players → League meta → Matches, plus a Scrims tab
-for this browser's private comps.
+Overview → Scout a team → Players → League meta → Matches. Private scrims live
+on their own page (`docs/scrims.html`) reached via the League/Scrims side
+toggle in the top bar — this dashboard never touches the capture IndexedDB.
 
 The template is assembled from static parts — see ``dashboard/`` — by plain
 concatenation (no framework, no bundler). Editing a part file is editing the
