@@ -1015,7 +1015,8 @@ function renderOverview(){
   if (pr.length) {
     wrap.appendChild(el(sectionH('Power Rankings')));
     wrap.appendChild(table(
-      [{k: 'rank', label: '#', num: true},
+      [{k: 'rank', label: '#', num: true,
+        html: r => `<span class="${r.provisional ? 'faint' : ''}">${r.rank}</span>`},
        {k: 'name', label: 'Team', html: r => teamLink(r.name)},
        {k: 'rating', label: 'Rating', num: true,
         html: r => `<span class="${r.provisional ? 'faint' : ''}">${r.rating}</span>`},
