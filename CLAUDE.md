@@ -163,8 +163,16 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
    except FACEIT Masters, and the tool is ~1 min/map so time isn't the problem. The
    three friction fixes this priority named are **delivered** (guided first-capture
    tour, auto-calibrate confidence preview, contributor impact card — all shipped
-   together in the 2026-08-04 onboarding commit); the priority now is to **iterate on
-   adoption** — watch where new scouts stall and remove the next friction.
+   together in the 2026-08-04 onboarding commit). The **capture-funnel callout**
+   ("N of M capturable teams here have zero captures" nudge on Overview naming the
+   teams and handing over an exact live replay, shipped 2026-08-09) is also
+   **delivered** — it lists only teams with a live, uncaptured, post-wipe replay
+   (`capturableTeams` + `zeroCaptureTeams` in `pure.js`). The priority remains to
+   **iterate on adoption** — watch where new scouts stall and remove the next
+   friction. Remaining P2 adoption items: **league-wide click-to-codes** (make the
+   top-bar team links / codes jump straight into the capture tool), **NA Advanced
+   seeding** (one line in matches.txt), and `--external-data` page splitting only
+   if page weight grows.
 2. **Ship scrim mode** — graduate WIP features (auto-side detection for scrims,
    scoreboard score read, screenshot import) from experimental badges. Bring scrim
    analytics to parity with league scouting (hero pools, swap detection, comp
