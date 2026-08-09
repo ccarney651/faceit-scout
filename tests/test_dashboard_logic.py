@@ -512,6 +512,75 @@ def test_scout_queue_without_a_wipe_treats_every_code_as_live(tmp_path) -> None:
     assert len(got) == 4
 
 
+# --- zero-capture teams (Overview capture-funnel callout) -------------------
+# A team counts as "scouted" once any captured game exists for it; the funnel
+# callout must list exactly the teams in the view with none.
+
+def test_zero_capture_teams_lists_teams_with_no_captured_games(tmp_path) -> None:
+    ocs = ("{'Alpha':{scout:{games:3}},'Bravo':{scout:{games:1}},'Gamma':{},'Delta':null}")
+    got = _run(f"return zeroCaptureTeams(['Alpha','Bravo','Gamma','Delta'],{ocs});", tmp_path)
+    assert got == ["Gamma", "Delta"]
+
+
+def test_zero_capture_teams_keeps_a_team_with_zero_scout_games(tmp_path) -> None:
+    ocs = ("{'Alpha':{scout:{games:0}}}")
+    got = _run(f"return zeroCaptureTeams(['Alpha','Beta'],{ocs});", tmp_path)
+    assert got == ["Alpha", "Beta"]
+
+
+def test_zero_capture_teams_handles_empty_comp_data(tmp_path) -> None:
+    assert _run("return zeroCaptureTeams(['A','B'], null);", tmp_path) == ["A", "B"]
+    assert _run("return zeroCaptureTeams([], {});", tmp_path) == []
+
+
+def test_capturable_teams_lists_only_teams_with_a_live_uncaptured_code(tmp_path) -> None:
+    matches = (
+        "[{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-30',games:["
+        "{game_no:1,map:'Ilios',demo_code:'AAA111'}]},"
+        "{id:'m2',f1:'Bravo',f2:'Charlie',finished_at:'2026-07-20',games:["
+        "{game_no:1,map:'Numbani',demo_code:'CCC333'}]}]"
+    )
+    # m2 finished before the wipe -> its teams are dead, even though coded.
+    got = _run(
+        f"return [...capturableTeams({matches}, new Set(), '2026-07-28')].sort();", tmp_path)
+    assert got == ["Alpha", "Bravo"]
+
+
+def test_capturable_teams_excludes_captured_games(tmp_path) -> None:
+    matches = (
+        "[{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-30',games:["
+        "{game_no:1,map:'Ilios',demo_code:'AAA111'}]}]"
+    )
+    got = _run(
+        f"return [...capturableTeams({matches}, new Set(['m1:1']), '2026-07-28')];", tmp_path)
+    assert got == []
+
+
+def test_capturable_teams_without_a_wipe_treats_every_code_as_live(tmp_path) -> None:
+    matches = (
+        "[{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-30',games:["
+        "{game_no:1,map:'Ilios',demo_code:'AAA111'}]}]"
+    )
+    got = _run(
+        f"return [...capturableTeams({matches}, new Set(), null)];", tmp_path)
+    assert sorted(got) == ["Alpha", "Bravo"]
+
+
+def test_capturable_teams_skips_games_without_a_code(tmp_path) -> None:
+    matches = (
+        "[{id:'m1',f1:'Alpha',f2:'Bravo',finished_at:'2026-07-30',games:["
+        "{game_no:1,map:'Ilios'},"
+        "{game_no:2,map:'Oasis',demo_code:'BBB222'}]}]"
+    )
+    got = _run(
+        f"return [...capturableTeams({matches}, new Set(), '2026-07-28')].sort();", tmp_path)
+    assert got == ["Alpha", "Bravo"]
+
+
+def test_capturable_teams_handles_empty_matches(tmp_path) -> None:
+    assert _run("return [...capturableTeams([], new Set(), '2026-07-28')];", tmp_path) == []
+
+
 # ---------------------------------------------------------------------------
 # Capture recommendations (mapCoverage)
 # ---------------------------------------------------------------------------

@@ -1181,6 +1181,32 @@ function renderOverview(){
   tiles.forEach(([v,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${v}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
   wrap.appendChild(g);
 
+  // Capture funnel — teams in this view nobody has scouted yet. Aggressive by
+  // design: their comp/bans/hero-pool panels are blank until someone captures a
+  // game, so the callout names them and hands over a concrete one-minute task.
+  // Only teams with a live replay actually available are listed — a team that
+  // never played, or whose only codes were wiped before capture, has nothing a
+  // scout could run.
+  const capturable=capturableTeams((D().matches||[]).concat(D().playoffs||[]), CAPTURED, CODE_WIPE);
+  const cap=zeroCaptureTeams(tn, ocs).filter(n=>capturable.has(n));
+  const capCount=tn.filter(n=>capturable.has(n)).length;
+  if(cap.length){
+    const zcd=el(`<div class="card mt20 funnel"></div>`);
+    zcd.appendChild(el(`<p class="eyebrow">Capture funnel · ${cap.length} of ${capCount} teams here have zero captures</p>`));
+    zcd.appendChild(el(`<p class="note" style="margin:0 0 6px">These teams have live replays waiting right now but no captured comps yet — their scouting panels stay blank until a scout runs one. About a minute per map, and a capture outlives the next code wipe.</p>`));
+    const zrow=el(`<div class="crowgrid" style="margin-bottom:10px"></div>`);
+    cap.slice(0,8).forEach(n=>zrow.appendChild(el(`<div class="crow"><span class="chip tlink" data-scout="${esc(n)}" title="Scout ${esc(n)}">${esc(n)}</span></div>`)));
+    if(cap.length>8) zrow.appendChild(el(`<div class="crow"><span class="note" style="margin:0">…and ${cap.length-8} more.</span></div>`));
+    zcd.appendChild(zrow);
+    // Point at a live code involving one of these teams when one exists; the
+    // funnel then hands over an exact replay instead of a generic call to action.
+    const zt=leagueQueue().find(r=>cap.includes(r.f1)||cap.includes(r.f2));
+    zcd.appendChild(el(zt
+      ? `<a class="btn" href="${captureCodeUrl(zt.code)}" title="Open a live replay of ${esc(zt.f1)} vs ${esc(zt.f2)} on ${esc(zt.map)} in the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12.5px;white-space:nowrap">Scout a zero-capture team's live replay →</a>`
+      : `<a class="btn" href="capture/" title="Open the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12.5px;white-space:nowrap">Open the capture tool →</a>`));
+    wrap.appendChild(zcd);
+  }
+
   // Most wanted — the live replay codes no one has captured yet, newest first.
   // A concrete one-minute task for a cold visitor, with the leaderboard below as
   // proof it's a real community effort. Hidden when nothing is scoutable.

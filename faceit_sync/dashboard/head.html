@@ -169,6 +169,11 @@ table.blocks thead th:hover{color:var(--faint)}
 .youdot{flex:none;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:10px;padding:1px 7px}
 /* Contributor profile card on Overview */
 .profcard{background:color-mix(in srgb,var(--accent) 4%,var(--surface));border-color:color-mix(in srgb,var(--accent) 18%,var(--line))}
+/* Capture-funnel callout on Overview: teams with zero captured comps. Reads as
+   an action nudge (accent edge), not another neutral card. */
+.funnel{background:color-mix(in srgb,var(--accent) 6%,var(--surface));border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
+.funnel .crow{min-width:0}
+.funnel .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .profile{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .prank{font-size:30px;line-height:1;flex:none}
 .pinfo{min-width:0;flex:1}
@@ -266,6 +271,8 @@ table.blocks thead th:hover{color:var(--faint)}
 .hicon.sm{width:18px;height:18px;border-radius:5px;box-shadow:none;margin:-1px 1px -1px -3px}
 .hicon.md{width:24px;height:24px;border-radius:6px}
 .chip.ico{padding-left:4px;gap:4px}
+.chip[data-scout]{cursor:pointer}
+.chip[data-scout]:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
 .comp{display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap}
 /* Spacer between role groups inside a comp, so tank | dps dps | sup sup reads as a shape. */
 .comp .rgap{flex:0 0 9px}

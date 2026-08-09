@@ -361,6 +361,30 @@ function matchLiveTodo(m, captured, wipe){
   return (m.games||[]).filter(g=>g.demo_code&&g.map&&!captured.has(m.id+':'+g.game_no)&&
     !(wipe&&m.finished_at&&String(m.finished_at).slice(0,10)<=wipe));
 }
+// Teams in a view with no captured comps at all — the Overview capture-funnel
+// callout. A team counts as "scouted" once it has any captured game
+// (`scout.games`), so a missing/empty entry means zero captures.
+function zeroCaptureTeams(teamNames, owscoutComps){
+  const ocs=owscoutComps||{};
+  return teamNames.filter(n=>!(((ocs[n]||{}).scout)||{}).games);
+}
+// Teams that can actually be captured FOR: have at least one game with a live
+// (post-wipe), uncaptured replay code. Same code-liveness rules as scoutQueue/
+// matchLiveTodo. The funnel must only nudge scouts toward teams a capture can
+// help — a team that never played, or whose only codes were wiped before anyone
+// captured them, offers no replay to run.
+function capturableTeams(matches, captured, wipe){
+  const out=new Set();
+  matches.forEach(m=>(m.games||[]).forEach(g=>{
+    if(!g.demo_code||!g.map) return;
+    const key=m.id+':'+g.game_no;
+    if(captured.has(key)) return;
+    if(wipe&&m.finished_at&&String(m.finished_at).slice(0,10)<=wipe) return;
+    if(m.f1) out.add(m.f1);
+    if(m.f2) out.add(m.f2);
+  }));
+  return out;
+}
 
 // ---- capture recommendations (Phase 4) ------------------------------------
 // Average per-game length by mode, minutes. Used to turn game counts into an
