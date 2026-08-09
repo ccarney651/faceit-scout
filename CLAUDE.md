@@ -169,10 +169,12 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
    **delivered** — it lists only teams with a live, uncaptured, post-wipe replay
    (`capturableTeams` + `zeroCaptureTeams` in `pure.js`). The priority remains to
    **iterate on adoption** — watch where new scouts stall and remove the next
-   friction. Remaining P2 adoption items: **league-wide click-to-codes** (make the
-   top-bar team links / codes jump straight into the capture tool), **NA Advanced
-   seeding** (one line in matches.txt), and `--external-data` page splitting only
-   if page weight grows.
+   friction. **League-wide click-to-codes** (every replay-code chip opens the
+   capture tool with that code pre-loaded, and every team-name link keeps
+   click-to-Scout plus a capture icon that pre-filters the capture tool to that
+   team, shipped 2026-08-09) is also **delivered**. Remaining P2 adoption items:
+   **NA Advanced seeding** (one line in matches.txt), and `--external-data` page
+   splitting only if page weight grows.
 2. **Ship scrim mode** — graduate WIP features (auto-side detection for scrims,
    scoreboard score read, screenshot import) from experimental badges. Bring scrim
    analytics to parity with league scouting (hero pools, swap detection, comp

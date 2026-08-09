@@ -88,6 +88,17 @@ Shipped and verified live since the 2026-08-01 audit (all six carry tests; the
   8 evidence sites on Scout a team; League meta and Overview aggregates are
   league-wide and were deliberately excluded. Do the larger, less-targeted
   versions if asked for.
+
+  **Resolved 2026-08-09.** Every replay-code chip (`rcChip`) on the dashboard
+  now jumps into the capture tool with that code pre-loaded (`capture/?code=…`,
+  `109acf6`; the tool auto-copies it, so pasting into OW2 → Watch still works),
+  and every team-name link — standings, power rankings, match cards, match
+  detail, playoff sides/projections, funnel chips, scout roster header,
+  leaderboard — gains a small capture icon (`capBtn`) that opens the capture
+  tool pre-filtered to that team (`capture/?team=…&division=REGION Tier`).
+  Team names still click to Scout: the delegated `[data-scout]` handler ignores
+  the capture icon's `<a>`. Verified by a Node runtime harness that boots the
+  real assembled JS plus the `node --check` gate and the full pytest suite.
 - **Aggressive capture-funnel callout.** "14 teams have zero captures" style
   coverage-gap nudge on Overview was deferred in the nav redesign; the
   orientation strip CTA was the agreed first step, and it's shipped.
