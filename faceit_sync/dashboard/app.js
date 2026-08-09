@@ -269,17 +269,22 @@ function swapLine(s){
 }
 function pill(text,color){ return `<span class="pill" style="background:color-mix(in srgb,${color} 16%,transparent);color:${color}">${esc(text)}</span>`; }
 function tag(text,cls=''){ return `<span class="tag ${cls}">${esc(text)}</span>`; }
-// A team name rendered as a click-to-scout link (jumps to that team's scout page).
-function teamLink(name,extra){ return name?`<span class="tlink" data-scout="${esc(name)}" title="Scout ${esc(name)}" style="display:flex;align-items:center;gap:8px">${teamAvatar(name,24)}${esc(name)}</span>${extra||''}`:'<span class="faint">—</span>'; }
+// A team name rendered as a click-to-scout link (jumps to that team's scout
+// page); the capture icon beside it jumps straight into the capture tool,
+// pre-filtered to this team.
+function teamLink(name,extra){ return name?`<span class="tlink" data-scout="${esc(name)}" title="Scout ${esc(name)}" style="display:flex;align-items:center;gap:8px">${teamAvatar(name,24)}${esc(name)}${capBtn(name)}</span>${extra||''}`:'<span class="faint">—</span>'; }
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
-  if(t&&t.dataset.scout){ e.preventDefault(); gotoScout(t.dataset.scout); } });
+  // An <a> inside the team link (the capture icon) navigates on its own — don't
+  // hijack it into the Scout page.
+  if(t&&t.dataset.scout&&!e.target.closest('a')){ e.preventDefault(); gotoScout(t.dataset.scout); } });
 // Playoff bracket nodes: a finished match card opens its detail page. Guarded
 // the same way matchCard's own onclick is — a team name (data-scout) or replay
 // chip inside the card wins, and a plain click opens the match.
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-match]');
   if(t&&t.dataset.match&&!e.target.closest('[data-scout]')&&!e.target.closest('.rc')&&!e.target.closest('a')){ e.preventDefault(); openMatch(t.dataset.match); } });
-// Overwatch replay code — click to copy (paste into OW2 → Watch → Replays).
-function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Copy replay code — paste in Overwatch → Watch">${esc(code)}</code>`; }
+// Overwatch replay code — click to jump into the capture tool with this code
+// pre-loaded (the tool copies it, so pasting into OW2 → Watch → Replays still works).
+function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Open this replay in the capture tool — the code is copied for Overwatch">${esc(code)}</code>`; }
 // Evidence-row codes cell: exactly one backing game -> the code chip inline,
 // no click needed (the common thin-sample case, and the explicit ask —
 // "bring me straight to code"). More than one -> a small click-to-open link.
@@ -316,18 +321,13 @@ document.addEventListener('click', e=>{
   const t=e.target.closest('.codeslink'); if(!t) return;
   openCodesPopover(t, JSON.parse(t.dataset.codes));
 });
-function copyText(t){
-  if(navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
-  return new Promise((res,rej)=>{ try{ const ta=document.createElement('textarea');
-    ta.value=t; ta.style.position='fixed'; ta.style.top='-999px'; document.body.appendChild(ta);
-    ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta);
-    ok?res():rej(); }catch(err){ rej(err); } });
-}
 document.addEventListener('click',e=>{
   const rc=e.target.closest('.rc'); if(!rc||!rc.dataset.rc) return;
-  const o=rc.textContent;
-  copyText(rc.dataset.rc).then(()=>{ rc.textContent='copied ✓'; rc.classList.add('copied');
-    setTimeout(()=>{rc.textContent=o; rc.classList.remove('copied');},900); },()=>{});
+  // Jump into the capture tool with this code pre-loaded (it auto-copies the
+  // code for pasting into Overwatch). A code chip can sit inside a match-history
+  // <a> row — stop that anchor's default from also firing.
+  e.preventDefault();
+  location.href=captureCodeUrl(rc.dataset.rc);
 });
 
 /* ---------- shared match card (used by Matches tab and Scout page) ---------- */
@@ -420,7 +420,7 @@ function matchCard(m, opts={}){
   // Team names double as click-to-scout links (hover-only underline — a resting
   // dotted line under every name would clutter this dense list).
   const teamName=(name,cls)=> name
-    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name)}${esc(name)}</span>`
+    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name)}${esc(name)}${capBtn(name)}</span>`
     : `<span class="${cls}">?</span>`;
   c.appendChild(el(`<div class="hd"><div class="teams">${teamName(m.f1,w1?'win':'lose')}`+
     `<span class="score">${esc(m.series)}</span>${teamName(m.f2,w2?'win':'lose')}</div>`+
@@ -544,7 +544,7 @@ function renderMatchDetail(m){
   wrap.appendChild(back);
   const w1=m.winner==='faction1', w2=m.winner==='faction2';
   const _teamName=(name,cls)=> name
-    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name)}${esc(name)}</span>`
+    ? `<span class="${cls} tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name)}${esc(name)}${capBtn(name)}</span>`
     : `<span class="${cls}">?</span>`;
   wrap.appendChild(el(`<div class="hd"><div class="teams">${_teamName(m.f1,w1?'win':'lose')}`+
     `<span class="score">${esc(m.series)}</span>${_teamName(m.f2,w2?'win':'lose')}</div>`+
@@ -733,6 +733,10 @@ const captureUrl=(team)=>{ const c=String((D().summary||{}).championship||''), t
 // the whole feed (unlike a match id, which is only unique within its division),
 // so the capture page can locate it without a team/division hint.
 const captureCodeUrl=(code)=>'capture/?code='+encodeURIComponent(code);
+// Compact capture icon for team-name links: one click into the capture tool,
+// pre-filtered to this team. The name itself still opens the Scout page.
+const capBtn=(team)=>`<a class="capbtn" href="${captureUrl(team)}" title="Capture ${esc(team)} →" aria-label="Capture ${esc(team)}">`+
+  `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.6" fill="currentColor"/></svg></a>`;
 const nextPow2=(n)=>{let k=1;while(k<n)k*=2;return k;};
 // Standard bracket seed order so 1 & 2 can only meet in the final:
 // seeds(4)=[1,4,2,3]; seeds(8)=[1,8,4,5,2,7,3,6].
@@ -757,7 +761,7 @@ function renderPlayoffs(){
   // Matches → Played card language, compressed to the series level — winner gets a
   // good-colored edge, losers dim, upcoming slots show kickoff instead of a score.
   const side=(n,cls)=> n
-    ? `<span class="pside ${cls} tscout" data-scout="${esc(n)}" title="Scout ${esc(n)}">${teamAvatar(n,16)}<span class="pn">${esc(n)}</span></span>`
+    ? `<span class="pside ${cls} tscout" data-scout="${esc(n)}" title="Scout ${esc(n)}">${teamAvatar(n,16)}<span class="pn">${esc(n)}</span>${capBtn(n)}</span>`
     : `<span class="pside tbd">TBD</span>`;
   const node=(m)=>{
     const fin=m.status==='FINISHED';
@@ -782,7 +786,7 @@ function renderPlayoffs(){
     return t?{seed,name:t.name}:null;
   };
   const proj=(p)=> p
-    ? `<span class="pside proj tscout" data-scout="${esc(p.name)}" title="Scout ${esc(p.name)}">${teamAvatar(p.name,16)}<span class="pn">${esc(p.name)}</span></span>`
+    ? `<span class="pside proj tscout" data-scout="${esc(p.name)}" title="Scout ${esc(p.name)}">${teamAvatar(p.name,16)}<span class="pn">${esc(p.name)}</span>${capBtn(p.name)}</span>`
     : `<span class="pside tbd">TBD</span>`;
   const blank=(a,b,bo)=>`<div class="pcard proj"><div class="pteams">${proj(a)}<span class="pscore vs">vs</span>${proj(b)}</div>`+
     `<div class="pfoot"><span class="pbo">Bo${bo||5}</span><span class="pwhen">—</span></div></div>`;
@@ -1195,7 +1199,7 @@ function renderOverview(){
     zcd.appendChild(el(`<p class="eyebrow">Capture funnel · ${cap.length} of ${capCount} teams here have zero captures</p>`));
     zcd.appendChild(el(`<p class="note" style="margin:0 0 6px">These teams have live replays waiting right now but no captured comps yet — their scouting panels stay blank until a scout runs one. About a minute per map, and a capture outlives the next code wipe.</p>`));
     const zrow=el(`<div class="crowgrid" style="margin-bottom:10px"></div>`);
-    cap.slice(0,8).forEach(n=>zrow.appendChild(el(`<div class="crow"><span class="chip tlink" data-scout="${esc(n)}" title="Scout ${esc(n)}">${esc(n)}</span></div>`)));
+    cap.slice(0,8).forEach(n=>zrow.appendChild(el(`<div class="crow"><span class="chip tlink" data-scout="${esc(n)}" title="Scout ${esc(n)}">${esc(n)}${capBtn(n)}</span></div>`)));
     if(cap.length>8) zrow.appendChild(el(`<div class="crow"><span class="note" style="margin:0">…and ${cap.length-8} more.</span></div>`));
     zcd.appendChild(zrow);
     // Point at a live code involving one of these teams when one exists; the
@@ -2334,7 +2338,7 @@ function renderPlayers(){
       const ros=t.roster||[];
       const card=el(`<div class="card roster"></div>`);
       card.appendChild(el(`<h4 style="display:flex;justify-content:space-between;align-items:center;gap:8px">`+
-        `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="display:flex;align-items:center;gap:8px;color:var(--fg);font-size:14px;font-weight:660">${teamAvatar(t.name,28)}${esc(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
+        `<span class="tlink" data-scout="${esc(t.name)}" title="Scout ${esc(t.name)}" style="display:flex;align-items:center;gap:8px;color:var(--fg);font-size:14px;font-weight:660">${teamAvatar(t.name,28)}${esc(t.name)}${capBtn(t.name)}</span>${pill(t.win_pct+'%',winVar(t.win_pct))}</h4>`));
       const curP=ros.filter(p=>p.current), subP=ros.filter(p=>!p.current);
       const mkRow=(p,dim)=>{ const av=faceitAvg(p), hs=topHeroes(cap[t.name+'|'+p.nick],3), role=roleOf(p.role);
         return el(`<div class="seatrow"${dim?' style="opacity:.55"':''} title="${p.games} maps this season${av?' · '+av.kd+' k/d · '+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':''}">`+
@@ -2431,7 +2435,7 @@ function renderPlayers(){
       body2.appendChild(el(`<tr>`+
         `<td class="num faint">${i+1}</td>`+
         `<td><b>${esc(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
-        `<td><span class="tlink" data-scout="${esc(p.team)}" style="display:flex;align-items:center;gap:6px">${teamAvatar(p.team,20)}${esc(p.team)}</span></td>`+
+        `<td><span class="tlink" data-scout="${esc(p.team)}" style="display:flex;align-items:center;gap:6px">${teamAvatar(p.team,20)}${esc(p.team)}${capBtn(p.team)}</span></td>`+
         `<td><span class="dot bg-${esc(p.role||'')}"></span> <span class="faint">${esc(p.role||'—')}</span></td>`+
         `<td class="num">${hs.length?hs.map(x=>heroIconSmall(x.hero)).join(''):'<span class="faint">—</span>'}</td>`+
         statCells(p)+`</tr>`));

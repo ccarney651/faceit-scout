@@ -622,7 +622,11 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
   background:var(--surface2);color:var(--fg);padding:1.5px 7px;border-radius:6px;cursor:pointer;
   border:1px solid var(--line2);letter-spacing:.03em}
 .rc:hover{border-color:var(--accent);color:var(--accent)}
-.rc.copied{color:var(--good);border-color:var(--good)}
+/* Team-name capture icon: a quiet record glyph that jumps into the capture tool. */
+.capbtn{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);
+  padding:1px 2px;border-radius:5px;text-decoration:none;flex:none;opacity:.8;transition:opacity .12s}
+.capbtn:hover{color:var(--accent);opacity:1}
+.capbtn svg{display:block}
 .codeslink{cursor:pointer;color:var(--accent);font-size:12px;text-decoration:underline dotted;text-underline-offset:2px}
 .codeslink:hover{color:var(--fg)}
 .codespop{position:fixed;z-index:50;background:var(--surface);border:1px solid var(--line2);
