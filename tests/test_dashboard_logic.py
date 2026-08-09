@@ -1009,10 +1009,42 @@ def test_power_rankings_bo5_win_moves_both_ratings_in_the_winners_favor(tmp_path
     assert by_name["A"]["mapRating"] > 1500 > by_name["B"]["mapRating"]
 
 
-def test_power_rankings_excludes_walkovers(tmp_path) -> None:
+def test_power_rankings_walkover_counts_as_series_result(tmp_path) -> None:
+    # A forfeit/no-show is still a real competitive outcome the league records
+    # (FACEIT's own standings count it as a loss) -- excluding it entirely from
+    # Rating made a team that defaulted most of its season read as an unproven
+    # middling team instead of what it actually is. Only Map form stays blind
+    # to it, since a walkover has no real per-map data (see the next test).
     m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", [], walkover=True)]
     got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
-    assert got == []
+    by_name = {r["name"]: r for r in got}
+    assert by_name["A"]["rating"] == 1516
+    assert by_name["B"]["rating"] == 1484
+    assert by_name["A"]["n"] == 1 and by_name["B"]["n"] == 1
+
+
+def test_power_rankings_walkover_never_moves_map_rating(tmp_path) -> None:
+    # Real data has walkover matches carrying synthetic per-game rows (fixed
+    # 1-0 scores, no map) purely as a scoring artifact -- if any winner_faction
+    # data is present it must still be ignored for Map form, walkover or not.
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z",
+                ["faction1", "faction1", "faction1"], walkover=True)]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    by_name = {r["name"]: r for r in got}
+    assert by_name["A"]["mapRating"] == 1500
+    assert by_name["B"]["mapRating"] == 1500
+
+
+def test_power_rankings_mixes_real_and_walkover_matches_in_n(tmp_path) -> None:
+    # A team that forfeits most of its season should end up with n matching
+    # its real record (this was the actual bug report: n=3 while Standings
+    # showed 15 matches, because walkovers were excluded from n entirely).
+    matches = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])]
+    matches += [_match("A", f"Opp{i}", "faction2", f"2026-01-0{i+2}T00:00:00Z", [],
+                        walkover=True) for i in range(3)]
+    got = _run(f"return powerRankings({json.dumps(matches)});", tmp_path)
+    a = next(r for r in got if r["name"] == "A")
+    assert a["n"] == 4
 
 
 def test_power_rankings_is_order_independent_of_input_array_order(tmp_path) -> None:

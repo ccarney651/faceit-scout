@@ -467,9 +467,13 @@ function radarPoints(vals, cx, cy, r){
 // results (NOT FACEIT's own per-player elo_snapshot on round_players). Series
 // Elo is the thing the league itself decides standings by, so it orders the
 // table; Map Elo updates far more often (games >> matches) and rides along as
-// a faster-reacting secondary signal, never the sort key. Walkovers have no
-// maps played and carry no competitive signal, so they're skipped entirely —
-// same "zeroed rows aren't a real result" rule the rest of ingest follows.
+// a faster-reacting secondary signal, never the sort key. A walkover (forfeit
+// or no-show, no real map played) still counts as a Series result -- FACEIT's
+// own standings count it as a loss, and excluding it entirely made a team that
+// defaulted most of its season read as an unproven middling team instead of
+// what it actually is. Map form stays blind to it either way: a walkover's
+// game rows are synthetic scoring artifacts (fixed score, no real map), never
+// a real per-map outcome, so they never touch Map Elo.
 const SERIES_ELO_K = 32, MAP_ELO_K = 12, ELO_START = 1500, POWER_MIN_N = 5;
 
 function eloExpected(ra, rb) { return 1 / (1 + Math.pow(10, (rb - ra) / 400)); }
@@ -482,20 +486,22 @@ function powerRankings(matches) {
   });
 
   const ordered = (matches || [])
-    .filter(m => !m.walkover && m.f1 && m.f2)
+    .filter(m => m.f1 && m.f2)
     .slice()
     .sort((a, b) => String(a.finished_at || '').localeCompare(String(b.finished_at || '')));
 
   ordered.forEach(m => {
     const a = team(m.f1), b = team(m.f2);
 
-    (m.games || []).forEach(g => {
-      if (g.winner_faction !== 'faction1' && g.winner_faction !== 'faction2') return;
-      const scoreA = g.winner_faction === 'faction1' ? 1 : 0;
-      const ra = eloNext(a.mapRating, b.mapRating, scoreA, MAP_ELO_K);
-      const rb = eloNext(b.mapRating, a.mapRating, 1 - scoreA, MAP_ELO_K);
-      a.mapRating = ra; b.mapRating = rb;
-    });
+    if (!m.walkover) {
+      (m.games || []).forEach(g => {
+        if (g.winner_faction !== 'faction1' && g.winner_faction !== 'faction2') return;
+        const scoreA = g.winner_faction === 'faction1' ? 1 : 0;
+        const ra = eloNext(a.mapRating, b.mapRating, scoreA, MAP_ELO_K);
+        const rb = eloNext(b.mapRating, a.mapRating, 1 - scoreA, MAP_ELO_K);
+        a.mapRating = ra; b.mapRating = rb;
+      });
+    }
 
     const scoreA = m.winner === 'faction1' ? 1 : m.winner === 'faction2' ? 0 : null;
     if (scoreA == null) return;
