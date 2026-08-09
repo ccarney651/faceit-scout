@@ -1,6 +1,6 @@
 // docs/capture/scoreboard.test.js
 // node:test fixtures for the scrim scoreboard parser. Fixtures are built from
-// the exact format strings in tools/scrim_code/scrim_owscout.opy:
+// the exact format strings in tools/scrim_code/scrim_owdb.opy:
 //   legend: 'K • D • DD • DT • ACC • UU'  (DPS / DB tank / HD support)
 //   entry:  '{heroIcon} {K} • {D} • {DD} • {DT} • {X} • {UU}'
 //   time:   '{icon} Match Time: {M}:{SS}'

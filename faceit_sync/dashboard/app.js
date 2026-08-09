@@ -8,7 +8,7 @@ const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined 
 // Remembered division (decision in pickDivision above; this is just the IO).
 // localStorage throws in some privacy modes and on file:// origins, so both ends
 // are guarded — an uncaught throw here would render a blank page.
-const DIV_KEY='owscout.division';
+const DIV_KEY='owdb.division';
 const readDivision=()=>{ try{ return localStorage.getItem(DIV_KEY); }catch(e){ return null; } };
 const rememberDivision=(id)=>{ try{ localStorage.setItem(DIV_KEY,id); }catch(e){} };
 let CURRENT_VIEW = pickDivision(readDivision(), VIEWS);
@@ -76,8 +76,8 @@ const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 // Unclassified heroes have no seat and fall back to base role everywhere.
 const HERO_SEAT={}; (DATA.heroes||[]).forEach(h=>{ if(h.subrole) HERO_SEAT[h.name]=h.subrole; });
 const SEATS=DATA.seat_order||['Tank','Hitscan','Flex DPS','Main Support','Flex Support'];
-// Games whose comps have been captured by owscout ("match_id:game_no").
-const CAPTURED=new Set(DATA.owscout_captured||[]);
+// Games whose comps have been captured by owdb ("match_id:game_no").
+const CAPTURED=new Set(DATA.owdb_captured||[]);
 // OW wipes invalidate replay codes each patch: a game finished on or before this
 // date can never be replayed, so it is only "scoutable" if already captured.
 const CODE_WIPE=DATA.code_wipe||null;
@@ -333,11 +333,11 @@ document.addEventListener('click',e=>{
 /* ---------- shared match card (used by Matches tab and Scout page) ---------- */
 // Per-map stat tables, one per team: Player | E | Dmg | Heal | D. The hero next
 // to a name is that player's primary hero ON THIS MAP when the capture carried
-// per-player attribution (owscout's per_game_players), else their season
-// most-played hero (owscout_comps), else nothing but the name.
+// per-player attribution (owdb's per_game_players), else their season
+// most-played hero (owdb_comps), else nothing but the name.
 function rosterHTML(m,g){
-  const pgHeroes=(DATA.owscout_pergame_players||{})[m.id+':'+g.game_no]||{};
-  const seasonHero=(team,nick)=>{ const ps=(((DATA.owscout_comps||{})[team]||{}).scout||{}).players||[];
+  const pgHeroes=(DATA.owdb_pergame_players||{})[m.id+':'+g.game_no]||{};
+  const seasonHero=(team,nick)=>{ const ps=(((DATA.owdb_comps||{})[team]||{}).scout||{}).players||[];
     const p=ps.find(x=>x.player===nick); return p&&p.heroes&&p.heroes[0]?p.heroes[0].hero:null; };
   const portrait=(hero)=>{ if(!hero) return '';
     const r=HERO_ROLE[hero], src=HERO_ICON[heroSlug(hero)];
@@ -436,7 +436,7 @@ function matchCard(m, opts={}){
     // in the series. A full-width ban line below mirrors the match detail page.
     const compBit=(g)=>{
       if(!opts.showComps) return '';
-      const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+      const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
       if(!pg) return '';
       const order=segOrder(pg), seg=order[0];
       if(!seg) return '';
@@ -490,7 +490,7 @@ function gamePanel(m,g){
         :'<span class="faint" style="font-size:11.5px">no replay</span>')+
       `</span></div>`));
   gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
-  const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+  const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
   if(pg && Object.keys(pg).length){
     const teams=Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)));
     const order=segOrder(pg);
@@ -513,7 +513,7 @@ function gamePanel(m,g){
   gEl.appendChild(rosterHTML(m,g));
   return gEl;
 }
-// All-maps-at-a-glance series overview (owscouter-style): small cards side by
+// All-maps-at-a-glance series overview (owdber-style): small cards side by
 // side, each showing one map's score, winner, and capture status. Clicking a
 // card selects that map's panel below.
 function seriesOverview(m,games,onSelect){
@@ -705,7 +705,7 @@ function aggregate(matches,team){
         // captured first-segment). Reliable ban side; opening side fills in with
         // captures. Count each opening hero once per game so a hero's tally = the
         // number of "banned X" games it appeared in.
-        const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+        const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
         const myOpen=(pg&&team&&pg[team])?Object.values(pg[team])[0]:null;   // first segment = the opening comp
         if(myOpen&&myOpen.length){
           g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{
@@ -1117,7 +1117,7 @@ function renderCompare(){
     if(!b){ body.innerHTML=''; return; }
     const roster=compareRoster();
     const aggA=aggregate(D().matches, COMPARE_A), aggB=aggregate(D().matches, b);
-    const scoutA=(DATA.owscout_comps||{})[COMPARE_A]||null, scoutB=(DATA.owscout_comps||{})[b]||null;
+    const scoutA=(DATA.owdb_comps||{})[COMPARE_A]||null, scoutB=(DATA.owdb_comps||{})[b]||null;
     const effA=teamEffSummary(roster, COMPARE_A), effB=teamEffSummary(roster, b);
     // Real active map count for this division, not the axis's fallback cap —
     // most seasons run well past 10 maps, which otherwise saturates every team.
@@ -1174,7 +1174,7 @@ function renderOverview(){
 
   // Coverage-at-a-glance beats data-health diagnostics: how much of the league
   // is actually scouted is the thing a scout wants to see first.
-  const ocs=DATA.owscout_comps||{}, tn=D().team_names;
+  const ocs=DATA.owdb_comps||{}, tn=D().team_names;
   const teamsScouted=tn.filter(n=>(((ocs[n]||{}).scout)||{}).games).length;
   const capturedMaps=tn.reduce((a,n)=>a+((((ocs[n]||{}).scout)||{}).games||0),0);
   const tiles=[[nf(s.played_games),'Maps played',`${s.matches} matches`],
@@ -1293,8 +1293,8 @@ function renderOverview(){
   }
 
   // Scout leaderboard — maps each contributor owns (first-wins credited). League-wide.
-  const contribs=DATA.owscout_contributors||[];
-  const meName=((localStorage.getItem('owscout_name')||'').trim()||'').toLowerCase();
+  const contribs=DATA.owdb_contributors||[];
+  const meName=((localStorage.getItem('owdb_name')||'').trim()||'').toLowerCase();
   const meIdx=meName?contribs.findIndex(c=>String(c.name||'').toLowerCase()===meName):-1;
 
   // Personalised contributor impact card — the scout's own profile, shown when
@@ -1353,7 +1353,7 @@ const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===tea
 function renderPrepBody(t){
   const w=el(`<div></div>`);
   const wins=t.results.filter(r=>r.won).length;
-  const oc=(DATA.owscout_comps||{})[t.team], sc=oc&&oc.scout;
+  const oc=(DATA.owdb_comps||{})[t.team], sc=oc&&oc.scout;
   const ad=sc&&sc.adapt;
   w.appendChild(el(`<div class="card" style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">`+
     `<span style="font-size:18px;font-weight:680">${esc(t.team)} - prep sheet</span>`+
@@ -1494,7 +1494,7 @@ function renderScoutBody(t){
   // Resolves every gk-tracked evidence row in this function to its replay
   // code(s); built from MATCHES_RECENT (unwindowed), not t.matches, so it
   // also covers Counter-scout's matchups below, which come from a separate,
-  // unwindowed owscout source (see the design doc). Declared here, at the
+  // unwindowed owdb source (see the design doc). Declared here, at the
   // top of the function, because Counter-scout (which needs it) renders
   // before the aggregated evidence tables do, and const isn't hoisted.
   // CODE_WIPE marks pre-wipe entries `dead` so codesCell/the popover can
@@ -1507,7 +1507,7 @@ function renderScoutBody(t){
   head.appendChild(el(`<div style="display:flex;align-items:center;gap:14px">${_tav?`<div style="display:flex;align-items:center;justify-content:center;width:64px;height:64px">${_tav}</div>`:''}`+
     `<div><div style="font-size:18px;font-weight:680">${esc(t.team)}</div>`+
     `<div class="note" style="margin-top:2px">${t.used<t.total?`last ${t.used} of ${t.total} matches`:`all ${t.total} matches`} · ${dshort(t.from)} → ${dshort(t.to)}</div></div></div>`));
-  const _hsc=((DATA.owscout_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
+  const _hsc=((DATA.owdb_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
   // Coverage is all-time (captures aren't windowed), so its denominator must be
   // all-time maps played too - windowing it (t.games) could show capMaps > total.
   const _allMaps=MATCHES_RECENT.filter(m=>m.f1===t.team||m.f2===t.team)
@@ -1524,7 +1524,7 @@ function renderScoutBody(t){
     // Most-played hero per player, from the same HUD-attributed pools "Player
     // pools" below uses (scout.players[].heroes is share-sorted, so [0] is it).
     const topHeroByPlayer={};
-    (((DATA.owscout_comps||{})[t.team]||{}).scout||{}).players?.forEach(p=>{
+    (((DATA.owdb_comps||{})[t.team]||{}).scout||{}).players?.forEach(p=>{
       if(p.heroes&&p.heroes[0]) topHeroByPlayer[p.player]=p.heroes[0].hero; });
     const prow=(p,dim)=>{
       const th=topHeroByPlayer[p.nick];
@@ -1551,7 +1551,7 @@ function renderScoutBody(t){
   // go-to comps, their bans, map pool, form/tempo. Degrades to the FACEIT-derived
   // bans/maps when no comps have been captured for this team yet.
   {
-    const scoutG=((DATA.owscout_comps||{})[t.team]||{}).scout;
+    const scoutG=((DATA.owdb_comps||{})[t.team]||{}).scout;
     const g=el(`<div class="card glance"></div>`);
     g.appendChild(el(`<p class="eyebrow">At a glance</p>`));
     const cols=el(`<div class="glance-grid"></div>`);
@@ -1629,7 +1629,7 @@ function renderScoutBody(t){
   // bans most and plays most, no jargon. (Requested: a simple by-the-numbers read
   // that doesn't need decoding.)
   {
-    const sc=((DATA.owscout_comps||{})[t.team]||{}).scout;
+    const sc=((DATA.owdb_comps||{})[t.team]||{}).scout;
     const banRows=rank(t.bans).slice(0,8).map(([h,n])=>({label:heroChip(h),value:n,color:roleVar(HERO_ROLE[h])}));
     const pool=((sc&&sc.hero_pool)||[]).slice().sort((a,b)=>(b.rounds||0)-(a.rounds||0)).slice(0,8);
     const playRows=pool.map(h=>({label:heroChip(h.hero),value:h.rounds||0,color:roleVar(h.role||HERO_ROLE[h.hero])}));
@@ -1686,10 +1686,10 @@ function renderScoutBody(t){
     `<a href="#sc-run">What they run</a><a href="#sc-ban">Ban decision</a>`+
     `<a href="#sc-map">Map decision</a></nav>`));
 
-  // ---- Scouting from captured replays (owscout) -------------------------
+  // ---- Scouting from captured replays (owdb) -------------------------
   // Three sections: what they play (Common comps + Hero pool), where they play
   // it (Map scouting, collapsible), and how they react (Common swaps).
-  const oc=(DATA.owscout_comps||{})[t.team];
+  const oc=(DATA.owdb_comps||{})[t.team];
   const scout=oc&&oc.scout;
   const nGames=(scout&&scout.games)||0;
   // Honest degrade: don't let the hero sections silently vanish for an uncaptured
@@ -2028,7 +2028,7 @@ function renderScoutBody(t){
       // runs — banning a staple hurts both sides equally, so it's a wash, not a
       // targeted ban. A ban only disrupts THEM specifically when it's distinctive.
       const metaRate=(()=>{ const tot={}; let allR=0;
-        Object.values(DATA.owscout_comps||{}).forEach(oc=>{ const sc=oc&&oc.scout; if(!sc||!sc.hero_pool) return;
+        Object.values(DATA.owdb_comps||{}).forEach(oc=>{ const sc=oc&&oc.scout; if(!sc||!sc.hero_pool) return;
           const r=sc.rounds||0; if(!r) return; allR+=r;
           sc.hero_pool.forEach(x=>{ tot[x.hero]=(tot[x.hero]||0)+((x.pick_rate||0)*r); }); });
         const out={}; if(allR) for(const k in tot) out[k]=tot[k]/allR; return out; })();
@@ -2144,7 +2144,7 @@ function renderScoutBody(t){
   w.appendChild(cluster('sc-map','Map decision'));
   // Signature setups — maps THEY pick AND ban first on (a fully self-chosen draft).
   // A high win% on a repeated map+ban tells you it's a rehearsed strat to be ready for.
-  // Their captured opening comp on that map, when owscout has one: the map + first
+  // Their captured opening comp on that map, when owdb has one: the map + first
   // ban says what they chose, this says what they actually ran inside it.
   const scoutMaps=(scout&&scout.maps)||{};
   const openOn=mp=>{
@@ -2257,7 +2257,7 @@ function renderScoutBody(t){
 /* ================================================= DRAFT SIMULATOR (manual scenario planner) */
 // Per-team history over the active division: map-pick counts, per-map ban counts, overall ban counts.
 /* ============================================================= PLAYERS */
-// League-wide player leaderboards from owscout's merge-time ranks (division/tier-
+// League-wide player leaderboards from owdb's merge-time ranks (division/tier-
 // scoped, role-weighted, deaths heavy). Two modes: "By hero" (rank within one
 // hero) and "By role" (aggregate a player across the heroes of a competitive seat
 // — Tank / Hitscan / Flex DPS / Main Support / Flex Support).
@@ -2265,7 +2265,7 @@ function renderScoutBody(t){
 // are too small and scoreboard stats too crude to rank fairly). Roster, role and
 // team come from FACEIT (covers everyone); top heroes + averages come from
 // captures (present once a player is scouted, blank otherwise).
-function playerCaptures(){ const ocs=DATA.owscout_comps||{}, out={};
+function playerCaptures(){ const ocs=DATA.owdb_comps||{}, out={};
   D().team_names.forEach(team=>{ (((ocs[team]||{}).scout||{}).players||[]).forEach(p=>{
     out[team+'|'+p.player]={rounds:p.rounds||0, heroes:(p.heroes||[]).slice()}; }); });
   return out; }
@@ -2814,9 +2814,9 @@ function renderMeta(){
     const agg={};
     D().team_names.forEach(team=>{
       const ovByKey={};
-      (((DATA.owscout_comps||{})[team]||{}).scout||{}).overall?.forEach(f=>{
+      (((DATA.owdb_comps||{})[team]||{}).scout||{}).overall?.forEach(f=>{
         ovByKey[[...f.heroes].sort().join(',')]=f; });
-      (((DATA.owscout_comps||{})[team]||{}).comps||[]).forEach(c=>{
+      (((DATA.owdb_comps||{})[team]||{}).comps||[]).forEach(c=>{
         const key=[...c.heroes].sort().join(',');
         const a=agg[key]||(agg[key]={heroes:c.heroes,maps:0,games:0,wins:0,teams:new Set(),gks:new Set()});
         a.maps+=c.maps||0; a.games+=c.games||0; a.wins+=c.wins||0; a.teams.add(team);
@@ -2854,7 +2854,7 @@ function renderMeta(){
     D().matches.forEach(m=>(m.games||[]).forEach(g=>{
       if(g.winner_team) winnerOf[m.id+':'+g.game_no]=g.winner_team;
     }));
-    const rows=heroWinRates(DATA.owscout_pergame||{},winnerOf,{minMaps:HERO_WR_MIN});
+    const rows=heroWinRates(DATA.owdb_pergame||{},winnerOf,{minMaps:HERO_WR_MIN});
     wrap.appendChild(el(sectionH('Hero win rates',
       `<span class="note">map win rate across captured maps · ${HERO_WR_MIN}+ maps to qualify · counted once per map a hero appears on${capSince()}</span>`)));
     if(rows.length){
@@ -2950,7 +2950,7 @@ function renderMatches(){
   const note=el(`<p class="note" style="margin:0 2px 10px">Single round-robin — everyone plays the same 15 opponents. Search a team, player, hero, or map to read their book against the field.</p>`);
   const list=el(`<div></div>`); wrap.append(bar,modeBar,note,list);
   const hay=(m)=>[m.f1,m.f2,...m.games.flatMap(g=>{
-    const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+    const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
     const compHeroes=pg?Object.values(pg).flatMap(segs=>Object.values(segs).flat()):[];
     return [g.map,...g.bans.map(b=>b.hero),...compHeroes,...(g.rosters||[]).flatMap(r=>r.players.map(p=>p.nick))];
   })].filter(Boolean).join(' ').toLowerCase();

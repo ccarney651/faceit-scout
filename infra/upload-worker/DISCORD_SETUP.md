@@ -16,7 +16,7 @@ When it's on:
 
 ## 1. Create the Discord application (~2 min)
 1. Go to <https://discord.com/developers/applications> → **New Application**, name it
-   e.g. "OW Scout".
+   e.g. "owdb".
 2. Left sidebar → **OAuth2**.
 3. Under **Redirects**, click **Add Redirect** and paste **exactly**:
    ```
@@ -75,7 +75,7 @@ with `login_error=notconfigured`.
   30-day expiry. The browser can read the payload (name/id/admin) for display, but
   only the Worker can mint/verify one, so a valid signature == a real Discord login.
   Returned to the app in the URL fragment after `/auth/callback`; stored in
-  `localStorage.owscout_session`; sent as `X-Owscout-Session` on publish.
+  `localStorage.owdb_session`; sent as `X-Owdb-Session` on publish.
 - **Authoritative identity**: on publish, a valid session overrides any typed name
   — `contributor` = sanitized Discord handle, file/claim keyed on `u_<discord_id>`.
   The `discord:<id>` token prefix is reserved so a keyless upload can't forge it.

@@ -302,7 +302,7 @@ function aggregate(matches,team){
         // captured first-segment). Reliable ban side; opening side fills in with
         // captures. Count each opening hero once per game so a hero's tally = the
         // number of "banned X" games it appeared in.
-        const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+        const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
         const myOpen=(pg&&team&&pg[team])?Object.values(pg[team])[0]:null;   // first segment = the opening comp
         if(myOpen&&myOpen.length){ const gk=m.id+':'+g.game_no;
           g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{
@@ -364,7 +364,7 @@ function aggregate(matches,team){
         // captured first-segment). Reliable ban side; opening side fills in with
         // captures. Count each opening hero once per game so a hero's tally = the
         // number of "banned X" games it appeared in.
-        const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+        const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
         const myOpen=(pg&&team&&pg[team])?Object.values(pg[team])[0]:null;   // first segment = the opening comp
         if(myOpen&&myOpen.length){
           g.bans.filter(b=>b.team===team&&b.hero).forEach(b=>{
@@ -527,7 +527,7 @@ Replace with:
   // Resolves every gk-tracked evidence row in this function to its replay
   // code(s); built from MATCHES_RECENT (unwindowed), not t.matches, so it
   // also covers Counter-scout's matchups below, which come from a separate,
-  // unwindowed owscout source (see the design doc). Declared here, at the
+  // unwindowed owdb source (see the design doc). Declared here, at the
   // top of the function, because Counter-scout (which needs it) renders
   // before the aggregated evidence tables do, and const isn't hoisted.
   const lookup=codeLookup(MATCHES_RECENT, t.team);

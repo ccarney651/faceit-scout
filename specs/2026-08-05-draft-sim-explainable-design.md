@@ -72,7 +72,7 @@ and verifiable"):
 
 - The scenario-tree mechanics (branch/expand/focus/collapse) — unchanged; only copy
   touches them.
-- The capture "drafts" review flow (`owscout drafts`, GUI review) — an unrelated
+- The capture "drafts" review flow (`owdb drafts`, GUI review) — an unrelated
   feature that merely shares the word.
 - New suggestion *features* (win-rate-aware map picks, comp-aware bans, per-game
   outcome reads) — future, not this pass.

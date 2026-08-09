@@ -170,7 +170,7 @@ Replace with:
 ```
 </div></div>
 <div id="hero" class="card hero">
-  <span class="note" style="margin:0;font-size:13px">OW Scout — FACEIT League scouting, built from real match data + fan-captured comps.</span>
+  <span class="note" style="margin:0;font-size:13px">OWDB — FACEIT League scouting, built from real match data + fan-captured comps.</span>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn" id="heroScout" type="button">Scout a team →</button>
     <button class="btn" id="heroCapture" type="button">Contribute a capture →</button>
@@ -209,7 +209,7 @@ function renderOverview(){
 
   // Coverage-at-a-glance beats data-health diagnostics: how much of the league
   // is actually scouted is the thing a scout wants to see first.
-  const ocs=DATA.owscout_comps||{}, tn=D().team_names;
+  const ocs=DATA.owdb_comps||{}, tn=D().team_names;
   const teamsScouted=tn.filter(n=>(((ocs[n]||{}).scout)||{}).games).length;
   const capturedMaps=tn.reduce((a,n)=>a+((((ocs[n]||{}).scout)||{}).games||0),0);
   const tiles=[[nf(s.played_games),'Maps played',`${s.matches} matches`],
@@ -239,7 +239,7 @@ function renderOverview(){
 
   // Scout leaderboard — maps each contributor owns (first-wins credited), the
   // same count the future contribute-or-pay threshold will use. League-wide.
-  const contribs=DATA.owscout_contributors||[];
+  const contribs=DATA.owdb_contributors||[];
   if(contribs.length){
     const lc=el(`<div class="card" style="margin-top:14px"></div>`);
     lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
@@ -303,7 +303,7 @@ function renderOverview(){
 
   // Coverage-at-a-glance beats data-health diagnostics: how much of the league
   // is actually scouted is the thing a scout wants to see first.
-  const ocs=DATA.owscout_comps||{}, tn=D().team_names;
+  const ocs=DATA.owdb_comps||{}, tn=D().team_names;
   const teamsScouted=tn.filter(n=>(((ocs[n]||{}).scout)||{}).games).length;
   const capturedMaps=tn.reduce((a,n)=>a+((((ocs[n]||{}).scout)||{}).games||0),0);
   const tiles=[[nf(s.played_games),'Maps played',`${s.matches} matches`],
@@ -325,7 +325,7 @@ function renderOverview(){
   // same count the future contribute-or-pay threshold will use. League-wide.
   // Below standings, not above: a trust signal for a returning visitor, not
   // orientation info a cold visitor needs first (that's the hero strip above).
-  const contribs=DATA.owscout_contributors||[];
+  const contribs=DATA.owdb_contributors||[];
   if(contribs.length){
     const lc=el(`<div class="card" style="margin-top:20px"></div>`);
     lc.appendChild(el(`<p class="eyebrow">Scout leaderboard</p>`));
@@ -795,7 +795,7 @@ git commit -m "docs: update FEATURES.md tabs section for the Overview/nav redesi
 - [ ] **Step 1: Full test suite**
 
 Run: `.venv/Scripts/python.exe -m pytest`
-Expected: all tests pass (this includes `owscout/tests`, per `pyproject.toml`'s `testpaths`).
+Expected: all tests pass (this includes `owdb/tests`, per `pyproject.toml`'s `testpaths`).
 
 - [ ] **Step 2: Type check**
 

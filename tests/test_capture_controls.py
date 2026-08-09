@@ -7,7 +7,7 @@ overlay button can't poke a half-set-up or finished capture.
 
 from __future__ import annotations
 
-from owscout.capture import CaptureControls
+from owdb.capture import CaptureControls
 
 
 def _bind(c: CaptureControls, calls: list[str], *, submaps=(), phased=False):

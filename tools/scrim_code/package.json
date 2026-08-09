@@ -1,9 +1,9 @@
 {
   "name": "scrim_code",
   "version": "0.1.0",
-  "description": "Lean Overwatch 2 scrim workshop code for OW Scout - a stripped derivative of Scrimtime (DKEEH) that keeps the spectator scoreboard visible to the capture tool.",
+  "description": "Lean Overwatch 2 scrim workshop code for OWDB - a stripped derivative of Scrimtime (DKEEH) that keeps the spectator scoreboard visible to the capture tool.",
   "scripts": {
-    "build": "overpy compile -i scrim_owscout.opy -o scrim_owscout.txt",
+    "build": "overpy compile -i scrim_owdb.opy -o scrim_owdb.txt",
     "decompile:dkeeh": "overpy decompile -i dkeeh_raw.txt -o dkeeh.opy"
   },
   "license": "UNLICENSED",

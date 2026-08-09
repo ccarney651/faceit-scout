@@ -941,7 +941,7 @@ def test_rank_players_by_efficiency_keeps_unrated_players_last(tmp_path) -> None
 
 # --- team compare: radar math -------------------------------------------------
 # compareAxes/radarPoints are pure (no DOM, no DATA), declared above bootApp.
-# They take pre-computed per-team sources — aggregate()'s agg + owscout scout +
+# They take pre-computed per-team sources — aggregate()'s agg + owdb scout +
 # a team-eff summary — and only normalize: fixed caps to 0..100, sample floors
 # to dim, and axes neither side sampled are dropped outright.
 

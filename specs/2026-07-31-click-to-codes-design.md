@@ -27,10 +27,10 @@ backing replay code(s), one click away.
   extending an established pattern, not inventing one.
 - `a.replays` (`:1052`) is already a flat per-game list with everything a
   codes popover needs to display: `{when, mid, opp, map, cat, gno, code, won}`.
-- Counter-scout's matchup rows (`scout.matchups`, owscout-generated) already
+- Counter-scout's matchup rows (`scout.matchups`, owdb-generated) already
   carry `match_id`/`game_no` per row — confirmed by
   `test_matchups_carry_match_identity_for_recency_and_history`
-  (`owscout/tests/test_scout.py:133`). These rows need no aggregation changes
+  (`owdb/tests/test_scout.py:133`). These rows need no aggregation changes
   at all, just a lookup.
 - `document.addEventListener('click', ...)` delegation already exists twice
   (`data-scout` links, `.rc` copy) — this feature adds a third delegated
@@ -103,7 +103,7 @@ Two small shared helpers, placed near `rcChip` (pure enough to unit-test):
 ```js
 // mid:gno -> {map,cat,code,opp,when,won} for every game with a replay code in
 // the given matches. Built once per aggregate() call; also used directly by
-// Counter-scout, whose rows (owscout matchups) carry match_id/game_no but
+// Counter-scout, whose rows (owdb matchups) carry match_id/game_no but
 // aren't part of aggregate()'s accumulators at all.
 function codeLookup(matches, team){
   const m=new Map();
@@ -185,7 +185,7 @@ list, not the recency-windowed `t.matches`: sites 1-7's `gk` sets only ever
 contain keys from `t.matches` anyway (they're built in the same
 `aggregate(t.matches, team)` pass), so a broader lookup changes nothing for
 them, but site 8's `scout.matchups` come from a separate, unwindowed
-owscout-computed source — building the lookup from `MATCHES_RECENT` instead
+owdb-computed source — building the lookup from `MATCHES_RECENT` instead
 of `t.matches` means a matchup never fails to resolve a code just because it
 falls outside the dashboard's current recency window.
 

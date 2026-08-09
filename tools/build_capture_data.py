@@ -25,14 +25,14 @@ import os
 import sqlite3
 from datetime import UTC, datetime
 
-from owscout.db import LATEST_KNOWN_WIPE
+from owdb.db import LATEST_KNOWN_WIPE
 
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
 OUT = os.environ.get("CAPTURE_OUT", os.path.join("docs", "capture", "data.json"))
 # Regions the site ships, strongest-audience first. Order drives the app's
 # division dropdown. Kept in sync with faceit_sync.export.REGIONS.
 REGIONS = ("EMEA", "NA")
-# Single source of truth for the league-wide replay-code wipe: owscout.db's
+# Single source of truth for the league-wide replay-code wipe: owdb.db's
 # LATEST_KNOWN_WIPE (never duplicate it here — bump it in _SEED_WIPES instead).
 CODE_WIPE_DATE = LATEST_KNOWN_WIPE
 TIERS = ("Master", "Expert", "Advanced", "Open")
@@ -44,7 +44,7 @@ def _tier(name: str) -> str | None:
 
 def _region(name: str) -> str | None:
     """Whole-word region match — a bare '%NA%' would also hit any championship
-    whose name merely contains those letters. Mirrors owscout.db.list_codes."""
+    whose name merely contains those letters. Mirrors owdb.db.list_codes."""
     words = (name or "").upper().replace("-", " ").split()
     return next((r for r in REGIONS if r in words), None)
 

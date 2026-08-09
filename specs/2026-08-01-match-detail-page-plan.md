@@ -131,7 +131,7 @@ function mapPipClass(g){
   if(g.winner_faction==='faction2') return 'loss';
   return '';
 }
-// Roll up per-game "scouted" (owscout has a captured comp for this game) into
+// Roll up per-game "scouted" (owdb has a captured comp for this game) into
 // one N/total for the compact card, in place of a tag per map.
 function scoutedCount(m, capturedIds){
   const played=(m.games||[]).filter(g=>g.map);
@@ -167,7 +167,7 @@ git commit -m "dashboard: add divisionOfMatch/mapPipClass/scoutedCount pure help
 - Modify: `faceit_sync/_dashboard.py`
 
 **Interfaces:**
-- Consumes: `divisionOfMatch` (Task 1); `el`, `esc`, `tag`, `dshort`, `rcChip`, `wipedTag`, `codeDead`, `bansOrdered`, `compRow`, `segOrder`, `rosterHTML`, `CAPTURED`, `DATA.owscout_pergame`, `recomputeDivision`, `updateHeader` (all existing, `bootApp`-scoped).
+- Consumes: `divisionOfMatch` (Task 1); `el`, `esc`, `tag`, `dshort`, `rcChip`, `wipedTag`, `codeDead`, `bansOrdered`, `compRow`, `segOrder`, `rosterHTML`, `CAPTURED`, `DATA.owdb_pergame`, `recomputeDivision`, `updateHeader` (all existing, `bootApp`-scoped).
 - Produces: `let MATCH_ID` (module state). `findMatch(matchId)` → the match object in the *current* view, or `null`. `openMatch(matchId)` → switches to the owning division if needed and opens the detail page. `gamePanel(m, g)` → one map's full detail (`Element`). `renderMatchDetail(m)` → the whole page (`Element`). A `'matchdetail'` pseudo-tab id understood by `show`/`hashFor`/`init`.
 - Consumed by: Task 3 (`matchCard`'s click handler calls `openMatch`).
 
@@ -308,7 +308,7 @@ function gamePanel(m,g){
         :'<span class="faint" style="font-size:11.5px">no replay</span>')+
       `</span></div>`));
   gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
-  const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+  const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
   if(pg && Object.keys(pg).length){
     const teams=Object.keys(pg).sort((a,b)=>((a===m.f1?0:a===m.f2?1:2)-(b===m.f1?0:b===m.f2?1:2)));
     const order=segOrder(pg);
@@ -559,7 +559,7 @@ function matchCard(m){
     gEl.appendChild(el(`<div class="bans">${bansOrdered(g)}</div>`));
     // Captured opening comps per segment: sub-map (Control), attack/defend
     // (Escort/Hybrid), or the whole map (Push/Flashpoint). Only when captured.
-    const pg=(DATA.owscout_pergame||{})[m.id+':'+g.game_no];
+    const pg=(DATA.owdb_pergame||{})[m.id+':'+g.game_no];
     if(pg && Object.keys(pg).length){
       // Both teams' opening comps per segment. In the narrow rail they STACK
       // (team over team) so each comp gets the full width instead of two 5-hero

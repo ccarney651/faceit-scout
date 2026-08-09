@@ -17,10 +17,10 @@ data/*
 dist/
 build/
 
-# Derived at build time by `owscout contribute merge` from data/captures/.
+# Derived at build time by `owdb contribute merge` from data/captures/.
 # Committing it would let a stale report outlive the observations it came from,
 # and freeze the analysis that produced it.
-owscout_comps.json
+owdb_comps.json
 
 # Local dashboard preview. The LIVE site is docs/index.html, built by CI from
 # its own synced database; this is built from whatever is on this machine, so
@@ -32,10 +32,10 @@ dashboard.html
 auto-update.log
 *.log
 
-# Refs export bundle - regenerated from the local DB with `owscout refs export`.
-owscout_refs.zip
+# Refs export bundle - regenerated from the local DB with `owdb refs export`.
+owdb_refs.zip
 
-# owscout runtime artifacts
+# owdb runtime artifacts
 calibration/
 refs/
 screenshots/
@@ -54,4 +54,4 @@ crops/
 # OverPy toolchain for the scrim workshop code (tools/scrim_code/)
 tools/scrim_code/node_modules/
 # Generated paste-ready workshop text (rebuilt via `npm run build`)
-tools/scrim_code/scrim_owscout.txt
+tools/scrim_code/scrim_owdb.txt

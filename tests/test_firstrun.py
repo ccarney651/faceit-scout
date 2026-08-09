@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import sqlite3
 
-from owscout.firstrun import eta_text, faceit_is_empty, setup_hint
+from owdb.firstrun import eta_text, faceit_is_empty, setup_hint
 
 
 def test_setup_hint_walks_the_user_through_the_three_steps() -> None:

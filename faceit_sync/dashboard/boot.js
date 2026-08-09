@@ -2,7 +2,7 @@
 // otherwise fetch the sibling data.json (the shell build). Next season this fetch
 // is the single place gating hooks in.
 (function(){
-  if(typeof __OWSCOUT_DATA__!=='undefined' && __OWSCOUT_DATA__) return bootApp(__OWSCOUT_DATA__);
+  if(typeof __OWDB_DATA__!=='undefined' && __OWDB_DATA__) return bootApp(__OWDB_DATA__);
   fetch('data.json',{cache:'no-store'})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(bootApp)

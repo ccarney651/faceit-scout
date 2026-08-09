@@ -22,7 +22,7 @@ dev = [
     "types-requests>=2.31",
     "ruff>=0.6",
 ]
-# owscout (sibling tool) screen-capture / CV runtime deps. Optional so the
+# owdb (sibling tool) screen-capture / CV runtime deps. Optional so the
 # faceit-sync install and test suite need none of them; imported lazily.
 capture = [
     "dxcam>=0.0.5",
@@ -35,10 +35,10 @@ capture = [
 
 [project.scripts]
 faceit-sync = "faceit_sync.cli:main"
-owscout = "owscout.cli:main"
+owdb = "owdb.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["faceit_sync*", "owscout*"]
+include = ["faceit_sync*", "owdb*"]
 
 # The inlined hero portraits ship with the package: a build without them renders
 # a portrait-less dashboard, which is a silent visual regression rather than an
@@ -62,7 +62,7 @@ disallow_untyped_defs = true
 # The SQLite rows we read back are Any-typed by nature; keep those localized.
 warn_return_any = false
 
-# owscout's capture stack ships no usable stubs (and numpy's are 3.12-only
+# owdb's capture stack ships no usable stubs (and numpy's are 3.12-only
 # syntax that trips a 3.11-targeted check), so skip following them entirely.
 [[tool.mypy.overrides]]
 module = ["cv2", "dxcam", "mss", "numpy", "numpy.*", "keyboard"]
@@ -88,9 +88,9 @@ ignore = [
 # F401: hero_icons/team_logos keep module-level imports for CLI convenience.
 "faceit_sync/__init__.py" = ["F401"]
 "faceit_sync/hero_icons.py" = ["F401"]
-# E402: cv2 is importorskip'd before the owscout imports it needs.
+# E402: cv2 is importorskip'd before the owdb imports it needs.
 "tests/test_ref_import_rescale.py" = ["E402"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "owscout/tests"]
+testpaths = ["tests", "owdb/tests"]
 addopts = "-q"

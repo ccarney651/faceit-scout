@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from owscout.calibrate import AUTO_STRIPS, auto_profile
-from owscout.models import SIDE_LEFT, SIDE_RIGHT
+from owdb.calibrate import AUTO_STRIPS, auto_profile
+from owdb.models import SIDE_LEFT, SIDE_RIGHT
 
 
 def test_five_slots_per_side() -> None:

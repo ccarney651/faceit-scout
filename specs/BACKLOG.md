@@ -1,4 +1,4 @@
-# OW Scout — backlog
+# OWDB — backlog
 
 Compiled 2026-08-01; updated 2026-08-07 (post-playoffs audit). Everything the
 project is tracking but is not (yet) a dated plan/design spec. Items move out
@@ -13,9 +13,9 @@ Priority levels:
 ## Recently shipped — do not re-plan
 
 The dated specs in this directory all correspond to merged work, verified live
-on owscout.com 2026-08-01. Treat them as historical records, not pending work:
+on owdb.io 2026-08-01. Treat them as historical records, not pending work:
 
-- **Swap-trigger baseline subtraction** (`owscout/scout.py::aggregate_swaps`,
+- **Swap-trigger baseline subtraction** (`owdb/scout.py::aggregate_swaps`,
   2026-08-01). Was a P1 known gap below; audit found it already had a *frontend*
   workaround (`SWAP_NOISE` in `_dashboard.py`, matchup-based, untested). Moved
   the real fix into the tested core — a candidate trigger hero must now clear
@@ -119,7 +119,7 @@ Shipped and verified live since the 2026-08-01 audit (all six carry tests; the
 
 The user's product-defining idea — *"infinitely more potential overall"* than
 the FACEIT lens alone. Seed: SPEC §0's scrims pipeline (no FACEIT match →
-`scrims` table → `map_instances.source_type='scrim'` → `owscout capture --scrim`
+`scrims` table → `map_instances.source_type='scrim'` → `owdb capture --scrim`
 → comp scouting for private games). The capture side is what exists; everything
 past capture — tracking, dashboard, scrim-vs-scrim comparison — is open. Captured
 as a roadmap item only, per user: *"if there's no detail there then just leave it
@@ -138,7 +138,7 @@ in the original agent's live-browser audit, not re-confirmed here.
 
 Sourced from a full audit of owscouter.com ("FACEIT Analytics & Insights").
 The audit's headline: owscouter is FACEIT-data-only analytics; its two data
-limits are exactly what OW Scout already solves (it cannot get hero picks/comps,
+limits are exactly what OWDB already solves (it cannot get hero picks/comps,
 and it cannot attribute bans). Parity items below close its *analytics* surface;
 they are derivable from data we already store (`round_players` elo/stats,
 `games` per-map scores, `matches` results) — no new collection needed.
@@ -220,7 +220,7 @@ with the player index work if either gets scoped.
 ### P3 — Map drawer (reimagine, do not copy)
 
 A draw-on-map strategy whiteboard is a fun idea but owscouter owns the shape
-of it; do not clone it. If it ever ships, it should be OW Scout's own take —
+of it; do not clone it. If it ever ships, it should be OWDB's own take —
 the obvious spin is tying markers to *real captured data* (mark a position,
 attach the comps/comps that were run there, export a prep image) rather than a
 blank whiteboard. Idea-level until that angle is defined.
@@ -301,10 +301,10 @@ exposes real game durations, derive them.
 
 ### P3 — Retire the dead native GUI
 
-**Resolved 2026-08-08.** `owscout/gui.py`, `owscout_app.py`, the PyInstaller
-specs and `Scout app.cmd` were deleted; the `owscout gui` subcommand, the
-`owscout-app` console script and the `owscout.gui` mypy override are gone. Its
-tested pure helpers were relocated to `owscout/firstrun.py` (tests moved to
+**Resolved 2026-08-08.** `owdb/gui.py`, `owdb_app.py`, the PyInstaller
+specs and `Scout app.cmd` were deleted; the `owdb gui` subcommand, the
+`owdb-app` console script and the `owdb.gui` mypy override are gone. Its
+tested pure helpers were relocated to `owdb/firstrun.py` (tests moved to
 `tests/test_firstrun.py`) rather than thrown away.
 
 ### P3 — OWDB rebrand mechanics

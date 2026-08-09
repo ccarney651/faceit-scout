@@ -5,7 +5,7 @@
 
 > Spec location note: the superpowers default is `docs/superpowers/specs/`, but
 > `docs/` is this repo's **published GitHub Pages root** (it holds `CNAME`).
-> Internal specs live in `specs/` so they are never served from owscout.com.
+> Internal specs live in `specs/` so they are never served from owdb.io.
 
 ## Goal
 
@@ -33,7 +33,7 @@ and most of the machinery behind them is already region-aware and dormant:
   view automatically.
 - The dashboard's region `<select>` (`_dashboard.py:2729-2743`) derives its
   options from `VIEWS`, so it lights up as soon as a second region appears.
-- The owscout GUI's region picker exists behind `LOCK_REGION`, whose own comment
+- The owdb GUI's region picker exists behind `LOCK_REGION`, whose own comment
   reads *"Set to None to restore the region picker (e.g. when NA is enabled)"*.
 
 ## Scope decisions
@@ -60,7 +60,7 @@ the number move materially.
 
 ### Verified as needing no work
 
-- **Player ranking pools.** `owscout/cli.py:572` keys per-game stats on
+- **Player ranking pools.** `owdb/cli.py:572` keys per-game stats on
   `m.championship_id` — a UUID — so EMEA Master and NA Master are already
   distinct pools. The `rank_player_heroes` docstring's "champ keeps skill tiers
   apart" holds across regions for free.
@@ -78,7 +78,7 @@ the number move materially.
 |---|---|
 | `.github/workflows/update.yml:143` | drop `--region emea` |
 | `tools/build_capture_data.py:24` | `REGION = "EMEA"` -> both regions |
-| `owscout/gui.py:35` | `LOCK_REGION = "EMEA"` -> `None` |
+| `owdb/gui.py:35` | `LOCK_REGION = "EMEA"` -> `None` |
 
 The comment above the export line is stale independently of this work — it says
 the site ships "EMEA Master + Expert" when Advanced has been live for a while.
@@ -115,7 +115,7 @@ Two follow-ons:
 return "EMEA" if "EMEA" in u else "NA" if "NA" in u else None
 ```
 
-Only the EMEA-first ordering saves this today. `owscout/db.py` already matches
+Only the EMEA-first ordering saves this today. `owdb/db.py` already matches
 whole words (`% NA %`) and carries a regression test
 (`test_region_matches_whole_words_only`) written for exactly this hazard. Align
 `_region_of` with that behaviour: `"S9 Open Nationals"` must classify as `None`,

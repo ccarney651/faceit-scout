@@ -116,7 +116,7 @@ def test_divisions_list_is_region_major_and_matches_the_codes(
 def test_region_of_matches_whole_words_only(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Same guard as faceit_sync.export._region_of and owscout.db.list_codes."""
+    """Same guard as faceit_sync.export._region_of and owdb.db.list_codes."""
     mod = _load_tool(monkeypatch, tmp_path / "x.sqlite3", tmp_path / "x.json")
     assert mod._region("S9 NA Master Central - Regular Season") == "NA"
     assert mod._region("S9 EMEA Master Central - Regular Season") == "EMEA"

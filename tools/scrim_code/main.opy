@@ -1,11 +1,11 @@
 #!suppressWarnings w_string_concat w_optimization_change_semantics
 #
-# OW Scout Scrim Code  (v0.1)
+# OWDB Scrim Code  (v0.1)
 # A lean, performance-first Overwatch 2 Workshop script for running scrims.
 # Goals:
 #   - Setup phase with ready-up, add-time, and defender teleport.
 #   - A spectator-only, replay-visible scoreboard at the top-left that the
-#     OW Scout capture tool can OCR (fixed 5-row blocks per team, slot-indexed
+#     OWDB capture tool can OCR (fixed 5-row blocks per team, slot-indexed
 #     so slot N of a team aligns with HUD portrait slot N).
 #   - Optional per-player stat counters (K/D/damage/healing) driven by event
 #     rules only -- NO per-tick reevaluation and NO log generation, so the
@@ -15,7 +15,7 @@
 # "full attack for both teams", "play it out" extra turns) are lobby settings,
 # not workshop logic; see README.md for the recommended lobby configuration.
 #
-# Compile with:  npx overpy compile -i main.opy -o out/scrim_owscout.txt
+# Compile with:  npx overpy compile -i main.opy -o out/scrim_owdb.txt
 # Import in-game: Custom Game > Create > Settings > Import Code.
 # Share code is minted in-game (Settings > Copy Settings) -- there is no way to
 # mint one programmatically.
@@ -173,7 +173,7 @@ rule "stats: deaths":
 
 # ---------------------------------------------------------------------------
 # Spectator scoreboard (top-left, rebuilt once per second).
-# Row slot numbers align with the observer HUD portrait strips, so the OW Scout
+# Row slot numbers align with the observer HUD portrait strips, so the OWDB
 # capture tool can map scoreboard rows to comp slots 1:1.
 # ---------------------------------------------------------------------------
 macro scoreboardRow(p, slot):

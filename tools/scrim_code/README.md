@@ -1,6 +1,6 @@
-# OW Scout Scrim workshop code
+# OWDB Scrim workshop code
 
-A **lean custom-game code** for Overwatch 2 scrims, built for the OW Scout project
+A **lean custom-game code** for Overwatch 2 scrims, built for the OWDB project
 (`docs/`). It is a **stripped derivative of Scrimtime (DKEEH) v1.73** by Caldoran,
 re-authored via the OverPy decompiler so teams can keep the Scrimtime experience
 they already know at a lower server cost.
@@ -10,7 +10,7 @@ they already know at a lower server cost.
 - Feature-parity with the industry standard — teams already know the ready-up,
   add-time, defender-teleport and scoreboard UX.
 - The **spectator scoreboard layout is preserved**, which is exactly what the
-  OW Scout capture tool will OCR in the scrim-tracker feature (Phase 2+).
+  OWDB capture tool will OCR in the scrim-tracker feature (Phase 2+).
 - Bloat removed (see below) roughly **halves the compiled size** and removes the
   per-event processing that tanks host FPS.
 
@@ -18,7 +18,7 @@ they already know at a lower server cost.
 
 | Removed | Why |
 |---|---|
-| Log Generator (~20 event-driven rules: kills, damage, healing, abilities, ults, hero-swap tracking…) | The biggest FPS cost; OW Scout reads the screen, not a log. |
+| Log Generator (~20 event-driven rules: kills, damage, healing, abilities, ults, hero-swap tracking…) | The biggest FPS cost; OWDB reads the screen, not a log. |
 | Multi-language UI (40×7 language strings + Change Language keybind) | Enormous string budget, unused in this team. |
 | Debug mode (5 rules + settings) | Dev-only. |
 | Legacy scoreboard presets (Legacy Standard, Legacy OWL/OWC) | Only the Standard preset is kept; fewer HUD texts. |
@@ -43,17 +43,17 @@ Requires Node + npm (OverPy is an npm package).
 
 ```bash
 npm install
-npm run build        # scrim_owscout.opy -> scrim_owscout.txt (paste-ready)
+npm run build        # scrim_owdb.opy -> scrim_owdb.txt (paste-ready)
 npm run decompile:dkeeh   # regenerate dkeeh.opy from a fresh dkeeh_raw.txt export
 ```
 
-`scrim_owscout.txt` is the file you paste into Overwatch. The `.opy` source is
+`scrim_owdb.txt` is the file you paste into Overwatch. The `.opy` source is
 the versioned, patchable form — edit that, then rebuild.
 
 ## Import in Overwatch
 
 1. Custom Game > Create.
-2. Settings > Workshop > Import Code; paste the entire `scrim_owscout.txt`.
+2. Settings > Workshop > Import Code; paste the entire `scrim_owdb.txt`.
 3. Save. Share code is minted in-game via **Copy Settings** (Custom Game menu).
 
 ## Controls (default keybinds)
@@ -111,10 +111,10 @@ own private scrims. Do **not** publish a stripped share code publicly as if it
 were original work. If public publication ever becomes a goal, the clean base is
 **Scrimmie** (open-source, CC BY-NC-SA, includes LogTime).
 
-## Relationship to OW Scout
+## Relationship to OWDB
 
 - `tools/scrim_code/` = the workshop code only.
-- The **capture** side (reading the scoreboard off-screen) lives in `owscout/`
+- The **capture** side (reading the scoreboard off-screen) lives in `owdb/`
   and `docs/capture/` and is developed separately — see `FEATURES.md`.
 - `dkeeh_raw.txt` (original export) and `dkeeh.opy` (its decompilation) are kept
   as reference so the strip can be re-derived when DKEEH updates.

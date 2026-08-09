@@ -1,5 +1,5 @@
 /**
- * owscout upload endpoint (Cloudflare Worker) - OPEN ACCESS.
+ * owdb upload endpoint (Cloudflare Worker) - OPEN ACCESS.
  *
  * Anyone may contribute; nobody is issued anything. The tool generates a random
  * identity token on first publish and sends it with the chosen display name.
@@ -42,7 +42,7 @@ export default {
         headers: {
           "access-control-allow-origin": "*",
           "access-control-allow-methods": "GET, POST, OPTIONS",
-          "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
+          "access-control-allow-headers": "content-type,x-owdb-name,x-owdb-token,x-owdb-session",
           "access-control-max-age": "86400",
         },
       });
@@ -85,7 +85,7 @@ export default {
         headers: {
           Authorization: `Bearer ${env.GITHUB_TOKEN}`,
           Accept: "application/vnd.github+json",
-          "User-Agent": "owscout-upload-worker",
+          "User-Agent": "owdb-upload-worker",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ event_type: "refresh" }),
@@ -129,15 +129,15 @@ export default {
     if (url.pathname === "/admin/contributor") return adminContributorDetail(request, env);
 
     if (request.method !== "POST") {
-      return json(405, { error: "POST a contribution with X-Owscout-Name and X-Owscout-Token" });
+      return json(405, { error: "POST a contribution with X-Owdb-Name and X-Owdb-Token" });
     }
-    const name = (request.headers.get("x-owscout-name") || "").trim().toLowerCase();
-    let token = request.headers.get("x-owscout-token") || "";
+    const name = (request.headers.get("x-owdb-name") || "").trim().toLowerCase();
+    let token = request.headers.get("x-owdb-token") || "";
     // Optional Discord login: a valid signed session is an unforgeable identity,
     // so it supplies a stable per-account token ("discord:<id>") that flows through
     // the existing name-claim unchanged. That prefix is reserved for verified
     // sessions, so a keyless upload can't hand-craft one to impersonate a login.
-    const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+    const sess = await verifySession(request.headers.get("x-owdb-session"), env);
     if (sess) token = "discord:" + sess.d;
     else if (token.startsWith("discord:")) return json(400, { error: "that token prefix is reserved for Discord login" });
     // Resolve identity. A Discord session is AUTHORITATIVE: the display name and
@@ -203,7 +203,7 @@ export default {
       headers: {
         Authorization: `Bearer ${env.GITHUB_TOKEN}`,
         Accept: "application/vnd.github+json",
-        "User-Agent": "owscout-upload-worker",
+        "User-Agent": "owdb-upload-worker",
         ...(init.headers || {}),
       },
     });
@@ -319,10 +319,20 @@ function sanitizeName(s) {
   return x.length >= 2 ? x : "";
 }
 
-// Only same-origin relative paths may be used as a post-login redirect target;
-// absolute URLs (http://evil.example, //evil.example) are bounced to "/".
+// Only the real app origin may be used as a post-login redirect target - other
+// absolute URLs (http://evil.example) are bounced to the app root. The app
+// (docs/capture/) lives on owdb.io, a different origin from this Worker
+// (upload.owdb.io), so the caller always sends its full page URL and we must
+// return a full absolute URL too: Response.redirect() cannot resolve a bare
+// relative path in the Workers runtime (no implicit document base URL).
+const APP_ORIGIN = "https://owdb.io";
 function safeBack(s) {
-  return typeof s === "string" && /^\/(?!\/)/.test(s) ? s : "/";
+  try {
+    const u = new URL(s);
+    return u.origin === APP_ORIGIN ? u.origin + u.pathname + u.search : APP_ORIGIN + "/";
+  } catch {
+    return APP_ORIGIN + "/";
+  }
 }
 
 // Resolve who is claiming. owner = who may release/refresh a claim (account when
@@ -343,9 +353,9 @@ async function claimIdentity(request, env) {
   const url = new URL(request.url);
   const pick = (h, q) => request.headers.get(h) || url.searchParams.get(q) || "";
   return resolveIdentity({
-    session: pick("x-owscout-session", "session"),
-    name: pick("x-owscout-name", "name"),
-    token: pick("x-owscout-token", "token"),
+    session: pick("x-owdb-session", "session"),
+    name: pick("x-owdb-name", "name"),
+    token: pick("x-owdb-token", "token"),
   }, env);
 }
 
@@ -354,7 +364,7 @@ async function claimIdentity(request, env) {
 // they last uploaded + last batch size. Gated server-side to ADMIN_IDS - the
 // session's own admin flag is only a UI hint, never the authority.
 async function adminContributors(request, env) {
-  const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+  const sess = await verifySession(request.headers.get("x-owdb-session"), env);
   const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
   if (!sess || !admins.includes(String(sess.d))) return json(403, { error: "admins only" });
   const out = [];
@@ -384,7 +394,7 @@ async function adminContributors(request, env) {
 // ClaimRoom Durable Object, which is the single source of truth for live locks.
 // Gated to ADMIN_IDS - the session's own admin flag is only a UI hint.
 async function adminClaims(request, env) {
-  const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+  const sess = await verifySession(request.headers.get("x-owdb-session"), env);
   const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
   if (!sess || !admins.includes(String(sess.d))) return json(403, { error: "admins only" });
   const stub = env.CLAIM_ROOM.get(env.CLAIM_ROOM.idFromName("global"));
@@ -399,7 +409,7 @@ async function adminClaims(request, env) {
 // committed file from GitHub so the admin sees the same data the build does.
 // Gated to ADMIN_IDS.
 async function adminContributorDetail(request, env) {
-  const sess = await verifySession(request.headers.get("x-owscout-session"), env);
+  const sess = await verifySession(request.headers.get("x-owdb-session"), env);
   const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
   if (!sess || !admins.includes(String(sess.d))) return json(403, { error: "admins only" });
   const url = new URL(request.url);
@@ -410,7 +420,7 @@ async function adminContributorDetail(request, env) {
     headers: {
       Authorization: `Bearer ${env.GITHUB_TOKEN}`,
       Accept: "application/vnd.github+json",
-      "User-Agent": "owscout-upload-worker",
+      "User-Agent": "owdb-upload-worker",
     },
   });
   if (gh.status === 404) return json(404, { error: "contributor file not found" });
@@ -451,7 +461,7 @@ function json(status, obj) {
       "content-type": "application/json",
       // The dashboard calls /refresh from the Pages origin.
       "access-control-allow-origin": "*",
-      "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
+      "access-control-allow-headers": "content-type,x-owdb-name,x-owdb-token,x-owdb-session",
       // JSON APIs shouldn't be framed, sniffed, or leak Referer.
       "content-security-policy": "default-src 'none'",
       "x-content-type-options": "nosniff",

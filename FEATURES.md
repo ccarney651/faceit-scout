@@ -1,9 +1,9 @@
-# OW Scout — complete feature reference
+# OWDB — complete feature reference
 
 Two packages that feed one website.
 
 **`faceit_sync`** ingests FACEIT League (Overwatch 2) match data into SQLite and
-renders it as a self-contained dashboard. **`owscout`** watches in-client replays,
+renders it as a self-contained dashboard. **`owdb`** watches in-client replays,
 reads the hero portraits off the observer HUD, and turns them into composition
 scouting that the same dashboard displays. They share nothing but a read-only
 database link and one JSON file.
@@ -19,7 +19,7 @@ FACEIT API ──fetch──► faceit.sqlite3 ──export──► docs/index.
                             │                          ▲
                        (read-only)                     │
                             ▼                    (merged at build)
-OW replay ──capture──► owscout.sqlite3 ──publish──► data/captures/<you>.json
+OW replay ──capture──► owdb.sqlite3 ──publish──► data/captures/<you>.json
 ```
 
 Three facts about this diagram carry most of the operational risk:
@@ -32,7 +32,7 @@ Three facts about this diagram carry most of the operational risk:
    untracked, because a committed copy would silently disagree with the real page.
 3. **`data/captures/<contributor>.json` is the bridge.** Each contributor commits
    their own file of raw observations; the build merges them all and derives the
-   report. `owscout_comps.json` is generated at build time and is NOT committed —
+   report. `owdb_comps.json` is generated at build time and is NOT committed —
    a stored report outlives the observations it came from and freezes the
    analysis that produced it.
 
@@ -263,7 +263,7 @@ evidence the data is right; any mismatch prints in full.
 
 ---
 
-# Part 2 — `owscout`
+# Part 2 — `owdb`
 
 Reads hero compositions off the observer HUD of an in-client replay. Screen
 capture is **read-only** (`dxcam`, falling back to `mss`); nothing is injected into
@@ -456,12 +456,12 @@ exceeding a 2% hit rate fails outright with a message to recalibrate.
 
 **No auto-greenlight.** Captures are written as **drafts**. Exports read only
 finalized maps, so nothing reaches the dashboard without the operator looking at
-it. Review (GUI or `owscout drafts`) groups observations by round and sub-map,
+it. Review (GUI or `owdb drafts`) groups observations by round and sub-map,
 flags low-confidence comps, and offers **in-review correction**: `correct_hero_in_map`
 replaces a misread across an entire map side and re-canonicalises the affected
 comps. Finalize greenlights; discard drops the draft.
 
-**`owscout doctor`** health-checks calibration, reference coverage and pending
+**`owdb doctor`** health-checks calibration, reference coverage and pending
 drafts in one command.
 
 ## 2.5 Comp analysis
@@ -478,7 +478,7 @@ A mid-map change is therefore either a **flex** (same comp) or a **core** swap
 **Swap triggers.** Each swap records the enemy lineup at that moment. Heroes
 present in at least half a swap's occurrences, *and* more often than in the
 team's own baseline (their overall enemy-lineup presence rate across every
-observation, swap or not — see `aggregate_swaps` in `owscout/scout.py`), are
+observation, swap or not — see `aggregate_swaps` in `owdb/scout.py`), are
 reported as its trigger — "they answer a D.Va with this". Baseline subtraction
 means an enemy hero present in every game no longer qualifies just for being
 omnipresent. Read triggers as directional, not causal — this only rules out one
@@ -497,12 +497,12 @@ how their opening comp shifts when a given hero is banned.
 
 ## 2.7 GUI — removed, not the capture path
 
-The native Windows Tk GUI that used to live in `owscout/gui.py` was **removed in
+The native Windows Tk GUI that used to live in `owdb/gui.py` was **removed in
 2026-08-08** — unmaintained, not distributed, superseded by the browser capture
 app at `docs/capture/` (zero-install, runs in any modern browser via
 `getDisplayMedia` + tesseract.js). That app is the only supported capture path.
 Its tested first-run helpers (ETA text, the read-only "faceit DB empty?" check,
-the "Step N of 3" setup hint) survived the removal in `owscout/firstrun.py`.
+the "Step N of 3" setup hint) survived the removal in `owdb/firstrun.py`.
 
 ---
 
@@ -694,7 +694,7 @@ function taking plain data. The parts that need a GPU, a display or the game are
 thin shells marked no-cover. This is why matching, comp identity, phase derivation
 and swap detection are all unit-tested without cv2 or Overwatch.
 
-**Two databases, one direction.** owscout never writes to `faceit.sqlite3`; it
+**Two databases, one direction.** owdb never writes to `faceit.sqlite3`; it
 ATTACHes it read-only. Cross-database foreign keys don't exist in SQLite, so
 FACEIT keys are stored as plain validated columns.
 

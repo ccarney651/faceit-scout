@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OW Scout — Capture comps (Scrims)</title>
+<title>owdb — Capture comps (Scrims)</title>
 <meta name="description" content="Private scrim scouting: share your screen, calibrate once, and capture team comps round-by-round. Stays on your browser — never published.">
 <meta name="theme-color" content="#0d1015">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
@@ -160,7 +160,7 @@
 </style></head><body>
 <div id="scrimpaused" style="position:fixed;inset:0;z-index:999999;background:#0b1020;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
   <div style="max-width:520px">
-    <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8087ff;margin-bottom:8px">OW Scout</div>
+    <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8087ff;margin-bottom:8px">owdb</div>
     <h1 style="font-size:26px;margin:0 0 10px">Scrims are paused</h1>
     <p style="color:#aab;font-size:14px;line-height:1.5;margin:0 0 20px">Scrim capture is paused while we finish it up. Head to the League capture tool to scout FACEIT maps instead.</p>
     <a href="index.html" style="display:inline-block;background:#8087ff;color:#0b1020;font-weight:700;padding:10px 18px;border-radius:8px;text-decoration:none">Open League capture →</a>
@@ -169,7 +169,7 @@
 <header>
   <div class="hrow">
     <div>
-      <div class="eyebrow">OW Scout · Private Scrims</div>
+      <div class="eyebrow">owdb · Private Scrims</div>
       <h1>Capture comps — Scrims</h1>
     </div>
     <div class="sidebox">
@@ -552,7 +552,7 @@ function scrimPseudoCode(){ return activeScrim&&activeScrimMap ? {
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
-let boxes=JSON.parse(localStorage.getItem('owscout_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
+let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
 function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
@@ -574,7 +574,7 @@ ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); 
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
   const x=Math.min(dragS.x,p.x)/s,y=Math.min(dragS.y,p.y)/s,w=Math.abs(p.x-dragS.x)/s,h=Math.abs(p.y-dragS.y)/s;
   const mode=drawMode;
-  if(w>10&&h>10){ boxes[mode]={x,y,w,h}; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); }
+  if(w>10&&h>10){ boxes[mode]={x,y,w,h}; localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes)); }
   drawMode=null;dragS=null;dragC=null;
   const done=boxes.a&&boxes.b, t = mode==='scoreboard'||mode==='score_readout'
     ? 'Box saved.' : (done?'Box saved.':'Box saved \u2014 now set the other box.');
@@ -630,7 +630,7 @@ function renderCalPreview(){ const p=document.getElementById('calpreview'); if(!
   p.style.display='block';
   document.getElementById('calhint').innerHTML=head; setStageHint(head); }
 function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal=null;
-  localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes));
+  localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes));
   const p=document.getElementById('calpreview'); if(p) p.style.display='none';
   drawOverlay(); updateBtns(); selfTest(); }
 function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
@@ -705,7 +705,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
 // Same non-blocking walkthrough as the League app, adapted for the local-only
 // scrim flow: no replay-code or publish step — set up a scrim map and save.
 // Separate dismissal key so completing the League tour doesn't suppress this one.
-const TOUR_KEY='owscout_tour_done_scrim';
+const TOUR_KEY='owdb_tour_done_scrim';
 let tourSteps=[], tourIdx=-1;
 function tourDefs(){
   return [
@@ -928,10 +928,10 @@ async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
   renderReview(rec, host); }
 async function saveReviewRec(rec){ await idbPutScrimMap(rec); }
 function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-  const payload={format:'owscout-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
+  const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
     refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
   const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='owscout-learned-refs.json'; a.click(); }
+  a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }
 async function importRefs(file){ try{ const j=JSON.parse(await file.text());
   if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size \u2014 skipped.','warn'); return; }
   for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
@@ -1176,7 +1176,7 @@ function startScrimSession(c){
 async function renderScrimPanel(){
   const scrims=await idbScrims();
   const sel=document.getElementById('scrimpick');
-  const saved=localStorage.getItem('owscout_cap_scrim');
+  const saved=localStorage.getItem('owdb_cap_scrim');
   sel.innerHTML='<option value="">\uff0b new scrim\u2026</option>'+scrims.map(s=>`<option value="${esc(s.id)}">${esc(s.team_us||'us')} vs ${esc(s.opponent||'opponent')}${s.date?' \u00B7 '+esc(s.date):''}</option>`).join('');
   if(saved && scrims.some(s=>s.id===saved)){ sel.value=saved; activeScrim=scrims.find(s=>s.id===saved); }
   else activeScrim=null;
@@ -1188,9 +1188,9 @@ function fillScrimForm(){ const s=activeScrim||{};
   document.getElementById('scdate').value=s.date||''; document.getElementById('scnotes').value=s.notes||''; }
 async function onScrimPick(){
   const id=document.getElementById('scrimpick').value;
-  if(!id){ activeScrim=null; localStorage.removeItem('owscout_cap_scrim'); fillScrimForm(); renderScrimMaps(); updateBtns(); return; }
+  if(!id){ activeScrim=null; localStorage.removeItem('owdb_cap_scrim'); fillScrimForm(); renderScrimMaps(); updateBtns(); return; }
   const scrims=await idbScrims(); activeScrim=scrims.find(s=>s.id===id)||null;
-  if(activeScrim) localStorage.setItem('owscout_cap_scrim', activeScrim.id);
+  if(activeScrim) localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   fillScrimForm(); renderScrimMaps(); updateBtns();
 }
 async function saveScrim(){
@@ -1202,7 +1202,7 @@ async function saveScrim(){
     date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
     updated_at:new Date().toISOString()});
   await idbPutScrim(activeScrim);
-  localStorage.setItem('owscout_cap_scrim', activeScrim.id);
+  localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   await renderScrimPanel(); updateBtns();
   toast('scrim saved \u2014 pick a map to start capturing','ok');
 }
@@ -1295,13 +1295,13 @@ async function renderScrimMaps(){
 }
 async function exportScrims(){
   const scrims=await idbScrims(), maps=await idbScrimMaps();
-  const blob=new Blob([JSON.stringify({format:'owscout-scrims', exported_at:new Date().toISOString(), scrims, maps},null,2)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='owscout-scrims.json'; a.click();
+  const blob=new Blob([JSON.stringify({format:'owdb-scrims', exported_at:new Date().toISOString(), scrims, maps},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='owdb-scrims.json'; a.click();
   toast('exported '+scrims.length+' scrims \u00B7 '+maps.length+' maps','ok');
 }
 async function importScrims(file){
   let j; try{ j=JSON.parse(await file.text()); }catch(e){ toast('not valid JSON','bad'); return; }
-  if(j.format!=='owscout-scrims'||!Array.isArray(j.scrims)||!Array.isArray(j.maps)){ toast('not an OW Scout scrims export','bad'); return; }
+  if(j.format!=='owdb-scrims'||!Array.isArray(j.scrims)||!Array.isArray(j.maps)){ toast('not an owdb scrims export','bad'); return; }
   for(const s of j.scrims) if(s&&s.id) await idbPutScrim(s);
   for(const m of j.maps) if(m&&m.id) await idbPutScrimMap(m);
   toast('imported '+j.scrims.length+' scrims \u00B7 '+j.maps.length+' maps','ok');
@@ -1447,7 +1447,7 @@ async function importSessionFromScreenshot(file){
   Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
     date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
     updated_at:new Date().toISOString()});
-  await idbPutScrim(activeScrim); localStorage.setItem('owscout_cap_scrim', activeScrim.id);
+  await idbPutScrim(activeScrim); localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   const startNo=activeScrim.map_no||1;
   for(let i=0;i<rows.length;i++){
     const r=rows[i]; const mapNo=startNo+i;
@@ -1535,13 +1535,13 @@ document.addEventListener('pointerdown',gestureAutoPop);
 // ---------- auto-snapshot ----------
 let autoSnapTimer=null;
 function setAutoSnap(){ clearInterval(autoSnapTimer); autoSnapTimer=null;
-  const on=document.getElementById('autosnap').checked; localStorage.setItem('owscout_pref_autosnap', on?'1':'0');
+  const on=document.getElementById('autosnap').checked; localStorage.setItem('owdb_pref_autosnap', on?'1':'0');
   if(on){ const ms=+document.getElementById('autosnapint').value||5000;
     autoSnapTimer=setInterval(()=>{ if(session&&boxes.a&&boxes.b&&vid.srcObject) snapshot(true); }, ms); } }
 document.getElementById('autosnap').onchange=setAutoSnap;
-document.getElementById('autosnapint').onchange=()=>{ localStorage.setItem('owscout_pref_autosnapint',document.getElementById('autosnapint').value); if(document.getElementById('autosnap').checked) setAutoSnap(); };
-(()=>{ const iv=localStorage.getItem('owscout_pref_autosnapint'); if(iv) document.getElementById('autosnapint').value=iv;
-  document.getElementById('autosnap').checked=localStorage.getItem('owscout_pref_autosnap')==='1'; setAutoSnap(); })();
+document.getElementById('autosnapint').onchange=()=>{ localStorage.setItem('owdb_pref_autosnapint',document.getElementById('autosnapint').value); if(document.getElementById('autosnap').checked) setAutoSnap(); };
+(()=>{ const iv=localStorage.getItem('owdb_pref_autosnapint'); if(iv) document.getElementById('autosnapint').value=iv;
+  document.getElementById('autosnap').checked=localStorage.getItem('owdb_pref_autosnap')==='1'; setAutoSnap(); })();
 
 // ---------- keyboard shortcuts ----------
 function isTyping(el){ return el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable); }
@@ -1573,7 +1573,7 @@ document.getElementById('fsSb').onclick=()=>pickBox('scoreboard');
 document.getElementById('fsSr').onclick=()=>pickBox('score_readout');
 document.getElementById('fsAuto').onclick=autoCalibrate;
 document.getElementById('fsExit').onclick=()=>{ if(document.exitFullscreen) document.exitFullscreen(); };
-document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owscout_cap_boxes');drawOverlay();updateBtns();};
+document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owdb_cap_boxes');drawOverlay();updateBtns();};
 document.getElementById('snap').onclick=()=>snapshot(false);
 document.getElementById('nextr').onclick=nextRound;
 document.getElementById('undo').onclick=undo;
@@ -1608,8 +1608,8 @@ document.addEventListener('paste', e=>{
 });
 
 buildScrimMapOptions();
-(()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')!=='1';
-  ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();
+(()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owdb_howto_closed')!=='1';
+  ht.addEventListener('toggle',()=>localStorage.setItem('owdb_howto_closed', ht.open?'0':'1')); })();
 updateBtns(); loadRefs(); loadTeamNames(); renderScrimPanel();
 setTimeout(maybeShowTour, 900);   // after feeds kick off, so nothing feels jumpy
 </script></body></html>

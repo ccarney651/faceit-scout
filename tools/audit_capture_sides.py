@@ -1,7 +1,7 @@
 """Audit committed captures for mis-attributed sides/teams.
 
 **Why `winner_side` cannot be used for this.** It is DERIVED
-(`owscout.db._winner_side`) from FACEIT's winning faction plus whichever faction
+(`owdb.db._winner_side`) from FACEIT's winning faction plus whichever faction
 the operator said was side A. Checking it against FACEIT is therefore circular:
 it agrees by construction no matter which way the sides were set.
 

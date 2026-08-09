@@ -1,21 +1,21 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OW Scout — Capture comps</title>
+<title>owdb — Capture comps</title>
 <meta name="description" content="Zero-install Overwatch 2 scouting: share your screen, calibrate once, and capture team comps round-by-round. Every capture sharpens the FACEIT League scouting data.">
 <meta name="theme-color" content="#0d1015">
 <link rel="canonical" href="https://owdb.io/capture/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="OW Scout">
-<meta property="og:title" content="OW Scout — Capture comps in your browser">
+<meta property="og:site_name" content="owdb">
+<meta property="og:title" content="owdb — Capture comps in your browser">
 <meta property="og:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, capture each map's comps round-by-round. Every capture sharpens the FACEIT League data.">
 <meta property="og:url" content="https://owdb.io/capture/">
 <meta property="og:image" content="https://owdb.io/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="OW Scout — Capture comps in your browser">
+<meta name="twitter:title" content="owdb — Capture comps in your browser">
 <meta name="twitter:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, and every capture sharpens the FACEIT League data.">
 <meta name="twitter:image" content="https://owdb.io/og.png">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://upload.owdb.io wss://upload.owdb.io https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src https://cdn.jsdelivr.net; font-src data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
@@ -202,7 +202,7 @@ button:disabled{opacity:.45;cursor:default}
 <header>
   <div class="hrow">
     <div>
-      <div class="eyebrow">OW Scout · FACEIT League</div>
+      <div class="eyebrow">owdb · FACEIT League</div>
       <h1>Capture comps — League</h1>
     </div>
     <div class="sidebox">
@@ -399,7 +399,7 @@ let HERO_ICON={};   // {heroSlug: colored portrait data-URI} — optional, from 
 let feedError=null;   // set when data.json fails to load — surfaced in feedmeta instead of a silent "0 codes"
 let LOCAL_REFS=[], CUSTOM_HEROES={};   // operator-learned hero refs + heroes not in refs.json (persisted in IndexedDB)
 let CLAIMS={}, myClaimKey=null, claimHb=null;   // live scouting claims (match:game -> {by,at}); myClaimKey = the one I hold
-// control-map sub-maps (mirror of owscout/maps.py)
+// control-map sub-maps (mirror of owdb/maps.py)
 const CONTROL_SUBMAPS={ilios:["Lighthouse","Ruins","Well"],"lijiang tower":["Control Center","Garden","Night Market"],nepal:["Sanctum","Shrine","Village"],oasis:["City Center","Gardens","University"],"antarctic peninsula":["Icebreaker","Labs","Sublevel"],samoa:["Beach","Downtown","Volcano"],busan:["Downtown","Sanctuary","MEKA Base"]};
 const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
 function submapsFor(m){ if(!m) return []; let k=m.trim().toLowerCase(); k=MAP_ALIASES[k]||k; return CONTROL_SUBMAPS[k]||[]; }
@@ -508,7 +508,7 @@ async function loadFeeds(){
     if(s.region && [...reg.options].some(o=>o.value===s.region)){ reg.value=s.region; buildDivisions(); }
     if([...div.options].some(o=>o.value===s.tier)) div.value=s.tier; }
   refreshCodes();
-  const tm=q.get('team'), po=localStorage.getItem('owscout_pref_opp');
+  const tm=q.get('team'), po=localStorage.getItem('owdb_pref_opp');
   if(tm){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===tm)){ opp.value=tm; refreshCodes(); } }
   else if(po){ const opp=document.getElementById('opp'); if([...opp.options].some(o=>o.value===po)){ opp.value=po; refreshCodes(); } }   // restore saved opponent filter
   // Deep-link from the dashboard's per-match "Scout" buttons: ?code= pre-selects
@@ -622,14 +622,14 @@ function onCode(){ const c=selectedCode(); if(!c) return;
   sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=onSideChange);
   startMap(); showClaimNote(); maybeClaim();   // reflect + take a live claim on the new code
 }
-function savePref(id){ const el=document.getElementById(id); localStorage.setItem('owscout_pref_'+id, el.type==='checkbox'?(el.checked?'1':'0'):el.value); }
-function restorePrefs(){ const h=localStorage.getItem('owscout_pref_hide'); if(h!=null) document.getElementById('hide').checked=h==='1';
+function savePref(id){ const el=document.getElementById(id); localStorage.setItem('owdb_pref_'+id, el.type==='checkbox'?(el.checked?'1':'0'):el.value); }
+function restorePrefs(){ const h=localStorage.getItem('owdb_pref_hide'); if(h!=null) document.getElementById('hide').checked=h==='1';
   // Region first: the division list is built FROM it, so restoring them the other
   // way round would validate the saved tier against the wrong region's options.
-  const r=localStorage.getItem('owscout_pref_reg');
+  const r=localStorage.getItem('owdb_pref_reg');
   if(r!=null && [...document.getElementById('reg').options].some(o=>o.value===r)) document.getElementById('reg').value=r;
   buildDivisions();
-  const d=localStorage.getItem('owscout_pref_div'); if(d!=null && [...document.getElementById('div').options].some(o=>o.value===d)) document.getElementById('div').value=d; }
+  const d=localStorage.getItem('owdb_pref_div'); if(d!=null && [...document.getElementById('div').options].some(o=>o.value===d)) document.getElementById('div').value=d; }
 document.getElementById('reg').onchange=()=>{ savePref('reg'); buildDivisions(); savePref('div'); refreshCodes(); };
 document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); };
 document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
@@ -641,7 +641,7 @@ document.getElementById('skip').onclick=nextCode;
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
-let boxes=JSON.parse(localStorage.getItem('owscout_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
+let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
 function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
@@ -661,7 +661,7 @@ ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); 
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
   const x=Math.min(dragS.x,p.x)/s,y=Math.min(dragS.y,p.y)/s,w=Math.abs(p.x-dragS.x)/s,h=Math.abs(p.y-dragS.y)/s;
   const mode=drawMode;
-  if(w>10&&h>10){ boxes[mode]={x,y,w,h}; localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes)); }
+  if(w>10&&h>10){ boxes[mode]={x,y,w,h}; localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes)); }
   drawMode=null;dragS=null;dragC=null;
   const done=boxes.a&&boxes.b, t = done?'Box saved.':'Box saved — now set the other box.';
   document.getElementById('calhint').textContent=t; setStageHint(t);
@@ -676,7 +676,7 @@ function calMsg(ok){ return ok>=8?`<span class="ok">calibration looks good — $
 function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const ok=calOk(boxes); if(ok==null) return;
   const msg=calMsg(ok); document.getElementById('calhint').innerHTML=msg; setStageHint(msg); maybeClaim(); }
 // Auto-calibrate: the HUD sits at fixed fractions of the screen (mirror of
-// owscout/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
+// owdb/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
 // the captured resolution — no dragging. Self-test then confirms alignment.
 const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
 // Find the game render area inside the capture, stripping near-black letterbox /
@@ -729,7 +729,7 @@ function renderCalPreview(){ const p=document.getElementById('calpreview'); if(!
   p.style.display='block';
   document.getElementById('calhint').innerHTML=head; setStageHint(head); }
 function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal=null;
-  localStorage.setItem('owscout_cap_boxes',JSON.stringify(boxes));
+  localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes));
   const p=document.getElementById('calpreview'); if(p) p.style.display='none';
   drawOverlay(); updateBtns(); selfTest(); }
 function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
@@ -783,7 +783,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   maybeAutoPop(); updateGuide(); }
 let _firstVisit=null;
 function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit;
-  const name=(localStorage.getItem('owscout_name')||'').trim(); return (_firstVisit=!name&&!(boxes.a&&boxes.b)); }
+  const name=(localStorage.getItem('owdb_name')||'').trim(); return (_firstVisit=!name&&!(boxes.a&&boxes.b)); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
   const fv=isFirstVisit();
@@ -808,7 +808,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
 // user is led through share -> calibrate -> pick -> capture -> publish without
 // ever hunting for a button. The panel sits at the bottom (toasts own the top
 // right); the highlighted element keeps working — it is a guide, not a lock.
-const TOUR_KEY='owscout_tour_done';
+const TOUR_KEY='owdb_tour_done';
 let tourSteps=[], tourIdx=-1;
 function tourDefs(){
   return [
@@ -829,7 +829,7 @@ function tourDefs(){
       done:()=>!!(session&&session.snaps.length)},
     {t:'Publish', target:'publish',
       body:'Done? Click <b>Publish my captures</b> and pick a name — your scouting goes live in ~2 minutes and your scout profile appears on the leaderboard.',
-      done:()=>localStorage.getItem('owscout_first_publish')!=null}
+      done:()=>localStorage.getItem('owdb_first_publish')!=null}
   ];
 }
 function tourHighlight(targetId){
@@ -875,7 +875,7 @@ function maybeShowTour(){
   if(!HAS_CAPTURE) return;
   if(localStorage.getItem(TOUR_KEY)==='1') return;
   // A returning scout who already published has a name — never tour them again.
-  if((localStorage.getItem('owscout_name')||'').trim()){ localStorage.setItem(TOUR_KEY,'1'); return; }
+  if((localStorage.getItem('owdb_name')||'').trim()){ localStorage.setItem(TOUR_KEY,'1'); return; }
   tourOpen();
 }
 
@@ -912,12 +912,12 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
 // ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
 // A browser port of the .exe's confident_left_faction: OCR the 10 HUD name
 // bars, fuzzy-match them to the two rosters, and only act when one orientation
-// clearly wins. Same difflib ratio as the exe (owscout/capture.py), so a
+// clearly wins. Same difflib ratio as the exe (owdb/capture.py), so a
 // garbled read still can't assign sides or players from noise.
 //
 // MIN_STRONG_NAMES is lower here (2, vs the exe's 3) — a deliberate, browser-
 // only divergence. The exe's thresholds were measured against Windows' native
-// OCR on dxcam frames (owscout/capture.py: good reads cleared 5-6 strong
+// OCR on dxcam frames (owdb/capture.py: good reads cleared 5-6 strong
 // names, a known-garbage misaligned frame scored 0). tesseract.js reading a
 // getDisplayMedia canvas is a weaker OCR engine on a lossier source, and
 // field use since the auto-detect-on-Snapshot gate shipped (2026-07-31) put
@@ -1285,10 +1285,10 @@ async function assignPlayer(rec, side, heroGuid, playerId, host){
 // Persist a reviewed + corrected map to the maps store so edits stick.
 async function saveReviewRec(rec){ await idbPut(rec); }
 function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-  const payload={format:'owscout-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
+  const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
     refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
   const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='owscout-learned-refs.json'; a.click(); }
+  a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }
 async function importRefs(file){ try{ const j=JSON.parse(await file.text());
   if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size — skipped.','warn'); return; }
   for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
@@ -1587,7 +1587,7 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Con
     target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
     const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
       pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
-        localStorage.setItem('owscout_autofetch',pa.checked?'1':'0'); }; }
+        localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; }
     renderPipControls();
     w.document.addEventListener('keydown',handleKey);          // shortcuts work from the control panel too
     const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
@@ -1619,7 +1619,7 @@ document.addEventListener('pointerdown',gestureAutoPop);
 const ENDPOINT='https://upload.owdb.io';
 // Pre-launch test uploads before pixels' first real capture are hidden from the admin roster.
 const CONTRIBUTIONS_SINCE_MS=Date.parse('2026-07-26T20:30:00Z');
-function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
+function identity(){ let t=localStorage.getItem('owdb_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owdb_identity',t);} return t; }
 
 // ---------- live scouting claims — real-time via a Durable Object WebSocket ----
 // Every scout holds one WS to the claim room; claim/release is pushed to everyone
@@ -1627,13 +1627,13 @@ function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[
 // can't be established it falls back to HTTP polling; everything degrades to a
 // no-op if the endpoints aren't deployed, so the page always works.
 let claimWS=null, wsRetry=0;
-function claimHeaders(){ const h={'content-type':'application/json','X-Owscout-Token':identity()};
-  const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) h['X-Owscout-Name']=nm;
-  const s=localStorage.getItem('owscout_session'); if(s) h['X-Owscout-Session']=s; return h; }
+function claimHeaders(){ const h={'content-type':'application/json','X-Owdb-Token':identity()};
+  const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) h['X-Owdb-Name']=nm;
+  const s=localStorage.getItem('owdb_session'); if(s) h['X-Owdb-Session']=s; return h; }
 function claimWsUrl(){ return ENDPOINT.replace(/^http/,'ws')+'/claims/ws'; }
 function connectClaims(){ let ws; try{ ws=new WebSocket(claimWsUrl()); }catch(e){ scheduleReconnect(); return; }
   claimWS=ws;
-  ws.onopen=()=>{ wsRetry=0; wsSend({type:'identify', token:identity(), name:(document.getElementById('pubname').value||'').trim().toLowerCase(), session:localStorage.getItem('owscout_session')||''}); };   // identity in-band, not the URL
+  ws.onopen=()=>{ wsRetry=0; wsSend({type:'identify', token:identity(), name:(document.getElementById('pubname').value||'').trim().toLowerCase(), session:localStorage.getItem('owdb_session')||''}); };   // identity in-band, not the URL
   ws.onmessage=ev=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onClaimMsg(m); };
   ws.onclose=()=>{ if(claimWS===ws) claimWS=null; scheduleReconnect(); };
   ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
@@ -1683,7 +1683,7 @@ function showClaimNote(){ const c=selectedCode(); if(!c) return; const k=codeKey
   if(note && CLAIMS[k] && k!==myClaimKey) note.innerHTML='<span class="warn">'+ico('lock')+' '+esc(CLAIMS[k].by)+' is scouting this now — Skip to another (re-scouting still adds player data if you want it).</span>'; }
 function buildContribution(name, maps){
   // Custom (operator-added) heroes referenced by these maps travel WITH the
-  // contribution so the merge can name a guid it's never seen (owscout does the same).
+  // contribution so the merge can name a guid it's never seen (owdb does the same).
   const used=new Set(); maps.forEach(r=>(r.observations||[]).forEach(o=>(o.heroes||[]).forEach(g=>used.add(g))));
   const heroes={}; used.forEach(g=>{ if(CUSTOM_HEROES[g]) heroes[g]={name:CUSTOM_HEROES[g].name, role:CUSTOM_HEROES[g].role}; });
   return {format:1, contributor:name, tool_version:'browser-0.2', heroes,
@@ -1695,16 +1695,16 @@ async function publish(){ const note=document.getElementById('pubnote'); const m
   if(!maps.length){ note.textContent='nothing captured yet.'; return; }
   const name=(document.getElementById('pubname').value||'').trim().toLowerCase();
   if(!sessionPayload() && !/^[a-z0-9_-]{2,24}$/.test(name)){ note.innerHTML='<span class="warn">name must be 2-24 chars: a-z 0-9 _ -, or log in with Discord</span>'; return; }
-  localStorage.setItem('owscout_name',name); note.textContent='publishing…';
-  const headers={'content-type':'application/json','X-Owscout-Name':name,'X-Owscout-Token':identity()};
-  const sess=localStorage.getItem('owscout_session'); if(sess) headers['X-Owscout-Session']=sess;   // Discord login (optional)
+  localStorage.setItem('owdb_name',name); note.textContent='publishing…';
+  const headers={'content-type':'application/json','X-Owdb-Name':name,'X-Owdb-Token':identity()};
+  const sess=localStorage.getItem('owdb_session'); if(sess) headers['X-Owdb-Session']=sess;   // Discord login (optional)
   try{ const res=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify(buildContribution(name,maps))});
     const j=await res.json().catch(()=>({}));
     if(res.ok){ for(const m of maps){ if(!m.published){ m.published=true; m.published_at=Date.now(); await idbPut(m); } }
       await renderCaptured();   // uploaded maps collapse into the "uploaded" section (kept for re-send)
       // First publish: celebration with a direct link to the board.
-      const prevPub=localStorage.getItem('owscout_first_publish');
-      if(!prevPub){ localStorage.setItem('owscout_first_publish', Date.now());
+      const prevPub=localStorage.getItem('owdb_first_publish');
+      if(!prevPub){ localStorage.setItem('owdb_first_publish', Date.now());
         document.getElementById('pubnote').innerHTML=`<span class="ok">🎉 <b>First publish live!</b> Published as ${esc(name)} with ${j.maps} map${j.maps===1?'':'s'} — <a href="../#overview" style="color:var(--accent);font-weight:700">see your scout profile on the leaderboard →</a> · Site rebuilds in ~2 min.</span>`;
         toast(`🎉 <b>First capture published!</b> Your scout profile is now on the leaderboard — check the site in ~2 min.`,'ok',10000);
       } else {
@@ -1749,7 +1749,7 @@ async function renderWelcome(){
   try{
     const rows=await idbAll();
     const pub=rows.filter(r=>r.published).length, pending=rows.length-pub;
-    const name=(localStorage.getItem('owscout_name')||'').trim();
+    const name=(localStorage.getItem('owdb_name')||'').trim();
     if(!name && !pub){ w.style.display='none'; return; }
     let html=`Welcome back, <b>${esc(name||'scout')}</b>`;
     const bits=[];
@@ -1764,7 +1764,7 @@ async function renderWelcome(){
 // ---------- Discord login (optional; ties publishes to a Discord account) ----------
 // The session token's payload is readable here just for display; the Worker
 // verifies its signature on publish, so this is cosmetic until you're logged in.
-function sessionPayload(){ const t=localStorage.getItem('owscout_session'); if(!t) return null;
+function sessionPayload(){ const t=localStorage.getItem('owdb_session'); if(!t) return null;
   try{ const j=decodeURIComponent(escape(atob(t.split('.')[0].replace(/-/g,'+').replace(/_/g,'/'))));
     const p=JSON.parse(j); return (p.exp && Date.now()<p.exp)?p:null; }catch(e){ return null; } }
 // Mirror the Worker's identity rule so the (locked) name field shows exactly what
@@ -1773,8 +1773,8 @@ function acctName(p){ const x=(''+(p.n||'')).toLowerCase().replace(/[^a-z0-9_-]/
 function renderAcct(){ const a=document.getElementById('acct'); if(!a) return; const p=sessionPayload();
   const pn=document.getElementById('pubname');
   if(p){ a.innerHTML=`<span class="ok">logged in as <b>${(''+p.n).replace(/[<>&]/g,'')}</b></span> · <a href="#" id="logout">log out</a>`;
-    document.getElementById('logout').onclick=e=>{ e.preventDefault(); localStorage.removeItem('owscout_session');
-      if(pn){ pn.disabled=false; pn.value=localStorage.getItem('owscout_name')||''; } renderAcct(); };
+    document.getElementById('logout').onclick=e=>{ e.preventDefault(); localStorage.removeItem('owdb_session');
+      if(pn){ pn.disabled=false; pn.value=localStorage.getItem('owdb_name')||''; } renderAcct(); };
     // Discord account is the authoritative scout name: lock the field to it.
     if(pn){ pn.value=acctName(p); pn.disabled=true; pn.title='your scouts publish under your Discord account'; }
     renderAdmin(p);
@@ -1788,11 +1788,11 @@ async function renderAdmin(p){
   card.style.display='';
   const note=document.getElementById('adminnote'), live=document.getElementById('adminlive'), list=document.getElementById('adminlist');
   note.textContent='loading…'; live.innerHTML=''; list.innerHTML='';
-  const sess=localStorage.getItem('owscout_session')||'';
+  const sess=localStorage.getItem('owdb_session')||'';
   try{
     const [cr, lr]=await Promise.all([
-      fetch(ENDPOINT+'/admin/contributors',{headers:{'X-Owscout-Session':sess}}),
-      fetch(ENDPOINT+'/admin/claims',{headers:{'X-Owscout-Session':sess}})
+      fetch(ENDPOINT+'/admin/contributors',{headers:{'X-Owdb-Session':sess}}),
+      fetch(ENDPOINT+'/admin/claims',{headers:{'X-Owdb-Session':sess}})
     ]);
     const cj=await cr.json().catch(()=>({}));
     const lj=await lr.json().catch(()=>({}));
@@ -1845,9 +1845,9 @@ async function renderAdmin(p){
 async function loadContributorDetail(key, name){
   const detail=document.getElementById('contribdetail'); if(!detail) return;
   detail.innerHTML='<span class="faint">loading '+esc(name)+'…</span>';
-  const sess=localStorage.getItem('owscout_session')||'';
+  const sess=localStorage.getItem('owdb_session')||'';
   try{
-    const res=await fetch(ENDPOINT+'/admin/contributor?key='+encodeURIComponent(key),{headers:{'X-Owscout-Session':sess}});
+    const res=await fetch(ENDPOINT+'/admin/contributor?key='+encodeURIComponent(key),{headers:{'X-Owdb-Session':sess}});
     const j=await res.json().catch(()=>({}));
     if(!res.ok){ detail.innerHTML='<span class="warn">'+(j.error||('HTTP '+res.status))+'</span>'; return; }
     const maps=j.maps||[];
@@ -1859,17 +1859,17 @@ async function loadContributorDetail(key, name){
 }
 
 // ---------- wire ----------
-document.getElementById('pubname').value=localStorage.getItem('owscout_name')||'';
+document.getElementById('pubname').value=localStorage.getItem('owdb_name')||'';
 // Capture the signed session (or error flag) the login callback appends to the URL.
 (()=>{ const h=new URLSearchParams(location.hash.slice(1));
-  if(h.get('session')) localStorage.setItem('owscout_session', h.get('session'));
+  if(h.get('session')) localStorage.setItem('owdb_session', h.get('session'));
   if(h.get('session')||h.get('login_error')) history.replaceState(null,'',location.pathname+location.search);
   if(h.get('login_error')==='notconfigured'){ const a=document.getElementById('acct'); if(a) a.innerHTML='<span class="warn">Discord login isn\'t set up yet.</span>'; setTimeout(renderAcct,4000); }
   else renderAcct(); })();
-document.getElementById('autofetch').checked=localStorage.getItem('owscout_autofetch')!=='0';   // default ON
-  (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owscout_howto_closed')==='0';
-  ht.addEventListener('toggle',()=>localStorage.setItem('owscout_howto_closed', ht.open?'0':'1')); })();
-document.getElementById('autofetch').onchange=e=>{ localStorage.setItem('owscout_autofetch',e.target.checked?'1':'0');
+document.getElementById('autofetch').checked=localStorage.getItem('owdb_autofetch')!=='0';   // default ON
+  (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owdb_howto_closed')==='0';
+  ht.addEventListener('toggle',()=>localStorage.setItem('owdb_howto_closed', ht.open?'0':'1')); })();
+document.getElementById('autofetch').onchange=e=>{ localStorage.setItem('owdb_autofetch',e.target.checked?'1':'0');
   if(pipWin&&!pipWin.closed){ const pa=pipWin.document.getElementById('pautofetch'); if(pa) pa.checked=e.target.checked; } };
 // Keyboard shortcuts — active only when THIS page (or the control panel) has
 // focus; a browser can't see keys while Overwatch is focused. Ignore keys while
@@ -1901,7 +1901,7 @@ document.getElementById('fsL').onclick=()=>pickBox('a');
 document.getElementById('fsR').onclick=()=>pickBox('b');
 document.getElementById('fsAuto').onclick=autoCalibrate;
 document.getElementById('fsExit').onclick=()=>{ if(document.exitFullscreen) document.exitFullscreen(); };
-document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owscout_cap_boxes');drawOverlay();updateBtns();};
+document.getElementById('clearcal').onclick=()=>{boxes={};localStorage.removeItem('owdb_cap_boxes');drawOverlay();updateBtns();};
 document.getElementById('finish').onclick=finishMap;
 document.getElementById('fixreads').onclick=fixReads;
 document.getElementById('exprefs').onclick=exportRefs;

@@ -323,7 +323,7 @@ function mapPipClass(g){
   if(g.winner_faction==='faction2') return 'f2win';
   return '';
 }
-// Roll up per-game "scouted" (owscout has a captured comp for this game) into
+// Roll up per-game "scouted" (owdb has a captured comp for this game) into
 // one N/total for the compact card, in place of a tag per map.
 function scoutedCount(m, capturedIds){
   const played=(m.games||[]).filter(g=>g.map);
@@ -364,8 +364,8 @@ function matchLiveTodo(m, captured, wipe){
 // Teams in a view with no captured comps at all — the Overview capture-funnel
 // callout. A team counts as "scouted" once it has any captured game
 // (`scout.games`), so a missing/empty entry means zero captures.
-function zeroCaptureTeams(teamNames, owscoutComps){
-  const ocs=owscoutComps||{};
+function zeroCaptureTeams(teamNames, owdbComps){
+  const ocs=owdbComps||{};
   return teamNames.filter(n=>!(((ocs[n]||{}).scout)||{}).games);
 }
 // Teams that can actually be captured FOR: have at least one game with a live
@@ -436,7 +436,7 @@ function mapCoverage(matches, captured, wipe){
 
 // ---- team compare (Phase 5) -----------------------------------------------
 // Two-team radar. The compare view hands this pre-computed per-team sources
-// (aggregate()'s output + the owscout_comps.scout object), and the pure layer
+// (aggregate()'s output + the owdb_comps.scout object), and the pure layer
 // only normalizes: caps raw values to 0..100, applies per-axis sample floors
 // (below a floor the number is honest to show dimmed, never confident), and
 // drops an axis neither team has any sample for. Fixed caps keep two weak teams

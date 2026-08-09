@@ -24,13 +24,13 @@ tabs, FACEIT-match-room style.
   `winner_team`, `attacking_first_faction`, `side_picked_by_faction`,
   `demo_code`, `was_restarted`. Bans (`bansOrdered`, `:952`), rosters
   (`rosterHTML`, `:940`), and opening comps (`compRow`/`segOrder`, `:818`/
-  `:961`, fed by `DATA.owscout_pergame[matchId:gameNo]`) are all already
+  `:961`, fed by `DATA.owdb_pergame[matchId:gameNo]`) are all already
   computed — this is a re-layout, not a new data need.
 - **Roster stats are thinner than the DB model**: `export.py:404-414` emits
   only `nick`, `role`, `cap` (stats_captured), `e` (eliminations), `d`
   (deaths), `dmg`, `heal` per player-per-game — no assists, no damage
   mitigated, no hero (FACEIT's `round_players` has no hero field; hero comes
-  from the separate owscout capture feed above). `rosterHTML` (`:940-950`)
+  from the separate owdb capture feed above). `rosterHTML` (`:940-950`)
   today only *renders* `e`/`dmg`/`heal` in a squeezed one-liner — `d`
   (deaths) is already in the payload but currently unused. The detail page's
   per-map player table uses exactly these five fields (role, E, D, dmg,

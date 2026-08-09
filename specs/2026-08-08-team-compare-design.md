@@ -8,7 +8,7 @@
 A two-team, side-by-side comparison on the dashboard: a radar-style chart across
 mixed FACEIT + capture-derived dimensions, plus per-team map-pick/ban views and
 a perspective toggle. Because we hold captured comps, this compare is deeper than
-owscouter's (which is FACEIT stats only): comp diversity, hero-pool breadth and
+owdber's (which is FACEIT stats only): comp diversity, hero-pool breadth and
 adaptability join map win rate, bans and efficiency on the same radar.
 
 ## Background: what's already there
@@ -18,7 +18,7 @@ adaptability join map win rate, bans and efficiency on the same radar.
   (`{map:{games,wins,picks,gk}}`), `bans`, `mapsPicked`, `firstBans`,
   `firstBanGames`, `results` and more — keyed on team name, reading the
   active division's matches. Compare needs nothing new from FACEIT data.
-- **Capture analytics are already per team.** `DATA.owscout_comps[team].scout`
+- **Capture analytics are already per team.** `DATA.owdb_comps[team].scout`
   carries `overall` (comp families), `adapt` (`swaps_per_map`, `families`),
   `hero_pool` (`[{hero,role,rounds,pick_rate}]`), `games` (maps captured),
   `rounds`, `swaps` and `ban_response`.
@@ -73,7 +73,7 @@ Hoisted above `bootApp` (the `test_dashboard_logic.py` `_pure_js()` seam):
 - `compareAxes(aggA, aggB, scoutA, scoutB)` → array of axis rows
   `{id, label, a:{raw,val,n,ok}, b:{raw,val,n,ok}}`. Pure data math: takes the
   already-computed aggregates (FACEIT numbers from `aggregate()`, capture
-  numbers from `owscout_comps`), applies caps/floors, drops all-missing axes.
+  numbers from `owdb_comps`), applies caps/floors, drops all-missing axes.
 - `radarPoints(axisVals, cx, cy, r)` → `[{x,y}]` polygon vertices for one team,
   starting at 12 o'clock, clockwise. Pure trig; the caller supplies `vals`
   (array of 0..100 numbers, or null to skip a vertex) and a target center/radius.
@@ -142,7 +142,7 @@ Head to head   (matches where both appear, score + #match= link)
   `app.js:151-164`), so each side reads "what they value MORE than the field".
 - **Comps** (rendered only if either team has captures): per-team top families
   (`compRow`), hero-pool chips by role, `swaps_per_map` + `families` summary
-  line — reusing `DATA.owscout_comps[team].scout`.
+  line — reusing `DATA.owdb_comps[team].scout`.
 - **Players**: per-team top contributors by `eff` (falling back to elo), via
   `rankPlayers`/`efficiencyRatings`.
 - **Head to head**: matches in `D().matches` where `f1`/`f2` are A and B, each

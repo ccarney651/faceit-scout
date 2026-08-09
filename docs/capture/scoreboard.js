@@ -1,5 +1,5 @@
 // docs/capture/scoreboard.js
-// Parser for the scrim spectator scoreboard rendered by scrim_owscout.opy
+// Parser for the scrim spectator scoreboard rendered by scrim_owdb.opy
 // (and by Scrimtime / DKEEH, whose layout this preserves). Pure text: it takes
 // OCR'd lines from the scoreboard ROI (top-to-bottom, as tesseract returns
 // them) and returns structured per-row stats.

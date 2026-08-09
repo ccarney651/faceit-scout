@@ -130,8 +130,8 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert not external, f"unexpected external URLs in the dashboard: {external}"
 
     # Embedded data parses back to JSON and reflects the ingest. The default build
-    # inlines it as `var __OWSCOUT_DATA__={...};` (single line, so no DOTALL).
-    m = re.search(r"var __OWSCOUT_DATA__=(\{.*\});", doc)
+    # inlines it as `var __OWDB_DATA__={...};` (single line, so no DOTALL).
+    m = re.search(r"var __OWDB_DATA__=(\{.*\});", doc)
     assert m is not None
     data = json.loads(m.group(1).replace("<\\/", "</"))
     assert len(data["divisions"]) == 1
@@ -153,7 +153,7 @@ def test_external_data_build_is_a_shell_plus_datajson(db: Database, tmp_path) ->
     doc = buf.getvalue()
     assert count == 1
     # Shell: NO inline blob, but the fetch bootstrap is present.
-    assert "var __OWSCOUT_DATA__=" not in doc
+    assert "var __OWDB_DATA__=" not in doc
     assert "fetch('data.json'" in doc
     # data.json is written and parses back to the same payload shape.
     assert dp.is_file()
@@ -195,7 +195,7 @@ def test_playoff_bracket_attaches_finished_and_scheduled(db: Database) -> None:
 
     buf = io.StringIO()
     export_html(db, buf, only_region="emea")
-    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+    data = json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
                       .group(1).replace("<\\/", "</"))
     # The playoff championship is NOT its own view — only the regular division.
     assert not any("Playoffs" in v["label"] for v in data["views"])
@@ -232,7 +232,7 @@ def test_playoff_bracket_carries_full_match_data(db: Database) -> None:
 
     buf = io.StringIO()
     export_html(db, buf, only_region="emea")
-    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+    data = json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
                       .group(1).replace("<\\/", "</"))
     div = next(d for d in data["divisions"].values()
                if "Master" in d["summary"]["championship"] and "Playoffs" not in d["summary"]["championship"])
@@ -292,7 +292,7 @@ def test_region_matches_whole_words_only() -> None:
     """A bare '"NA" in name' substring test classifies any championship merely
     CONTAINING those letters as NA — which, now that NA actually ships, would
     file a division under the wrong region's switcher. Mirrors the equivalent
-    guard in owscout.db.list_codes."""
+    guard in owdb.db.list_codes."""
     from faceit_sync.export import _region_of
 
     assert _region_of("S9 Open Nationals - Regular Season") is None
@@ -330,7 +330,7 @@ def test_both_regions_export_as_grouped_views(db: Database) -> None:
 
     buf = io.StringIO()
     export_html(db, buf)
-    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+    data = json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
                       .group(1).replace("<\\/", "</"))
     labels = [v["label"] for v in data["views"]]
     # EMEA before NA; tiers strongest-first; Combined only where >1 tier exists.
@@ -358,7 +358,7 @@ def test_region_filter_still_narrows_the_export(db: Database) -> None:
 
     buf = io.StringIO()
     export_html(db, buf, only_region="na")
-    data = json.loads(re.search(r"var __OWSCOUT_DATA__=(\{.*\});", buf.getvalue())
+    data = json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
                       .group(1).replace("<\\/", "</"))
     assert [v["label"] for v in data["views"]] == ["NA Master"]
 
@@ -381,8 +381,8 @@ def test_dashboard_javascript_is_syntactically_valid(tmp_path):
 
     html = HTML_TEMPLATE.replace("__TITLE__", "t").replace(
         "// __DATA_INLINE__",
-        'var __OWSCOUT_DATA__={"divisions":{},"views":[],"heroes":[],"roster":{},'
-        '"maps":[],"owscout_comps":{},"hero_icons":{}};')
+        'var __OWDB_DATA__={"divisions":{},"views":[],"heroes":[],"roster":{},'
+        '"maps":[],"owdb_comps":{},"hero_icons":{}};')
     js = re.search(r"<script>(.*)</script>", html, re.S)
     assert js, "no <script> block found in the dashboard template"
     script = tmp_path / "dash.js"

@@ -18,9 +18,9 @@ import pytest
 np = pytest.importorskip("numpy")
 cv2 = pytest.importorskip("cv2")
 
-from owscout.db import Database
-from owscout.models import Rect, RoiProfile
-from owscout.refs import BUNDLE_FORMAT, import_ref_bundle, phash_image
+from owdb.db import Database
+from owdb.models import Rect, RoiProfile
+from owdb.refs import BUNDLE_FORMAT, import_ref_bundle, phash_image
 
 
 def _profile(res_w: int, res_h: int) -> RoiProfile:

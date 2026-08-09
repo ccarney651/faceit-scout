@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-set "OW=.venv\Scripts\owscout.exe"
+set "OW=.venv\Scripts\owdb.exe"
 if not exist "%OW%" (
   echo ERROR: %OW% not found. Install with:  .venv\Scripts\pip install -e .[capture]
   pause & exit /b 1
@@ -16,8 +16,8 @@ echo   Tip: for a solo replay where one hero sits in one spot, run this with
 echo        --calibrate-slot to box that single portrait once and learn from
 echo        only that box (e.g.  Learn heroes.cmd --calibrate-slot).
 echo.
-"%OW%" --db owscout.sqlite3 --faceit-db faceit.sqlite3 refs learn %*
+"%OW%" --db owdb.sqlite3 --faceit-db faceit.sqlite3 refs learn %*
 echo.
 echo Verifying library...
-"%OW%" --db owscout.sqlite3 --faceit-db faceit.sqlite3 refs verify
+"%OW%" --db owdb.sqlite3 --faceit-db faceit.sqlite3 refs verify
 pause

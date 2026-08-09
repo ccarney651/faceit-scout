@@ -185,7 +185,7 @@ def _attack_first_panels(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """(total, extra) attacking-first panels using the DECIDING attack/defend cycle.
     Normal games (max score <= 3) use FACEIT's round-1 attacker; extra-round games
-    (score > 3) use owscout's round-3 attacker from ``attack_cycles`` and are
+    (score > 3) use owdb's round-3 attacker from ``attack_cycles`` and are
     dropped when not captured. Each panel: {by_map:[{name,category,games,
     atk_first_wins}], total_games, atk_first_wins}."""
     from collections import defaultdict
@@ -384,7 +384,7 @@ def _dashboard_data(db: Database, cid: str,
 
     # Attack-first advantage (asymmetric modes). Uses the DECIDING attack/defend
     # cycle: round 1 for normal games (FACEIT), round 3 for games that went to
-    # extra rounds (owscout capture, keyed match:game). Uncaptured extra-round
+    # extra rounds (owdb capture, keyed match:game). Uncaptured extra-round
     # games can't be decided and drop out. Two panels: total and extra-round only.
     ph = ",".join("?" for _ in ASYMMETRIC_CATEGORIES)
     atk_rows = rows(f"""
@@ -512,7 +512,7 @@ REGIONS: tuple[str, ...] = ("EMEA", "NA")
 def _region_of(name: str | None) -> str | None:
     """The region a championship name encodes ('EMEA' | 'NA' | None).
 
-    Matched as a WHOLE WORD, mirroring ``owscout.db.list_codes``: a bare
+    Matched as a WHOLE WORD, mirroring ``owdb.db.list_codes``: a bare
     substring test would classify any name merely containing those letters
     ("Open Nationals") as NA. Harmless while the site shipped one region and
     EMEA was tested first; load-bearing now that a mis-classified division
@@ -569,30 +569,30 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
     playoff_cids = [cid for cid in cids if _is_playoff(name_by_cid.get(cid))]
     cids = [cid for cid in cids if cid not in set(playoff_cids)]
 
-    # Captured comps synced in from owscout (if present). Loaded once, up front, so
+    # Captured comps synced in from owdb (if present). Loaded once, up front, so
     # the per-game deciding-cycle data (attack_cycles) can feed each division's
-    # attacking-first panel. Team-keyed JSON from `owscout ... contribute merge`.
-    owscout_comps: dict[str, object] = {}
-    owscout_captured: list[str] = []
-    owscout_wipe: object = None
-    owscout_cycles: dict[str, object] = {}
-    owscout_pergame: dict[str, object] = {}
-    owscout_pergame_players: dict[str, object] = {}
-    owscout_contributors: list[object] = []
-    oc_path = os.environ.get("OWSCOUT_COMPS", "owscout_comps.json")
+    # attacking-first panel. Team-keyed JSON from `owdb ... contribute merge`.
+    owdb_comps: dict[str, object] = {}
+    owdb_captured: list[str] = []
+    owdb_wipe: object = None
+    owdb_cycles: dict[str, object] = {}
+    owdb_pergame: dict[str, object] = {}
+    owdb_pergame_players: dict[str, object] = {}
+    owdb_contributors: list[object] = []
+    oc_path = os.environ.get("OWDB_COMPS", "owdb_comps.json")
     if os.path.exists(oc_path):
         try:
             with open(oc_path, encoding="utf-8") as fh:
                 oc = json.load(fh)
-            owscout_comps = oc.get("teams", {})
-            owscout_captured = list(oc.get("captured_games", []))
-            owscout_wipe = oc.get("code_wipe_date")
-            owscout_cycles = oc.get("attack_cycles", {})
-            owscout_pergame = oc.get("per_game_comps", {})
-            owscout_pergame_players = oc.get("per_game_players", {})
-            owscout_contributors = oc.get("contributor_stats", [])
+            owdb_comps = oc.get("teams", {})
+            owdb_captured = list(oc.get("captured_games", []))
+            owdb_wipe = oc.get("code_wipe_date")
+            owdb_cycles = oc.get("attack_cycles", {})
+            owdb_pergame = oc.get("per_game_comps", {})
+            owdb_pergame_players = oc.get("per_game_players", {})
+            owdb_contributors = oc.get("contributor_stats", [])
         except (json.JSONDecodeError, OSError):
-            owscout_comps = {}
+            owdb_comps = {}
 
     divisions: dict[str, Any] = {}
     heroes: dict[str, Any] = {}
@@ -600,7 +600,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
     team_avatars: dict[str, str | None] = {}
     ordered: list[tuple[str, str]] = []
     for cid in cids:
-        d = _dashboard_data(db, cid, attack_cycles=owscout_cycles)
+        d = _dashboard_data(db, cid, attack_cycles=owdb_cycles)
         if not d["summary"]["matches"]:
             continue
         for h in d.pop("heroes"):
@@ -633,7 +633,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
             reg_cid = rt_reg.get((preg, ptier)) if preg and ptier else None
             if not reg_cid:
                 continue
-            pd = _dashboard_data(db, pcid, attack_cycles=owscout_cycles)
+            pd = _dashboard_data(db, pcid, attack_cycles=owdb_cycles)
             # A bracket entry per playoff match — finished (with a result) and
             # scheduled (upcoming slot). TBD slots (teams not yet resolved) carry
             # NULL team names. The Playoffs tab lays these out by round.
@@ -702,18 +702,18 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         "heroes": [dict(h, subrole=seat_of(str(h.get("name") or ""))) for h in heroes.values()],
         "roster": roster,
         "maps": list(maps.values()),
-        "owscout_comps": owscout_comps,
-        "owscout_captured": owscout_captured,
-        "owscout_pergame": owscout_pergame,
-        "owscout_pergame_players": owscout_pergame_players,
-        "owscout_contributors": owscout_contributors,
+        "owdb_comps": owdb_comps,
+        "owdb_captured": owdb_captured,
+        "owdb_pergame": owdb_pergame,
+        "owdb_pergame_players": owdb_pergame_players,
+        "owdb_contributors": owdb_contributors,
         "team_avatars": inlined_team_avatars,
-        "code_wipe": owscout_wipe,
+        "code_wipe": owdb_wipe,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.
         # Where the page asks for an on-demand rebuild (the upload worker).
         "refresh_endpoint": os.environ.get(
-            "OWSCOUT_REFRESH_ENDPOINT",
+            "OWDB_REFRESH_ENDPOINT",
             "https://upload.owdb.io/refresh"),
         "seat_order": list(SEAT_ORDER),
         "built_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -737,7 +737,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
     else:
         # Single-file build (default): data inlined, so index.html works offline
         # and from file:// with nothing else to serve.
-        inline = f"var __OWSCOUT_DATA__={payload};"
+        inline = f"var __OWDB_DATA__={payload};"
     out.write(HTML_TEMPLATE.replace("__TITLE__", html.escape(title))
                            .replace("// __DATA_INLINE__", inline))
     return len(divisions)

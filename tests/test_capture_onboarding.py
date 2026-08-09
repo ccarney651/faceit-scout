@@ -84,7 +84,7 @@ check('boxes NOT committed by autoCalibrate', global.boxes.a===undefined);
 
 commitCal();
 check('boxes committed after confirm', !!global.boxes.a && !!global.boxes.b);
-check('boxes persisted', (global.localStorage.getItem('owscout_cap_boxes')||'').indexOf('x')>=0);
+check('boxes persisted', (global.localStorage.getItem('owdb_cap_boxes')||'').indexOf('x')>=0);
 check('panel hidden after commit', el('calpreview').style.display==='none');
 check('pendingCal cleared after commit', global.pendingCal===null);
 check('self-test runs after commit', global._selftest===1);
@@ -122,7 +122,7 @@ def test_auto_calibrate_previews_before_committing() -> None:
 # Guided first-capture tour
 # ---------------------------------------------------------------------------
 
-_TOUR_BLOCK = _extract("const TOUR_KEY='owscout_tour_done';", "// ---------- matcher ----------")
+_TOUR_BLOCK = _extract("const TOUR_KEY='owdb_tour_done';", "// ---------- matcher ----------")
 
 _TOUR_STUBS = _FAKE_DOM + r"""
 global.HAS_CAPTURE=true;
@@ -154,19 +154,19 @@ tourPrev();
 check('Prev clamped at first step', title().indexOf('capture your first replay')>=0);
 
 tourDone();   // the Skip / ✕ buttons both call tourDone
-check('skipping marks the tour done', global.localStorage.getItem('owscout_tour_done')==='1');
+check('skipping marks the tour done', global.localStorage.getItem('owdb_tour_done')==='1');
 check('tour hidden after skip', el('tour').style.display==='none');
 
 // A returning scout who already published (has a name) is never toured.
-global.localStorage.removeItem('owscout_tour_done');
-global.localStorage.setItem('owscout_name','ccarn');
+global.localStorage.removeItem('owdb_tour_done');
+global.localStorage.setItem('owdb_name','ccarn');
 maybeShowTour();
 check('returning scout never toured', el('tour').style.display==='none');
-global.localStorage.removeItem('owscout_name');
+global.localStorage.removeItem('owdb_name');
 
 // Calibrated-but-not-published: after clicking Start the ticker walks past the
 // completed Share step on its own (one advance per tick — grace notwithstanding).
-global.localStorage.removeItem('owscout_tour_done');
+global.localStorage.removeItem('owdb_tour_done');
 global.boxes={a:{},b:{}}; global.vid.srcObject={};
 tourOpen();
 tourNext();          // click Start on Welcome

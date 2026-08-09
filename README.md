@@ -1,4 +1,4 @@
-# OW Scout
+# OWDB
 
 OW2 composition scouting: a capture tool and a website, two lenses on
 one product (the FACEIT League lens today; a private scrim lens later).
@@ -7,7 +7,7 @@ Two packages feed the dashboard:
 - **`faceit_sync`** — incremental, idempotent ingest of **FACEIT League
   (Overwatch 2)** championship data into a local **SQLite** database, exported as
   a self-contained HTML dashboard.
-- **`owscout`** — reads hero compositions off the observer HUD of in-client
+- **`owdb`** — reads hero compositions off the observer HUD of in-client
   replays and turns them into per-team composition scouting on the same page.
 
 **→ [FEATURES.md](FEATURES.md) documents every feature in both packages and how

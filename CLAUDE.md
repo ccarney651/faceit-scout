@@ -4,18 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**OW Scout** — Overwatch 2 composition scouting for the FACEIT League. Two Python
+**OWDB** — Overwatch 2 composition scouting for the FACEIT League. Two Python
 packages feed **one website** (`docs/index.html`):
 
 - **`faceit_sync`** — incremental, idempotent ingest of FACEIT League match data
   into a local **SQLite** DB, exported as a self-contained HTML dashboard.
-- **`owscout`** — reads hero comps off the observer HUD of in-client replays
+- **`owdb`** — reads hero comps off the observer HUD of in-client replays
   (screen capture + template matching) and turns them into per-team composition
   scouting shown on the same page. Capture happens through the browser app at
   `docs/capture/` (zero-install, `getDisplayMedia` + tesseract.js) — **the only
   supported capture path.** A native Windows GUI once existed here
-  (`owscout/gui.py`, `owscout_app.py`) but was removed in 2026-08-08 as dead
-  code; its tested first-run helpers survive in `owscout/firstrun.py`.
+  (`owdb/gui.py`, `owdb_app.py`) but was removed in 2026-08-08 as dead
+  code; its tested first-run helpers survive in `owdb/firstrun.py`.
 
 `README.md` (faceit_sync ingest + data-quality hazards) and `FEATURES.md`
 (every feature in both packages) are the authoritative long-form docs — read them
@@ -26,14 +26,14 @@ before deep work on ingest or capture.
 Dev environment is **Windows**; use the venv Python directly:
 
 ```bash
-.venv/Scripts/python.exe -m pytest                 # full suite (tests/ + owscout/tests/)
+.venv/Scripts/python.exe -m pytest                 # full suite (tests/ + owdb/tests/)
 .venv/Scripts/python.exe -m pytest tests/test_export.py::test_name   # one test
 .venv/Scripts/python.exe -m pytest -k scheduled    # by keyword
 .venv/Scripts/python.exe -m mypy faceit_sync       # strict; must stay clean
-pip install -e ".[dev]"                            # install (add [capture] for owscout CV deps)
+pip install -e ".[dev]"                            # install (add [capture] for owdb CV deps)
 ```
 
-`faceit-sync` / `owscout` are the console entry points (see `[project.scripts]`).
+`faceit-sync` / `owdb` are the console entry points (see `[project.scripts]`).
 Common flows:
 
 ```bash
@@ -41,7 +41,7 @@ faceit-sync fetch --matches-file matches.txt        # seed + keyless transitive 
 faceit-sync fetch --championship <id>               # enumerate (needs FACEIT_API_KEY)
 faceit-sync export --format html --out docs/index.html   # build the site (all regions)
 faceit-sync export --format html --out docs/index.html --region na      # narrow to one region
-owscout ... contribute merge --dir data/captures --out owscout_comps.json  # merge captures
+owdb ... contribute merge --dir data/captures --out owdb_comps.json  # merge captures
 ```
 
 ### Verifying the dashboard
@@ -63,7 +63,7 @@ FACEIT API ──fetch──► faceit.sqlite3 ──export──► docs/index.
                             │                          ▲
                        (read-only ATTACH)              │ (captures merged at build)
                             ▼                          │
-OW replay ──capture──► owscout.sqlite3 ──publish──► data/captures/<you>.json
+OW replay ──capture──► owdb.sqlite3 ──publish──► data/captures/<you>.json
                             ▲
                (browser IndexedDB "owscout-capture")
                docs/capture/ ──scrim──► private scrims (this browser only)
@@ -79,12 +79,12 @@ OW replay ──capture──► owscout.sqlite3 ──publish──► data/cap
    from *your* DB. Never hand-edit `docs/index.html` — regenerate via `export`.
 2. **Two independent copies of `faceit.sqlite3`** — yours and the one CI keeps in
    its Actions cache. Both rebuild from the same API; nothing reconciles them.
-3. **`data/captures/<contributor>.json` is committed; `owscout_comps.json` is
+3. **`data/captures/<contributor>.json` is committed; `owdb_comps.json` is
    generated at build and NOT committed** — the report is always recomputed from
    raw observations so analysis improvements apply retroactively. The CI merge
    does first-wins on contested maps by commit date.
-4. **`owscout` never writes the faceit DB** — it `ATTACH`es it read-only
-   (`mode=ro` URI, see `owscout/db.py::attach_faceit`) for cross-DB context.
+4. **`owdb` never writes the faceit DB** — it `ATTACH`es it read-only
+   (`mode=ro` URI, see `owdb/db.py::attach_faceit`) for cross-DB context.
 5. **Private scrims live only in the browser.** The capture app's scrim mode
    (`docs/capture/scrim.html`, IndexedDB `owscout-capture` v4, stores `scrims` +
    `scrim_maps`) is a local-first side-channel: never published to the worker,
@@ -125,7 +125,7 @@ parts under `faceit_sync/dashboard/` — `head.html` (page shell + CSS + the
 helpers), `app.js` (the `bootApp(DATA)` body), `boot.js` (data delivery) — via
 plain concatenation at import, no framework or build step. Vanilla JS builds the
 DOM (`el()`/`esc()`, hash routing per tab). The app boots via `bootApp(DATA)` —
-DATA is inlined as `var __OWSCOUT_DATA__=…` by default, or fetched from a
+DATA is inlined as `var __OWDB_DATA__=…` by default, or fetched from a
 sibling `data.json` with `export --external-data` (the seam for future
 access-gating). Pure logic that must be unit-testable goes in `pure.js` above
 `bootApp` (the `tests/test_dashboard_logic.py` harness executes that region in
@@ -133,20 +133,20 @@ node). Hero portraits come from the committed `faceit_sync/hero_icons.json`
 cache (a build without it silently renders text chips; regenerate with
 `python -m faceit_sync.hero_icons <asset-dir>`).
 
-**`owscout`** keeps IO/CV thin and the logic in typed, tested modules (the
+**`owdb`** keeps IO/CV thin and the logic in typed, tested modules (the
 capture/CV stack is excluded from mypy for that reason; everything it wraps is
-tested elsewhere). Its CLI (`owscout/cli.py`) has many
+tested elsewhere). Its CLI (`owdb/cli.py`) has many
 subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
 `review`, `drafts`, `doctor`, …). SPEC.md is its design reference.
 
 ## Gotchas
 
 - **Replay codes are invalidated by every OW patch ("code wipe").** The wipe date
-  is duplicated in **two** places that must stay in sync: `owscout/db.py`
-  `_SEED_WIPES` (drives `LATEST_KNOWN_WIPE` → `owscout_comps.json` → the site) and
+  is duplicated in **two** places that must stay in sync: `owdb/db.py`
+  `_SEED_WIPES` (drives `LATEST_KNOWN_WIPE` → `owdb_comps.json` → the site) and
   `tools/build_capture_data.py` `CODE_WIPE_DATE` (drives the capture tool). Update
   both when a patch lands, plus the pinned wipe-date assertions in
-  `owscout/tests/test_codes.py` / `test_context.py`.
+  `owdb/tests/test_codes.py` / `test_context.py`.
 - **Cloudflare Worker** (`infra/upload-worker/`, `wrangler.toml`) handles capture
   uploads + real-time scouting claims (a Durable Object). `wrangler deploy` is run
   by the human, not from here.
@@ -197,13 +197,13 @@ audiences if the analytics are strong enough.
 
 ### Codebase conventions
 
-- **Branding: "OWDB".** Rebranding in progress from "OW Scout". The domain is
+- **Branding: "OWDB".** Rebranding in progress from "OWDB". The domain is
   **owdb.io** (registered 2026-08-09; the site + capture tool moved to it, with
   the upload worker on `upload.owdb.io`). `owdb.com/.net/.org` are taken/expensive.
 - **Don't overengineer unless necessary for expandability.** The dashboard is
   modularized into concatenated static parts (`faceit_sync/dashboard/`); keep
   new features landing in the right part file rather than growing one string.
-- The dead native GUI (`owscout/gui.py`, `owscout_app.py`, PyInstaller spec
+- The dead native GUI (`owdb/gui.py`, `owdb_app.py`, PyInstaller spec
   files, `Scout app.cmd`) was removed in 2026-08-08 — don't resurrect it.
 - The two scrims implementations were consolidated in 2026-08-08 — the
   standalone `docs/scrims.html` page (reached via the top-bar League/Scrims

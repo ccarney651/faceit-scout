@@ -14,7 +14,7 @@
 
 - **After every edit to a dashboard part file** (`pure.js`/`app.js`/`head.html`), run `.venv/Scripts/python.exe -m pytest tests/test_export.py::test_dashboard_javascript_is_syntactically_valid` — one JS syntax error yields a completely blank live page.
 - **Pure, testable logic goes in `pure.js` above `function bootApp(DATA){`**, same discipline as `codeLookup`/`codesFor`/`mapCoverage`. A function belongs there only if it has **zero** dependency on anything declared inside `bootApp` — no `esc`, `el`, `inc`, `MAP_CAT`, `CODE_WIPE`, `HERO_ROLE`, `D()`, or DOM. The `_pure_js()` harness executes every hoisted line in node, so any such reference throws immediately in the new tests.
-- **`aggregate()` lives in `app.js`, not pure.js.** `compareAxes` must take already-computed `aggA`/`aggB`/`scoutA`/`scoutB` objects as parameters; the `app.js` wrapper builds them from `D().matches` + `DATA.owscout_comps`. Never call the wrapper from the tests — call `compareAxes` with explicit fixtures.
+- **`aggregate()` lives in `app.js`, not pure.js.** `compareAxes` must take already-computed `aggA`/`aggB`/`scoutA`/`scoutB` objects as parameters; the `app.js` wrapper builds them from `D().matches` + `DATA.owdb_comps`. Never call the wrapper from the tests — call `compareAxes` with explicit fixtures.
 - **No new dependencies, no build step.** Reuse `codeLookup`, `codesFor`, `pill`, `winVar`, `table`, `barList`, `compRow`, `teamAvatar`, `esc`, `el`, and the existing CSS variables.
 - **`mypy faceit_sync` / full `pytest`** run once at the end (Task 6), not per-task — these edits live in the JS part files, which mypy doesn't parse.
 - **Division scope is enforced at the routing layer** (same-division only), not in pure math: `compareAxes` doesn't know about divisions.
@@ -108,7 +108,7 @@ Run the JS syntax guard.
   - Maps/Bans/Comps/Players tables via existing helpers; Comps only when either side has captures.
   - Head-to-head list (matches where both `f1`/`f2` are A and B).
   - Perspective toggle re-renders section labels via a small `pers(us,them)` helper.
-- [x] **Step 2: Radar axis inputs.** Build `aggA=aggregate(MATCHES_RECENT, COMPARE_A)` (and B), `scoutA=(DATA.owscout_comps||{})[COMPARE_A]` (and B), call `compareAxes`, then `radarPoints` per team.
+- [x] **Step 2: Radar axis inputs.** Build `aggA=aggregate(MATCHES_RECENT, COMPARE_A)` (and B), `scoutA=(DATA.owdb_comps||{})[COMPARE_A]` (and B), call `compareAxes`, then `radarPoints` per team.
 - [x] **Step 3: head.html CSS.** `.compare-hd`, `.compare-grid` (two columns), `.radar` + axis/value/dim states, reusing `--line`/`--muted`/`--good`/`--bad`/`--accent`.
 
 Run the JS syntax guard.
@@ -144,7 +144,7 @@ Fixture aggregates: `{mapStats:{mapA:{games,wins}}, games, gwins, bans:{}, mapsP
 1. **`compareAxes` gained a 5th/6th parameter** — `effA`/`effB` — in addition to
    the documented `(aggA, aggB, scoutA, scoutB)`. The Team Eff axis needs the
    roster Eff summary (mean + count of qualified players), which lives neither
-   in `aggregate()`'s output nor in `owscout_comps`; the app wrapper computes it
+   in `aggregate()`'s output nor in `owdb_comps`; the app wrapper computes it
    via `compareRoster()` + `teamEffSummary()` (mirroring `renderPlayers`' eff
    pass) and passes `{mean, n}` per side. Pure layer stays pure; only the
    signature grew.

@@ -12,7 +12,7 @@ import gzip
 import os
 import sqlite3
 
-from owscout.contribute import fetch_faceit_snapshot
+from owdb.contribute import fetch_faceit_snapshot
 
 
 def _valid_db_bytes() -> bytes:

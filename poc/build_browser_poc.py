@@ -1,6 +1,6 @@
 """Generate a standalone, self-contained browser-capture POC page.
 
-Viability spike for "can OW Scout run in a browser instead of a signed .exe?".
+Viability spike for "can OWDB run in a browser instead of a signed .exe?".
 It bakes the operator's active HUD ref library (profile 4, 52 blue + 52 red face
 crops) into one HTML file so recognition runs fully client-side — no opencv.js,
 no server, no network. Open the output in a browser, share the Overwatch screen,
@@ -22,7 +22,7 @@ import sqlite3
 
 import cv2
 
-OWSCOUT_DB = "owscout.sqlite3"
+OWDB_DB = "owdb.sqlite3"
 FACEIT_DB = "faceit.sqlite3"
 PROFILE_ID = 4          # the operator's active 2560x1440 HUD library
 REF_W, REF_H = 64, 36   # common match size (refs are ~77x44; keep ~1.75 aspect)
@@ -36,9 +36,9 @@ def hero_names() -> dict[str, str]:
     with sqlite3.connect(FACEIT_DB) as f:
         for guid, name in f.execute("SELECT guid, name FROM heroes"):
             names[guid] = name
-    # custom heroes live in the owscout DB
+    # custom heroes live in the owdb DB
     try:
-        with sqlite3.connect(OWSCOUT_DB) as o:
+        with sqlite3.connect(OWDB_DB) as o:
             for guid, name in o.execute("SELECT guid, name FROM custom_heroes"):
                 names[guid] = name
     except sqlite3.Error:
@@ -49,7 +49,7 @@ def hero_names() -> dict[str, str]:
 def build_refs() -> list[dict[str, str]]:
     names = hero_names()
     refs: list[dict[str, str]] = []
-    with sqlite3.connect(OWSCOUT_DB) as c:
+    with sqlite3.connect(OWDB_DB) as c:
         rows = c.execute(
             "SELECT hero_guid, variant, image_path FROM hero_refs "
             "WHERE profile_id=? AND state='alive'",
@@ -73,7 +73,7 @@ def build_refs() -> list[dict[str, str]]:
 HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OW Scout — browser capture POC</title>
+<title>OWDB — browser capture POC</title>
 <style>
   :root{color-scheme:dark}
   body{margin:0;background:#0d1015;color:#e7ebf2;font:14px/1.5 system-ui,Segoe UI,sans-serif}
@@ -100,7 +100,7 @@ HTML = r"""<!doctype html>
   .warn{color:#e5624a}
 </style></head><body>
 <header>
-  <h1>OW Scout — browser capture viability POC</h1>
+  <h1>OWDB — browser capture viability POC</h1>
   <div class="sub">Proves whether hero recognition can run entirely in a browser (no install, no signed exe). Everything is baked into this one file — the ref library, the matcher — and nothing leaves your machine. Run Overwatch <b>borderless/windowed</b> (exclusive fullscreen can't be captured), share the screen, drag the two boxes over the 5 blue and 5 red portraits once, then Read comp.
   <br><span class="warn" id="ctxwarn"></span></div>
 </header>
@@ -143,7 +143,7 @@ const REFS = REFS_RAW.map(r=>{
 });
 
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
-let boxes=JSON.parse(localStorage.getItem('owscout_poc_boxes')||'{}');   // {a:{x,y,w,h}, b:{...}} in VIDEO px
+let boxes=JSON.parse(localStorage.getItem('owdb_poc_boxes')||'{}');   // {a:{x,y,w,h}, b:{...}} in VIDEO px
 let drawMode=null, dragStart=null, dragCur=null, autoTimer=null;
 // Where reads render — the main page, or a popped-out floating always-on-top
 // window (Document Picture-in-Picture) that sits over Overwatch so no alt-tab.
@@ -170,7 +170,7 @@ ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragStart=evPos(e); dr
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragStart)return; dragCur=evPos(e); drawOverlay(); });
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragStart)return; const p=evPos(e); const s=scale();
   const x=Math.min(dragStart.x,p.x)/s, y=Math.min(dragStart.y,p.y)/s, w=Math.abs(p.x-dragStart.x)/s, h=Math.abs(p.y-dragStart.y)/s;
-  if(w>10&&h>10){ boxes[drawMode]={x,y,w,h}; localStorage.setItem('owscout_poc_boxes',JSON.stringify(boxes)); }
+  if(w>10&&h>10){ boxes[drawMode]={x,y,w,h}; localStorage.setItem('owdb_poc_boxes',JSON.stringify(boxes)); }
   drawMode=null; dragStart=null; dragCur=null; document.getElementById('hint').textContent='Box saved. Set the other, or Read comp.'; drawOverlay(); updateButtons();
 });
 
@@ -233,7 +233,7 @@ document.getElementById('share').onclick=share;
 document.getElementById('setL').onclick=()=>{drawMode='a';document.getElementById('hint').textContent='Drag a box over the 5 BLUE (left) portraits.';};
 document.getElementById('setR').onclick=()=>{drawMode='b';document.getElementById('hint').textContent='Drag a box over the 5 RED (right) portraits.';};
 document.getElementById('read').onclick=read;
-document.getElementById('clear').onclick=()=>{boxes={};localStorage.removeItem('owscout_poc_boxes');drawOverlay();updateButtons();document.getElementById('outA').innerHTML='';document.getElementById('outB').innerHTML='';};
+document.getElementById('clear').onclick=()=>{boxes={};localStorage.removeItem('owdb_poc_boxes');drawOverlay();updateButtons();document.getElementById('outA').innerHTML='';document.getElementById('outB').innerHTML='';};
 document.getElementById('auto').onchange=e=>{ if(e.target.checked){ autoTimer=setInterval(()=>{ if(boxes.a&&boxes.b&&vid.srcObject) read(); },1500);} else clearInterval(autoTimer); };
 
 // Pop out a floating, always-on-top window (Document Picture-in-Picture) that
@@ -263,7 +263,7 @@ updateButtons();
 def main() -> None:
     refs = build_refs()
     if not refs:
-        raise SystemExit("no profile-4 refs found — is owscout.sqlite3 present with a trained library?")
+        raise SystemExit("no profile-4 refs found — is owdb.sqlite3 present with a trained library?")
     html = (HTML
             .replace("__REFS__", json.dumps(refs))
             .replace("__RW__", str(REF_W)).replace("__RH__", str(REF_H))

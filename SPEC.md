@@ -1,4 +1,4 @@
-# owscout — SPEC
+# owdb — SPEC
 
 Overwatch 2 composition extraction from in-client replays, joined to the
 existing `faceit-sync` league database.
@@ -20,7 +20,7 @@ confirmed empirically, not assumed.
 Hero picks exist only inside the game, behind the replay codes that
 `faceit-sync` already stores as `games.demo_code`.
 
-`owscout` extracts compositions from those replays via screen capture and
+`owdb` extracts compositions from those replays via screen capture and
 computer vision, and makes them queryable alongside the league data.
 
 ### Scope
@@ -96,7 +96,7 @@ These come from a read-only audit of the live database. Treat as given.
   `banned_by_faction` rows and some NULL `demo_code`s.
 - **`demo_code` is assigned by list index**: `sync.py:329` reads
   `match_payload["demoURLs"]`, `sync.py:400` assigns `demo_urls[idx]`.
-  See §9 — this is a correctness hazard owscout must check.
+  See §9 — this is a correctness hazard owdb must check.
 
 ---
 
@@ -114,10 +114,10 @@ Therefore:
 - **There is no historical backfill. The archive is zero.** Every one of the
   1,512 stored codes is a dead pointer. The strings remain in
   `faceit.games.demo_code` forever; the replays they addressed do not exist.
-- **owscout is a live-capture tool with a rolling window.** It builds value
+- **owdb is a live-capture tool with a rolling window.** It builds value
   going forward, from the next match played, and only from matches captured
   before the next wipe.
-- **The extracted data is permanent.** `owscout.sqlite3` survives wipes.
+- **The extracted data is permanent.** `owdb.sqlite3` survives wipes.
   The code is a perishable ticket; the comp row is forever. This is the
   whole point of the tool and the reason it is worth building despite the
   above.
@@ -162,10 +162,10 @@ API for this.
 ## 3. Architecture
 
 ```
-  faceit.sqlite3 (existing, read-only to owscout)
+  faceit.sqlite3 (existing, read-only to owdb)
         │  ATTACH
         ▼
-  owscout.sqlite3 (new, owscout writes only)
+  owdb.sqlite3 (new, owdb writes only)
         ▲
         │
   capture → parse → constrain → smooth → review → store
@@ -183,21 +183,21 @@ Rationale, in order of importance:
    hand-editing `db.py`'s DDL and hoping.
 3. The CI job and the `.cmd` launchers write to it on their own schedule.
 
-owscout opens `owscout.sqlite3` and `ATTACH`es `faceit.sqlite3` **read-only**
+owdb opens `owdb.sqlite3` and `ATTACH`es `faceit.sqlite3` **read-only**
 (`file:...?mode=ro` URI). It never writes to the faceit DB. Cross-DB joins
 work normally under ATTACH; cross-DB foreign keys do not, so FACEIT keys are
 stored as plain columns and validated on write (§4).
 
-Set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on the owscout
+Set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on the owdb
 DB. Even though it's local disk and single-writer, WAL costs nothing.
 
 DB path config mirrors faceit-sync's convention: `--faceit-db` flag →
-`$FACEIT_DB` → CWD-relative `faceit.sqlite3`. Own DB: `--db` → `$OWSCOUT_DB`
-→ `owscout.sqlite3`.
+`$FACEIT_DB` → CWD-relative `faceit.sqlite3`. Own DB: `--db` → `$OWDB_DB`
+→ `owdb.sqlite3`.
 
 ---
 
-## 4. Data model (owscout.sqlite3)
+## 4. Data model (owdb.sqlite3)
 
 Foreign keys on. All DDL as `CREATE TABLE IF NOT EXISTS`, matching
 faceit-sync's convention.
@@ -283,12 +283,12 @@ later.
 
 ---
 
-## 5. `owscout calibrate`
+## 5. `owdb calibrate`
 
 Pixel coordinates live in the DB, never in source.
 
 ```
-owscout calibrate [--hud-variant <name>]
+owdb calibrate [--hud-variant <name>]
 ```
 
 1. Grab the current game window at native resolution. Save the full frame.
@@ -308,11 +308,11 @@ Re-calibration is expected after HUD-affecting patches. §9 tells you when.
 
 ---
 
-## 6. `owscout refs`
+## 6. `owdb refs`
 
 ```
-owscout refs capture         # guided
-owscout refs verify
+owdb refs capture         # guided
+owdb refs verify
 ```
 
 **Reference icons must come from the client, at the operator's exact
@@ -334,16 +334,16 @@ portraits will cause silent misclassification — know about it up front).
 
 ---
 
-## 7. `owscout capture`
+## 7. `owdb capture`
 
 ```
-owscout capture --code <demo_code>            # FACEIT; everything else derived
-owscout capture --scrim <scrim_id>
-owscout capture --watch                       # continuous, auto-detects map
-owscout codes list --team <name> [--uncaptured] [--limit 10]
-owscout codes queue --team <name> [--limit 10]   # clipboard queue, see below
-owscout codes mark --code <c> --status captured|skipped|failed
-owscout codes age
+owdb capture --code <demo_code>            # FACEIT; everything else derived
+owdb capture --scrim <scrim_id>
+owdb capture --watch                       # continuous, auto-detects map
+owdb codes list --team <name> [--uncaptured] [--limit 10]
+owdb codes queue --team <name> [--limit 10]   # clipboard queue, see below
+owdb codes mark --code <c> --status captured|skipped|failed
+owdb codes age
 ```
 
 **`--code` is the whole interface for FACEIT capture.** Given a demo_code,
@@ -362,7 +362,7 @@ by definition (§2). Default sort: **most recent first**.
 **The replay client has its own playback speed controls. Use them.**
 
 Load the code, set playback to 4x, alt-tab away. A ten-minute map completes
-in ~2.5 minutes, unattended, while owscout samples continuously. At 1-2 fps
+in ~2.5 minutes, unattended, while owdb samples continuously. At 1-2 fps
 capture against 4x playback that is a sample every 4-8 game-seconds — far
 more than sufficient, because comps are step functions.
 
@@ -389,7 +389,7 @@ is on screen and does not care how it got there.
 Code entry is the repetitive part. It can be removed without touching the
 game process at all.
 
-`owscout codes queue --team X` loads the pending codes and places the first
+`owdb codes queue --team X` loads the pending codes and places the first
 on the **system clipboard**. Operator clicks the replay code field, Ctrl+V,
 Enter. On capture completion the tool advances the queue and places the next
 code on the clipboard automatically.
@@ -416,7 +416,7 @@ of the risk described in §11.
   map, OCR the in-game names in each strip and match against the ten known
   players from `round_players` (§8.2). Assign sides by majority match.
   Prompt only if that fails.
-- **Playback rate is config, not detection.** The operator tells owscout what
+- **Playback rate is config, not detection.** The operator tells owdb what
   speed they set (`--speed 4`, default 1). Do not try to infer it.
 
 ---
@@ -487,7 +487,7 @@ If any slot resolves to a hero in that map's `hero_bans`, the result is
 
 ```
 Slot resolved to banned hero <name> — ROI profile likely stale after patch.
-Run `owscout calibrate`.
+Run `owdb calibrate`.
 ```
 
 Track the rate in `capture_log.banned_hero_hits`. Above a threshold
@@ -505,7 +505,7 @@ emits demo URLs only for replays that actually occurred, **every code after
 a shell in that match is off by one** — and nothing inside faceit-sync can
 detect it.
 
-owscout can. It sees the map.
+owdb can. It sees the map.
 
 On capture: OCR the map name from the replay. Compare against
 `games.map_name` for that `demo_code`. On mismatch:
@@ -513,13 +513,13 @@ On capture: OCR the map name from the replay. Compare against
 - **Refuse to write comp observations for that instance.**
 - Log loudly, naming both maps and the match_id.
 
-Then: `owscout verify-codes --championship <id>` — for every captured
+Then: `owdb verify-codes --championship <id>` — for every captured
 instance, report the mismatch rate, broken down by whether the match
 contains a restart shell. If mismatches cluster on post-restart games, the
 index-assignment bug is confirmed and `sync.py:400` needs to key demo URLs
 by something other than position.
 
-This makes owscout a validator for faceit-sync. Treat that as a feature and
+This makes owdb a validator for faceit-sync. Treat that as a feature and
 document it in the README.
 
 ### 9.3 Build change → force re-verification
@@ -554,7 +554,7 @@ Therefore, mandatory in every command:
   fraction (`2/2`) instead. A rendered "100%" off two games is a lie of
   presentation.
 
-### 10.1 `owscout scout player <name>`
+### 10.1 `owdb scout player <name>`
 
 **This is the primary scouting output.** Say so in the README.
 
@@ -566,7 +566,7 @@ X on Ilios" over 2 maps is not.
 Breakdowns: overall pool, pool by map category, pool by map (with the n
 caveat loud).
 
-### 10.2 `owscout scout team <name> [--map <m>] [--last-n 5]`
+### 10.2 `owdb scout team <name> [--map <m>] [--last-n 5]`
 
 Built up from players, not down from comps.
 
@@ -585,7 +585,7 @@ Built up from players, not down from comps.
 There is no such thing as an "average comp". Sets of heroes do not average.
 Modal comp and per-slot rate are the two honest objects; produce those.
 
-### 10.3 `owscout comps top [--map <m>] [--mode <category>] [--min-samples 10]`
+### 10.3 `owdb comps top [--map <m>] [--mode <category>] [--min-samples 10]`
 
 The cross-team comp database. This is the one query with real breadth —
 ~3,000 team-map observations if broadly captured.
@@ -609,7 +609,7 @@ samples** on that map; store the weight. Document in `--help`: map-level
 attribution is a coarse proxy, comp win rate is directional and not causal.
 Do not present it as though the comp caused the win.
 
-### 10.4 `owscout export --format csv|json`
+### 10.4 `owdb export --format csv|json`
 
 Mirror faceit-sync's export conventions.
 
@@ -662,7 +662,7 @@ anything requiring dense temporal sampling or state beyond "who is on what".
 Mirror faceit-sync's conventions — this is a sibling tool, not a foreign body.
 
 - Python 3.11+. Windows-first. Full type hints, passes mypy.
-- Layout: `owscout/{cli,capture,match,calibrate,refs,db,models,derive,export}.py`,
+- Layout: `owdb/{cli,capture,match,calibrate,refs,db,models,derive,export}.py`,
   `tests/`.
 - Structured logging via `logging`, not `print()`. `--verbose` → DEBUG.
 - `--dry-run` on every write command.
@@ -707,12 +707,12 @@ faceit-sync already proves can be shipped.
 
 ---
 
-## Appendix — `owscout review`
+## Appendix — `owdb review`
 
 Human-in-the-loop, required, not optional.
 
 ```
-owscout review
+owdb review
 ```
 
 Serves a minimal local page (or Tk window) listing unresolved observations:

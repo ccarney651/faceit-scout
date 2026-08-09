@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-set "OW=.venv\Scripts\owscout.exe"
+set "OW=.venv\Scripts\owdb.exe"
 if not exist "%OW%" (
   echo ERROR: %OW% not found. Install with:  .venv\Scripts\pip install -e .[capture]
   pause & exit /b 1
@@ -14,9 +14,9 @@ if "%~1"=="" (
 set "CODE=%~1"
 shift
 echo Context for %CODE%:
-"%OW%" --db owscout.sqlite3 --faceit-db faceit.sqlite3 code show %CODE%
+"%OW%" --db owdb.sqlite3 --faceit-db faceit.sqlite3 code show %CODE%
 echo.
 echo Set the replay to 4x now, then press a key to start sampling...
 pause >nul
-"%OW%" --db owscout.sqlite3 --faceit-db faceit.sqlite3 capture --code %CODE% --speed 4 %1 %2 %3 %4
+"%OW%" --db owdb.sqlite3 --faceit-db faceit.sqlite3 capture --code %CODE% --speed 4 %1 %2 %3 %4
 pause
