@@ -124,7 +124,7 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     # assets (the favicon's SVG carries an xmlns that merely looks like a URL).
     scan = re.sub(r'"data:[^"]*"', '""', doc)
     urls = {u.rstrip('",;)') for u in re.findall(r"https?://[^\s\"'<>]+", scan)}
-    allowed_hosts = {"owscout-upload.owscout.workers.dev", "owscout.com"}
+    allowed_hosts = {"upload.owdb.io", "owdb.io"}
     external = {u for u in urls
                 if u.split("/")[2] not in allowed_hosts} if urls else set()
     assert not external, f"unexpected external URLs in the dashboard: {external}"

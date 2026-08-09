@@ -714,7 +714,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         # Where the page asks for an on-demand rebuild (the upload worker).
         "refresh_endpoint": os.environ.get(
             "OWSCOUT_REFRESH_ENDPOINT",
-            "https://owscout-upload.owscout.workers.dev/refresh"),
+            "https://upload.owdb.io/refresh"),
         "seat_order": list(SEAT_ORDER),
         "built_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         # Inlined hero portraits so comps read as icons, not five words. Empty

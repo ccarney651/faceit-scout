@@ -309,6 +309,6 @@ tested pure helpers were relocated to `owscout/firstrun.py` (tests moved to
 
 ### P3 — OWDB rebrand mechanics
 
-Branding decision is made (owdb.gg, per CLAUDE.md) but untracked: register the
-domain when closer to shipping, then a rename pass over user-visible strings
-(site title, capture app, worker messages, docs).
+Domain is registered (owdb.io, 2026-08-09) and the site/capture/upload-worker all
+point at it; a rename pass over user-visible strings (site title, capture app,
+worker messages, docs) is still outstanding.

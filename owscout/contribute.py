@@ -53,7 +53,7 @@ CONTRIB_DIR = "data/captures"
 
 # The deployed upload worker. Baked into builds so end users configure
 # NOTHING; empty until the curator deploys infra/upload-worker.
-DEFAULT_UPLOAD_ENDPOINT = "https://owscout-upload.owscout.workers.dev"
+DEFAULT_UPLOAD_ENDPOINT = "https://upload.owdb.io"
 
 # Real public contributions started with pixels on 2026-07-26. Anything captured
 # before that moment is pre-launch testing and should not appear on leaderboards.

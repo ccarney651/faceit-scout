@@ -20,7 +20,7 @@ When it's on:
 2. Left sidebar → **OAuth2**.
 3. Under **Redirects**, click **Add Redirect** and paste **exactly**:
    ```
-   https://owscout-upload.owscout.workers.dev/auth/callback
+   https://upload.owdb.io/auth/callback
    ```
    Save. (It must match character-for-character or Discord refuses the login.)
 4. Copy the **Client ID** (under OAuth2 / General).
@@ -36,11 +36,11 @@ No bot, no extra scopes — the login only asks for `identify` (username + id).
 ## 3. Set the five values on the Worker
 From `infra/upload-worker/` (secrets keep them out of the public repo):
 ```bash
-npx wrangler secret put DISCORD_CLIENT_ID        # paste the Client ID
-npx wrangler secret put DISCORD_CLIENT_SECRET    # paste the Client Secret
+npx wrangler secret put DISCORD_CLIENT_ID        # paste the Client ID at the prompt
+npx wrangler secret put DISCORD_CLIENT_SECRET    # paste the Client Secret at the prompt
 npx wrangler secret put SESSION_SECRET           # any long random string (see below)
-npx wrangler secret put DISCORD_REDIRECT_URI     # https://owscout-upload.owscout.workers.dev/auth/callback
-npx wrangler secret put ADMIN_IDS                # your user-id (comma-separated for more admins)
+npx wrangler secret put DISCORD_REDIRECT_URI     # paste https://upload.owdb.io/auth/callback at the prompt
+npx wrangler secret put ADMIN_IDS                # your user-id at the prompt (comma-separated for more admins)
 ```
 Generate a `SESSION_SECRET` (this signs the login tokens — keep it private, and if
 you ever change it everyone is logged out):

@@ -8,9 +8,15 @@ REPO = "ccarney651/faceit-scout"
 
 # Discord login (scaffold - stays OFF until all four are present). Uncomment and
 # set this to the deployed callback URL when you create the Discord app:
-# DISCORD_REDIRECT_URI = "https://owscout-upload.owscout.workers.dev/auth/callback"
+# DISCORD_REDIRECT_URI = "https://upload.owdb.io/auth/callback"
 # Admin roster access (/admin/contributors): comma-separated Discord user ids.
 # ADMIN_IDS = "your_discord_user_id"
+
+# owdb.io custom domain for this Worker (requires the owdb.io zone in Cloudflare).
+# Cloudflare auto-creates the DNS record + certificate for upload.owdb.io on deploy.
+[[routes]]
+pattern = "upload.owdb.io"
+custom_domain = true
 
 # After `wrangler kv namespace create NAMES`, paste the id here:
 [[kv_namespaces]]

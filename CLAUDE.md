@@ -197,10 +197,9 @@ audiences if the analytics are strong enough.
 
 ### Codebase conventions
 
-- **Branding: "OWDB".** Rebranding in progress from "OW Scout". Chosen domain is
-  **owdb.gg** (gaming-native, currently available) — register it when closer to
-  shipping the final product. `owdb.com/.net/.org` are taken/expensive;
-  `owdb.dev/.app/.io/.sh/.me` are available fallbacks.
+- **Branding: "OWDB".** Rebranding in progress from "OW Scout". The domain is
+  **owdb.io** (registered 2026-08-09; the site + capture tool moved to it, with
+  the upload worker on `upload.owdb.io`). `owdb.com/.net/.org` are taken/expensive.
 - **Don't overengineer unless necessary for expandability.** The dashboard is
   modularized into concatenated static parts (`faceit_sync/dashboard/`); keep
   new features landing in the right part file rather than growing one string.

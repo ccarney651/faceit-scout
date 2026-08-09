@@ -4,21 +4,21 @@
 <title>OW Scout — Capture comps</title>
 <meta name="description" content="Zero-install Overwatch 2 scouting: share your screen, calibrate once, and capture team comps round-by-round. Every capture sharpens the FACEIT League scouting data.">
 <meta name="theme-color" content="#0d1015">
-<link rel="canonical" href="https://owscout.com/capture/">
+<link rel="canonical" href="https://owdb.io/capture/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="OW Scout">
 <meta property="og:title" content="OW Scout — Capture comps in your browser">
 <meta property="og:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, capture each map's comps round-by-round. Every capture sharpens the FACEIT League data.">
-<meta property="og:url" content="https://owscout.com/capture/">
-<meta property="og:image" content="https://owscout.com/og.png">
+<meta property="og:url" content="https://owdb.io/capture/">
+<meta property="og:image" content="https://owdb.io/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="OW Scout — Capture comps in your browser">
 <meta name="twitter:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, and every capture sharpens the FACEIT League data.">
-<meta name="twitter:image" content="https://owscout.com/og.png">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://owscout-upload.owscout.workers.dev wss://owscout-upload.owscout.workers.dev https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src https://cdn.jsdelivr.net; font-src data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="twitter:image" content="https://owdb.io/og.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://upload.owdb.io wss://upload.owdb.io https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src https://cdn.jsdelivr.net; font-src data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <style>
   :root{color-scheme:dark;--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;--faint:#6b7686;--line:#252c37;--accent:#8087ff;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;--blue:#5a9bd8;--red:#e9694f}
   *{box-sizing:border-box}
@@ -1616,7 +1616,7 @@ function gestureAutoPop(){ if(!pipAutoPending||drawMode) return; pipAutoPending=
 document.addEventListener('pointerdown',gestureAutoPop);
 
 // ---------- publish: build contribution + upload to the worker ----------
-const ENDPOINT='https://owscout-upload.owscout.workers.dev';
+const ENDPOINT='https://upload.owdb.io';
 // Pre-launch test uploads before pixels' first real capture are hidden from the admin roster.
 const CONTRIBUTIONS_SINCE_MS=Date.parse('2026-07-26T20:30:00Z');
 function identity(){ let t=localStorage.getItem('owscout_identity'); if(!t){ t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,'0')).join(''); localStorage.setItem('owscout_identity',t);} return t; }
