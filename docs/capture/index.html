@@ -18,6 +18,7 @@
 <meta name="twitter:title" content="OW Scout — Capture comps in your browser">
 <meta name="twitter:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, and every capture sharpens the FACEIT League data.">
 <meta name="twitter:image" content="https://owscout.com/og.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://owscout-upload.owscout.workers.dev wss://owscout-upload.owscout.workers.dev https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src https://cdn.jsdelivr.net; font-src data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <style>
   :root{color-scheme:dark;--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;--faint:#6b7686;--line:#252c37;--accent:#8087ff;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;--blue:#5a9bd8;--red:#e9694f}
   *{box-sizing:border-box}
@@ -584,8 +585,8 @@ function isDone(c){ const k=codeKey(c); return CLAIMED.has(k)||savedKeys.has(k);
 function claimedByOther(c){ const k=codeKey(c); return !!CLAIMS[k] && k!==myClaimKey; }
 function codeOption(c,i){ const k=codeKey(c);
   let tag = savedKeys.has(k)?'  [captured here]' : (CLAIMED.has(k)?'  [scouted]':'');
-  if(claimedByOther(c)) tag += '  '+ico('lock')+' '+CLAIMS[k].by;
-  return `<option value="${i}">${c.code}  ${c.map||'?'}  ${c.team_a||'?'} vs ${c.team_b||'?'}${tag}</option>`; }
+  if(claimedByOther(c)) tag += '  '+ico('lock')+' '+esc(CLAIMS[k].by);
+  return `<option value="${i}">${esc(c.code)}  ${esc(c.map)||'?'}  ${esc(c.team_a)||'?'} vs ${esc(c.team_b)||'?'}${tag}</option>`; }
 function currentCodes(){ let cs=divFilter(DATA.codes.slice());
   const op=document.getElementById('opp').value, hide=document.getElementById('hide').checked;
   if(op&&op!=='all') cs=cs.filter(c=>c.team_a===op||c.team_b===op);
@@ -594,7 +595,7 @@ function currentCodes(){ let cs=divFilter(DATA.codes.slice());
 function refreshOpponents(){ const cs=divFilter(DATA.codes.slice());
   const teams=[...new Set(cs.flatMap(c=>[c.team_a,c.team_b]).filter(Boolean))].sort();
   const sel=document.getElementById('opp'), cur=sel.value;
-  sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join(''); }
+  sel.innerHTML='<option value="all">all teams</option>'+teams.map(t=>`<option${t===cur?' selected':''}>${esc(t)}</option>`).join(''); }
 function refreshCodes(){ refreshOpponents(); const cs=currentCodes(), sel=document.getElementById('code');
   sel.classList.remove('skel'); sel.disabled=false;
   sel.innerHTML=cs.map((c,i)=>codeOption(c,i)).join('');
@@ -613,11 +614,11 @@ function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
-  const line=(id,label)=>{ const r=rs[id]; const who=r?r.players.map(p=>p.nick).join(', '):'—'; return `<div class="rosterline"><b style="color:var(--fg)">${nameOf(id)||label}</b>: ${who}</div>`; };
+  const line=(id,label)=>{ const r=rs[id]; const who=r?r.players.map(p=>esc(p.nick)).join(', '):'—'; return `<div class="rosterline"><b style="color:var(--fg)">${esc(nameOf(id)||label)}</b>: ${who}</div>`; };
   document.getElementById('roster').innerHTML=line(c.t1,c.team_a)+line(c.t2,c.team_b);
   const sr=document.getElementById('sideradios');
   sr.innerHTML=`<label class="status"><input type="radio" name="side" value="" checked> auto/blank</label>`+
-    [[c.t1,c.team_a],[c.t2,c.team_b]].map(([id,nm])=>`<label class="status"><input type="radio" name="side" value="${id||''}"> ${nm||'?'}</label>`).join('');
+    [[c.t1,c.team_a],[c.t2,c.team_b]].map(([id,nm])=>`<label class="status"><input type="radio" name="side" value="${esc(id)||''}"> ${esc(nm)||'?'}</label>`).join('');
   sr.querySelectorAll('input[name=side]').forEach(r=>r.onchange=onSideChange);
   startMap(); showClaimNote(); maybeClaim();   // reflect + take a live claim on the new code
 }
@@ -905,7 +906,7 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
       if(host){ const row=document.createElement('div'); row.className='slot'; const pid=(session&&session.players&&session.players[side])?session.players[side][i]:null;
         const pn=pid?playerName(pid):'';
-        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">${pn?esc(pn):'—'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${esc(ok?r.name:'??')}</span></span><span class="cn pn">${pn?esc(pn):'—'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 
 // ---------- Auto-detect sides + players (opt-in OCR of the HUD names) ----------
@@ -963,7 +964,9 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
   if(_ocrLoading) return _ocrLoading;
   _ocrLoading=(async()=>{
     if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
+      s.crossOrigin='anonymous';
       s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
     const w=await Tesseract.createWorker('eng');
     await w.setParameters({ tessedit_pageseg_mode:'7' });   // single text line = one name
@@ -1627,20 +1630,17 @@ let claimWS=null, wsRetry=0;
 function claimHeaders(){ const h={'content-type':'application/json','X-Owscout-Token':identity()};
   const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) h['X-Owscout-Name']=nm;
   const s=localStorage.getItem('owscout_session'); if(s) h['X-Owscout-Session']=s; return h; }
-function claimWsUrl(){ const u=new URL(ENDPOINT.replace(/^http/,'ws')+'/claims/ws');
-  u.searchParams.set('token', identity());
-  const nm=(document.getElementById('pubname').value||'').trim().toLowerCase(); if(nm) u.searchParams.set('name', nm);
-  const s=localStorage.getItem('owscout_session'); if(s) u.searchParams.set('session', s);
-  return u.toString(); }
+function claimWsUrl(){ return ENDPOINT.replace(/^http/,'ws')+'/claims/ws'; }
 function connectClaims(){ let ws; try{ ws=new WebSocket(claimWsUrl()); }catch(e){ scheduleReconnect(); return; }
   claimWS=ws;
-  ws.onopen=()=>{ wsRetry=0; if(myClaimKey) wsSend({type:'claim',key:myClaimKey}); };   // re-assert on reconnect
+  ws.onopen=()=>{ wsRetry=0; wsSend({type:'identify', token:identity(), name:(document.getElementById('pubname').value||'').trim().toLowerCase(), session:localStorage.getItem('owscout_session')||''}); };   // identity in-band, not the URL
   ws.onmessage=ev=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onClaimMsg(m); };
   ws.onclose=()=>{ if(claimWS===ws) claimWS=null; scheduleReconnect(); };
   ws.onerror=()=>{ try{ ws.close(); }catch(e){} }; }
 function scheduleReconnect(){ const d=Math.min(30000, 1000*Math.pow(2, wsRetry++));
   setTimeout(()=>{ if(!claimWS) connectClaims(); }, d); }
 function onClaimMsg(m){ if(m.type==='snapshot') CLAIMS=m.claims||{};
+  else if(m.type==='identified'){ if(myClaimKey) wsSend({type:'claim',key:myClaimKey}); }   // re-assert after identity is bound
   else if(m.type==='set') CLAIMS[m.key]=m.claim;
   else if(m.type==='del') delete CLAIMS[m.key];
   else if(m.type==='claimresult'){ if(!m.ok){ if(myClaimKey===m.key) myClaimKey=null; CLAIMS[m.key]={by:m.by, at:Date.now()}; } }

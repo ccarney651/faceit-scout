@@ -14,21 +14,21 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Iterator, Mapping, Optional, Sequence
+from datetime import UTC, datetime
 
 from .derive import ObsRow
 from .faceit import faceit_ro_uri
 from .integrity import VerifyCodesRow
 from .models import (
     DEFAULT_DIVISION,
-    HeroCoverage,
     CodeContext,
     CodeListing,
     Comp,
     DraftMap,
     FaceitHero,
+    HeroCoverage,
     HeroRef,
     ObsDetail,
     Rect,
@@ -246,10 +246,10 @@ LATEST_KNOWN_WIPE = max(w[0] for w in _SEED_WIPES)
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _winner_side(winner_faction: Optional[str], side_a_faction: str) -> Optional[str]:
+def _winner_side(winner_faction: str | None, side_a_faction: str) -> str | None:
     """Map a faceit winner faction onto HUD side 'a'/'b' given which faction is
     side A. None winner -> None."""
     if winner_faction not in ("faction1", "faction2"):
@@ -343,7 +343,7 @@ class Database:
     def close(self) -> None:
         self.conn.close()
 
-    def __enter__(self) -> "Database":
+    def __enter__(self) -> Database:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -416,7 +416,7 @@ class Database:
 
     # --- custom heroes (live-game roster additions) --------------------------
 
-    def add_custom_hero(self, name: str, role: Optional[str] = None) -> str:
+    def add_custom_hero(self, name: str, role: str | None = None) -> str:
         """Register a hero not yet in faceit.heroes (a freshly-released OW2 hero).
         Returns its namespaced guid. Idempotent on name (updates the role)."""
         name = name.strip()
@@ -479,7 +479,7 @@ class Database:
                     (k, v, _utcnow()),
                 )
 
-    def get_learn_slot(self, profile_id: int) -> Optional[Rect]:
+    def get_learn_slot(self, profile_id: int) -> Rect | None:
         """The single-portrait learn ROI for a profile, or None if not set."""
         row = self.conn.execute(
             "SELECT rect_json FROM learn_slots WHERE profile_id = ?",
@@ -489,7 +489,7 @@ class Database:
 
     def get_active_profile(
         self, resolution_w: int, resolution_h: int, hud_variant: str = "default"
-    ) -> Optional[RoiProfile]:
+    ) -> RoiProfile | None:
         """The current (non-retired) profile for a (resolution, variant), or
         None. A profile is only valid at the resolution it was calibrated on."""
         row = self.conn.execute(
@@ -503,7 +503,7 @@ class Database:
 
     def latest_active_profile(
         self, hud_variant: str = "default"
-    ) -> Optional[RoiProfile]:
+    ) -> RoiProfile | None:
         """The most recent active profile for a HUD variant, across resolutions.
         Used offline (e.g. ``refs verify``) where no live frame is available."""
         row = self.conn.execute(
@@ -553,8 +553,8 @@ class Database:
         self,
         profile_id: int,
         *,
-        state: Optional[str] = None,
-        source: Optional[str] = None,
+        state: str | None = None,
+        source: str | None = None,
     ) -> list[HeroRef]:
         """All refs for a profile, optionally filtered by state and/or source."""
         sql = "SELECT * FROM hero_refs WHERE profile_id = ?"
@@ -580,7 +580,7 @@ class Database:
             phash=str(row["phash"]),
             added_at=row["added_at"],
             source=str(row["source"]),
-            variant=str(row["variant"]) if "variant" in row.keys() else "a",
+            variant=str(row["variant"]) if "variant" in row else "a",
         )
 
     @staticmethod
@@ -599,13 +599,13 @@ class Database:
 
     # --- wipes / code_status -------------------------------------------------
 
-    def latest_wipe_date(self) -> Optional[str]:
+    def latest_wipe_date(self) -> str | None:
         """MAX(wiped_at). Any code whose game pre-dates this is dead (SPEC §2)."""
         row = self.conn.execute("SELECT MAX(wiped_at) AS w FROM wipes").fetchone()
         return None if row is None or row["w"] is None else str(row["w"])
 
     def upsert_code_status(
-        self, demo_code: str, status: str, notes: Optional[str] = None
+        self, demo_code: str, status: str, notes: str | None = None
     ) -> None:
         """Record operator INTENT/outcome for a code. Viability is NOT stored
         here — it derives from ``wipes`` (SPEC §4)."""
@@ -618,7 +618,7 @@ class Database:
                 (demo_code, _utcnow(), status, notes),
             )
 
-    def get_code_status(self, demo_code: str) -> Optional[str]:
+    def get_code_status(self, demo_code: str) -> str | None:
         row = self.conn.execute(
             "SELECT status FROM code_status WHERE demo_code = ?", (demo_code,)
         ).fetchone()
@@ -630,12 +630,12 @@ class Database:
         self,
         faceit_db_path: str,
         *,
-        team: Optional[str] = None,
+        team: str | None = None,
         uncaptured: bool = False,
         include_wiped: bool = False,
-        division: Optional[str] = DEFAULT_DIVISION,
-        region: Optional[str] = None,
-        limit: Optional[int] = None,
+        division: str | None = DEFAULT_DIVISION,
+        region: str | None = None,
+        limit: int | None = None,
     ) -> list[CodeListing]:
         """Capturable codes joined faceit games→matches→teams, with a captured
         flag (does a map_instance exist) and wipe status. Filters out codes whose
@@ -682,7 +682,7 @@ class Database:
             params.append(limit)
         rows = self.conn.execute(sql, params).fetchall()
 
-        def is_wiped(finished_at: Optional[str]) -> bool:
+        def is_wiped(finished_at: str | None) -> bool:
             return bool(wipe and finished_at and finished_at[:10] <= wipe)
 
         return [
@@ -696,7 +696,7 @@ class Database:
         ]
 
     def code_age_summary(
-        self, faceit_db_path: str, division: Optional[str] = DEFAULT_DIVISION
+        self, faceit_db_path: str, division: str | None = DEFAULT_DIVISION
     ) -> dict[str, object]:
         """Totals for ``owscout codes age``: latest wipe and how many stored
         codes are alive (post-wipe) vs dead, and how many captured — within one
@@ -729,7 +729,7 @@ class Database:
     # --- review (SPEC appendix) ----------------------------------------------
 
     def unresolved_observations(
-        self, limit: Optional[int] = None
+        self, limit: int | None = None
     ) -> list[dict[str, object]]:
         """Observations with at least one unresolved slot — the review queue.
         Each carries its slots so a UI can present the gaps (SPEC appendix)."""
@@ -804,7 +804,7 @@ class Database:
 
     # --- derived output (SPEC §10) -------------------------------------------
 
-    def resolved_observations(self, team_id: Optional[str] = None) -> list[ObsRow]:
+    def resolved_observations(self, team_id: str | None = None) -> list[ObsRow]:
         """Resolved comp observations flattened for aggregation (SPEC §10).
         Unresolved rows are excluded — bad scouting data is worse than none.
         ``team_id`` restricts to observations of that team (either HUD side)."""
@@ -859,7 +859,7 @@ class Database:
 
     def map_side_comps(
         self, map_instance_id: int
-    ) -> dict[str, list[tuple[str, int, bool, Optional[str], Optional[int], Optional[float]]]]:
+    ) -> dict[str, list[tuple[str, int, bool, str | None, int | None, float | None]]]:
         """Per side ('a'/'b'), the distinct comps observed as
         (hero_names, times_seen, resolved, sub_map, round_no, min_confidence), for
         review. Grouped per round and sub-map; min_confidence is the weakest slot
@@ -875,7 +875,7 @@ class Database:
                ORDER BY o.side, o.round_no, o.sub_map, n DESC""",
             (map_instance_id,),
         ).fetchall()
-        out: dict[str, list[tuple[str, int, bool, Optional[str], Optional[int], Optional[float]]]] = {"a": [], "b": []}
+        out: dict[str, list[tuple[str, int, bool, str | None, int | None, float | None]]] = {"a": [], "b": []}
         for r in rows:
             out.setdefault(str(r["side"]), []).append(
                 (r["names"] or "(unresolved)", int(r["n"]), bool(r["resolved"]),
@@ -1189,13 +1189,13 @@ class Database:
     def insert_capture_log(
         self,
         *,
-        demo_code: Optional[str],
-        map_instance_id: Optional[int],
+        demo_code: str | None,
+        map_instance_id: int | None,
         samples_taken: int,
         samples_written: int,
         low_confidence: int,
         banned_hero_hits: int,
-        map_mismatch: Optional[int],
+        map_mismatch: int | None,
         errors: int,
     ) -> None:
         self.conn.execute(
@@ -1244,9 +1244,9 @@ class Database:
         ctx: CodeContext,
         side_a_faction: str,
         *,
-        profile_id: Optional[int] = None,
-        build_id: Optional[int] = None,
-        map_verified: Optional[int] = None,
+        profile_id: int | None = None,
+        build_id: int | None = None,
+        map_verified: int | None = None,
     ) -> int:
         """Create/update the map_instance for a faceit code. All map/team/winner
         fields are DERIVED from the faceit context, never OCR'd (SPEC §4).
@@ -1309,15 +1309,15 @@ class Database:
         map_instance_id: int,
         side: str,
         sample_ts_ms: int,
-        comp_id: Optional[str],
-        min_slot_confidence: Optional[float],
+        comp_id: str | None,
+        min_slot_confidence: float | None,
         resolved: int,
         slots: Sequence[Mapping[str, object]],
-        frame_path: Optional[str] = None,
-        comp: Optional[Comp] = None,
-        sub_map: Optional[str] = None,
-        round_no: Optional[int] = None,
-        phase: Optional[str] = None,
+        frame_path: str | None = None,
+        comp: Comp | None = None,
+        sub_map: str | None = None,
+        round_no: int | None = None,
+        phase: str | None = None,
     ) -> int:
         """Insert/replace one observation and its slots. Idempotent on
         (map_instance_id, side, sample_ts_ms) — re-capture UPDATEs (SPEC §12).

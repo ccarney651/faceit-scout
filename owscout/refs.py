@@ -13,11 +13,12 @@ and operator prompts are isolated below and exercised only when the game is runn
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, NamedTuple, Optional
+from typing import Any, NamedTuple
 
-from .errors import CaptureError
 from .db import Database
+from .errors import CaptureError
 from .faceit import connect_ro, load_heroes
 from .models import REF_STATES, STATE_ALIVE, FaceitHero, HeroRef, Rect, RoiProfile
 
@@ -140,7 +141,7 @@ def run_refs_capture(  # pragma: no cover - runtime-only path
     side: str,
     slot: int,
     states: tuple[str, ...] = REF_STATES,
-    only: Optional[str] = None,
+    only: str | None = None,
     refs_dir: str | Path,
     dry_run: bool = False,
 ) -> int:
@@ -303,7 +304,7 @@ def _safe(hero: FaceitHero) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in hero.name).strip("_") or hero.guid
 
 
-def resolve_hero_name(heroes: list[FaceitHero], name: str) -> Optional[FaceitHero]:
+def resolve_hero_name(heroes: list[FaceitHero], name: str) -> FaceitHero | None:
     """Fuzzy-resolve an operator-typed hero name to a roster hero: exact, then
     unique substring, then closest by edit distance."""
     import difflib
@@ -411,7 +412,7 @@ class LearnContext(NamedTuple):
     cv2: Any
     # If a single-portrait learn ROI is calibrated, the learning loop reads just
     # this one cell instead of scanning all ten HUD slots.
-    learn_box: Optional[Rect] = None
+    learn_box: Rect | None = None
 
 
 class LearnSlot(NamedTuple):
@@ -421,8 +422,8 @@ class LearnSlot(NamedTuple):
     roi: Rect   # the face sub-rect actually matched
     cell: Rect  # the full portrait cell (for a recognizable preview)
     crop: Any   # BGR ndarray of the matched face region
-    guess_guid: Optional[str]
-    guess_name: Optional[str]
+    guess_guid: str | None
+    guess_name: str | None
 
 
 def prepare_learn(  # pragma: no cover - needs cv2/faceit
@@ -431,7 +432,7 @@ def prepare_learn(  # pragma: no cover - needs cv2/faceit
     """Load everything the learning loop needs: the calibrated profile, the hero
     roster, a template scorer, and the face ROI of every HUD slot. Raises
     CaptureError if there is no profile yet."""
-    from .match import face_subrect, make_template_scorer
+    from .match import make_template_scorer
     from .models import SIDE_LEFT, SIDE_RIGHT
 
     cv2 = _import_cv2()
@@ -513,7 +514,7 @@ def save_learn_ref(  # pragma: no cover - needs cv2
 def harvest_correction(  # pragma: no cover - needs cv2
     db: Database, refs_dir: str | Path, *, map_instance_id: int, side: str,
     right_guid: str, hero_name: str, profile_id: int,
-) -> Optional[str]:
+) -> str | None:
     """Turn a Review correction into a reference portrait.
 
     Without this the loop is open: the operator tells the tool it was wrong, the
@@ -588,10 +589,10 @@ def calibrate_learn_slot(  # pragma: no cover - needs cv2/game
     return snapped
 
 
-def _snap_to_slot(box: Rect, profile: RoiProfile) -> Optional[Rect]:
+def _snap_to_slot(box: Rect, profile: RoiProfile) -> Rect | None:
     """The calibrated portrait cell whose rect overlaps ``box`` most, or None if
     the box doesn't touch any slot."""
-    best: Optional[Rect] = None
+    best: Rect | None = None
     best_area = 0
     for rects in profile.slots.values():
         for r in rects:
@@ -634,7 +635,7 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
         calibrate_learn_slot(db, hud_variant=hud_variant)
 
     ctx = prepare_learn(db, faceit_db_path, hud_variant=hud_variant)
-    profile, pid, heroes, names, cv2 = (
+    profile, pid, heroes, _names, cv2 = (
         ctx.profile, ctx.pid, ctx.heroes, ctx.names, ctx.cv2)
 
     win = "owscout refs learn — is this the right hero?"
@@ -783,7 +784,7 @@ BUNDLE_FORMAT = 1
 
 def export_ref_bundle(
     db: Database, out_path: str | Path, *,
-    hud_variant: str = "default", faceit_db_path: Optional[str] = None,
+    hud_variant: str = "default", faceit_db_path: str | None = None,
     tool_version: str = "0",
 ) -> dict[str, int]:
     """Write every stored ref for the active profile into a shareable zip.

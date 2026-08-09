@@ -25,9 +25,10 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Iterable, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from .client import FaceitClient
 from .db import Database
@@ -60,7 +61,7 @@ class EnumerationError(RuntimeError):
 
 # --- small helpers -----------------------------------------------------------
 
-def _to_int(v: Any) -> Optional[int]:
+def _to_int(v: Any) -> int | None:
     if v is None or isinstance(v, bool):
         return int(v) if isinstance(v, bool) else None
     s = str(v).strip()
@@ -72,7 +73,7 @@ def _to_int(v: Any) -> Optional[int]:
         return None
 
 
-def _tag_value(tags: Any, prefix: str) -> Optional[str]:
+def _tag_value(tags: Any, prefix: str) -> str | None:
     if not isinstance(tags, list):
         return None
     for t in tags:
@@ -82,7 +83,7 @@ def _tag_value(tags: Any, prefix: str) -> Optional[str]:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # FACEIT match ids are ``1-<uuid>``; accept either a bare id or a room URL.
@@ -90,7 +91,7 @@ _MATCH_ID_RE = re.compile(r"1-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
                           r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
-def parse_match_id(ref: str) -> Optional[str]:
+def parse_match_id(ref: str) -> str | None:
     """Extract a match id from a bare id or a faceit room URL; None if invalid."""
     m = _MATCH_ID_RE.search(ref.strip())
     return m.group(0) if m else None
@@ -134,7 +135,7 @@ def parse_maps(match_payload: dict[str, Any]) -> list[Map]:
 
 # --- democracy reconciliation -------------------------------------------------
 
-def _democracy_slots(dem_payload: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
+def _democracy_slots(dem_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Group democracy tickets into per-game slots.
 
     Tickets come in fixed groups of three (map, attacking_first, heroes); the
@@ -159,15 +160,15 @@ def _democracy_slots(dem_payload: Optional[dict[str, Any]]) -> list[dict[str, An
 class _SlotInfo:
     """A democracy game-slot, indexed for joining to a played game."""
 
-    ordered_bans: list[tuple[str, Optional[str]]]
+    ordered_bans: list[tuple[str, str | None]]
     drop_set: frozenset[str]
-    map_guid: Optional[str]
-    map_ticket: Optional[dict[str, Any]]
-    atk_ticket: Optional[dict[str, Any]]
+    map_guid: str | None
+    map_ticket: dict[str, Any] | None
+    atk_ticket: dict[str, Any] | None
     used: bool = field(default=False)
 
 
-def _previous_loser(winners: list[Optional[str]], g: int) -> Optional[str]:
+def _previous_loser(winners: list[str | None], g: int) -> str | None:
     """Faction that lost game g-1 (bans first in game g). None if unknown."""
     idx = g - 2
     if idx < 0 or idx >= len(winners):
@@ -177,8 +178,8 @@ def _previous_loser(winners: list[Optional[str]], g: int) -> Optional[str]:
 
 
 def _order_bans(
-    pairs: list[tuple[str, Optional[str]]], first_banner: Optional[str],
-) -> list[tuple[str, Optional[str]]]:
+    pairs: list[tuple[str, str | None]], first_banner: str | None,
+) -> list[tuple[str, str | None]]:
     """Put the first-banning faction's ban first. Order is cosmetic otherwise."""
     if not first_banner or len(pairs) != 2:
         return pairs
@@ -188,7 +189,7 @@ def _order_bans(
     return [a, b]
 
 
-def _pick_guid(ticket: Optional[dict[str, Any]]) -> Optional[str]:
+def _pick_guid(ticket: dict[str, Any] | None) -> str | None:
     """Guid of the entity a map/side ticket resolved to ('pick')."""
     if not ticket:
         return None
@@ -198,7 +199,7 @@ def _pick_guid(ticket: Optional[dict[str, Any]]) -> Optional[str]:
     return None
 
 
-def _democracy_slot_infos(dem_payload: Optional[dict[str, Any]]) -> list[_SlotInfo]:
+def _democracy_slot_infos(dem_payload: dict[str, Any] | None) -> list[_SlotInfo]:
     infos: list[_SlotInfo] = []
     for slot in _democracy_slots(dem_payload):
         ordered, _ = _ordered_bans_from_ticket(slot.get("heroes"))
@@ -213,8 +214,8 @@ def _democracy_slot_infos(dem_payload: Optional[dict[str, Any]]) -> list[_SlotIn
 
 
 def _match_slot(
-    infos: list[_SlotInfo], ban_set: frozenset[str], game_map: Optional[str],
-) -> Optional[_SlotInfo]:
+    infos: list[_SlotInfo], ban_set: frozenset[str], game_map: str | None,
+) -> _SlotInfo | None:
     """Join a played game to its veto slot.
 
     Prefer exact ban-set equality; fall back to the map the game was played on.
@@ -234,7 +235,7 @@ def _match_slot(
     return None
 
 
-def _entity_guid(e: dict[str, Any]) -> Optional[str]:
+def _entity_guid(e: dict[str, Any]) -> str | None:
     """Hero/map guid, tolerant of both veto payload shapes.
 
     The live democracy feed nests it under ``properties.guid``; the durable
@@ -244,8 +245,8 @@ def _entity_guid(e: dict[str, Any]) -> Optional[str]:
 
 
 def _ordered_bans_from_ticket(
-    heroes_ticket: Optional[dict[str, Any]],
-) -> tuple[list[tuple[str, Optional[str]]], bool]:
+    heroes_ticket: dict[str, Any] | None,
+) -> tuple[list[tuple[str, str | None]], bool]:
     """Return ((guid, banned_by_faction) in ban order, is_open).
 
     Attribution always comes from each drop's ``selected_by``. Ban order comes
@@ -264,7 +265,7 @@ def _ordered_bans_from_ticket(
     config = heroes_ticket.get("config")
     if isinstance(config, list) and config:
         # Live feed: config gives the voter sequence; match drops by selected_by.
-        ordered: list[tuple[str, Optional[str]]] = []
+        ordered: list[tuple[str, str | None]] = []
         remaining = list(drops)
         for cfg in config:
             voter = cfg.get("voter")
@@ -290,7 +291,7 @@ def _ordered_bans_from_ticket(
     return ordered, False
 
 
-def _pick_selected_by(ticket: Optional[dict[str, Any]]) -> Optional[str]:
+def _pick_selected_by(ticket: dict[str, Any] | None) -> str | None:
     """Faction that made the final 'pick' in a map / attacking_first ticket."""
     if not ticket:
         return None
@@ -304,10 +305,10 @@ def _pick_selected_by(ticket: Optional[dict[str, Any]]) -> Optional[str]:
 
 def extract_bundle(
     match_payload: dict[str, Any],
-    dem_payload: Optional[dict[str, Any]],
+    dem_payload: dict[str, Any] | None,
     stats: list[dict[str, Any]],
     *,
-    fetched_at: Optional[str] = None,
+    fetched_at: str | None = None,
 ) -> MatchBundle:
     fetched_at = fetched_at or _now_iso()
     warnings: list[str] = []
@@ -367,7 +368,7 @@ def extract_bundle(
     for w in winners:
         if w in wins:
             wins[w] += 1
-    winner_faction: Optional[str] = None
+    winner_faction: str | None = None
     if wins[FACTION1] != wins[FACTION2]:
         winner_faction = FACTION1 if wins[FACTION1] > wins[FACTION2] else FACTION2
 
@@ -394,6 +395,40 @@ def extract_bundle(
     round_players: list[RoundPlayer] = []
 
     n_games = len(results)
+    # --- demo codes: only attach when the positional alignment is trustworthy --
+    # demo_urls is positional (game i's replay is demo_urls[i]) but FACEIT's
+    # order can diverge from `results` after a restart: an 'open' veto slot
+    # shifts the rest, so index 0 stops being game 1's replay. Detect that up
+    # front (same slot join as the loop, on a FRESH probe so the real pass below
+    # is untouched) or a length mismatch, and drop ALL codes for the match rather
+    # than label a game with its neighbor's replay. The replay-code backfill
+    # re-runs close the gap afterwards.
+    demo_codes_ok = True
+    if dem_present and demo_urls and n_games:
+        probe = _democracy_slot_infos(dem_payload)
+        for g in range(1, n_games + 1):
+            idx = g - 1
+            map_guid = map_pick[idx] if idx < len(map_pick) else None
+            has_veto = idx < len(hero_survivors) and bool(hero_survivors[idx])
+            if not has_veto:
+                continue
+            survivors = set(hero_survivors[idx])
+            banned_guids = [gd for gd in pool_guids_ordered if gd not in survivors]
+            if not banned_guids:
+                continue
+            slot = _match_slot(probe, frozenset(banned_guids), map_guid)
+            if slot is None:
+                demo_codes_ok = False
+                break
+    if demo_urls and len(demo_urls) != n_games:
+        demo_codes_ok = False
+    if demo_urls and not demo_codes_ok:
+        warnings.append(
+            f"demoURLs misaligned ({len(demo_urls)} codes for {n_games} games, "
+            "or a restarted game) - dropping all replay codes for this match"
+        )
+        demo_urls = []
+
     for g in range(1, n_games + 1):
         idx = g - 1
         result = results[idx]
@@ -420,7 +455,7 @@ def extract_bundle(
 
         if slot is not None:
             attr = {gd: fac for gd, fac in slot.ordered_bans}
-            pairs: list[tuple[str, Optional[str]]] = [(gd, attr.get(gd)) for gd in banned_guids]
+            pairs: list[tuple[str, str | None]] = [(gd, attr.get(gd)) for gd in banned_guids]
             map_pick_by = _pick_selected_by(slot.map_ticket)
             side_pick_by = _pick_selected_by(slot.atk_ticket)
             was_restarted = False
@@ -489,15 +524,15 @@ def extract_bundle(
 
 def _parse_teams(
     match_payload: dict[str, Any],
-) -> tuple[list[Team], dict[str, Optional[int]], dict[str, str],
-           dict[str, str], dict[str, Optional[str]], dict[str, Optional[str]]]:
+) -> tuple[list[Team], dict[str, int | None], dict[str, str],
+           dict[str, str], dict[str, str | None], dict[str, str | None]]:
     teams_node = match_payload.get("teams", {}) or {}
     teams: list[Team] = []
-    elo_by_player: dict[str, Optional[int]] = {}
+    elo_by_player: dict[str, int | None] = {}
     team_by_player: dict[str, str] = {}
     faction_ids: dict[str, str] = {}
-    nick_by_player: dict[str, Optional[str]] = {}
-    game_by_player: dict[str, Optional[str]] = {}   # Battle.net in-game name
+    nick_by_player: dict[str, str | None] = {}
+    game_by_player: dict[str, str | None] = {}   # Battle.net in-game name
     for fac in (FACTION1, FACTION2):
         t = teams_node.get(fac)
         if not t:
@@ -522,11 +557,11 @@ def _parse_teams(
 def _round_players_for_game(
     match_id: str,
     game_no: int,
-    sgame: Optional[dict[str, Any]],
-    elo_by_player: dict[str, Optional[int]],
+    sgame: dict[str, Any] | None,
+    elo_by_player: dict[str, int | None],
     team_by_player: dict[str, str],
     faction_ids: dict[str, str],
-    demo_code: Optional[str],
+    demo_code: str | None,
 ) -> tuple[list[RoundPlayer], list[str]]:
     warnings: list[str] = []
     out: list[RoundPlayer] = []
@@ -613,7 +648,7 @@ class SyncEngine:
         self.client = client
         self.db = db
         self.backfill_days = backfill_days
-        self._backfill: Optional[set[str]] = None
+        self._backfill: set[str] | None = None
 
     def _skip_stored(self, match_id: str, force_refresh: bool) -> bool:
         """Whether an already-stored match can be skipped. A stored FINISHED match
@@ -631,7 +666,7 @@ class SyncEngine:
     def ingest_match(
         self,
         match_id: str,
-        championship_id: Optional[str] = None,
+        championship_id: str | None = None,
         *,
         force_refresh: bool = False,
         dry_run: bool = False,
@@ -682,7 +717,7 @@ class SyncEngine:
     def _persist(
         self,
         bundle: MatchBundle,
-        championship_id: Optional[str],
+        championship_id: str | None,
         match_payload: dict[str, Any],
     ) -> bool:
         entity = match_payload.get("entity", {}) or {}
@@ -725,7 +760,7 @@ class SyncEngine:
         return [str(r[0]) for r in rows
                 if len(str(r[0])) == 36 and str(r[0]).count("-") == 4]
 
-    def _championship_name(self, cid: str) -> Optional[str]:
+    def _championship_name(self, cid: str) -> str | None:
         row = self.db.conn.execute(
             "SELECT name FROM championships WHERE id=?", (cid,)
         ).fetchone()
@@ -756,7 +791,7 @@ class SyncEngine:
         return out
 
     def _ingest_and_tally(
-        self, mid: str, cid: str, result: "SyncResult", *,
+        self, mid: str, cid: str, result: SyncResult, *,
         force_refresh: bool, dry_run: bool,
     ) -> None:
         if self._skip_stored(mid, force_refresh):
@@ -846,7 +881,7 @@ class SyncEngine:
         self._write_sync_log(result, championship_id)
         return result
 
-    def _write_sync_log(self, result: "SyncResult", cid: Optional[str]) -> None:
+    def _write_sync_log(self, result: SyncResult, cid: str | None) -> None:
         self.db.insert_sync_log(
             ran_at=_now_iso(), championship_id=cid,
             matches_seen=result.matches_seen, inserted=result.inserted,
@@ -876,8 +911,8 @@ class SyncEngine:
         return total
 
     def backfill_game_names(
-        self, *, limit: Optional[int] = None,
-        progress: Optional[Callable[[int, int], None]] = None,
+        self, *, limit: int | None = None,
+        progress: Callable[[int, int], None] | None = None,
     ) -> int:
         """Fill players.game_name (Battle.net names) for already-stored matches.
 
@@ -934,7 +969,7 @@ class SyncEngine:
         *,
         force_refresh: bool = False,
         dry_run: bool = False,
-        progress: Optional[Callable[[int, int], None]] = None,
+        progress: Callable[[int, int], None] | None = None,
     ) -> SyncResult:
         """Mass-import an explicit list of match refs (ids or room URLs).
 

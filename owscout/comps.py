@@ -10,7 +10,7 @@ Pure module — no I/O, fully unit-tested.
 from __future__ import annotations
 
 import hashlib
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from .faceit import KNOWN_ROLES
 from .models import Comp

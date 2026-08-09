@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -12,7 +12,6 @@ from owscout.db import Database
 from owscout.faceit import connect_ro, load_heroes
 from owscout.models import FaceitHero, HeroRef
 from owscout.refs import find_close_pairs, find_missing, resolve_hero_name
-
 
 # --- fixtures ----------------------------------------------------------------
 
@@ -59,9 +58,8 @@ def test_load_heroes(tmp_path: Path) -> None:
 
 def test_faceit_connection_is_read_only(tmp_path: Path) -> None:
     fpath = _make_faceit_db(tmp_path / "faceit.sqlite3")
-    with connect_ro(fpath) as conn:
-        with pytest.raises(sqlite3.OperationalError):
-            conn.execute("INSERT INTO heroes (guid, name) VALUES ('x', 'X')")
+    with connect_ro(fpath) as conn, pytest.raises(sqlite3.OperationalError):
+        conn.execute("INSERT INTO heroes (guid, name) VALUES ('x', 'X')")
 
 
 def test_missing_faceit_db_raises(tmp_path: Path) -> None:

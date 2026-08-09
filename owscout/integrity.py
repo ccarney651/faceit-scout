@@ -18,9 +18,9 @@ The comparison/aggregation logic is pure and unit-tested; the OCR that feeds
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Optional, Sequence
 
 # Fail a capture run if more than this fraction of resolved slots land on a
 # banned hero — a low rate is noise, a high rate means the ROIs have drifted
@@ -32,7 +32,7 @@ MAP_NAME_MATCH_RATIO = 0.85
 
 
 def banned_hero_hits(
-    slot_guids: Sequence[Optional[str]], banned_guids: set[str]
+    slot_guids: Sequence[str | None], banned_guids: set[str]
 ) -> list[str]:
     """The banned hero_guids that (wrongly) appear among resolved slots. A
     non-empty result means the ROI profile is likely stale (SPEC §9.1)."""
@@ -72,7 +72,7 @@ class VerifyCodesRow:
 
     match_id: str
     game_no: int
-    map_verified: Optional[int]     # 1 ok, 0 mismatch, None not checked
+    map_verified: int | None     # 1 ok, 0 mismatch, None not checked
     match_has_restart: bool         # does the match contain a restart shell?
 
 

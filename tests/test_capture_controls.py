@@ -35,7 +35,11 @@ def test_actions_fire_bound_handlers_after_bind() -> None:
     c = CaptureControls()
     calls: list[str] = []
     _bind(c, calls, submaps=("City Center", "Gardens"))
-    c.snapshot(); c.next_round(); c.undo(); c.done(); c.pick_sub("Gardens")
+    c.snapshot()
+    c.next_round()
+    c.undo()
+    c.done()
+    c.pick_sub("Gardens")
     assert calls == ["snap", "round", "undo", "done", "sub:Gardens"]
 
 
@@ -57,7 +61,9 @@ def test_end_makes_further_clicks_noops() -> None:
     _bind(c, calls)
     c.snapshot()
     c._end()
-    c.snapshot(); c.next_round(); c.pick_sub("X")   # all ignored now
+    c.snapshot()
+    c.next_round()
+    c.pick_sub("X")   # all ignored now
     assert calls == ["snap"]
 
 

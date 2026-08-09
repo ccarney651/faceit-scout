@@ -6,7 +6,7 @@ import argparse
 import logging
 import os
 import sys
-from typing import Optional, Sequence, TextIO
+from collections.abc import Sequence
 
 from dotenv import load_dotenv
 
@@ -95,7 +95,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 1 if counts["errors"] else 0
 
 
-def _resolve_championship(db: Database, requested: Optional[str]) -> Optional[str]:
+def _resolve_championship(db: Database, requested: str | None) -> str | None:
     """Use the requested id, or auto-pick when the DB holds exactly one."""
     if requested:
         return requested
@@ -139,14 +139,11 @@ def cmd_export(args: argparse.Namespace) -> int:
         cid = _resolve_championship(db, args.championship)
         if cid is None:
             return 2
-        stream: TextIO = (
-            open(args.out, "w", newline="", encoding="utf-8") if args.out else sys.stdout
-        )
-        try:
-            n = export_csv(db, cid, stream) if args.format == "csv" else export_json(db, cid, stream)
-        finally:
-            if stream is not sys.stdout:
-                stream.close()
+        if args.out:
+            with open(args.out, "w", newline="", encoding="utf-8") as fh:
+                n = export_csv(db, cid, fh) if args.format == "csv" else export_json(db, cid, fh)
+        else:
+            n = export_csv(db, cid, sys.stdout) if args.format == "csv" else export_json(db, cid, sys.stdout)
     if n == 0:
         print(f"no data for championship {cid}", file=sys.stderr)
         return 1
@@ -258,7 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     load_dotenv()
     parser = build_parser()
     args = parser.parse_args(argv)

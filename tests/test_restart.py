@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import responses
+from conftest import RESTART_DC_ID, make_client, register_match
 
 from faceit_sync.db import Database
-from faceit_sync.sync import SyncEngine, parse_match_id, dedupe_preserving_order
-from conftest import RESTART_DC_ID, make_client, register_match
+from faceit_sync.sync import SyncEngine, dedupe_preserving_order, parse_match_id
 
 
 @responses.activate

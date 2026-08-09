@@ -5,10 +5,11 @@ from __future__ import annotations
 import csv
 import html
 import json
-from datetime import datetime, timezone
 import os
 import sqlite3
-from typing import Any, Mapping, Optional, TextIO
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any, TextIO
 
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
@@ -47,7 +48,7 @@ def export_csv(db: Database, championship_id: str, out: TextIO) -> int:
     writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
     writer.writeheader()
     for r in rows:
-        writer.writerow({k: r[k] for k in r.keys()})
+        writer.writerow({k: r[k] for k in r})
     return len(rows)
 
 
@@ -89,10 +90,10 @@ def export_json(db: Database, championship_id: str, out: TextIO) -> int:
 
 
 def _row(r: sqlite3.Row) -> dict[str, Any]:
-    return {k: r[k] for k in r.keys()}
+    return {k: r[k] for k in r}
 
 
-def team_stats(db: Database, team_name: str) -> Optional[dict[str, Any]]:
+def team_stats(db: Database, team_name: str) -> dict[str, Any] | None:
     """Ban tendencies, map picks and win rates for a team (by name)."""
     c = db.conn
     trow = c.execute(
@@ -180,8 +181,8 @@ def team_stats(db: Database, team_name: str) -> Optional[dict[str, Any]]:
 # --- self-contained HTML dashboard -------------------------------------------
 
 def _attack_first_panels(
-    game_rows: "list[Any]", attack_cycles: "Mapping[str, Any]"
-) -> "tuple[dict[str, Any], dict[str, Any]]":
+    game_rows: list[Any], attack_cycles: Mapping[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """(total, extra) attacking-first panels using the DECIDING attack/defend cycle.
     Normal games (max score <= 3) use FACEIT's round-1 attacker; extra-round games
     (score > 3) use owscout's round-3 attacker from ``attack_cycles`` and are
@@ -199,13 +200,22 @@ def _attack_first_panels(
         if max(s1, s2) <= 3:                        # normal 2-round game -> round 1
             if r["attacking_first_faction"] and r["winner_faction"]:
                 won = 1 if r["winner_faction"] == r["attacking_first_faction"] else 0
-                tot[mp][0] += 1; tot[mp][1] += won; tg += 1; tw += won
+                tot[mp][0] += 1
+                tot[mp][1] += won
+                tg += 1
+                tw += won
         else:                                       # extra rounds -> round-3 attacker
             ci = attack_cycles.get(f"{r['match_id']}:{r['game_no']}")
             if ci and ci.get("decider") == 3:
                 won = 1 if ci.get("won") else 0
-                tot[mp][0] += 1; tot[mp][1] += won; tg += 1; tw += won
-                ext[mp][0] += 1; ext[mp][1] += won; eg += 1; ew += won
+                tot[mp][0] += 1
+                tot[mp][1] += won
+                tg += 1
+                tw += won
+                ext[mp][0] += 1
+                ext[mp][1] += won
+                eg += 1
+                ew += won
 
     def panel(agg: dict[str, list[int]], g: int, w: int) -> dict[str, Any]:
         by_map = [{"name": mp, "category": cat[mp], "games": v[0], "atk_first_wins": v[1]}
@@ -215,7 +225,7 @@ def _attack_first_panels(
 
 
 def _dashboard_data(db: Database, cid: str,
-                    attack_cycles: "Optional[Mapping[str, Any]]" = None) -> dict[str, Any]:
+                    attack_cycles: Mapping[str, Any] | None = None) -> dict[str, Any]:
     from collections import Counter, defaultdict
     c = db.conn
 
@@ -240,7 +250,7 @@ def _dashboard_data(db: Database, cid: str,
         # `upcoming` below and must not inflate totals or (worse) read as walkovers.
         "matches": scalar("SELECT COUNT(*) FROM matches WHERE championship_id=? AND status='FINISHED'", cid),
         "forfeits": scalar("SELECT COUNT(*) FROM matches WHERE championship_id=? AND status='FINISHED' AND forfeit=1", cid),
-        "walkovers": scalar(f"""SELECT COUNT(*) FROM matches m WHERE m.championship_id=:c AND m.status='FINISHED'
+        "walkovers": scalar("""SELECT COUNT(*) FROM matches m WHERE m.championship_id=:c AND m.status='FINISHED'
             AND NOT EXISTS (SELECT 1 FROM games g WHERE g.match_id=m.id AND g.map_guid IS NOT NULL)""", {"c": cid}),
         "played_games": scalar(f"SELECT COUNT(*) FROM games WHERE match_id IN {in_champ} AND map_guid IS NOT NULL", {"c": cid}),
         "teams": scalar("SELECT COUNT(DISTINCT id) FROM teams WHERE id IN "
@@ -330,7 +340,7 @@ def _dashboard_data(db: Database, cid: str,
             a["elo"], a["elo_at"] = int(rr["elo"]), fin
         if rr["e"] is not None and rr["d"] is not None:
             a["sgames"] += 1
-            for k, col in zip(_STAT_KEYS, ("e", "d", "dmg", "heal", "mit")):
+            for k, col in zip(_STAT_KEYS, ("e", "d", "dmg", "heal", "mit"), strict=True):
                 a[k] += rr[col] or 0
     team_rosters: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for (team, pid), a in _agg.items():
@@ -353,7 +363,7 @@ def _dashboard_data(db: Database, cid: str,
             # Played in the team's most recent match = part of the current lineup.
             "current": bool(a["last_seen"]) and a["last_seen"] == _last_match.get(team, ""),
         })
-    for team, pls in team_rosters.items():
+    for _team, pls in team_rosters.items():
         pls.sort(key=lambda x: (x["last_seen"], x["games"]), reverse=True)
     for t in teams:
         t["roster"] = team_rosters.get(t["name"], [])
@@ -388,7 +398,7 @@ def _dashboard_data(db: Database, cid: str,
 
     matches: list[dict[str, Any]] = []
     team_names: set[str] = set()
-    team_avatars: dict[str, Optional[str]] = {}
+    team_avatars: dict[str, str | None] = {}
     for m in c.execute("""SELECT m.*, t1.name f1name, t2.name f2name,
                                  t1.avatar_url f1avatar, t2.avatar_url f2avatar
                           FROM matches m LEFT JOIN teams t1 ON t1.id=m.faction1_team_id
@@ -406,7 +416,7 @@ def _dashboard_data(db: Database, cid: str,
             if a2 and not team_avatars.get(f2):
                 team_avatars[f2] = a2
 
-        def team_of(faction: Optional[str]) -> Optional[str]:
+        def team_of(faction: str | None, *, f1: str = f1, f2: str = f2) -> str | None:
             return f1 if faction == "faction1" else f2 if faction == "faction2" else None
 
         # team_id -> team name, so per-game rosters can be grouped by side.
@@ -489,7 +499,7 @@ def _dashboard_data(db: Database, cid: str,
 TIERS: tuple[str, ...] = ("Master", "Expert", "Advanced", "Open")
 
 
-def _tier_of(name: Optional[str]) -> Optional[str]:
+def _tier_of(name: str | None) -> str | None:
     """The skill tier a championship name encodes, or None (see :data:`TIERS`)."""
     if not name:
         return None
@@ -499,7 +509,7 @@ def _tier_of(name: Optional[str]) -> Optional[str]:
 REGIONS: tuple[str, ...] = ("EMEA", "NA")
 
 
-def _region_of(name: Optional[str]) -> Optional[str]:
+def _region_of(name: str | None) -> str | None:
     """The region a championship name encodes ('EMEA' | 'NA' | None).
 
     Matched as a WHOLE WORD, mirroring ``owscout.db.list_codes``: a bare
@@ -514,7 +524,7 @@ def _region_of(name: Optional[str]) -> Optional[str]:
     return next((r for r in REGIONS if r in words), None)
 
 
-def _is_playoff(name: Optional[str]) -> bool:
+def _is_playoff(name: str | None) -> bool:
     """A playoff/knockout championship, separate from the '... - Regular Season'
     divisions. Its matches feed the Playoffs tab as real results but must NOT
     enter regular-season standings/meta — so it's classified out of the tier
@@ -522,9 +532,9 @@ def _is_playoff(name: Optional[str]) -> bool:
     return is_playoff_name(name)
 
 
-def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None,
-                only_tier: Optional[str] = None, only_region: Optional[str] = None,
-                data_path: Optional[str] = None) -> int:
+def export_html(db: Database, out: TextIO, championship_id: str | None = None,
+                only_tier: str | None = None, only_region: str | None = None,
+                data_path: str | None = None) -> int:
     """Render the multi-division dashboard.
 
     With ``championship_id`` set, only that division is included; otherwise every
@@ -533,11 +543,11 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     dashboard; the DB may hold several divisions across tiers and regions.
     Returns the number of divisions with data.
     """
-    want_tier: Optional[str] = None
+    want_tier: str | None = None
     if only_tier:
         w = only_tier.strip().lower()
         want_tier = next((t for t in TIERS if t.lower() == w), None)
-    want_region: Optional[str] = None
+    want_region: str | None = None
     if only_region:
         w = only_region.strip().lower()
         want_region = "EMEA" if w.startswith("e") else "NA" if w.startswith("n") else None
@@ -587,7 +597,7 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
     divisions: dict[str, Any] = {}
     heroes: dict[str, Any] = {}
     maps: dict[str, Any] = {}
-    team_avatars: dict[str, Optional[str]] = {}
+    team_avatars: dict[str, str | None] = {}
     ordered: list[tuple[str, str]] = []
     for cid in cids:
         d = _dashboard_data(db, cid, attack_cycles=owscout_cycles)
@@ -706,13 +716,17 @@ def export_html(db: Database, out: TextIO, championship_id: Optional[str] = None
             "OWSCOUT_REFRESH_ENDPOINT",
             "https://owscout-upload.owscout.workers.dev/refresh"),
         "seat_order": list(SEAT_ORDER),
-        "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "built_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         # Inlined hero portraits so comps read as icons, not five words. Empty
         # when the art isn't present; the page then falls back to text chips.
         "hero_icons": load_hero_icons(),
     }
     title = "FACEIT OW2 — League Scouting"
-    payload = json.dumps(data).replace("</", "<\\/")
+    # ensure_ascii + escaping every `<` as \u003c closes the `<!--` breakout hole
+    # as well as the `</script>` one: a leading "<!" in any string can't begin an
+    # HTML comment inside the inlined blob. json.loads() (and JSON.parse) decode
+    # \u003c back to `<` transparently, so the round-trip is lossless.
+    payload = json.dumps(data, ensure_ascii=True).replace("<", "\\u003c")
     if data_path:
         # Shell build: the data lives in a sibling file the page fetches. This is
         # the seam next-season gating hooks into (serve data.json from the

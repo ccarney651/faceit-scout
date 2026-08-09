@@ -20,6 +20,7 @@ dev = [
     "responses>=0.25",
     "mypy>=1.8",
     "types-requests>=2.31",
+    "ruff>=0.6",
 ]
 # owscout (sibling tool) screen-capture / CV runtime deps. Optional so the
 # faceit-sync install and test suite need none of them; imported lazily.
@@ -67,6 +68,28 @@ warn_return_any = false
 module = ["cv2", "dxcam", "mss", "numpy", "numpy.*", "keyboard"]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+[tool.ruff]
+# Same ceiling as the codebase's line-wrapping habits.
+line-length = 100
+
+[tool.ruff.lint]
+# Default rule set minus the pedantic stylistic ones that would churn every
+# diff for no behavioral gain; B (bugbear) is kept on because it flags the
+# broad-except/f-string pitfalls the review cares about.
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    # The dashboard parts and capture app are concatenated/build artifacts, not
+    # hand-linted modules - leave their style alone.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# F401: hero_icons/team_logos keep module-level imports for CLI convenience.
+"faceit_sync/__init__.py" = ["F401"]
+"faceit_sync/hero_icons.py" = ["F401"]
+# E402: cv2 is importorskip'd before the owscout imports it needs.
+"tests/test_ref_import_rescale.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "owscout/tests"]

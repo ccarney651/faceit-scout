@@ -5,6 +5,7 @@
 <meta name="description" content="Private scrim scouting: share your screen, calibrate once, and capture team comps round-by-round. Stays on your browser — never published.">
 <meta name="theme-color" content="#0d1015">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src https://cdn.jsdelivr.net; font-src data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <style>
   :root{color-scheme:dark;--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;--faint:#6b7686;--line:#252c37;--accent:#8087ff;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;--blue:#5a9bd8;--red:#e9694f}
   *{box-sizing:border-box}
@@ -1091,7 +1092,9 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
   if(_ocrLoading) return _ocrLoading;
   _ocrLoading=(async()=>{
     if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
+      s.crossOrigin='anonymous';
       s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
     const w=await Tesseract.createWorker('eng');
     await w.setParameters({ tessedit_pageseg_mode:'7' });

@@ -8,14 +8,13 @@ nothing. Only a partial gap or a just-ingested match can still gain a code.
 
 from __future__ import annotations
 
-from typing import Optional
+from conftest import make_client
 
 from faceit_sync.db import Database
 from faceit_sync.sync import SyncEngine
-from conftest import make_client
 
 
-def _match(db: Database, mid: str, age: str, codes: list[Optional[str]]) -> None:
+def _match(db: Database, mid: str, age: str, codes: list[str | None]) -> None:
     """Store a FINISHED match ``age`` ago (a SQLite modifier like '-2 days') whose
     games carry ``codes`` — None for a game with no replay code."""
     db.conn.execute("INSERT OR IGNORE INTO championships (id) VALUES ('c1')")

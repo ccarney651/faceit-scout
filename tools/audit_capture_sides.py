@@ -33,7 +33,7 @@ import json
 import os
 import sqlite3
 from collections import Counter
-from typing import Any, Optional
+from typing import Any
 
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
 CAPTURE_DIR = os.environ.get("CAPTURE_DIR", os.path.join("data", "captures"))
@@ -84,7 +84,7 @@ def _audit_map(m: dict[str, Any], roster: dict[str, str]) -> dict[str, Any]:
 
     # Per side: which team its tags point at, and how cleanly -- or None if
     # there isn't enough (or clean enough) evidence to call it either way.
-    resolved: dict[str, Optional[str]] = {}
+    resolved: dict[str, str | None] = {}
     shares: dict[str, float] = {}
     for side, c in hits.items():
         total = sum(c.values())
@@ -97,7 +97,7 @@ def _audit_map(m: dict[str, Any], roster: dict[str, str]) -> dict[str, Any]:
 
     # Classify each RESOLVED side against what was declared -- a side with no
     # resolution contributes no outcome at all, positive or negative.
-    outcomes: dict[str, Optional[str]] = {}
+    outcomes: dict[str, str | None] = {}
     for side, other in (("a", "b"), ("b", "a")):
         team = resolved[side]
         if team is None:

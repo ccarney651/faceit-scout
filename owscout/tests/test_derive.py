@@ -16,7 +16,6 @@ from owscout.derive import (
     wilson_lower_bound,
 )
 
-
 # --- Wilson ------------------------------------------------------------------
 
 

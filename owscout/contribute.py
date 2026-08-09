@@ -32,9 +32,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+import os
+import re
+import subprocess
+from collections.abc import Iterable, Mapping, Sequence, Set
+from contextlib import suppress
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import AbstractSet, Any, Iterable, Mapping, NamedTuple, Optional, Sequence
+from typing import Any, NamedTuple
 
 from .models import ObsDetail
 
@@ -52,7 +57,7 @@ DEFAULT_UPLOAD_ENDPOINT = "https://owscout-upload.owscout.workers.dev"
 
 # Real public contributions started with pixels on 2026-07-26. Anything captured
 # before that moment is pre-launch testing and should not appear on leaderboards.
-REAL_CONTRIBUTIONS_SINCE = datetime(2026, 7, 26, 20, 30, tzinfo=timezone.utc)
+REAL_CONTRIBUTIONS_SINCE = datetime(2026, 7, 26, 20, 30, tzinfo=UTC)
 
 
 def _parse_iso_ts(ts: Any) -> datetime | None:
@@ -79,7 +84,7 @@ class KnownGame(NamedTuple):
     """What FACEIT says about a real game: who played it, and its replay code."""
 
     teams: frozenset[str]           # both team names, lowercased
-    demo_code: Optional[str]        # None when FACEIT never published one
+    demo_code: str | None        # None when FACEIT never published one
 
 
 class MergeResult(NamedTuple):
@@ -139,7 +144,7 @@ def build_contribution(
                ORDER BY s.observation_id, s.slot_index""",
             (int(r["id"]),),
         ).fetchall()
-        pairs_by_obs: dict[int, list[list[Optional[str]]]] = {}
+        pairs_by_obs: dict[int, list[list[str | None]]] = {}
         for pr in pair_rows:
             pairs_by_obs.setdefault(int(pr["oid"]), []).append(
                 [pr["hero_guid"], pr["player_id"]])
@@ -215,7 +220,7 @@ def known_games(faceit_db_path: str) -> dict[MapKey, KnownGame]:
 
 def validate_maps(
     contrib: Mapping[str, Any], known: Mapping[MapKey, KnownGame]
-) -> tuple[dict[str, Any], list[tuple[Optional[MapKey], str]]]:
+) -> tuple[dict[str, Any], list[tuple[MapKey | None, str]]]:
     """One contribution -> (cleaned copy, rejected maps with reasons).
 
     Applied PER VIEW, before ownership: if Alice's view of a real game carries
@@ -231,7 +236,7 @@ def validate_maps(
     """
     who = str(contrib.get("contributor", "?"))
     cleaned: list[dict[str, Any]] = []
-    rejects: list[tuple[Optional[MapKey], str]] = []
+    rejects: list[tuple[MapKey | None, str]] = []
     for m in contrib.get("maps", []):
         if not m.get("match_id") or m.get("game_no") is None:
             rejects.append((None, "no FACEIT identity"))
@@ -276,8 +281,8 @@ OVERRIDES_FILE = "overrides.json"
 
 def merge_first_wins(
     contributions: Sequence[Mapping[str, Any]],
-    overrides: Optional[Mapping[MapKey, str]] = None,
-    excludes: Optional[AbstractSet[MapKey]] = None,
+    overrides: Mapping[MapKey, str] | None = None,
+    excludes: Set[MapKey] | None = None,
 ) -> MergeResult:
     """Combine contributions in PRIORITY ORDER (earliest submission first).
 
@@ -415,7 +420,7 @@ def to_obs_rows(
     from .derive import ObsRow
 
     rows: list[Any] = []
-    for idx, (key, m) in enumerate(sorted(maps.items()), start=1):
+    for idx, (_key, m) in enumerate(sorted(maps.items()), start=1):
         for o in m.get("observations", []):
             guids = [g for g in (o.get("heroes") or ())]
             if not guids:
@@ -474,11 +479,11 @@ def attack_first_cycles(
 def merged_payload(
     contributions: Sequence[Mapping[str, Any]],
     hero_roles: Mapping[str, str], hero_names: Mapping[str, str],
-    overrides: Optional[Mapping[MapKey, str]] = None,
-    known: Optional[Mapping[MapKey, KnownGame]] = None,
-    player_names: Optional[Mapping[str, str]] = None,
-    excludes: Optional[AbstractSet[MapKey]] = None,
-    player_stats: Optional[Mapping[tuple[str, int, str], Mapping[str, Any]]] = None,
+    overrides: Mapping[MapKey, str] | None = None,
+    known: Mapping[MapKey, KnownGame] | None = None,
+    player_names: Mapping[str, str] | None = None,
+    excludes: Set[MapKey] | None = None,
+    player_stats: Mapping[tuple[str, int, str], Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
@@ -564,7 +569,7 @@ def merged_payload(
             continue
         pgp.setdefault(f"{mid}:{gno}", {})[nick] = names.get(guid, guid)
     payload["per_game_players"] = pgp
-    payload["built_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload["built_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Games on or before this date have DEAD replay codes: the site must not
     # count them as scoutable (unless someone captured them before the wipe).
     from .db import LATEST_KNOWN_WIPE
@@ -637,7 +642,7 @@ def push_contribution(
         "User-Agent": "owscout-sync",
     }
     # Updating an existing file requires its current blob sha; absent file = create.
-    sha: Optional[str] = None
+    sha: str | None = None
     got = session.get(base, headers=headers, params={"ref": branch}, timeout=30)
     if got.status_code == 200:
         sha = got.json().get("sha")
@@ -763,7 +768,7 @@ def rank_player_heroes(
             mean = sum(xs) / len(xs)
             means[stat] = mean
             stds[stat] = (sum((x - mean) ** 2 for x in xs) / len(xs)) ** 0.5
-        for pid, avg in members:
+        for _pid, avg in members:
             avg["_comp"] = sum(w * (avg[stat] - means[stat]) / stds[stat]
                                for stat, w in weights.items() if stds[stat] > 0)
         ranked = len(members) >= min_group
@@ -798,7 +803,7 @@ def rank_player_heroes(
 def player_pools(
     maps: Mapping[MapKey, Mapping[str, Any]],
     player_names: Mapping[str, str], hero_names: Mapping[str, str],
-    ranks: Optional[Mapping[tuple[str, str], Mapping[str, Any]]] = None,
+    ranks: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Per team, each attributed player's hero pool in ROUNDS (same unit as the
     team pool). Only observations that carry (hero, player) pairs contribute;
@@ -927,10 +932,9 @@ def fetch_faceit_snapshot(
             chunks.append(chunk)
             done += len(chunk)
             if progress is not None:
-                try:
+                # A display hiccup must not break the download.
+                with suppress(Exception):
                     progress(done, total)
-                except Exception:  # noqa: BLE001 - display must not break the download
-                    pass
         raw = gzip.decompress(b"".join(chunks))
 
         d = os.path.dirname(os.path.abspath(dest_path)) or "."
@@ -959,10 +963,8 @@ def fetch_faceit_snapshot(
         return False
     finally:
         if tmp and os.path.exists(tmp):
-            try:
+            with suppress(OSError):
                 os.remove(tmp)
-            except OSError:
-                pass
 
 
 def contribution_files(directory: str | Path) -> list[Path]:
@@ -981,19 +983,44 @@ def git_submission_order(paths: Iterable[Path]) -> list[Path]:
     The contributing machine cannot be trusted to timestamp its own submission,
     so first-wins is decided by the receiving side. In a git flow that is the
     commit that added the file. Files git knows nothing about sort last, by name.
+
+    Two git calls total (repo root + one log covering every path), never one
+    subprocess per file: with dozens of contributor files the per-file spawn
+    was the dominant cost of a merge.
     """
-    import subprocess
+    try:
+        root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=15, check=False)
+        root = root.stdout.strip()
+        out = subprocess.run(
+            ["git", "log", "--diff-filter=A", "--name-only", "--format=%cI", "--",
+             *(str(p) for p in paths)],
+            capture_output=True, text=True, timeout=30, check=False)
+    except Exception:  # noqa: BLE001 - no git, or not a repo
+        return sorted(paths, key=lambda p: p.name)
 
-    def added_at(p: Path) -> str:
-        try:
-            out = subprocess.run(
-                ["git", "log", "--diff-filter=A", "--format=%cI", "-1", "--", str(p)],
-                capture_output=True, text=True, timeout=15)
-            return out.stdout.strip() or "9999"
-        except Exception:  # noqa: BLE001 - no git, or not a repo
-            return "9999"
+    # Parse "DATE\n\nfile\nfile\nDATE\n\nfile..." - log is newest-first, so a
+    # file's LAST mention is its oldest add; keep the minimum date seen.
+    # git prints --name-only paths relative to the repo root (forward slashes).
+    added_at: dict[str, str] = {}
+    date = ""
+    for line in out.stdout.splitlines():
+        if not line:
+            continue
+        if re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", line):
+            date = line
+        elif date:
+            norm = os.path.normpath(line).replace("\\", "/")
+            prev = added_at.get(norm)
+            if prev is None or date < prev:
+                added_at[norm] = date
 
-    return sorted(paths, key=lambda p: (added_at(p), p.name))
+    def norm_path(p: Path) -> str:
+        rel = os.path.relpath(os.path.abspath(p), root) if root else str(p)
+        return os.path.normpath(rel).replace("\\", "/")
+
+    return sorted(paths, key=lambda p: (added_at.get(norm_path(p), "9999"), p.name))
 
 
 def resolve_contributions(

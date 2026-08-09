@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from .models import FaceitHero
 
@@ -78,7 +77,7 @@ def load_team_roles(
 
 def team_ids_for_map(
     conn: sqlite3.Connection, match_id: str
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """(faction1_team_id, faction2_team_id) for a match."""
     row = conn.execute(
         "SELECT faction1_team_id, faction2_team_id FROM matches WHERE id = ?",
@@ -89,7 +88,7 @@ def team_ids_for_map(
     return row["faction1_team_id"], row["faction2_team_id"]
 
 
-def resolve_player_id(conn: sqlite3.Connection, nickname: str) -> Optional[str]:
+def resolve_player_id(conn: sqlite3.Connection, nickname: str) -> str | None:
     """Look up a player id by nickname (case-insensitive exact, then substring)."""
     row = conn.execute(
         "SELECT id FROM players WHERE nickname = ? COLLATE NOCASE", (nickname,)
@@ -103,7 +102,7 @@ def resolve_player_id(conn: sqlite3.Connection, nickname: str) -> Optional[str]:
     return None if row is None else str(row["id"])
 
 
-def resolve_team_id(conn: sqlite3.Connection, name: str) -> Optional[str]:
+def resolve_team_id(conn: sqlite3.Connection, name: str) -> str | None:
     """Look up a team id by name (case-insensitive exact, then substring)."""
     row = conn.execute(
         "SELECT id FROM teams WHERE name = ? COLLATE NOCASE", (name,)

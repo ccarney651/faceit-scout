@@ -64,6 +64,22 @@ export default {
           retry_after: Math.ceil(waitMs / 1000),
         });
       }
+      // Claim the cooldown BEFORE the slow GitHub call. Writing it only after
+      // the dispatch (as originally) was a TOCTOU: N concurrent refreshes all
+      // read the same stale timestamp and all fired. KV has no compare-and-set,
+      // so the lock is write-then-verify with a unique claim value: the loser's
+      // write is overwritten and its read-back sees someone else's claim. The
+      // TTL self-heals a claim if the worker dies mid-dispatch.
+      const claim = String(Date.now());
+      await env.NAMES.put("_refresh_at", claim, {
+        expirationTtl: Math.ceil(REFRESH_COOLDOWN_MS / 1000),
+      });
+      if ((await env.NAMES.get("_refresh_at")) !== claim) {
+        return json(429, {
+          error: `a refresh is already running or just ran - try again in ${Math.ceil(waitMs / 1000)}s`,
+          retry_after: Math.ceil(waitMs / 1000),
+        });
+      }
       const res = await fetch(`https://api.github.com/repos/${env.REPO}/dispatches`, {
         method: "POST",
         headers: {
@@ -75,9 +91,11 @@ export default {
         body: JSON.stringify({ event_type: "refresh" }),
       });
       if (res.status !== 204) {
+        // A failed dispatch shouldn't burn the whole cooldown window - release
+        // the claim so the site can be retried promptly.
+        await env.NAMES.delete("_refresh_at");
         return json(502, { error: `could not start the refresh (HTTP ${res.status})` });
       }
-      await env.NAMES.put("_refresh_at", String(Date.now()));
       return json(200, { started: true });
     }
 
@@ -261,7 +279,7 @@ function oauthReady(env) {
             env.DISCORD_REDIRECT_URI && env.SESSION_SECRET);
 }
 async function authLogin(url, env) {
-  const back = url.searchParams.get("redirect") || "/";
+  const back = safeBack(url.searchParams.get("redirect"));
   if (!oauthReady(env)) {   // inert: bounce back with a flag the app explains
     return Response.redirect(back + (back.includes("#") ? "&" : "#") + "login_error=notconfigured", 302);
   }
@@ -292,7 +310,7 @@ async function authCallback(url, env) {
   const session = await signSession(
     { d: u.id, n: u.global_name || u.username || "scout",
       admin: admins.includes(String(u.id)), exp: Date.now() + 30 * 86400000 }, env);   // 30 days
-  const back = st.r || "/";
+  const back = safeBack(st.r);
   return Response.redirect(back + (back.includes("#") ? "&" : "#") + "session=" + encodeURIComponent(session), 302);
 }
 
@@ -301,20 +319,34 @@ function sanitizeName(s) {
   return x.length >= 2 ? x : "";
 }
 
-// Resolve who is claiming, from headers (HTTP fallback) or query string (the
-// WebSocket upgrade, which a browser can't send headers on). owner = who may
-// release/refresh a claim (account when logged in, else a hash of the anon
-// identity token); by = best-effort display name.
-async function claimIdentity(request, env) {
-  const url = new URL(request.url);
-  const pick = (h, q) => request.headers.get(h) || url.searchParams.get(q) || "";
-  const sess = await verifySession(pick("x-owscout-session", "session"), env);
-  const nm = pick("x-owscout-name", "name").trim().toLowerCase();
-  const tok = pick("x-owscout-token", "token");
+// Only same-origin relative paths may be used as a post-login redirect target;
+// absolute URLs (http://evil.example, //evil.example) are bounced to "/".
+function safeBack(s) {
+  return typeof s === "string" && /^\/(?!\/)/.test(s) ? s : "/";
+}
+
+// Resolve who is claiming. owner = who may release/refresh a claim (account when
+// logged in, else a hash of the anon identity token); by = best-effort display
+// name. Used for HTTP paths (headers) and, via an explicit WS `identify` message,
+// for the socket — never from the query string, so identity tokens don't end up
+// in proxy/access logs.
+async function resolveIdentity({ session, name, token }, env) {
+  const sess = await verifySession(session, env);
+  const nm = String(name || "").trim().toLowerCase();
+  const tok = String(token || "");
   const owner = sess ? "u_" + sess.d : (tok ? "t_" + (await sha256hex(tok)).slice(0, 16) : "anon");
   const by = sess ? (sanitizeName(sess.n) || "scout-" + String(sess.d).slice(-6))
                   : (NAME_RE.test(nm) ? nm : "a scout");
   return { owner, by };
+}
+async function claimIdentity(request, env) {
+  const url = new URL(request.url);
+  const pick = (h, q) => request.headers.get(h) || url.searchParams.get(q) || "";
+  return resolveIdentity({
+    session: pick("x-owscout-session", "session"),
+    name: pick("x-owscout-name", "name"),
+    token: pick("x-owscout-token", "token"),
+  }, env);
 }
 
 // The admin roster is the whole point of "who is sending reports": it walks the
@@ -420,6 +452,10 @@ function json(status, obj) {
       // The dashboard calls /refresh from the Pages origin.
       "access-control-allow-origin": "*",
       "access-control-allow-headers": "content-type,x-owscout-name,x-owscout-token,x-owscout-session",
+      // JSON APIs shouldn't be framed, sniffed, or leak Referer.
+      "content-security-policy": "default-src 'none'",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
     },
   });
 }
@@ -467,7 +503,8 @@ export class ClaimRoom {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);                 // hibernatable: no duration charge while idle
-      server.serializeAttachment({ owner, by });
+      // Identity arrives on the first message (an `identify` frame), not the
+      // upgrade, so tokens never ride in the WS URL.
       server.send(JSON.stringify({ type: "snapshot", claims: this.publicClaims() }));
       await this.ensureAlarm();
       return new Response(null, { status: 101, webSocket: client });
@@ -485,8 +522,16 @@ export class ClaimRoom {
     return json(404, { error: "not found" });
   }
 
-  webSocketMessage(ws, raw) {
+  async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; }
+    if (m.type === "identify") {
+      const { owner, by } = await resolveIdentity({
+        session: m.session, name: m.name, token: m.token,
+      }, this.env);
+      ws.serializeAttachment({ owner, by });
+      try { ws.send(JSON.stringify({ type: "identified" })); } catch (e) {}
+      return;
+    }
     const { owner, by } = ws.deserializeAttachment() || {};
     if (m.type === "claim" && this.ok(m.key)) {
       const r = this.doClaim(m.key, owner, by);

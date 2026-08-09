@@ -15,7 +15,7 @@ from owscout.match import (
     reduce_candidates,
     role_counts,
 )
-from owscout.models import Rect, HeroRef
+from owscout.models import HeroRef, Rect
 
 # hero_guid -> role, and a small ref library (alive + dead per hero).
 ROLES = {"tank": "Tank", "dps1": "Damage", "dps2": "Damage", "sup1": "Support", "sup2": "Support"}

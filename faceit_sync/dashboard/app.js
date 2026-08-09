@@ -47,7 +47,7 @@ function mergeDivisions(v){
 
 /* ---------- tiny DOM + format helpers ---------- */
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
-const esc = (s)=> (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = (s)=> (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf = (n)=> (n==null?'—':Number(n).toLocaleString('en-US'));
 const pctOf = (a,b)=> b? Math.round(100*a/b) : 0;
 const dshort = (s)=> s? String(s).slice(0,10) : '?';

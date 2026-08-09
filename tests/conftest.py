@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -35,7 +34,7 @@ def db(tmp_path: Path) -> Database:
     database.close()
 
 
-def make_client(api_key: Optional[str] = None) -> tuple[FaceitClient, list[float]]:
+def make_client(api_key: str | None = None) -> tuple[FaceitClient, list[float]]:
     """A client with no real sleeping and a seeded RNG; returns (client, sleeps)."""
     sleeps: list[float] = []
     client = FaceitClient(

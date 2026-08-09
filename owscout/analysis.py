@@ -19,8 +19,8 @@ game or DB.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
 
 # hero identifier -> role ('tank' | 'damage' | 'support'), case-insensitive.
 Roles = dict[str, str]
@@ -32,8 +32,8 @@ _PHASED_CATEGORIES = {"escort", "hybrid", "assault"}
 
 
 def phase_of(
-    map_category: Optional[str], side: str, round_no: Optional[int]
-) -> Optional[str]:
+    map_category: str | None, side: str, round_no: int | None
+) -> str | None:
     """'attack' / 'defend' for one HUD side, or None when the map has no phase.
 
     Operator rule: on Escort/Hybrid the RED team (right HUD side 'b') attacks
@@ -47,7 +47,7 @@ def phase_of(
     return "attack" if side == attack_side else "defend"
 
 
-def tank_of(lineup: Sequence[str], roles: Roles) -> Optional[str]:
+def tank_of(lineup: Sequence[str], roles: Roles) -> str | None:
     """The tank in a lineup (first hero whose role is 'tank'), or None."""
     for h in lineup:
         if (roles.get(h) or "").lower() == "tank":
@@ -103,7 +103,7 @@ class CompInstance:
     # here). None for instances built before FACEIT identity was threaded
     # through (or synthetic/test data). Lets a comp family point back to the
     # replay code(s) that back it - see CompFamily.game_keys.
-    code_key: Optional[str] = None
+    code_key: str | None = None
 
 
 @dataclass
@@ -129,7 +129,7 @@ def cluster_comps(instances: Sequence[CompInstance], roles: Roles) -> list[CompF
     from collections import Counter
 
     # Canonicalise each lineup to a sorted tuple so order never splits a family.
-    norm: list[tuple[tuple[str, ...], bool, str, tuple[str, ...], Optional[str]]] = [
+    norm: list[tuple[tuple[str, ...], bool, str, tuple[str, ...], str | None]] = [
         (tuple(sorted(i.heroes)), i.won, i.map_key, tuple(i.bans), i.code_key) for i in instances
     ]
     freq = Counter(t[0] for t in norm)
@@ -205,13 +205,13 @@ class PlayerSlot:
     """One roster slot in a lineup snapshot: which player (if attribution
     resolved) is on which hero."""
 
-    player_id: Optional[str]
+    player_id: str | None
     hero: str
 
 
 def classify_player_transition(
     prev: Sequence[PlayerSlot], curr: Sequence[PlayerSlot], roles: Roles
-) -> Optional[Transition]:
+) -> Transition | None:
     """Like :func:`classify_transition`, but confirmed via player identity: a
     hero-set change is only reported as a swap when it's traceable to the SAME
     players still being present, with at least one of them on a different hero.

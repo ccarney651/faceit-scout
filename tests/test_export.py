@@ -7,12 +7,12 @@ import json
 import re
 
 import responses
+from conftest import RESTART_DC_ID, make_client, register_match
 
 from faceit_sync.client import MATCH_URL
 from faceit_sync.db import Database
 from faceit_sync.export import _dashboard_data, export_html
 from faceit_sync.sync import SyncEngine
-from conftest import RESTART_DC_ID, make_client, register_match
 
 
 def _ingest(db: Database) -> None:

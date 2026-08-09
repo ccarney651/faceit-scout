@@ -9,10 +9,10 @@ Control, else the whole map. Consumes ``ObsDetail`` rows (from
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
-from .analysis import (CompFamily, CompInstance, Roles, cluster_comps,
-                       phase_of, same_comp)
+from .analysis import CompFamily, CompInstance, Roles, cluster_comps, phase_of, same_comp
 from .models import ObsDetail
 
 
@@ -21,7 +21,8 @@ def scout_payload(db: Any, faceit_db_path: str) -> dict[str, Any]:
     (derive.dashboard_comps) enriched with each team's scouting report under
     ``teams[team]["scout"]``. Reads roles/names from faceit + custom heroes."""
     from .derive import dashboard_comps
-    from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+    from .faceit import connect_ro, load_heroes
+    from .faceit import hero_roles as load_roles
 
     payload = dashboard_comps(db.resolved_observations())
     with connect_ro(faceit_db_path) as fdb:
@@ -66,7 +67,7 @@ def _player_slots(o: ObsDetail) -> list[Any]:
     from .analysis import PlayerSlot
 
     pids = o.player_ids if len(o.player_ids) == len(o.hero_guids) else (None,) * len(o.hero_guids)
-    return [PlayerSlot(pid, hero) for hero, pid in zip(o.hero_guids, pids)]
+    return [PlayerSlot(pid, hero) for hero, pid in zip(o.hero_guids, pids, strict=True)]
 
 
 def aggregate_swaps(
@@ -193,7 +194,7 @@ def ban_response(
     return out
 
 
-def _segment(d: ObsDetail) -> Optional[str]:
+def _segment(d: ObsDetail) -> str | None:
     """The scouting segment for an observation: 'attack'/'defend' (Escort/Hybrid),
     else the control sub-map, else None (single-geometry map).
 
@@ -204,7 +205,7 @@ def _segment(d: ObsDetail) -> Optional[str]:
     return d.phase or phase_of(d.map_category, d.side, d.round_no) or d.sub_map
 
 
-def _team_of(d: ObsDetail) -> Optional[str]:
+def _team_of(d: ObsDetail) -> str | None:
     return d.side_a_team if d.side == "a" else d.side_b_team
 
 
@@ -371,7 +372,7 @@ def team_scout(
         # one-hero flex is not "changing"; a different family is).
         loss_next = changed = 0
         games_seq = sorted(series.get(team, []))
-        for (m1, g1, won1, open1), (m2, g2, _w2, open2) in zip(games_seq, games_seq[1:]):
+        for (m1, g1, won1, open1), (m2, g2, _w2, open2) in zip(games_seq, games_seq[1:], strict=False):
             if m1 == m2 and g2 == g1 + 1 and not won1:
                 loss_next += 1
                 if not same_comp(open1, open2, roles):

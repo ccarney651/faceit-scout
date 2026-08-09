@@ -10,6 +10,8 @@ ahead of ``bootApp`` precisely so they can be executed here for real.
 from __future__ import annotations
 
 import json
+import math
+import random
 import re
 import shutil
 import subprocess
@@ -620,8 +622,8 @@ def test_map_coverage_ranks_by_unseen_playtime_and_drops_below_the_floor(
 def test_map_coverage_drops_a_map_that_reached_the_target(tmp_path) -> None:
     # Capture 3 of Numbani's 5 games -> 60% covered -> needed 0 -> not listed.
     got = _run(
-        "return mapCoverage(%s, new Set(['m1:1','m1:2','m1:3']), null).map(r=>r.map);" %
-        _MATCHES, tmp_path)
+        f"return mapCoverage({_MATCHES}, new Set(['m1:1','m1:2','m1:3']), null).map(r=>r.map);",
+        tmp_path)
     assert got == ["Ilios"]
 
 
@@ -645,8 +647,8 @@ def test_map_coverage_counts_only_live_codes_as_capturable(tmp_path) -> None:
 def test_map_coverage_needed_is_clamped_at_zero_when_fully_captured(tmp_path) -> None:
     # Capture every Numbani game: needed must clamp to 0, and the map drops out.
     got = _run(
-        "return mapCoverage(%s, new Set(['m1:1','m1:2','m1:3','m2:1','m2:2']), null);" %
-        _MATCHES, tmp_path)
+        f"return mapCoverage({_MATCHES}, new Set(['m1:1','m1:2','m1:3','m2:1','m2:2']), null);",
+        tmp_path)
     assert not any(r["map"] == "Numbani" for r in got)
     for r in got:
         assert r["needed"] >= 0
@@ -1149,6 +1151,114 @@ def test_power_rankings_history_is_one_point_per_match_in_order(tmp_path) -> Non
     assert len(a["history"]) == 2
     assert a["history"][0] == 1516          # after beating B (see bo1 test above)
     assert a["history"][1] < a["history"][0]  # then lost to C, rating dropped
+
+
+# --- cross-language golden test: powerRankings --------------------------------
+# powerRankings is the one pure.js decision function built on real arithmetic,
+# so it carries an independent Python re-implementation of the same spec. If
+# someone edits the JS constants, the rounding or the walkover handling, this
+# test fails even if every JS-only test above was updated to match the drift —
+# the golden reference pins the algorithm, not the other tests. (JS's
+# Math.round rounds half up; Python's builtin round() is banker's, so the
+# reference uses floor(x + 0.5) to match.)
+
+SERIES_ELO_K, MAP_ELO_K, ELO_START, POWER_MIN_N = 32, 12, 1500, 5
+
+
+def _py_elo_expected(ra: float, rb: float) -> float:
+    return 1 / (1 + 10 ** ((rb - ra) / 400))
+
+
+def _py_power_rankings(matches: list) -> list[dict]:
+    """Reference Elo table, mirroring pure.js powerRankings exactly."""
+    teams: dict[str, dict] = {}  # insertion order == JS Object.create(null)
+    ordered = [m for m in matches if m.get("f1") and m.get("f2")]
+    ordered.sort(key=lambda m: str(m.get("finished_at") or ""))
+
+    def team(name: str) -> dict:
+        if name not in teams:
+            teams[name] = {"rating": ELO_START, "mapRating": ELO_START,
+                           "n": 0, "history": []}
+        return teams[name]
+
+    for m in ordered:
+        a, b = team(m["f1"]), team(m["f2"])
+        if not m.get("walkover"):
+            for g in m.get("games") or []:
+                wf = g.get("winner_faction")
+                if wf not in ("faction1", "faction2"):
+                    continue
+                score_a = 1 if wf == "faction1" else 0
+                ra = a["mapRating"] + MAP_ELO_K * (
+                    score_a - _py_elo_expected(a["mapRating"], b["mapRating"]))
+                rb = b["mapRating"] + MAP_ELO_K * (
+                    (1 - score_a) - _py_elo_expected(b["mapRating"], a["mapRating"]))
+                a["mapRating"], b["mapRating"] = ra, rb
+        winner = m.get("winner")
+        score_a = 1 if winner == "faction1" else (0 if winner == "faction2" else None)
+        if score_a is None:
+            continue
+        ra = a["rating"] + SERIES_ELO_K * (
+            score_a - _py_elo_expected(a["rating"], b["rating"]))
+        rb = b["rating"] + SERIES_ELO_K * (
+            (1 - score_a) - _py_elo_expected(b["rating"], a["rating"]))
+        a["rating"], b["rating"] = ra, rb
+        a["n"] += 1
+        b["n"] += 1
+        a["history"].append(math.floor(ra + 0.5))
+        b["history"].append(math.floor(rb + 0.5))
+
+    rows = [{"name": name, "rating": math.floor(t["rating"] + 0.5),
+             "mapRating": math.floor(t["mapRating"] + 0.5),
+             "n": t["n"], "history": t["history"],
+             "provisional": t["n"] < POWER_MIN_N}
+            for name, t in teams.items() if t["n"] > 0]
+    rows.sort(key=lambda r: -r["rating"])
+    return rows
+
+
+def _random_league_matches(seed: int) -> list[dict]:
+    """Deterministic fake season: real + walkover games, occasional no-winner
+    rows (ignored by the spec), input order shuffled to defeat order effects."""
+    rng = random.Random(seed)
+    teams = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
+             "Golf", "Hotel", "India", "Juliett"]
+    matches = []
+    for i in range(60):
+        f1, f2 = rng.sample(teams, 2)
+        walkover = rng.random() < 0.12
+        games = []
+        if not walkover:
+            for _ in range(rng.choice([1, 3, 4, 5])):
+                games.append({"winner_faction": rng.choice(["faction1", "faction2"])})
+        winner = rng.choice(["faction1", "faction2", None])
+        day = 1 + (i * 2) % 28
+        matches.append({
+            "finished_at": f"2026-03-{day:02d}T{rng.randint(0, 23):02d}:00:00Z",
+            "f1": f1, "f2": f2, "winner": winner,
+            "walkover": walkover, "games": games,
+        })
+    rng.shuffle(matches)
+    return matches
+
+
+def test_power_rankings_matches_independent_python_reference(tmp_path) -> None:
+    # Four different seasons exercise mixed walkover/real rows, no-winner rows,
+    # varied game counts and shuffled input order. The Python reference and the
+    # node-executed JS must produce byte-identical tables.
+    for seed in range(4):
+        matches = _random_league_matches(seed)
+        got = _run(f"return powerRankings({json.dumps(matches)});", tmp_path)
+        assert got == _py_power_rankings(matches), f"seed {seed} diverged"
+
+
+def test_power_rankings_bo1_numbers_agree_with_python_reference(tmp_path) -> None:
+    # The hand-checked exact numbers from the JS tests above must also be what
+    # the independent reference computes, so the two can't silently drift apart
+    # on the simplest possible input either.
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])]
+    assert _run(f"return powerRankings({json.dumps(m)});", tmp_path) == \
+        _py_power_rankings(m)
 
 
 # --- sparkline points --------------------------------------------------------

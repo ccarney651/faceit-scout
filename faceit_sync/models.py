@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 # --- Overwatch 2 stats: FACEIT ``i*`` code -> named per-game metric -----------
 # Derived from role-correlation across real matches:
@@ -49,13 +48,13 @@ _PLAYOFF_STAGE_SUFFIX = re.compile(
 )
 
 
-def is_playoff_name(name: Optional[str]) -> bool:
+def is_playoff_name(name: str | None) -> bool:
     """A playoff/knockout championship, separate from the regular-season division."""
     low = (name or "").lower()
     return "playoff" in low or "knockout" in low
 
 
-def playoff_base_name(name: Optional[str]) -> Optional[str]:
+def playoff_base_name(name: str | None) -> str | None:
     """The shared division name minus the stage suffix, used to pair a playoff
     championship with its regular-season division."""
     if not name:
@@ -67,53 +66,53 @@ def playoff_base_name(name: Optional[str]) -> Optional[str]:
 @dataclass(slots=True)
 class Championship:
     id: str
-    name: Optional[str]
-    game: Optional[str]
-    region: Optional[str]
+    name: str | None
+    game: str | None
+    region: str | None
 
 
 @dataclass(slots=True)
 class Team:
     id: str
-    name: Optional[str]
-    avatar_url: Optional[str]
+    name: str | None
+    avatar_url: str | None
 
 
 @dataclass(slots=True)
 class Player:
     id: str
-    nickname: Optional[str]
-    game_name: Optional[str] = None   # Battle.net in-game name (what the OW HUD shows)
+    nickname: str | None
+    game_name: str | None = None   # Battle.net in-game name (what the OW HUD shows)
 
 
 @dataclass(slots=True)
 class Hero:
     guid: str
     name: str
-    role: Optional[str]
+    role: str | None
 
 
 @dataclass(slots=True)
 class Map:
     guid: str
     name: str
-    category: Optional[str]
+    category: str | None
 
 
 @dataclass(slots=True)
 class Match:
     id: str
     championship_id: str
-    round: Optional[int]
-    group_no: Optional[int]
+    round: int | None
+    group_no: int | None
     status: str
-    best_of: Optional[int]
-    scheduled_at: Optional[str]
-    started_at: Optional[str]
-    finished_at: Optional[str]
-    faction1_team_id: Optional[str]
-    faction2_team_id: Optional[str]
-    winner_faction: Optional[str]
+    best_of: int | None
+    scheduled_at: str | None
+    started_at: str | None
+    finished_at: str | None
+    faction1_team_id: str | None
+    faction2_team_id: str | None
+    winner_faction: str | None
     forfeit: bool
     fetched_at: str
 
@@ -122,14 +121,14 @@ class Match:
 class Game:
     match_id: str
     game_no: int
-    map_guid: Optional[str]
-    map_category: Optional[str]
-    attacking_first_faction: Optional[str]
-    side_picked_by_faction: Optional[str]
-    faction1_score: Optional[int]
-    faction2_score: Optional[int]
-    winner_faction: Optional[str]
-    demo_code: Optional[str]
+    map_guid: str | None
+    map_category: str | None
+    attacking_first_faction: str | None
+    side_picked_by_faction: str | None
+    faction1_score: int | None
+    faction2_score: int | None
+    winner_faction: str | None
+    demo_code: str | None
     was_restarted: bool
 
 
@@ -137,8 +136,8 @@ class Game:
 class MapPick:
     match_id: str
     game_no: int
-    map_guid: Optional[str]
-    picked_by_faction: Optional[str]
+    map_guid: str | None
+    picked_by_faction: str | None
 
 
 @dataclass(slots=True)
@@ -147,24 +146,24 @@ class HeroBan:
     game_no: int
     hero_guid: str
     ban_order: int
-    banned_by_faction: Optional[str]  # NULL when democracy absent/restarted
+    banned_by_faction: str | None  # NULL when democracy absent/restarted
 
 
 @dataclass(slots=True)
 class RoundPlayer:
     match_id: str
     game_no: int
-    team_id: Optional[str]
+    team_id: str | None
     player_id: str
-    role: Optional[str]
-    elo_snapshot: Optional[int]
+    role: str | None
+    elo_snapshot: int | None
     stats_captured: bool
-    eliminations: Optional[int]
-    deaths: Optional[int]
-    assists: Optional[int]
-    damage: Optional[int]
-    healing: Optional[int]
-    damage_mitigated: Optional[int]
+    eliminations: int | None
+    deaths: int | None
+    assists: int | None
+    damage: int | None
+    healing: int | None
+    damage_mitigated: int | None
 
 
 @dataclass(slots=True)

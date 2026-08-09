@@ -1,7 +1,7 @@
 """Ref-harvest and coverage: turning Review corrections into library improvements."""
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -28,7 +28,7 @@ def _map_with_obs(db: Database, tmp_path: Path, guids: list[str],
                      VALUES ('faceit', 'm1', 1, 'CODE1')""")
         mid = int(c.execute("SELECT id FROM map_instances").fetchone()["id"])
     slots = []
-    for i, (g, conf) in enumerate(zip(guids, confidences)):
+    for i, (g, conf) in enumerate(zip(guids, confidences, strict=True)):
         crop = tmp_path / f"crop_{i}.png"
         crop.write_bytes(b"not-a-real-png")      # only the PATH matters here
         slots.append({"slot_index": i, "hero_guid": g, "confidence": conf,
@@ -54,7 +54,8 @@ def test_harvest_prefers_the_worst_appearance(db: Database, tmp_path: Path) -> N
     so it is the most useful thing to learn from - not an easy repeat."""
     mid = _map_with_obs(db, tmp_path, ["ram", "soj"], [0.9, 0.6])
     # Add a second, higher-confidence appearance of the same hero.
-    crop2 = tmp_path / "crop_hi.png"; crop2.write_bytes(b"x")
+    crop2 = tmp_path / "crop_hi.png"
+    crop2.write_bytes(b"x")
     db.upsert_comp_observation(
         map_instance_id=mid, side="a", sample_ts_ms=100, comp_id=None,
         min_slot_confidence=0.95, resolved=0,

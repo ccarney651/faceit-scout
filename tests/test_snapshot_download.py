@@ -12,8 +12,6 @@ import gzip
 import os
 import sqlite3
 
-import pytest
-
 from owscout.contribute import fetch_faceit_snapshot
 
 
@@ -95,9 +93,9 @@ def test_corrupt_download_is_rejected_and_leaves_no_file(tmp_path) -> None:
 def test_wrong_schema_is_rejected(tmp_path) -> None:
     """A real SQLite file that isn't the faceit DB (missing tables) is refused,
     so it can't silently shadow the crawl with an unusable database."""
-    empty = sqlite3.connect(":memory:")
     import tempfile
-    fd, p = tempfile.mkstemp(suffix=".sqlite3"); os.close(fd)
+    fd, p = tempfile.mkstemp(suffix=".sqlite3")
+    os.close(fd)
     sqlite3.connect(p).close()  # valid but table-less SQLite file
     with open(p, "rb") as f:
         body = _gz(f.read())

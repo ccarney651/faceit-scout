@@ -1,7 +1,7 @@
 """Ref bundles: shipping a curator's learned library to another machine."""
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 

@@ -1,6 +1,6 @@
 """Per-team scouting report assembly (owscout.scout)."""
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from owscout.models import ObsDetail
 from owscout.scout import aggregate_swaps, team_scout

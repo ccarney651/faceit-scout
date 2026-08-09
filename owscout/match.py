@@ -16,20 +16,23 @@ from __future__ import annotations
 import logging
 import os
 from collections import deque
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Deque, Optional, Sequence
+from typing import Any
 
 from .db import Database
 from .errors import CaptureError
 from .faceit import (
     KNOWN_ROLES,
     connect_ro,
-    hero_roles as load_hero_roles,
     load_bans,
     load_heroes,
     load_team_roles,
     resolve_team_id,
     team_ids_for_map,
+)
+from .faceit import (
+    hero_roles as load_hero_roles,
 )
 from .models import STATE_ALIVE, HeroRef, Rect, RoiProfile
 
@@ -106,10 +109,10 @@ DEFAULT_SMOOTHING_WINDOW = 5
 @dataclass
 class SlotMatch:
     slot_index: int
-    matched_role: Optional[str]   # role of the matched hero, read from heroes.role
+    matched_role: str | None   # role of the matched hero, read from heroes.role
     state: str
-    hero_guid: Optional[str]
-    hero_name: Optional[str]
+    hero_guid: str | None
+    hero_name: str | None
     confidence: float
     resolved: bool
     candidates: int
@@ -130,7 +133,7 @@ def role_counts(team_roles: Sequence[str]) -> dict[str, int]:
 
 
 def composition_consistent(
-    matched_roles: Sequence[Optional[str]], team_roles: Sequence[str]
+    matched_roles: Sequence[str | None], team_roles: Sequence[str]
 ) -> bool:
     """True if the roles of the matched heroes match the team's known
     composition. Only meaningful when every slot resolved and the team is fully
@@ -169,8 +172,8 @@ def face_subrect(
 def reduce_candidates(
     refs: Sequence[HeroRef],
     *,
-    state: Optional[str],
-    expected_role: Optional[str],
+    state: str | None,
+    expected_role: str | None,
     banned_guids: set[str],
     hero_roles: dict[str, str],
 ) -> list[HeroRef]:
@@ -215,7 +218,7 @@ def match_frame(
     )
     for i, rect in enumerate(slots):
         crop = crop_fn(frame, rect)
-        best_ref: Optional[HeroRef] = None
+        best_ref: HeroRef | None = None
         best_score = 0.0
         for ref in candidates:
             score = score_fn(crop, ref)
@@ -260,7 +263,7 @@ def format_matches(results: Sequence[SlotMatch]) -> str:
 # --- temporal smoothing (SPEC §8.3; unit-tested) -----------------------------
 
 # One window entry: (hero_guid or None, confidence).
-SlotSample = tuple[Optional[str], float]
+SlotSample = tuple[str | None, float]
 
 
 def modal_slot(window: Sequence[SlotSample]) -> SlotSample:
@@ -273,9 +276,9 @@ def modal_slot(window: Sequence[SlotSample]) -> SlotSample:
     """
     if not window:
         return (None, 0.0)
-    counts: dict[Optional[str], int] = {}
-    conf_sum: dict[Optional[str], float] = {}
-    last_index: dict[Optional[str], int] = {}
+    counts: dict[str | None, int] = {}
+    conf_sum: dict[str | None, float] = {}
+    last_index: dict[str | None, int] = {}
     for i, (guid, conf) in enumerate(window):
         counts[guid] = counts.get(guid, 0) + 1
         conf_sum[guid] = conf_sum.get(guid, 0.0) + conf
@@ -290,7 +293,7 @@ class TemporalSmoother:
 
     def __init__(self, num_slots: int, window: int = DEFAULT_SMOOTHING_WINDOW) -> None:
         self.window = window
-        self._hist: list[Deque[SlotSample]] = [
+        self._hist: list[deque[SlotSample]] = [
             deque(maxlen=window) for _ in range(num_slots)
         ]
 

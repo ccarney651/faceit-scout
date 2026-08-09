@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import responses
+from conftest import RESTART_DC_ID, make_client, register_match
 
 from faceit_sync.db import Database
 from faceit_sync.sync import SyncEngine
-from conftest import RESTART_DC_ID, make_client, register_match
 
 TABLES = ["matches", "games", "map_picks", "hero_bans", "round_players", "teams",
           "heroes", "maps"]

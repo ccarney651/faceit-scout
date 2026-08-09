@@ -77,7 +77,7 @@ def build_hero_icons(
     out: dict[str, str] = {}
     for path in sorted(root.glob("*.png")):
         # Pillow moved the resampling enum in 9.1; support both.
-        lanczos = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+        lanczos = getattr(Image, "Resampling", Image).LANCZOS
         try:
             with Image.open(path) as src:
                 im = src.convert("RGBA")

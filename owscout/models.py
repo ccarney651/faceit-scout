@@ -149,7 +149,7 @@ class Rect(NamedTuple):
         return [self.x, self.y, self.w, self.h]
 
     @classmethod
-    def from_list(cls, values: list[int] | tuple[int, ...]) -> "Rect":
+    def from_list(cls, values: list[int] | tuple[int, ...]) -> Rect:
         x, y, w, h = values
         return cls(int(x), int(y), int(w), int(h))
 

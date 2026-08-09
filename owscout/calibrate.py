@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from .errors import CaptureError
 from .db import Database
+from .errors import CaptureError
 from .models import (
     SIDE_LEFT,
     SIDE_RIGHT,
@@ -216,7 +216,7 @@ def run_auto_calibration(
     frame_dir: str | Path,
     confirm: bool = True,
     dry_run: bool = False,
-) -> Optional[RoiProfile]:
+) -> RoiProfile | None:
     """Auto-detect the ROI boxes from HUD proportions and save - no dragging.
 
     With ``confirm`` a preview opens: ENTER saves the auto boxes; ESC drops to

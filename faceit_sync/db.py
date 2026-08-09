@@ -14,10 +14,11 @@ unchanged.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator, Optional
 
 from .models import (
+    Championship,
     Game,
     Hero,
     HeroBan,
@@ -27,7 +28,6 @@ from .models import (
     Player,
     RoundPlayer,
     Team,
-    Championship,
 )
 
 SCHEMA = """
@@ -176,7 +176,7 @@ class Database:
     def close(self) -> None:
         self.conn.close()
 
-    def __enter__(self) -> "Database":
+    def __enter__(self) -> Database:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -230,7 +230,7 @@ class Database:
         ).fetchall()
         return {str(r["id"]) for r in rows}
 
-    def match_status(self, match_id: str) -> Optional[str]:
+    def match_status(self, match_id: str) -> str | None:
         row = self.conn.execute(
             "SELECT status FROM matches WHERE id = ?", (match_id,)
         ).fetchone()
@@ -364,7 +364,7 @@ class Database:
     def insert_sync_log(
         self,
         ran_at: str,
-        championship_id: Optional[str],
+        championship_id: str | None,
         matches_seen: int,
         inserted: int,
         updated: int,

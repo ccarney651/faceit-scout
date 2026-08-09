@@ -23,14 +23,18 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from owscout.db import LATEST_KNOWN_WIPE
 
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
 OUT = os.environ.get("CAPTURE_OUT", os.path.join("docs", "capture", "data.json"))
 # Regions the site ships, strongest-audience first. Order drives the app's
 # division dropdown. Kept in sync with faceit_sync.export.REGIONS.
 REGIONS = ("EMEA", "NA")
-CODE_WIPE_DATE = "2026-07-28"          # league-wide replay-code wipe (SPEC §2); bump each patch
+# Single source of truth for the league-wide replay-code wipe: owscout.db's
+# LATEST_KNOWN_WIPE (never duplicate it here — bump it in _SEED_WIPES instead).
+CODE_WIPE_DATE = LATEST_KNOWN_WIPE
 TIERS = ("Master", "Expert", "Advanced", "Open")
 
 
@@ -120,7 +124,7 @@ def main() -> None:
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     payload = {
-        "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "built_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "code_wipe_date": CODE_WIPE_DATE,
         "regions": list(REGIONS),
         # Region-major, then tier strongest-first — the order the app's dropdown

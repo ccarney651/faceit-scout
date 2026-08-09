@@ -16,11 +16,11 @@ The crawler closes that gap two ways:
 from __future__ import annotations
 
 import responses
+from conftest import NORMAL_30_ID, make_client, register_match
 
 from faceit_sync.client import CHAMP_MATCHES_URL
 from faceit_sync.db import Database
 from faceit_sync.sync import SyncEngine
-from conftest import NORMAL_30_ID, make_client, register_match
 
 PO = "c2e6135e-8160-4991-a869-1bcd575bf2cf"       # S9 EMEA Master Central - Playoffs
 REG = "938f6e68-b374-4f0f-b3e1-3bf1bdfbfd11"      # S9 EMEA Master Central - Regular Season

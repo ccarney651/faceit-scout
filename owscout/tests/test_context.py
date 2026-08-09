@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -15,7 +15,6 @@ from owscout.context import (
     format_context,
 )
 from owscout.db import Database
-
 
 # --- fixtures ----------------------------------------------------------------
 

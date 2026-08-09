@@ -17,16 +17,18 @@ import argparse
 import logging
 import os
 import sys
-from typing import Optional, Sequence, cast
+from collections.abc import Sequence
+from contextlib import suppress
+from typing import cast
 
 from dotenv import load_dotenv
 
 from . import __version__
 from .calibrate import default_frame_dir, run_calibration
 from .capture import DEFAULT_WRITE_INTERVAL_MS, run_capture, run_hotkey_capture
-from .errors import CaptureError
-from .contribute import CONTRIB_DIR
 from .context import AmbiguousCode, CodeNotFound, derive_code_context, format_context
+from .contribute import CONTRIB_DIR
+from .db import Database
 from .derive import (
     DEFAULT_MIN_SAMPLES,
     aggregate_comps,
@@ -35,8 +37,8 @@ from .derive import (
     render_rate,
     synthetic_comp,
 )
+from .errors import CaptureError
 from .integrity import verify_codes_report
-from .db import Database
 from .match import DEFAULT_CONFIDENCE_FLOOR, run_match
 from .models import DEFAULT_DIVISION, DEFAULT_TEAM_SIZE, REF_STATES, REGIONS, SIDE_LEFT
 from .refs import (
@@ -240,7 +242,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
     return 0
 
 
-def _short_date(s: Optional[str]) -> str:
+def _short_date(s: str | None) -> str:
     return (s or "")[:10] or "?"
 
 
@@ -306,7 +308,8 @@ def cmd_review(args: argparse.Namespace) -> int:
             if not os.path.exists(faceit_path):
                 print(f"error: faceit DB not found: {faceit_path}", file=sys.stderr)
                 return 2
-            from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes
+            from .faceit import connect_ro, load_heroes
+            from .faceit import hero_roles as load_hero_roles
             with connect_ro(faceit_path) as fdb:
                 roles = load_hero_roles(fdb)
                 heroes = load_heroes(fdb)
@@ -344,7 +347,8 @@ def cmd_drafts(args: argparse.Namespace) -> int:
             if side not in ("a", "b"):
                 print("error: SIDE must be 'a' or 'b'", file=sys.stderr)
                 return 2
-            from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+            from .faceit import connect_ro, load_heroes
+            from .faceit import hero_roles as load_roles
             with connect_ro(_faceit_db_path(args)) as fdb:
                 heroes = load_heroes(fdb) + db.list_custom_heroes()
                 roles = load_roles(fdb)
@@ -420,6 +424,7 @@ def _harvest(db: Database, args: argparse.Namespace, map_id: int, side: str,
 def cmd_contribute_export(args: argparse.Namespace) -> int:
     """Write this machine's captures in the shared exchange format."""
     import json as _json
+
     from .contribute import CONTRIB_DIR, build_contribution
 
     out = args.out or os.path.join(CONTRIB_DIR, f"{args.contributor}.json")
@@ -441,6 +446,7 @@ def cmd_contribute_export(args: argparse.Namespace) -> int:
 def cmd_contribute_push(args: argparse.Namespace) -> int:
     """Export this machine's captures AND upload them to the site repo."""
     import json as _json
+
     from .contribute import CONTRIB_DIR, build_contribution, push_contribution
 
     with Database(_db_path(args)) as db:
@@ -487,6 +493,7 @@ def cmd_contribute_unscout(args: argparse.Namespace) -> int:
     already-scouted feed and the code frees up in the apps again."""
     import json as _json
     import sqlite3
+
     from .contribute import OVERRIDES_FILE
 
     raw = args.code.strip()
@@ -544,9 +551,16 @@ def cmd_contribute_unscout(args: argparse.Namespace) -> int:
 def cmd_contribute_merge(args: argparse.Namespace) -> int:
     """Merge every contributor file into the published payload (first-wins)."""
     import json as _json
-    from .contribute import (known_games, load_excludes, load_overrides,
-                             merged_payload, resolve_contributions)
-    from .faceit import connect_ro, hero_roles as load_roles, load_heroes
+
+    from .contribute import (
+        known_games,
+        load_excludes,
+        load_overrides,
+        merged_payload,
+        resolve_contributions,
+    )
+    from .faceit import connect_ro, load_heroes
+    from .faceit import hero_roles as load_roles
 
     contribs = resolve_contributions(args.dir, use_git_order=not args.name_order)
     overrides = load_overrides(args.dir)
@@ -682,7 +696,7 @@ def cmd_refs_coverage(args: argparse.Namespace) -> int:
           f"{sum(r.samples for r in rows)} slots")
     if unseen:
         print(f"  NEVER seen in a capture: {len(unseen)} hero+team refs")
-        for guid, name, variant in unseen[:12]:
+        for _guid, name, variant in unseen[:12]:
             print(f"    {name} ({'blue' if variant == 'a' else 'red'})")
         if len(unseen) > 12:
             print(f"    ... and {len(unseen) - 12} more")
@@ -783,7 +797,7 @@ def cmd_heroes_remove(args: argparse.Namespace) -> int:
     return 0
 
 
-def _resolve_team(db: Database, faceit_path: str, name: str) -> Optional[tuple[str, str]]:
+def _resolve_team(db: Database, faceit_path: str, name: str) -> tuple[str, str] | None:
     from .faceit import connect_ro, resolve_team_id
     with connect_ro(faceit_path) as fdb:
         tid = resolve_team_id(fdb, name)
@@ -833,7 +847,8 @@ def cmd_scout_team(args: argparse.Namespace) -> int:
         bans = db.team_ban_tendencies(faceit_path, team_id)
         obs = db.resolved_observations(team_id=team_id)
         mc = modal_comp(obs)
-        from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes
+        from .faceit import connect_ro, load_heroes
+        from .faceit import hero_roles as load_hero_roles
         with connect_ro(faceit_path) as fdb:
             roles = load_hero_roles(fdb)
             names = {h.guid: h.name for h in load_heroes(fdb)}
@@ -865,7 +880,8 @@ def cmd_scout_player(args: argparse.Namespace) -> int:
     if not os.path.exists(faceit_path):
         print(f"error: faceit DB not found: {faceit_path}", file=sys.stderr)
         return 2
-    from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_player_id
+    from .faceit import connect_ro, load_heroes, resolve_player_id
+    from .faceit import hero_roles as load_hero_roles
     with Database(_db_path(args)) as db:
         with connect_ro(faceit_path) as fdb:
             pid = resolve_player_id(fdb, args.player)
@@ -914,19 +930,24 @@ def cmd_export(args: argparse.Namespace) -> int:
          "win_rate": round(s.win_rate, 4), "wilson": round(s.wilson, 4)}
         for s in stats
     ]
-    out = open(args.out, "w", newline="", encoding="utf-8") if args.out else sys.stdout
-    try:
-        if args.format == "json":
-            out.write(_json.dumps(records, indent=2))
-        else:
-            w = _csv.DictWriter(out, fieldnames=list(records[0].keys()) if records
-                                else ["comp", "comp_id", "samples", "distinct_maps",
-                                      "distinct_teams", "games", "wins", "win_rate", "wilson"])
-            w.writeheader()
-            w.writerows(records)
-    finally:
-        if out is not sys.stdout:
-            out.close()
+    if args.out:
+        with open(args.out, "w", newline="", encoding="utf-8") as out:
+            if args.format == "json":
+                out.write(_json.dumps(records, indent=2))
+            else:
+                w = _csv.DictWriter(out, fieldnames=list(records[0].keys()) if records
+                                    else ["comp", "comp_id", "samples", "distinct_maps",
+                                          "distinct_teams", "games", "wins", "win_rate", "wilson"])
+                w.writeheader()
+                w.writerows(records)
+    elif args.format == "json":
+        print(_json.dumps(records, indent=2))
+    else:
+        w = _csv.DictWriter(sys.stdout, fieldnames=list(records[0].keys()) if records
+                            else ["comp", "comp_id", "samples", "distinct_maps",
+                                  "distinct_teams", "games", "wins", "win_rate", "wilson"])
+        w.writeheader()
+        w.writerows(records)
     return 0
 
 
@@ -1251,13 +1272,11 @@ def _make_console_crashproof() -> None:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
-            try:
+            with suppress(ValueError, OSError):  # pragma: no cover - stream can't reconfigure
                 reconfigure(errors="replace")
-            except (ValueError, OSError):  # pragma: no cover - stream can't reconfigure
-                pass
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     _make_console_crashproof()
     load_dotenv()
     parser = build_parser()

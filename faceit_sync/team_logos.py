@@ -17,10 +17,13 @@ import base64
 import io
 import json
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping, Optional
+from urllib.parse import urlparse
 
 import requests
+
+from .client import DEFAULT_USER_AGENT
 
 log = logging.getLogger("faceit_sync.team_logos")
 
@@ -28,6 +31,23 @@ LOGO_CACHE = Path(__file__).with_name("team_logos.json")
 # Rendered at the same size as match-card hero portraits (a little larger than
 # the header icon) so the cached file stays small.
 LOGO_PX = 64
+
+# Avatar URLs come from the FACEIT API, but we still validate them so a poisoned
+# row can never turn the export step into an SSRF/protocol-smuggling vector.
+ALLOWED_LOGO_HOSTS = frozenset({"distribution.faceit-cdn.net", "assets.faceit-cdn.net"})
+# Ceiling on a single avatar download (guard against huge or hostile responses).
+MAX_LOGO_BYTES = 2 * 1024 * 1024
+
+# Reuse one connection pool + keep the honest descriptive UA (FACEIT's edge
+# blocks browser-like UAs, and the review flagged per-call ad-hoc requests).
+_SESSION = requests.Session()
+_SESSION.headers.update({"User-Agent": DEFAULT_USER_AGENT})
+
+
+def _safe_logo_url(url: str) -> bool:
+    """True only for https image URLs on FACEIT's own CDN hosts."""
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and parsed.netloc in ALLOWED_LOGO_HOSTS
 
 
 def load_team_logos() -> dict[str, dict[str, str]]:
@@ -45,10 +65,20 @@ def load_team_logos() -> dict[str, dict[str, str]]:
 
 
 def _fetch_one(url: str) -> str | None:
+    if not _safe_logo_url(url):
+        log.warning("refusing non-CDN logo url: %s", url)
+        return None
     try:
-        resp = requests.get(url, timeout=30)
+        resp = _SESSION.get(url, timeout=30)
         resp.raise_for_status()
+        if not (resp.headers.get("Content-Type") or "").lower().startswith("image/"):
+            log.warning("logo %s returned non-image Content-Type %r",
+                        url, resp.headers.get("Content-Type"))
+            return None
         data = resp.content
+        if len(data) > MAX_LOGO_BYTES:
+            log.warning("logo %s exceeds %d bytes, skipping", url, MAX_LOGO_BYTES)
+            return None
     except Exception as exc:  # noqa: BLE001 - network/asset failure is not fatal
         log.warning("could not fetch logo %s: %s", url, exc)
         return None
@@ -63,7 +93,7 @@ def _fetch_one(url: str) -> str | None:
     try:
         with Image.open(io.BytesIO(data)) as src:
             im = src.convert("RGBA")
-            im.thumbnail((LOGO_PX, LOGO_PX), getattr(getattr(Image, "Resampling", Image), "LANCZOS"))
+            im.thumbnail((LOGO_PX, LOGO_PX), getattr(Image, "Resampling", Image).LANCZOS)
             buf = io.BytesIO()
             im.save(buf, format="WEBP", quality=82, method=6)
             b64 = base64.b64encode(buf.getvalue()).decode("ascii")
@@ -73,7 +103,7 @@ def _fetch_one(url: str) -> str | None:
         return None
 
 
-def build_team_logos(urls: Mapping[str, Optional[str]]) -> dict[str, str]:
+def build_team_logos(urls: Mapping[str, str | None]) -> dict[str, str]:
     """Fetch and inline any team logos not already in the cache.
 
     Returns ``{team_name: data-URI}`` (cached + freshly fetched). Network or

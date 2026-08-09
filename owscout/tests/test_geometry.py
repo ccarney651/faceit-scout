@@ -24,7 +24,7 @@ def test_slots_tile_the_strip_exactly() -> None:
     assert sum(s.w for s in slots) == strip.w
     assert [s.w for s in slots] == [101, 101, 101, 100, 100]
     # each slot starts where the previous ended.
-    for prev, nxt in zip(slots, slots[1:]):
+    for prev, nxt in zip(slots, slots[1:], strict=False):
         assert nxt.x == prev.x + prev.w
     assert slots[0].x == strip.x
     assert slots[-1].x + slots[-1].w == strip.x + strip.w

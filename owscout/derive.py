@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Sequence
 
 DEFAULT_MIN_SAMPLES = 5
 WILSON_Z = 1.96  # 95% confidence
@@ -88,11 +88,11 @@ class ObsRow:
     hero_names: str
     map_instance_id: int
     side: str
-    map_guid: Optional[str]
-    team_id: Optional[str]
+    map_guid: str | None
+    team_id: str | None
     won: bool
-    team_name: Optional[str] = None
-    sub_map: Optional[str] = None
+    team_name: str | None = None
+    sub_map: str | None = None
 
 
 @dataclass
@@ -175,7 +175,7 @@ class ModalComp:
     losses: int
 
 
-def modal_comp(rows: Iterable[ObsRow]) -> Optional[ModalComp]:
+def modal_comp(rows: Iterable[ObsRow]) -> ModalComp | None:
     """The exact 5 a team ran most often, by distinct team-maps (not samples),
     with its record. Honest — the comp they actually fielded (SPEC §10.2)."""
     # Reduce each team-map to the comp(s) seen; count maps per comp + record.
@@ -232,7 +232,7 @@ def synthetic_comp(
 @dataclass
 class PoolEntry:
     hero_guid: str
-    role: Optional[str]
+    role: str | None
     maps: int          # distinct maps the player was seen on this hero
     pick_rate: float   # maps_on_hero / total_maps
 
@@ -243,7 +243,7 @@ def dashboard_comps(rows: Iterable[ObsRow]) -> dict[str, object]:
     hand-off, no shared database."""
     from collections import defaultdict
 
-    def _comp_dict(c: "CompStat") -> dict[str, object]:
+    def _comp_dict(c: CompStat) -> dict[str, object]:
         return {"heroes": [h.strip() for h in c.hero_names.split(",")],
                 "samples": c.samples, "maps": c.distinct_maps,
                 "games": round(c.games, 2), "wins": round(c.wins, 2),

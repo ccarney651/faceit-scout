@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import responses
+from conftest import make_client
 
 from faceit_sync.client import DATA_API_BASE
-from conftest import make_client
 
 
 @responses.activate

@@ -42,7 +42,7 @@ def test_slots_are_gap_free_and_in_order() -> None:
     slots = auto_profile(1920, 1080, hud_variant="default").slots[SIDE_LEFT]
     xs = [s.x for s in slots]
     assert xs == sorted(xs)                       # left-to-right
-    for a, b in zip(slots, slots[1:]):
+    for a, b in zip(slots, slots[1:], strict=False):
         # next slot starts within a pixel of where the previous ends (tiling).
         assert abs((a.x + a.w) - b.x) <= 1
 
@@ -52,8 +52,8 @@ def test_every_box_is_on_screen() -> None:
         p = auto_profile(w, h, hud_variant="default")
         for side in (SIDE_LEFT, SIDE_RIGHT):
             for r in p.slots[side]:
-                assert 0 <= r.x and r.x + r.w <= w
-                assert 0 <= r.y and r.y + r.h <= h
+                assert r.x >= 0 and r.x + r.w <= w
+                assert r.y >= 0 and r.y + r.h <= h
 
 
 def test_left_and_right_strips_are_mirrored_halves() -> None:

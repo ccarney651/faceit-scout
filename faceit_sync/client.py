@@ -24,7 +24,8 @@ from __future__ import annotations
 import logging
 import random
 import time
-from typing import Any, Callable, Iterator, Optional
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import requests
 
@@ -79,17 +80,17 @@ class RateLimiter:
 class FaceitClient:
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         *,
         rate_limit: float = 4.0,
         user_agent: str = DEFAULT_USER_AGENT,
-        session: Optional[requests.Session] = None,
+        session: requests.Session | None = None,
         max_retries: int = 5,
         backoff_base: float = 0.5,
         backoff_cap: float = 30.0,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
-        rng: Optional[random.Random] = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.api_key = api_key
         self.max_retries = max_retries
@@ -107,7 +108,7 @@ class FaceitClient:
     # --- core request with retry/backoff -------------------------------------
 
     def _request(
-        self, url: str, *, params: Optional[dict[str, Any]] = None, auth: bool = False
+        self, url: str, *, params: dict[str, Any] | None = None, auth: bool = False
     ) -> requests.Response:
         headers: dict[str, str] = {}
         if auth:
@@ -146,7 +147,7 @@ class FaceitClient:
         return backoff + self._rng.uniform(0.0, backoff)
 
     def _get_json(
-        self, url: str, *, params: Optional[dict[str, Any]] = None, auth: bool = False
+        self, url: str, *, params: dict[str, Any] | None = None, auth: bool = False
     ) -> Any:
         resp = self._request(url, params=params, auth=auth)
         if resp.status_code != 200:
@@ -226,7 +227,7 @@ class FaceitClient:
         payload = data.get("payload", data)
         return payload if isinstance(payload, dict) else {}
 
-    def get_democracy(self, match_id: str) -> Optional[dict[str, Any]]:
+    def get_democracy(self, match_id: str) -> dict[str, Any] | None:
         """Return the veto (democracy) payload with ban attribution, or None.
 
         The live ``/democracy/v1/match/{id}`` feed is ephemeral (~7-day window),

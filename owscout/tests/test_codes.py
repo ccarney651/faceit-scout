@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, cast
+from typing import cast
 
 import pytest
 
@@ -42,7 +43,8 @@ def _faceit(path: Path) -> str:
         ("NEW", 1, "m-ilios", "NEW111"),
         ("NEW", 2, "m-ilios", "NEW222"),
     ])
-    c.commit(); c.close()
+    c.commit()
+    c.close()
     return str(path)
 
 
@@ -97,7 +99,8 @@ def test_list_codes_skips_empty_code(db: Database, tmp_path: Path) -> None:
     _faceit(tmp_path / "faceit.sqlite3")
     con = sqlite3.connect(fp)
     con.execute("INSERT INTO games VALUES('NEW',3,'m-ilios','')")
-    con.commit(); con.close()
+    con.commit()
+    con.close()
     codes = {r.demo_code for r in db.list_codes(fp, include_wiped=True)}
     assert codes == {"OLD111", "NEW111", "NEW222"}  # the '' game is gone
 
@@ -107,7 +110,8 @@ def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
     con = sqlite3.connect(fp)
     con.execute("INSERT INTO matches VALUES('EXP','tA','tB','2026-07-29T20:00:00Z','ce')")
     con.execute("INSERT INTO games VALUES('EXP',1,'m-ilios','EXP111')")
-    con.commit(); con.close()
+    con.commit()
+    con.close()
     assert "EXP111" not in {r.demo_code for r in db.list_codes(fp)}          # master default
     assert "EXP111" in {r.demo_code for r in db.list_codes(fp, division="expert")}
     assert {"NEW111", "NEW222", "EXP111"} <= {r.demo_code for r in db.list_codes(fp, division=None)}

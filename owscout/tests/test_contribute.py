@@ -135,6 +135,7 @@ def test_overrides_file_is_not_read_as_a_contribution(tmp_path: Path) -> None:
     """overrides.json lives in the same directory; it must be reserved, not
     loaded, warned about and skipped as a malformed contribution."""
     import json
+
     from owscout.contribute import contribution_files, load_overrides
     (tmp_path / "alice.json").write_text(json.dumps(
         _contrib("alice", [("m1", 1, ["ram"])])), encoding="utf-8")
@@ -265,6 +266,7 @@ def test_push_failures_carry_a_plain_hint() -> None:
     """Teammates will hit these, not read API docs: the message must say what to
     actually do."""
     import pytest
+
     from owscout.contribute import push_contribution
 
     class _Denied(_FakeSession):
@@ -299,6 +301,7 @@ def test_endpoint_errors_surface_the_server_message() -> None:
     """The worker's messages are written for humans ('name is already used from
     another install') - the client must show them, not swallow them."""
     import pytest
+
     from owscout.contribute import push_to_endpoint
 
     class _Taken(_FakeSession):

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import responses
+from conftest import make_client
 
 from faceit_sync.client import MATCH_URL
-from conftest import make_client
 
 MID = "1-abc00000-0000-0000-0000-000000000000"
 
@@ -51,8 +51,9 @@ def test_503_is_retried() -> None:
 
 @responses.activate
 def test_retries_exhausted_raises() -> None:
-    from faceit_sync.client import FaceitAPIError
     import pytest
+
+    from faceit_sync.client import FaceitAPIError
 
     url = MATCH_URL.format(id=MID)
     for _ in range(10):

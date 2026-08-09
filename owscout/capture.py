@@ -17,9 +17,11 @@ from __future__ import annotations
 import difflib
 import logging
 import time
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any
 
 from .comps import comp_id_for
 from .errors import CaptureError
@@ -151,10 +153,10 @@ def game_time_ms(wall_elapsed_s: float, speed: float) -> int:
 
 
 def should_write(
-    current_key: tuple[Optional[str], ...],
-    last_key: Optional[tuple[Optional[str], ...]],
+    current_key: tuple[str | None, ...],
+    last_key: tuple[str | None, ...] | None,
     game_ts_ms: int,
-    last_written_ts_ms: Optional[int],
+    last_written_ts_ms: int | None,
     interval_ms: int,
 ) -> bool:
     """Write an observation only when the (smoothed) comp differs from the last
@@ -174,18 +176,18 @@ class SmoothedObservation:
 
     side: str
     sample_ts_ms: int
-    slot_guids: list[Optional[str]]
+    slot_guids: list[str | None]
     slot_confidences: list[float]
     resolved: bool
     min_confidence: float
-    comp_id: Optional[str]
+    comp_id: str | None
 
 
 @dataclass
 class _SideState:
     smoother: TemporalSmoother
-    last_key: Optional[tuple[Optional[str], ...]] = None
-    last_ts_ms: Optional[int] = None
+    last_key: tuple[str | None, ...] | None = None
+    last_ts_ms: int | None = None
 
 
 class CaptureSession:
@@ -212,7 +214,7 @@ class CaptureSession:
 
     def observe(
         self, side: str, matches: Sequence[SlotMatch], game_ts_ms: int
-    ) -> Optional[SmoothedObservation]:
+    ) -> SmoothedObservation | None:
         state = self._sides[side]
         state.smoother.push_matches(matches)
         smoothed = state.smoother.current()
@@ -269,7 +271,7 @@ def confident_left_faction(
     faction2_names: Sequence[str],
     *,
     scorer: Scorer = _difflib_ratio,
-) -> Optional[str]:
+) -> str | None:
     """assign_sides, but strict enough to act on WITHOUT a human check.
 
     Two gates: the winning orientation must lead by AUTO_SIDE_MARGIN, and at
@@ -290,7 +292,7 @@ def confident_left_faction(
     if lead < AUTO_SIDE_MARGIN:
         return None
     strong = sum(
-        1 for names, roster in zip((left_names, right_names), rosters)
+        1 for names, roster in zip((left_names, right_names), rosters, strict=True)
         for n in names
         if n and max((scorer(n, r) for r in roster), default=0.0) >= STRONG_NAME_SCORE
     )
@@ -354,7 +356,7 @@ def assign_sides(
     *,
     scorer: Scorer = _difflib_ratio,
     margin: float = DEFAULT_SIDE_MARGIN,
-) -> Optional[str]:
+) -> str | None:
     """Which faction is on side A (the LEFT HUD strip): 'faction1', 'faction2',
     or None if the OCR'd names don't clearly favour either orientation.
 
@@ -378,13 +380,13 @@ def resolve_player(
     *,
     scorer: Scorer = _difflib_ratio,
     threshold: float = DEFAULT_NAME_MATCH_THRESHOLD,
-) -> Optional[str]:
+) -> str | None:
     """Fuzzy-match one OCR'd in-game name against a candidate list of five
     (SPEC §8.2). Each roster entry is ``(player_id, *names)`` - the HUD shows the
     Battle.net game name, which often differs from the FACEIT nickname, so we
     score against every known alias and keep the best. Returns the player_id above
     ``threshold``, else None (review)."""
-    best_id: Optional[str] = None
+    best_id: str | None = None
     best_score = threshold
     for player_id, *names in roster:
         score = max((scorer(ocr_name, n) for n in names if n), default=0.0)
@@ -397,18 +399,18 @@ def resolve_player(
 
 
 def run_capture(  # pragma: no cover - runtime-only path
-    db: "Any",
+    db: Any,
     faceit_db_path: str,
     *,
     demo_code: str,
     hud_variant: str = "default",
     speed: float = 1.0,
     fps: float = 1.5,
-    duration_s: Optional[float] = None,
-    side_a_team: Optional[str] = None,
+    duration_s: float | None = None,
+    side_a_team: str | None = None,
     write_interval_ms: int = DEFAULT_WRITE_INTERVAL_MS,
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
-    require_division: Optional[str] = None,
+    require_division: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Sample the replay under speed-mode playback, match each side, temporally
@@ -419,9 +421,12 @@ def run_capture(  # pragma: no cover - runtime-only path
     hero portraits are read off the screen.
     """
     from .context import derive_code_context
-    from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
+    from .faceit import connect_ro, load_heroes, resolve_team_id
+    from .faceit import hero_roles as load_hero_roles
     from .match import (
-        crop_roi, face_subrect, make_template_scorer, match_frame, pad_rect,
+        face_subrect,
+        make_template_scorer,
+        match_frame,
     )
 
     cv2, _np = _import_cv2_np_for_capture()
@@ -456,7 +461,7 @@ def run_capture(  # pragma: no cover - runtime-only path
     profile, refs = height_width
     banned = {b.hero_guid for b in ctx.bans}
 
-    map_instance_id: Optional[int] = None
+    map_instance_id: int | None = None
     if not dry_run:
         map_instance_id = db.upsert_map_instance_from_context(
             ctx, side_a_faction, profile_id=profile.id, map_verified=None)
@@ -468,7 +473,7 @@ def run_capture(  # pragma: no cover - runtime-only path
 
     counts = {"frames": 0, "written": 0, "skipped": 0}
     integ = {"resolved_slots": 0, "banned_hits": 0, "low_conf": 0}
-    map_mismatch: Optional[int] = None
+    map_mismatch: int | None = None
     map_checked = False
     warned_ban = False
     start = time.perf_counter()
@@ -558,7 +563,7 @@ PALETTE_MIN_SNAPSHOTS = 2    # one bad frame (loading screen, kill cam) is noise
 
 def palette_mismatch_hint(
     resolved_a: int, total_a: int, resolved_b: int, total_b: int, snapshots: int
-) -> Optional[str]:
+) -> str | None:
     """A one-line diagnosis when resolve rates match the custom-palette
     signature, or None. Pure - fed with running totals across snapshots."""
     if snapshots < PALETTE_MIN_SNAPSHOTS or not total_a or not total_b:
@@ -645,15 +650,15 @@ class CaptureControls:
     def __init__(self) -> None:
         self.submaps: tuple[str, ...] = ()
         self.phased: bool = False
-        self.map_category: Optional[str] = None
-        self.on_ready: Optional[Callable[[], None]] = None
+        self.map_category: str | None = None
+        self.on_ready: Callable[[], None] | None = None
         self._active = False
-        self._snapshot: Optional[Callable[[], None]] = None
-        self._round: Optional[Callable[[], None]] = None
-        self._attack: Optional[Callable[[], None]] = None
-        self._undo: Optional[Callable[[], None]] = None
-        self._done: Optional[Callable[[], None]] = None
-        self._pick_sub: Optional[Callable[[str], None]] = None
+        self._snapshot: Callable[[], None] | None = None
+        self._round: Callable[[], None] | None = None
+        self._attack: Callable[[], None] | None = None
+        self._undo: Callable[[], None] | None = None
+        self._done: Callable[[], None] | None = None
+        self._pick_sub: Callable[[str], None] | None = None
 
     def _bind(
         self, *,
@@ -663,9 +668,9 @@ class CaptureControls:
         undo: Callable[[], None],
         done: Callable[[], None],
         pick_sub: Callable[[str], None],
-        submaps: "Sequence[str]",
+        submaps: Sequence[str],
         phased: bool,
-        map_category: Optional[str],
+        map_category: str | None,
     ) -> None:
         self._snapshot, self._round, self._attack = snapshot, next_round, toggle_attack
         self._undo, self._done, self._pick_sub = undo, done, pick_sub
@@ -674,10 +679,9 @@ class CaptureControls:
         self.map_category = map_category
         self._active = True
         if self.on_ready is not None:
-            try:
+            # A display hiccup must not break capture.
+            with suppress(Exception):
                 self.on_ready()
-            except Exception:  # noqa: BLE001 - a display hiccup must not break capture
-                pass
 
     def _end(self) -> None:
         self._active = False
@@ -708,12 +712,12 @@ class CaptureControls:
 
 
 def run_hotkey_capture(  # pragma: no cover - runtime-only path
-    db: "Any",
+    db: Any,
     faceit_db_path: str,
     *,
     demo_code: str,
     hud_variant: str = "default",
-    side_a_team: Optional[str] = None,
+    side_a_team: str | None = None,
     hotkey: str = "f8",
     round_hotkey: str = "f7",
     submap_hotkey: str = "f6",
@@ -721,11 +725,11 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     attack_toggle_hotkey: str = "f5",
     done_hotkey: str = "f10",
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
-    require_division: Optional[str] = None,
+    require_division: str | None = None,
     emit: Callable[[str], None] = print,
-    controls: Optional[CaptureControls] = None,
-    debug_dir: Optional[str] = None,
-    crops_dir: Optional[str] = None,
+    controls: CaptureControls | None = None,
+    debug_dir: str | None = None,
+    crops_dir: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Snapshot capture: instead of a continuous loop, the operator navigates the
@@ -738,7 +742,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     import threading
 
     from .context import derive_code_context
-    from .faceit import connect_ro, hero_roles as load_hero_roles, load_heroes, resolve_team_id
+    from .faceit import connect_ro, load_heroes, resolve_team_id
+    from .faceit import hero_roles as load_hero_roles
     from .match import face_subrect, make_template_scorer, match_frame
 
     crops_dir = crops_dir or default_crops_dir(getattr(db, "path", "owscout.sqlite3"))
@@ -776,7 +781,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 
     profile, refs = _profile_and_refs(db, cv2, hud_variant)
     banned = {b.hero_guid for b in ctx.bans}
-    map_instance_id: Optional[int] = None
+    map_instance_id: int | None = None
     if not dry_run and not auto_side:
         # In auto mode the map instance is created only after the first
         # confident name read - never under a guessed side.
@@ -799,10 +804,12 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     # tag the current sub-map with number keys so snapshots are attributed to it.
     from .maps import submaps_for
     submaps = submaps_for(ctx.map_name)
-    cur_sub: list[Optional[str]] = [None]
+    cur_sub: list[str | None] = [None]
     used_subs: set[str] = set()   # sub-maps already played this map
     # A stable reference for the GUI's sub-map buttons; a no-op on non-control maps.
-    pick_sub_cb: Callable[[str], None] = lambda _n: None
+    def _noop_sub(_name: str) -> None:
+        pass
+    pick_sub_cb: Callable[[str], None] = _noop_sub
     if submaps:
         def _cycle_sub() -> None:
             # Offer the sub-maps not yet played; fall back to all once exhausted.
@@ -834,7 +841,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         # Deliberately NO auto-pick: the first sub-map varies per lobby, and a
         # silent default would tag every round-1 snapshot with a guess. The
         # snapshot path refuses to write until the operator declares it.
-        emit(f"  CONTROL MAP - declare the STARTING sub-map BEFORE snapshotting:")
+        emit("  CONTROL MAP - declare the STARTING sub-map BEFORE snapshotting:")
         emit(f"    {picks}   (or '{submap_hotkey}' cycles)")
 
     # Attack/defend. Escort/Hybrid only: RED (side 'b') attacks round 1, and the
@@ -843,7 +850,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     phased = (ctx.map_category or "").strip().lower() in ("escort", "hybrid", "assault")
     attacker = ["b"]   # side currently attacking
 
-    def _phase_for(side: str) -> Optional[str]:
+    def _phase_for(side: str) -> str | None:
         if not phased:
             return None
         return "attack" if side == attacker[0] else "defend"
@@ -905,7 +912,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 
     snaps = 0
     written = 0
-    last_kept: Optional[tuple[Any, ...]] = None  # (comp a, comp b, round, sub) last KEPT
+    last_kept: tuple[Any, ...] | None = None  # (comp a, comp b, round, sub) last KEPT
     # Palette diagnosis: running resolve totals per side. Accumulated BEFORE the
     # dedupe skip - an all-?? snapshot is deduped as "only unknowns", so counting
     # after the skip would starve the hint for exactly the user it exists for.
@@ -915,7 +922,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
     # a map) from one OCR pass, then attached to every observation. WHITEBEARD-
     # style battletags won't resolve (fuzzy score below threshold) - those slots
     # stay unattributed and the raw name is kept for later alias confirmation.
-    slot_players: dict[str, list[Optional[str]]] = {}
+    slot_players: dict[str, list[str | None]] = {}
     slot_raw: dict[str, list[str]] = {}
 
     def _attribute_players(frame: Frame) -> None:
@@ -933,7 +940,7 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
         left_roster, right_roster = (f1, f2) if side_a_faction == "faction1" else (f2, f1)
         hits = 0
         for side, roster in ((SIDE_LEFT, left_roster), (SIDE_RIGHT, right_roster)):
-            ids: list[Optional[str]] = []
+            ids: list[str | None] = []
             for raw in reads[side]:
                 pid = resolve_player(raw, roster) if raw else None
                 ids.append(pid)
@@ -955,7 +962,8 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
                 # auto-advance offers the same pool it would have.
                 history.pop()
                 _, cur_round[0], cur_sub[0], prev_used, attacker[0] = top
-                used_subs.clear(); used_subs.update(prev_used)
+                used_subs.clear()
+                used_subs.update(prev_used)
                 last_kept = None
                 emit(f"  UNDID the round marker - back to round {cur_round[0]}"
                      + (f" ({cur_sub[0]})" if cur_sub[0] else ""))
@@ -1080,11 +1088,12 @@ def run_hotkey_capture(  # pragma: no cover - runtime-only path
 def _padded_crop(frame: Frame, rect: Any) -> Any:
     """Crop a ROI with a small margin so the matcher can slide the ref inside it
     (see match.MATCH_PAD_PX). Matching only — refs are learned from the tight ROI."""
-    from .match import crop_roi as _crop, pad_rect as _pad
+    from .match import crop_roi as _crop
+    from .match import pad_rect as _pad
     return _crop(frame, _pad(rect))
 
 
-def _only_lost_known(prev: Sequence[Optional[str]], new: Sequence[Optional[str]]) -> bool:
+def _only_lost_known(prev: Sequence[str | None], new: Sequence[str | None]) -> bool:
     """True when ``new`` differs from ``prev`` only by slots that dropped to unknown.
 
     A snapshot that reads the same comp but with more '??' is a worse read of the
@@ -1093,7 +1102,7 @@ def _only_lost_known(prev: Sequence[Optional[str]], new: Sequence[Optional[str]]
     """
     if len(prev) != len(new):
         return False
-    for p, n in zip(prev, new):
+    for p, n in zip(prev, new, strict=True):
         if p == n or n is None:
             continue
         return False
@@ -1109,7 +1118,7 @@ def default_crops_dir(db_path: str) -> str:
 def save_slot_crops(  # pragma: no cover - needs cv2
     cv2: Any, frame: Frame, rects: Sequence[Any], crops_dir: str,
     *, map_instance_id: int, side: str, ts: int,
-) -> list[Optional[str]]:
+) -> list[str | None]:
     """Write each slot's portrait crop to disk and return the paths.
 
     This is what makes a Review correction worth something: without the actual
@@ -1119,7 +1128,7 @@ def save_slot_crops(  # pragma: no cover - needs cv2
     import os
     out = os.path.join(crops_dir, str(map_instance_id))
     os.makedirs(out, exist_ok=True)
-    paths: list[Optional[str]] = []
+    paths: list[str | None] = []
     for i, rect in enumerate(rects):
         try:
             crop = frame[rect.y:rect.y + rect.h, rect.x:rect.x + rect.w]
@@ -1133,11 +1142,11 @@ def save_slot_crops(  # pragma: no cover - needs cv2
 
 
 def _persist_matches(  # pragma: no cover
-    db: "Any", map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
+    db: Any, map_instance_id: int, side: str, ts: int, matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],
-    sub_map: Optional[str] = None, round_no: Optional[int] = None,
-    phase: Optional[str] = None, crop_paths: Sequence[Optional[str]] = (),
-    players: Sequence[Optional[str]] = (), raw_names: Sequence[str] = (),
+    sub_map: str | None = None, round_no: int | None = None,
+    phase: str | None = None, crop_paths: Sequence[str | None] = (),
+    players: Sequence[str | None] = (), raw_names: Sequence[str] = (),
 ) -> bool:
     """Persist one frame's matches as a single observation (no smoothing). Returns
     True if the observation fully resolved."""
@@ -1166,8 +1175,8 @@ def _persist_matches(  # pragma: no cover
 
 
 def _verify_map(  # pragma: no cover - runtime-only path
-    db: "Any", cv2: Any, frame: Any, profile: Any, ctx: Any, map_instance_id: int
-) -> Optional[int]:
+    db: Any, cv2: Any, frame: Any, profile: Any, ctx: Any, map_instance_id: int
+) -> int | None:
     """§9.2: OCR the map name and compare to the code's expected map. Returns
     1 (mismatch), 0 (match), or None (could not check). On mismatch, flags the
     instance unverified and refuses further writes (the caller enforces that)."""
@@ -1183,7 +1192,7 @@ def _verify_map(  # pragma: no cover - runtime-only path
     return 0 if ok else 1
 
 
-def _ocr_map_name(cv2: Any, frame: Any, profile: Any) -> Optional[str]:  # pragma: no cover
+def _ocr_map_name(cv2: Any, frame: Any, profile: Any) -> str | None:  # pragma: no cover
     """OCR the on-screen map name. Requires both an OCR backend (pytesseract)
     and a calibrated map-name ROI; until a map-name anchor is calibrated this
     returns None (check skipped, not failed)."""
@@ -1201,7 +1210,7 @@ def _import_cv2_np_for_capture() -> tuple[Any, Any]:  # pragma: no cover
     return cv2, np
 
 
-def _profile_and_refs(db: "Any", cv2: Any, hud_variant: str) -> tuple[Any, Any]:  # pragma: no cover
+def _profile_and_refs(db: Any, cv2: Any, hud_variant: str) -> tuple[Any, Any]:  # pragma: no cover
     frame, w, h = grab_frame()
     profile = db.get_active_profile(w, h, hud_variant)
     if profile is None:
@@ -1215,7 +1224,7 @@ def _profile_and_refs(db: "Any", cv2: Any, hud_variant: str) -> tuple[Any, Any]:
 
 
 def calibration_selftest(  # pragma: no cover - needs cv2 + a frame
-    db: "Any", *, hud_variant: str = "default", frame_dir: Optional[str] = None,
+    db: Any, *, hud_variant: str = "default", frame_dir: str | None = None,
 ) -> tuple[int, int]:
     """Run the REAL matcher with the current calibration + refs and count how many
     of the 10 HUD slots resolve to a hero. A low count means the boxes are
@@ -1261,7 +1270,7 @@ def calibration_selftest(  # pragma: no cover - needs cv2 + a frame
 
 
 def _persist_observation(  # pragma: no cover
-    db: "Any", map_instance_id: int, obs: "SmoothedObservation", matches: Sequence[SlotMatch],
+    db: Any, map_instance_id: int, obs: SmoothedObservation, matches: Sequence[SlotMatch],
     hero_roles: dict[str, str], hero_names: dict[str, str],
 ) -> None:
     from .comps import canonical_comp

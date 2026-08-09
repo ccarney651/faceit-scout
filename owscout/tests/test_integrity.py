@@ -4,8 +4,8 @@ verify-codes / demoURLs-bug report."""
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -18,7 +18,6 @@ from owscout.integrity import (
     verify_codes_report,
 )
 from owscout.models import CodeContext
-
 
 # --- §9.1 banned-hero -------------------------------------------------------
 
@@ -110,7 +109,8 @@ def _faceit(path: Path) -> str:
     # match RESTART has a restart shell; match CLEAN does not.
     c.executemany("INSERT INTO games VALUES(?,?,?)",
                   [("RESTART", 1, 1), ("RESTART", 2, 0), ("CLEAN", 1, 0)])
-    c.commit(); c.close()
+    c.commit()
+    c.close()
     return str(path)
 
 
