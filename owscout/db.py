@@ -257,6 +257,17 @@ def _winner_side(winner_faction: str | None, side_a_faction: str) -> str | None:
     return "a" if winner_faction == side_a_faction else "b"
 
 
+def _row_columns(row: sqlite3.Row) -> tuple[str, ...]:
+    """Column names of a sqlite3.Row.
+
+    ``sqlite3.Row`` implements no ``__contains__``, so ``"variant" in row``
+    iterates the row's *values* (and is exactly what SIM118 suggests for plain
+    dicts). Use this helper so a column-presence check reads the real columns.
+    """
+
+    return tuple(row.keys())
+
+
 class Database:
     """Thin wrapper around the owscout SQLite connection.
 
@@ -580,7 +591,7 @@ class Database:
             phash=str(row["phash"]),
             added_at=row["added_at"],
             source=str(row["source"]),
-            variant=str(row["variant"]) if "variant" in row else "a",
+            variant=str(row["variant"]) if "variant" in _row_columns(row) else "a",
         )
 
     @staticmethod
