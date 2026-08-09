@@ -866,3 +866,88 @@ def test_rank_players_by_efficiency_keeps_unrated_players_last(tmp_path) -> None
     assert got[-2:] == ["x1", "x2"]            # rated never sorts below unrated
     assert got[-3] == "t5"                     # lowest eff (-1.414) sits right before the unrated
     assert all(n in got for n in ("t1", "t5", "s5", "s1"))
+
+
+# --- power rankings ---------------------------------------------------------
+# Series Elo orders the table (K=32); Map Elo (K=12) is a supporting column
+# only. Walkovers carry no maps and must not move either rating. Order of the
+# input array must not matter — only chronology (finished_at) does.
+
+def _match(f1, f2, winner, finished_at, game_winners, walkover=False):
+    games = [{"winner_faction": w} for w in game_winners]
+    return {
+        "finished_at": finished_at, "f1": f1, "f2": f2,
+        "winner": winner, "walkover": walkover, "games": games,
+    }
+
+
+def test_power_rankings_bo1_match_updates_both_ratings_exactly(tmp_path) -> None:
+    # Single-game match keeps Series and Map Elo identical formulas with no
+    # intermediate steps, so the exact post-match numbers are hand-checkable:
+    # both start at 1500 (expected score 0.5 each way), A wins ->
+    # ra = 1500 + K*(1-0.5), rb = 1500 + K*(0-0.5).
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    by_name = {r["name"]: r for r in got}
+    assert by_name["A"]["rating"] == 1516
+    assert by_name["B"]["rating"] == 1484
+    assert by_name["A"]["mapRating"] == 1506
+    assert by_name["B"]["mapRating"] == 1494
+    assert by_name["A"]["n"] == 1 and by_name["B"]["n"] == 1
+    assert by_name["A"]["provisional"] is True   # n=1 < POWER_MIN_N
+
+
+def test_power_rankings_orders_by_series_rating_descending(tmp_path) -> None:
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    assert [r["name"] for r in got] == ["A", "B"]
+
+
+def test_power_rankings_bo5_win_moves_both_ratings_in_the_winners_favor(tmp_path) -> None:
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z",
+                ["faction1", "faction1", "faction2", "faction1"])]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    by_name = {r["name"]: r for r in got}
+    assert by_name["A"]["rating"] > 1500 > by_name["B"]["rating"]
+    assert by_name["A"]["mapRating"] > 1500 > by_name["B"]["mapRating"]
+
+
+def test_power_rankings_excludes_walkovers(tmp_path) -> None:
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", [], walkover=True)]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    assert got == []
+
+
+def test_power_rankings_is_order_independent_of_input_array_order(tmp_path) -> None:
+    m1 = _match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])
+    m2 = _match("A", "B", "faction2", "2026-01-08T00:00:00Z", ["faction2"])
+    forward = _run(f"return powerRankings({json.dumps([m1, m2])});", tmp_path)
+    backward = _run(f"return powerRankings({json.dumps([m2, m1])});", tmp_path)
+    assert forward == backward
+
+
+def test_power_rankings_provisional_flag_boundary(tmp_path) -> None:
+    # A plays 4 distinct opponents (n=4, below POWER_MIN_N=5) -> provisional.
+    opponents = ["C", "D", "E", "F"]
+    matches = [_match("A", opp, "faction1", f"2026-01-0{i+1}T00:00:00Z", ["faction1"])
+               for i, opp in enumerate(opponents)]
+    got = _run(f"return powerRankings({json.dumps(matches)});", tmp_path)
+    a = next(r for r in got if r["name"] == "A")
+    assert a["n"] == 4
+    assert a["provisional"] is True
+
+    matches.append(_match("A", "G", "faction1", "2026-01-05T00:00:00Z", ["faction1"]))
+    got5 = _run(f"return powerRankings({json.dumps(matches)});", tmp_path)
+    a5 = next(r for r in got5 if r["name"] == "A")
+    assert a5["n"] == 5
+    assert a5["provisional"] is False
+
+
+def test_power_rankings_history_is_one_point_per_match_in_order(tmp_path) -> None:
+    m1 = _match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])
+    m2 = _match("A", "C", "faction2", "2026-01-08T00:00:00Z", ["faction2"])
+    got = _run(f"return powerRankings({json.dumps([m1, m2])});", tmp_path)
+    a = next(r for r in got if r["name"] == "A")
+    assert len(a["history"]) == 2
+    assert a["history"][0] == 1516          # after beating B (see bo1 test above)
+    assert a["history"][1] < a["history"][0]  # then lost to C, rating dropped
