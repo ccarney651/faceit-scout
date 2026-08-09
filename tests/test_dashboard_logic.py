@@ -951,3 +951,31 @@ def test_power_rankings_history_is_one_point_per_match_in_order(tmp_path) -> Non
     assert len(a["history"]) == 2
     assert a["history"][0] == 1516          # after beating B (see bo1 test above)
     assert a["history"][1] < a["history"][0]  # then lost to C, rating dropped
+
+
+# --- sparkline points --------------------------------------------------------
+# Turns a rating history into normalized SVG polyline points. A single-point
+# history still has to render a visible flat line, not collapse to nothing —
+# a team's first result shouldn't be an invisible sparkline.
+
+def test_sparkline_empty_history_is_empty_string(tmp_path) -> None:
+    assert _run("return sparklinePoints([], 60, 20);", tmp_path) == ""
+
+
+def test_sparkline_single_point_is_a_flat_centered_line(tmp_path) -> None:
+    assert _run("return sparklinePoints([1500], 60, 20);", tmp_path) == "0,10 60,10"
+
+
+def test_sparkline_two_points_span_the_full_box(tmp_path) -> None:
+    # Lower rating first -> higher on screen is lower y (SVG y grows downward),
+    # so the rising [1500,1600] history must end at y=0 (top), not y=20.
+    got = _run("return sparklinePoints([1500,1600], 60, 20);", tmp_path)
+    assert got == "0.0,20.0 60.0,0.0"
+
+
+def test_sparkline_flat_history_stays_centered(tmp_path) -> None:
+    got = _run("return sparklinePoints([1500,1500,1500], 60, 20);", tmp_path)
+    # equal values -> span defaults to 1 so it doesn't divide by zero; every
+    # point should land at the same y.
+    ys = [p.split(',')[1] for p in got.split(' ')]
+    assert len(set(ys)) == 1

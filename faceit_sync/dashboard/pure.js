@@ -461,3 +461,18 @@ function powerRankings(matches) {
     }))
     .sort((a, b) => b.rating - a.rating);
 }
+
+// history -> normalized "x,y x,y ..." for an SVG <polyline>. A one-point
+// history still draws a flat line across the full width rather than a dot,
+// so a team's very first tracked result isn't invisible in the table.
+function sparklinePoints(history, w, h) {
+  const w_ = w || 60, h_ = h || 20;
+  if (!history || !history.length) return '';
+  if (history.length === 1) return `0,${h_ / 2} ${w_},${h_ / 2}`;
+  const min = Math.min(...history), max = Math.max(...history), span = (max - min) || 1;
+  return history.map((v, i) => {
+    const x = i / (history.length - 1) * w_;
+    const y = h_ - ((v - min) / span) * h_;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+}
