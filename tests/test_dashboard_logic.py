@@ -963,3 +963,116 @@ def test_radar_points_null_skips_the_vertex_and_zero_radius_is_empty(tmp_path) -
     assert abs(got[2]["x"] - 0) < 1e-9 and abs(got[2]["y"] - 100) < 1e-9
     assert abs(got[3]["x"] + 50) < 1e-9 and abs(got[3]["y"] - 0) < 1e-9
     assert _run("return radarPoints([100,100],0,0,0);", tmp_path) == []
+
+
+# --- power rankings ---------------------------------------------------------
+# Series Elo orders the table (K=32); Map Elo (K=12) is a supporting column
+# only. Walkovers carry no maps and must not move either rating. Order of the
+# input array must not matter — only chronology (finished_at) does.
+
+def _match(f1, f2, winner, finished_at, game_winners, walkover=False):
+    games = [{"winner_faction": w} for w in game_winners]
+    return {
+        "finished_at": finished_at, "f1": f1, "f2": f2,
+        "winner": winner, "walkover": walkover, "games": games,
+    }
+
+
+def test_power_rankings_bo1_match_updates_both_ratings_exactly(tmp_path) -> None:
+    # Single-game match keeps Series and Map Elo identical formulas with no
+    # intermediate steps, so the exact post-match numbers are hand-checkable:
+    # both start at 1500 (expected score 0.5 each way), A wins ->
+    # ra = 1500 + K*(1-0.5), rb = 1500 + K*(0-0.5).
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    by_name = {r["name"]: r for r in got}
+    assert by_name["A"]["rating"] == 1516
+    assert by_name["B"]["rating"] == 1484
+    assert by_name["A"]["mapRating"] == 1506
+    assert by_name["B"]["mapRating"] == 1494
+    assert by_name["A"]["n"] == 1 and by_name["B"]["n"] == 1
+    assert by_name["A"]["provisional"] is True   # n=1 < POWER_MIN_N
+
+
+def test_power_rankings_orders_by_series_rating_descending(tmp_path) -> None:
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    assert [r["name"] for r in got] == ["A", "B"]
+
+
+def test_power_rankings_bo5_win_moves_both_ratings_in_the_winners_favor(tmp_path) -> None:
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z",
+                ["faction1", "faction1", "faction2", "faction1"])]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    by_name = {r["name"]: r for r in got}
+    assert by_name["A"]["rating"] > 1500 > by_name["B"]["rating"]
+    assert by_name["A"]["mapRating"] > 1500 > by_name["B"]["mapRating"]
+
+
+def test_power_rankings_excludes_walkovers(tmp_path) -> None:
+    m = [_match("A", "B", "faction1", "2026-01-01T00:00:00Z", [], walkover=True)]
+    got = _run(f"return powerRankings({json.dumps(m)});", tmp_path)
+    assert got == []
+
+
+def test_power_rankings_is_order_independent_of_input_array_order(tmp_path) -> None:
+    m1 = _match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])
+    m2 = _match("A", "B", "faction2", "2026-01-08T00:00:00Z", ["faction2"])
+    forward = _run(f"return powerRankings({json.dumps([m1, m2])});", tmp_path)
+    backward = _run(f"return powerRankings({json.dumps([m2, m1])});", tmp_path)
+    assert forward == backward
+
+
+def test_power_rankings_provisional_flag_boundary(tmp_path) -> None:
+    # A plays 4 distinct opponents (n=4, below POWER_MIN_N=5) -> provisional.
+    opponents = ["C", "D", "E", "F"]
+    matches = [_match("A", opp, "faction1", f"2026-01-0{i+1}T00:00:00Z", ["faction1"])
+               for i, opp in enumerate(opponents)]
+    got = _run(f"return powerRankings({json.dumps(matches)});", tmp_path)
+    a = next(r for r in got if r["name"] == "A")
+    assert a["n"] == 4
+    assert a["provisional"] is True
+
+    matches.append(_match("A", "G", "faction1", "2026-01-05T00:00:00Z", ["faction1"]))
+    got5 = _run(f"return powerRankings({json.dumps(matches)});", tmp_path)
+    a5 = next(r for r in got5 if r["name"] == "A")
+    assert a5["n"] == 5
+    assert a5["provisional"] is False
+
+
+def test_power_rankings_history_is_one_point_per_match_in_order(tmp_path) -> None:
+    m1 = _match("A", "B", "faction1", "2026-01-01T00:00:00Z", ["faction1"])
+    m2 = _match("A", "C", "faction2", "2026-01-08T00:00:00Z", ["faction2"])
+    got = _run(f"return powerRankings({json.dumps([m1, m2])});", tmp_path)
+    a = next(r for r in got if r["name"] == "A")
+    assert len(a["history"]) == 2
+    assert a["history"][0] == 1516          # after beating B (see bo1 test above)
+    assert a["history"][1] < a["history"][0]  # then lost to C, rating dropped
+
+
+# --- sparkline points --------------------------------------------------------
+# Turns a rating history into normalized SVG polyline points. A single-point
+# history still has to render a visible flat line, not collapse to nothing —
+# a team's first result shouldn't be an invisible sparkline.
+
+def test_sparkline_empty_history_is_empty_string(tmp_path) -> None:
+    assert _run("return sparklinePoints([], 60, 20);", tmp_path) == ""
+
+
+def test_sparkline_single_point_is_a_flat_centered_line(tmp_path) -> None:
+    assert _run("return sparklinePoints([1500], 60, 20);", tmp_path) == "0,10 60,10"
+
+
+def test_sparkline_two_points_span_the_full_box(tmp_path) -> None:
+    # Lower rating first -> higher on screen is lower y (SVG y grows downward),
+    # so the rising [1500,1600] history must end at y=0 (top), not y=20.
+    got = _run("return sparklinePoints([1500,1600], 60, 20);", tmp_path)
+    assert got == "0.0,20.0 60.0,0.0"
+
+
+def test_sparkline_flat_history_stays_centered(tmp_path) -> None:
+    got = _run("return sparklinePoints([1500,1500,1500], 60, 20);", tmp_path)
+    # equal values -> span defaults to 1 so it doesn't divide by zero; every
+    # point should land at the same y.
+    ys = [p.split(',')[1] for p in got.split(' ')]
+    assert len(set(ys)) == 1

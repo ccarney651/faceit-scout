@@ -462,3 +462,69 @@ function radarPoints(vals, cx, cy, r){
   });
 }
 
+
+// Power rankings — a from-scratch team rating computed from stored match/map
+// results (NOT FACEIT's own per-player elo_snapshot on round_players). Series
+// Elo is the thing the league itself decides standings by, so it orders the
+// table; Map Elo updates far more often (games >> matches) and rides along as
+// a faster-reacting secondary signal, never the sort key. Walkovers have no
+// maps played and carry no competitive signal, so they're skipped entirely —
+// same "zeroed rows aren't a real result" rule the rest of ingest follows.
+const SERIES_ELO_K = 32, MAP_ELO_K = 12, ELO_START = 1500, POWER_MIN_N = 5;
+
+function eloExpected(ra, rb) { return 1 / (1 + Math.pow(10, (rb - ra) / 400)); }
+function eloNext(ra, rb, scoreA, k) { return ra + k * (scoreA - eloExpected(ra, rb)); }
+
+function powerRankings(matches) {
+  const teams = Object.create(null);
+  const team = (name) => teams[name] || (teams[name] = {
+    rating: ELO_START, mapRating: ELO_START, n: 0, history: [],
+  });
+
+  const ordered = (matches || [])
+    .filter(m => !m.walkover && m.f1 && m.f2)
+    .slice()
+    .sort((a, b) => String(a.finished_at || '').localeCompare(String(b.finished_at || '')));
+
+  ordered.forEach(m => {
+    const a = team(m.f1), b = team(m.f2);
+
+    (m.games || []).forEach(g => {
+      if (g.winner_faction !== 'faction1' && g.winner_faction !== 'faction2') return;
+      const scoreA = g.winner_faction === 'faction1' ? 1 : 0;
+      const ra = eloNext(a.mapRating, b.mapRating, scoreA, MAP_ELO_K);
+      const rb = eloNext(b.mapRating, a.mapRating, 1 - scoreA, MAP_ELO_K);
+      a.mapRating = ra; b.mapRating = rb;
+    });
+
+    const scoreA = m.winner === 'faction1' ? 1 : m.winner === 'faction2' ? 0 : null;
+    if (scoreA == null) return;
+    const ra = eloNext(a.rating, b.rating, scoreA, SERIES_ELO_K);
+    const rb = eloNext(b.rating, a.rating, 1 - scoreA, SERIES_ELO_K);
+    a.rating = ra; b.rating = rb; a.n += 1; b.n += 1;
+    a.history.push(Math.round(ra)); b.history.push(Math.round(rb));
+  });
+
+  return Object.entries(teams)
+    .filter(([, t]) => t.n > 0)
+    .map(([name, t]) => ({
+      name, rating: Math.round(t.rating), mapRating: Math.round(t.mapRating),
+      n: t.n, history: t.history, provisional: t.n < POWER_MIN_N,
+    }))
+    .sort((a, b) => b.rating - a.rating);
+}
+
+// history -> normalized "x,y x,y ..." for an SVG <polyline>. A one-point
+// history still draws a flat line across the full width rather than a dot,
+// so a team's very first tracked result isn't invisible in the table.
+function sparklinePoints(history, w, h) {
+  const w_ = w || 60, h_ = h || 20;
+  if (!history || !history.length) return '';
+  if (history.length === 1) return `0,${h_ / 2} ${w_},${h_ / 2}`;
+  const min = Math.min(...history), max = Math.max(...history), span = (max - min) || 1;
+  return history.map((v, i) => {
+    const x = i / (history.length - 1) * w_;
+    const y = h_ - ((v - min) / span) * h_;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+}

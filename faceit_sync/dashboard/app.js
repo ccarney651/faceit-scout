@@ -1232,6 +1232,36 @@ function renderOverview(){
     D().teams));
   wrap.appendChild(el(`<p class="note">Veto attribution recovered from FACEIT's durable history feed for ${s.matches_with_attribution}/${s.matches} matches; only walkovers and disrupted vetos lack it.</p>`));
 
+  // Power Rankings — a from-scratch Elo-style rating built from stored match
+  // results (distinct from FACEIT's own per-player elo_snapshot). Series
+  // rating orders the table since that's what the league itself decides
+  // standings by; Map form is a faster-reacting secondary column, never the
+  // sort key. Regular season only, same scope as Standings above.
+  const pr = powerRankings(D().matches);
+  if (pr.length) {
+    wrap.appendChild(el(sectionH('Power Rankings')));
+    wrap.appendChild(table(
+      [{k: 'rank', label: '#', num: true,
+        html: r => `<span class="${r.provisional ? 'faint' : ''}">${r.rank}</span>`},
+       {k: 'name', label: 'Team', html: r => teamLink(r.name)},
+       {k: 'rating', label: 'Rating', num: true,
+        html: r => `<span class="${r.provisional ? 'faint' : ''}">${r.rating}</span>`},
+       {k: 'mapRating', label: 'Map form', num: true},
+       {k: 'history', label: 'Trend',
+        html: r => `<svg viewBox="0 0 60 20" class="spark" width="60" height="20">` +
+          `<polyline points="${sparklinePoints(r.history, 60, 20)}" fill="none" ` +
+          `stroke="var(--accent)" stroke-width="2"/></svg>`},
+       {k: 'n', label: 'n', num: true,
+        html: r => r.provisional
+          ? `${r.n} <span class="faint" title="Fewer than ${POWER_MIN_N} matches — rating is still settling">*</span>`
+          : String(r.n)}],
+      pr.map((r, i) => ({...r, rank: i + 1}))));
+    const combinedCaveat = viewOf(CURRENT_VIEW).divisions.length > 1
+      ? ' This is a combined view spanning multiple tiers that never play each other — ratings are only meaningfully comparable within a tier.'
+      : '';
+    wrap.appendChild(el(`<p class="note">Power Rankings is an Elo-style rating built from match results (not FACEIT's own per-player elo) — every finished match moves a team's Rating by up to K=${SERIES_ELO_K} based on the result and the opponent's strength, and every map moves a separate Map form rating (K=${MAP_ELO_K}), which reacts faster since there are more maps than matches. Trend plots Rating after each match, oldest to newest. Rows marked * have played fewer than ${POWER_MIN_N} matches and are still settling.${combinedCaveat}</p>`));
+  }
+
   // Scout leaderboard — maps each contributor owns (first-wins credited). League-wide.
   const contribs=DATA.owscout_contributors||[];
   const meName=((localStorage.getItem('owscout_name')||'').trim()||'').toLowerCase();
