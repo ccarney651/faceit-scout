@@ -424,7 +424,7 @@ function eloExpected(ra, rb) { return 1 / (1 + Math.pow(10, (rb - ra) / 400)); }
 function eloNext(ra, rb, scoreA, k) { return ra + k * (scoreA - eloExpected(ra, rb)); }
 
 function powerRankings(matches) {
-  const teams = {};
+  const teams = Object.create(null);
   const team = (name) => teams[name] || (teams[name] = {
     rating: ELO_START, mapRating: ELO_START, n: 0, history: [],
   });

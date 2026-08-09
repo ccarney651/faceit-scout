@@ -1030,7 +1030,10 @@ function renderOverview(){
           ? `${r.n} <span class="faint" title="Fewer than ${POWER_MIN_N} matches — rating is still settling">*</span>`
           : String(r.n)}],
       pr.map((r, i) => ({...r, rank: i + 1}))));
-    wrap.appendChild(el(`<p class="note">Power Rankings is an Elo-style rating built from match results (not FACEIT's own per-player elo) — every finished match moves a team's Rating by up to K=${SERIES_ELO_K} based on the result and the opponent's strength, and every map moves a separate Map form rating (K=${MAP_ELO_K}), which reacts faster since there are more maps than matches. Trend plots Rating after each match, oldest to newest. Rows marked * have played fewer than ${POWER_MIN_N} matches and are still settling.</p>`));
+    const combinedCaveat = viewOf(CURRENT_VIEW).divisions.length > 1
+      ? ' This is a combined view spanning multiple tiers that never play each other — ratings are only meaningfully comparable within a tier.'
+      : '';
+    wrap.appendChild(el(`<p class="note">Power Rankings is an Elo-style rating built from match results (not FACEIT's own per-player elo) — every finished match moves a team's Rating by up to K=${SERIES_ELO_K} based on the result and the opponent's strength, and every map moves a separate Map form rating (K=${MAP_ELO_K}), which reacts faster since there are more maps than matches. Trend plots Rating after each match, oldest to newest. Rows marked * have played fewer than ${POWER_MIN_N} matches and are still settling.${combinedCaveat}</p>`));
   }
 
   // Scout leaderboard — maps each contributor owns (first-wins credited). League-wide.
