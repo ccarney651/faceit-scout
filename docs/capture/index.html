@@ -1113,6 +1113,34 @@ async function autoDetect(){ const c=selectedCode();
   }catch(e){ ocrProgress(null); setDetectMsg('auto-detect failed: '+(e.message||e)+' — use manual sides / Swap teams.','warn'); }
   finally{ updateBtns(); }
 }
+// A manual side fix (Swap L/R or picking a team) invalidates the auto-tags —
+// onSideChange clears session.players because they were matched against the
+// previous orientation's rosters, and without this re-read they'd stay empty
+// for the rest of the map (the auto-detect gate no longer runs once the side
+// is manually locked). Re-run the name OCR + attribution against the now-known
+// sides so snapshots keep carrying player names with no extra button. Runs in
+// the background (never flips sideResolved or blocks the UI); snapshot() awaits
+// an in-flight retag so a Snap pressed right after Swap still gets the tags.
+let _retagPromise=null;
+function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return null;
+  const c=selectedCode(); if(!c) return null;
+  const s=session; if(s._retagging) return s._retagPromise||null;
+  s._retagging=true;
+  s._retagPromise=(async()=>{
+    try{
+      setDetectMsg('re-tagging players…'); ocrProgress(0);
+      const names=await ocrNames();
+      if(session!==s || selectedCode()!==c) return;
+      const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
+      const aIds=attribute(names.a,teamRoster(leftId)), bIds=attribute(names.b,teamRoster(rightId));
+      if(session===s) s.players={a:aIds,b:bIds};
+      const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
+      setDetectMsg(hit?`${hit}/10 players tagged`:'still couldn’t read HUD names — check calibration.','ok');
+    }catch(e){ if(session===s) setDetectMsg('player re-tag failed: '+(e.message||e),'warn'); }
+    finally{ ocrProgress(null); if(s){ s._retagging=false; s._retagPromise=null; } }
+  })();
+  return s._retagPromise;
+}
 // Runs OCR side-detection automatically on the FIRST snapshot of a map (called
 // from snapshot(), below) instead of requiring a manual button — a scout glued
 // to the game is looking at the control panel, not the page. A no-op once
@@ -1393,7 +1421,8 @@ function currentLeftId(){ const c=selectedCode(); if(!c) return null;
 // Picking an actual team locks sideResolved (stops ensureSideResolved's automatic
 // retry below); picking back to "auto/blank" explicitly hands control back to it.
 function onSideChange(){ if(session){ session.players=null;
-  session.sideResolved=!!((document.querySelector('input[name=side]:checked')||{}).value||''); }
+  session.sideResolved=!!((document.querySelector('input[name=side]:checked')||{}).value||'');
+  if(session.sideResolved) retagPlayers(); }
   relabelTeams(); }
 function swapSides(){ const c=selectedCode(); if(!c) return;
   const newLeft = currentLeftId()===c.t1 ? c.t2 : c.t1;
@@ -1419,6 +1448,10 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   // Auto-detect sides on this map's first snapshot (see ensureSideResolved).
   // Fast path: once resolved, this is a synchronous no-op on every later call.
   if(!(await ensureSideResolved())) return;
+  // If the operator just manually fixed the side (Swap L/R / picking a team),
+  // onSideChange kicked off a background player re-tag — wait for it so this
+  // very snapshot carries the fresh names instead of an empty set.
+  if(session&&session._retagging) await retagPlayers();
   // Escort/Hybrid round 3+: attacker is time-bank based, not parity — refuse to
   // guess (see setAttacker/nextRound). Checked AFTER side-detect since the
   // attack picker's team names depend on knowing which side is which.
