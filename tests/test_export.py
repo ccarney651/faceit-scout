@@ -142,6 +142,18 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert div["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy
 
 
+def test_dashboard_inlines_theme_css_with_embedded_fonts() -> None:
+    """The dashboard's shared design tokens come from docs/theme.css, inlined
+    with fonts base64-embedded — not linked (that would break the
+    self-contained guarantee) and not left as a stray marker."""
+    from faceit_sync._dashboard import HTML_TEMPLATE
+
+    assert "__THEME_CSS__" not in HTML_TEMPLATE, "theme marker was not substituted"
+    assert "--font-display" in HTML_TEMPLATE, "theme tokens missing from dashboard"
+    assert "url(data:font/woff2;base64," in HTML_TEMPLATE, "fonts were not base64-embedded"
+    assert "url('fonts/" not in HTML_TEMPLATE, "a font reference leaked through unembedded"
+
+
 @responses.activate
 def test_external_data_build_is_a_shell_plus_datajson(db: Database, tmp_path) -> None:
     """--external-data: the page becomes a shell that fetches data.json (the seam

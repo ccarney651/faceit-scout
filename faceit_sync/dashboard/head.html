@@ -22,70 +22,23 @@
 <meta name="twitter:image" content="https://owdb.io/og.png">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://upload.owdb.io; font-src data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'; worker-src 'none'">
 <style>
-:root{
-  --bg:#f5f7fa; --surface:#ffffff; --surface2:#eef1f6; --fg:#171a20; --muted:#5c6674;
-  --faint:#8b95a4; --line:#e3e8f0; --line2:#d6dce6;
-  --accent:#4f46e5; --accent-weak:rgba(79,70,229,.12);
-  --tank:#3f80c4; --damage:#d5563f; --support:#33a06a;
-  --good:#1f9d61; --mid:#b8860b; --bad:#cf4b36;
-  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);
-}
-@media (prefers-color-scheme: dark){
-  :root{--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;
-    --faint:#6b7686;--line:#252c37;--line2:#313a48;--accent:#8087ff;--accent-weak:rgba(128,135,255,.16);
-    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
-    --shadow:0 1px 2px rgba(0,0,0,.3);}
-}
-:root[data-theme="dark"]{--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;
-  --faint:#6b7686;--line:#252c37;--line2:#313a48;--accent:#8087ff;--accent-weak:rgba(128,135,255,.16);
-  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
-  --shadow:0 1px 2px rgba(0,0,0,.3);}
-:root[data-theme="light"]{--bg:#f5f7fa;--surface:#ffffff;--surface2:#eef1f6;--fg:#171a20;--muted:#5c6674;
-  --faint:#8b95a4;--line:#e3e8f0;--line2:#d6dce6;--accent:#4f46e5;--accent-weak:rgba(79,70,229,.12);
-  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
-  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
-
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;
-  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
-.tnum{font-variant-numeric:tabular-nums}
+/* __THEME_CSS__ */
 
 /* ---- app shell ---- */
 .topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
 .topbar-in{max-width:min(1500px,96vw);margin:0 auto;padding:12px 18px 0}
-.prodname{display:block;font-size:15px;font-weight:800;letter-spacing:.1em;color:var(--accent);margin-bottom:2px}
-.prodname span{font-size:11px;letter-spacing:.08em;color:var(--faint);font-weight:600}
 .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .brand h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
 .brand .meta{color:var(--muted);font-size:12.5px}
-nav{display:flex;gap:2px;margin-top:10px}
-nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:8px 8px 0 0;
-  cursor:pointer;font-size:13.5px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
-nav button:hover{color:var(--fg)}
-nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
-nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
-.sidebox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
-.sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface2)}
-.sidetoggle a,.sidetoggle span{padding:6px 14px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap;color:var(--muted)}
-.sidetoggle span.on{background:var(--accent);color:#0b1020}
-.sidetoggle a:hover{color:var(--fg)}
-.modebtns{display:flex;gap:6px}
-.navcap{background:var(--accent-weak);color:var(--accent);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid var(--accent);white-space:nowrap}
-.navcapdim{background:transparent;color:var(--muted);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:13px;font-weight:650;border:1px solid var(--line);white-space:nowrap}
-.navcapdim:hover{border-color:var(--accent);color:var(--fg)}
 main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
-.eyebrow{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
 .eyebrow .note,.eyebrow .faint{text-transform:none;letter-spacing:0;font-weight:600;font-size:11.5px;margin-left:8px}
 .eyebrow .note{color:var(--muted)}
 .opener{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:4px;padding:0 4px;margin-left:3px;vertical-align:middle}
 .bvs{display:block;font-size:10.5px;font-weight:400;line-height:1.2;color:var(--faint)}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:none}
 .hero{max-width:min(1500px,96vw);margin:14px auto 0;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
 .grid{display:grid;gap:10px}
 .cols-2{grid-template-columns:1fr 1fr}
@@ -107,7 +60,7 @@ main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 .mt8{margin-top:8px}.mt10{margin-top:10px}.mt14{margin-top:14px}.mt20{margin-top:20px}
 
 /* controls */
-select,input,.btn{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line2);
+select,input{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line2);
   border-radius:9px;padding:8px 11px}
 select:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
@@ -119,8 +72,6 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:5
 input[type=number]{width:56px;text-align:center;padding:7px 6px}
 .recency{display:inline-flex;align-items:center;gap:10px}
 .winlab{color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap}
-.btn{cursor:pointer;font-weight:600;background:var(--accent);color:#fff;border-color:transparent}
-.btn:hover{filter:brightness(1.06)}
 
 /* tables */
 table{width:100%;border-collapse:collapse}
@@ -641,12 +592,12 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
 <body>
 <div class="topbar"><div class="topbar-in">
   <div class="toprow">
-    <div class="brand"><span class="prodname">owdb <span>FACEIT League</span></span>
+    <div class="brand"><span class="prodname"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">FACEIT League</span></span>
       <h1 id="title"></h1>
       <select id="division" class="hidden" aria-label="Division"></select>
       <span class="meta" id="subtitle"></span></div>
     <div class="sidebox">
-      <div class="modebtns"><span class="navcap">Data</span><a class="navcapdim" href="capture/" title="Scout comps in your browser &mdash; no install, no exe">Capture <span id="navcapcount"></span></a></div>
+      <div class="sidetoggle"><span class="on">Data</span><a href="capture/" title="Scout comps in your browser &mdash; no install, no exe">Capture <span id="navcapcount"></span></a></div>
     </div>
   </div>
   <nav id="nav"></nav>
