@@ -99,6 +99,9 @@ const HERO_ROLE={}; DATA.heroes.forEach(h=>HERO_ROLE[h.name]=h.role);
 // Full roster (all heroes, incl. never-banned ones) for the draft simulator's hero picker.
 const ROSTER = (DATA.roster&&DATA.roster.length)? DATA.roster : DATA.heroes;
 ROSTER.forEach(h=>{ if(!HERO_ROLE[h.name]) HERO_ROLE[h.name]=h.role; });
+// Heroes grouped by role — the draft simulator uses this to enforce the
+// league rule that a map's two bans (one per team) can't share a role.
+const HEROES_BY_ROLE={}; Object.entries(HERO_ROLE).forEach(([name,role])=>{ (HEROES_BY_ROLE[role]=HEROES_BY_ROLE[role]||[]).push(name); });
 const MAP_CAT={}; DATA.maps.forEach(m=>MAP_CAT[m.name]=m.category);
 // Competitive seats (Tank / Hitscan / Flex DPS / Main Support / Flex Support).
 // Unclassified heroes have no seat and fall back to base role everywhere.
@@ -2546,11 +2549,15 @@ function renderSim(){
   ctl.appendChild(el(`<label title="This team picks the Game 1 map and takes the first ban.">First pick &amp; ban</label>`));
   const fb=el(`<div class="wsel"></div>`);
   const fbBtn=ab=>{ const b=el(`<span class="wbtn ${SIM_FIRST===ab?(ab==='A'?'selA':'selB'):''}">${esc(nameOf(ab))}</span>`); b.onclick=()=>{SIM_FIRST=ab;SIM_TREE={};SIM_FOCUS='';draw();}; return b; };
-  fb.append(fbBtn('A'),fbBtn('B')); ctl.appendChild(fb);
+  // Rebuilt by draw() below, not just on click — the buttons cache each team's
+  // NAME (via nameOf) as well as the first-pick highlight, so a Team A/B swap
+  // leaves them stale unless they're redrawn alongside the tree.
+  const renderFB=()=>{ fb.innerHTML=''; fb.append(fbBtn('A'),fbBtn('B')); };
+  renderFB(); ctl.appendChild(fb);
   ctl.appendChild(el(`<label title="Wins needed to take the series. Bo5 is the FACEIT default; playoff finals can be Bo7.">Format</label>`));
   const bo=el(`<div class="wsel"></div>`);
-  [['Bo3',2],['Bo5',3],['Bo7',4]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}" title="${lbl==='Bo7'?'Best of 7 — playoff finals':lbl==='Bo5'?'Best of 5 — regular default':'Best of 3'}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;SIM_FOCUS='';draw();}; bo.append(b); });
-  ctl.appendChild(bo);
+  const renderBO=()=>{ bo.innerHTML=''; [['Bo3',2],['Bo5',3],['Bo7',4]].forEach(([lbl,t])=>{ const b=el(`<span class="wbtn ${SIM_BO===t?'selA':''}" title="${lbl==='Bo7'?'Best of 7 — playoff finals':lbl==='Bo5'?'Best of 5 — regular default':'Best of 3'}">${lbl}</span>`); b.onclick=()=>{SIM_BO=t;SIM_FOCUS='';draw();}; bo.append(b); }); };
+  renderBO(); ctl.appendChild(bo);
   ctl.appendChild(el(`<label title="How far back to read each team's BANS. Full season is most reliable; narrow it only to catch a very recent meta shift (a short window is sparse). Map picks always use the full season.">Ban window</label>`));
   const rw=el(`<select style="min-width:132px" title="How far back to read each team's bans."></select>`);
   [['Full season',0],['Last 12 games',12],['Last 6 games',6]].forEach(([lbl,v])=>rw.appendChild(el(`<option value="${v}" ${SIM_RECENT===v?'selected':''}>${lbl}</option>`)));
@@ -2565,8 +2572,10 @@ function renderSim(){
   wrap.appendChild(el(`<div class="simlegend">
     <div><span class="pp">3×</span> on a map chip = times that team has picked it this season</div>
     <div><span class="pp">2× here · 5×</span> on a ban chip = bans on this map · this season</div>
+    <div><span class="pp">3× reply</span> on the 2nd ban = their historical reply to the 1st team's ban, any map</div>
     <div><span class="pp">★</span> = signature ban — repeated well above the division rate</div>
     <div>A team can't repeat its own ban down a line</div>
+    <div>A map's two bans can't share a role</div>
   </div>`));
   const body=el(`<div></div>`); wrap.appendChild(body);
 
@@ -2597,16 +2606,17 @@ function renderSim(){
   // Ban choices as buttons — the team's most-banned heroes (recent window), each
   // with its ban count and ★ signature; a compact "any hero" dropdown covers the
   // long tail so the giant list isn't the primary interface.
-  function banButtons(model, map, illegal, current, onPick){
+  function banButtons(model, map, illegal, current, onPick, vsBan){
     const wrap=el(`<div class="mbtns"></div>`);
-    const sugg=banSuggest(model, map, illegal), shown=new Set();
+    const sugg=banSuggest(model, map, illegal, vsBan), shown=new Set();
     sugg.forEach(s=>{ shown.add(s.hero);
       const sig=sigMark(model,s.hero);
-      // On-map count (their bans in this same situation) leads when present; the
-      // total is their overall tendency. Both feed the "commonly banned here" read.
-      // Format is defined in the sim legend: "N× here · M×" = this map · this season.
-      const cnt = s.onMap>0 ? `${s.onMap}× here · ${s.all}×` : `${s.all}× total`;
-      const o=el(`<span class="opt${s.hero===current?' sel':''}" title="${esc(s.hero)} — banned ${s.all}× overall${s.onMap?`, ${s.onMap}× on ${esc(map)}`:''}">${heroChip(s.hero)}<span class="pp">${cnt}</span>${sig}</span>`);
+      // Counter-ban (reply to vsBan, any map) leads when present — it's the
+      // specific "what did they do after seeing THIS ban" signal. Otherwise
+      // on-map count leads, then overall. Format matches the sim legend:
+      // "N× reply" / "N× here · M×" = this map · this season.
+      const cnt = s.counter>0 ? `${s.counter}× reply` : (s.onMap>0 ? `${s.onMap}× here · ${s.all}×` : `${s.all}× total`);
+      const o=el(`<span class="opt${s.hero===current?' sel':''}" title="${esc(s.hero)} — banned ${s.all}× overall${s.onMap?`, ${s.onMap}× on ${esc(map)}`:''}${s.counter?`, ${s.counter}× as a reply to ${esc(vsBan)}`:''}">${heroChip(s.hero)}<span class="pp">${cnt}</span>${sig}</span>`);
       o.onclick=()=>onPick(s.hero); wrap.appendChild(o); });
     if(current && !shown.has(current))
       wrap.appendChild(el(`<span class="opt sel">${heroChip(current)}<span class="pp">manual</span></span>`));
@@ -2624,6 +2634,7 @@ function renderSim(){
     .filter(x=>pool[x]===pool[mp]).every(x=> (mf.pick[mp]||0) >= (mf.pick[x]||0));
 
   function draw(){
+    renderFB(); renderBO();
     body.innerHTML='';
     if(SIM_A===SIM_B){ body.appendChild(el(`<p class="note" style="margin-top:14px">Pick two different teams.</p>`)); return; }
     const A=simModel(SIM_A,SIM_RECENT), B=simModel(SIM_B,SIM_RECENT), modelOf=ab=>ab==='A'?A:B, target=SIM_BO;
@@ -2672,11 +2683,15 @@ function renderSim(){
       // they feed the child branches (one map per mode; no repeat bans down a line).
       const allowedCats=allowedCatsFor(g1,used,pool);
       const map = (ov.map && !used.has(ov.map) && allowedCats.includes(pool[ov.map])) ? ov.map : autoMap(mf.pick,divPick,divPlay,allowedCats,used,pool);
-      const ill1=banned[picker], ill2=banned[other];
-      let b1=null,b2=null;
+      const ill1=banned[picker];
+      let b1=null,b2=null,ill2=banned[other];
       if(map){
         b1 = (ov.b1 && !ill1.has(ov.b1)) ? ov.b1 : autoBan(modelOf(picker),map,ill1);
-        b2 = (ov.b2 && !ill2.has(ov.b2)) ? ov.b2 : autoBan(modelOf(other),map,ill2);
+        // The two bans on one map can't share a role (FACEIT league rule) — once
+        // the first ban is set, its whole role is off-limits for the second.
+        ill2 = new Set(banned[other]);
+        if(b1 && HERO_ROLE[b1]) (HEROES_BY_ROLE[HERO_ROLE[b1]]||[]).forEach(h=>ill2.add(h));
+        b2 = (ov.b2 && !ill2.has(ov.b2)) ? ov.b2 : autoBan(modelOf(other),map,ill2,b1);
       }
 
       const focused = (path===SIM_FOCUS);
@@ -2694,7 +2709,7 @@ function renderSim(){
         const selMap = map;
         const mapWhy = selMap? mapExplain(nameOf(picker), selMap, pool[selMap],
           mfNow.pick[selMap]||0, divPick[selMap]||0, isTopMapInCat(mfNow, selMap)) : null;
-        const banWhy = (model, hero, ill)=>{
+        const banWhy = (model, hero, ill, vsBan)=>{
           const all = model.bansAll[hero]||0, onMap = (model.banByMap[selMap]||{})[hero]||0;
           const maxAll = Math.max(0, ...Object.entries(model.bansAll||{})
             .filter(([h])=>!ill.has(h)).map(([,n])=>n));
@@ -2703,8 +2718,10 @@ function renderSim(){
           const isTopOverall = all>0 && all===maxAll;
           const isTopOnMap = onMap>0 && onMap===maxOnMap;
           const sig = sigLift(model, dbase, hero).sig;
+          const counterN = vsBan && model.counter && model.counter[vsBan] && model.counter[vsBan][hero];
+          const counter = counterN? {vsBan, n:counterN} : null;
           return banExplain(nameOf(model===A?'A':'B'), selMap, hero, all, onMap,
-            isTopOverall, isTopOnMap, sig);
+            isTopOverall, isTopOnMap, sig, counter);
         };
         if(g1){
           // Game 1 is always Control: pick straight from the three maps, each
@@ -2737,19 +2754,20 @@ function renderSim(){
           r1.appendChild(banButtons(modelOf(picker), map, ill1, b1, h=>setOv(path,{b1:h})));
           card.appendChild(r1);
           const r2=el(`<div class="snrow"><span class="rl2">${esc(nameOf(other))} ban</span></div>`);
-          r2.appendChild(banButtons(modelOf(other), map, ill2, b2, h=>setOv(path,{b2:h})));
+          r2.appendChild(banButtons(modelOf(other), map, ill2, b2, h=>setOv(path,{b2:h}), b1));
           card.appendChild(r2);
         }
         // Why each ban? Bans use the recent-window model (matching the chip counts);
-        // evidence prefers the on-map set, falling back to the overall set.
-        const whyRow = (hero, model, ill)=>{
-          const e = hero? banWhy(model, hero, ill) : null;
+        // evidence prefers a counter-ban match (vsBan given, reply on record), then
+        // the on-map set, falling back to the overall set.
+        const whyRow = (hero, model, ill, vsBan)=>{
+          const e = hero? banWhy(model, hero, ill, vsBan) : null;
           if(!e) return '';
-          const ev=codesFor(((model.gkBanMap[selMap]||{})[hero])||(model.gkBanAll[hero]||new Set()), lookup);
+          const ev=codesFor((vsBan&&(model.gkCounter||{})[vsBan])||((model.gkBanMap[selMap]||{})[hero])||(model.gkBanAll[hero]||new Set()), lookup);
           return `<p class="whyline">Why <b>${heroChip(hero)}</b>? ${esc(e.text)}${e.thin?` <span class="thin">— a single case, not a pattern</span>`:''}${ev.length?' '+codesCell(ev):''}</p>`;
         };
         card.appendChild(el(whyRow(b1, modelOf(picker), ill1)));
-        card.appendChild(el(whyRow(b2, modelOf(other), ill2)));
+        card.appendChild(el(whyRow(b2, modelOf(other), ill2, b1)));
       } else {
         // Condensed — one glance-able row. Click to bring it into focus.
         const mini=el(`<div class="snode mini" title="Click to edit this game"></div>`);

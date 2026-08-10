@@ -211,7 +211,7 @@ function codesFor(gkSet, lookup){
 /* draft simulator — pure decision helpers */
 const SIG_MIN=3, SIG_LIFT=2, SIM_MIN_MAPS=6;
 function simModelFrom(matches, team, limitGames){
-  const pick={}, banByMap={}, bansAll={}, gkPick={}, gkBanAll={}, gkBanMap={};
+  const pick={}, banByMap={}, bansAll={}, gkPick={}, gkBanAll={}, gkBanMap={}, counter={}, gkCounter={};
   const inc=(o,k)=>o[k]=(o[k]||0)+1;
   const add=(o,k,v)=>{(o[k]=o[k]||new Set()).add(v);};
   const games=[];
@@ -229,8 +229,17 @@ function simModelFrom(matches, team, limitGames){
       (banByMap[g.map]=banByMap[g.map]||{}); inc(banByMap[g.map],b.hero);
       inc(bansAll,b.hero); add(gkBanAll,b.hero,k);
       (gkBanMap[g.map]=gkBanMap[g.map]||{}); add(gkBanMap[g.map],b.hero,k); });
+    // Counter-ban: this team's reply (order 2) to the opponent's ban (order 1),
+    // regardless of map — once we already know exactly what the opponent just
+    // took away, this is a stronger signal than "their ban history" in general.
+    const mine=(g.bans||[]).find(b=>b.team===team&&b.order===2);
+    const opp=(g.bans||[]).find(b=>b.team&&b.team!==team&&b.order===1);
+    if(mine&&opp&&mine.hero&&opp.hero){
+      (counter[opp.hero]=counter[opp.hero]||{}); inc(counter[opp.hero],mine.hero);
+      add(gkCounter,opp.hero,k);
+    }
   });
-  return {team,pick,banByMap,bansAll,gkPick,gkBanAll,gkBanMap,ngames:use.length};
+  return {team,pick,banByMap,bansAll,gkPick,gkBanAll,gkBanMap,counter,gkCounter,ngames:use.length};
 }
 function divBanBaseFrom(matches){
   const all={}, first={};
@@ -247,12 +256,22 @@ function mapsFrom(matches){
     if(g.map&&!s[g.map]) s[g.map]=g.map_category||''; }));
   return s;
 }
-function banSuggest(model, map, illegal){
-  const onMap=model.banByMap[map]||{}, all=model.bansAll||{}, keys=new Set([...Object.keys(onMap),...Object.keys(all)]);
-  const score=x=>x.onMap*2+x.all;
+// Ranked ban suggestions for a team on a map. When vsBan is given (this is
+// the SECOND ban of the map, replying to the opponent's already-known first
+// ban), that team's historical reply to vsBan specifically — regardless of
+// map — outranks everything else: it's a stronger, more specific signal than
+// "their ban history" once we already know exactly what was just taken away.
+// Below that, on-map bans (this exact map) outrank overall bans elsewhere —
+// a hero this team has never banned on THIS map shouldn't beat one they
+// have, no matter how big its overall count is. Overall count only breaks
+// ties (including the all-zero-on-map case, where it's the only signal left).
+function banSuggest(model, map, illegal, vsBan){
+  const onMap=model.banByMap[map]||{}, all=model.bansAll||{};
+  const counter=(vsBan && model.counter && model.counter[vsBan]) || {};
+  const keys=new Set([...Object.keys(onMap),...Object.keys(all),...Object.keys(counter)]);
   return [...keys].filter(h=>!illegal.has(h))
-    .map(h=>({hero:h,onMap:onMap[h]||0,all:all[h]||0}))
-    .sort((a,b)=>(score(b)-score(a))||(b.onMap-a.onMap)).slice(0,7);
+    .map(h=>({hero:h,onMap:onMap[h]||0,all:all[h]||0,counter:counter[h]||0}))
+    .sort((a,b)=>(b.counter-a.counter)||(b.onMap-a.onMap)||(b.all-a.all)||a.hero.localeCompare(b.hero)).slice(0,7);
 }
 function sigLift(model, divBase, hero){
   const bans=model.bansAll[hero]||0;
@@ -279,8 +298,8 @@ function autoMap(teamPicks, divPicks, divPlay, cats, used, pool){
   avail.sort((a,b)=>mapCompare(a,b,teamPicks,divPicks,divPlay));
   return avail[0]||null;
 }
-function autoBan(model, map, illegal){
-  const s=banSuggest(model, map, illegal); return s.length? s[0].hero : null;
+function autoBan(model, map, illegal, vsBan){
+  const s=banSuggest(model, map, illegal, vsBan); return s.length? s[0].hero : null;
 }
 function mapExplain(teamName, map, cat, teamPicks, divPicks, isTopInCat){
   if(teamPicks>0) return {text:`${teamName} picked ${map} ${teamPicks}× this season`+
@@ -288,15 +307,23 @@ function mapExplain(teamName, map, cat, teamPicks, divPicks, isTopInCat){
   if(divPicks>0) return {text:`no ${teamName} pick history on ${cat} — ${map} is the division's most-picked (${divPicks}× league-wide)`, thin:false};
   return {text:`no pick data on ${cat} — nothing to read yet`, thin:false};
 }
-function banExplain(teamName, map, hero, all, onMap, isTopOverall, isTopOnMap, sig){
-  if(all===0) return {text:`no ban history for ${hero} — an experimental pick`, thin:false};
+// counter (optional): {vsBan, n} — this hero is the team's actual historical
+// reply, n× this season on any map, when the opponent opened by banning
+// vsBan. Takes priority over the overall/on-map reasoning below it: knowing
+// exactly what a team does after seeing THIS ban beats a general tendency.
+function banExplain(teamName, map, hero, all, onMap, isTopOverall, isTopOnMap, sig, counter){
+  if(all===0 && !(counter&&counter.n)) return {text:`no ban history for ${hero} — an experimental pick`, thin:false};
   let t, saidHere=false;
-  if(isTopOverall) t = `${teamName}'s most-banned hero overall — ${all}× this season`;
+  if(counter && counter.n){
+    t = `${teamName}'s most common reply when the opponent opens by banning ${counter.vsBan} — ${counter.n}× this season, any map`;
+    saidHere = true;
+  }
+  else if(isTopOverall) t = `${teamName}'s most-banned hero overall — ${all}× this season`;
   else if(isTopOnMap){ t = `their most-banned hero on ${map} — ${onMap}× here${onMap<all?`, ${all}× this season`:''}`; saidHere=true; }
   else t = `banned ${all}× this season`;
   if(onMap>0 && !saidHere) t += `, ${onMap} of them on ${map}`;
   if(sig) t += ` — ★ signature, well above the division rate`;
-  return {text:t, thin: all===1};
+  return {text:t, thin: counter&&counter.n ? counter.n===1 : all===1};
 }
 function modeExplain(teamName, cat, leaguePct, teamModePicks){
   return {text:`${cat} — the league's most-picked remaining type (${leaguePct}% of picks)`+

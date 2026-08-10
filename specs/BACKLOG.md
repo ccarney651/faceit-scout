@@ -325,18 +325,27 @@ Overview already is), keeping the league-wide count as a separate signal.
 
 ### P3 — Draft simulator bugs (user report)
 
-Reported while testing the draft simulator (known beta):
+**Resolved 2026-08-10.** Reported while testing the draft simulator (known beta):
 
 - **Top bar doesn't update "first pick & ban".** After simulating, the header
   still shows a stale team (user: "still says AR9 a different team") — the
-  pick/ban attribution row isn't re-rendered.
+  pick/ban attribution row isn't re-rendered. Root cause: the "First pick &
+  ban" and "Format" (Bo3/5/7) buttons were built once into the static control
+  bar and never rebuilt, so their cached team-name text and selected-highlight
+  went stale on any team/first-pick/format change. Fixed by hoisting both into
+  `renderFB()`/`renderBO()` closures called on every `draw()` (`app.js`
+  `renderSim`), not just at initial mount.
 - **Ban suggestion ignores role constraints.** The sim recommended the 2nd team
   ban Mauga when the 1st team should have banned D.Va — "can't ban the same
-  role", so the two bans can't both be tanks. The suggestion logic doesn't
-  enforce the tank/damage/support split between the two ban phases.
+  role", so the two bans can't both be tanks. Fixed: once the first team's ban
+  is resolved, `node()` adds every hero sharing its role (via the new
+  `HEROES_BY_ROLE` lookup) to the second team's illegal set before resolving
+  their ban — enforced for both the auto-suggestion and the manual hero picker.
 - **Ban suggestion is map-agnostic.** It recommends the overall most-banned hero
   rather than the specific map's ban pattern ("obviously no one bans Mauga in
-  Dorado"). Should condition on the map the sim is running.
+  Dorado"). Fixed: `banSuggest` (`pure.js`) now ranks by on-map ban count first
+  and only falls back to the overall count as a tiebreaker (previously
+  `onMap*2+all`, which let a big overall total outrank real on-map evidence).
 
 `specs/2026-08-05-draft-sim-explainable-*.md` is the design reference for the
-current (explainable) draft sim; fix these in that module.
+current (explainable) draft sim.

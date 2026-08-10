@@ -738,13 +738,26 @@ def test_sim_model_windows_to_the_newest_maps(tmp_path) -> None:
     assert win["pick"] == {"Ilios": 1, "Nepal": 1} and win["ngames"] == 2  # newest two
 
 
+def test_sim_model_tracks_counter_ban_replies(tmp_path) -> None:
+    # _ONE game 1: Alpha bans D.Va FIRST (order 1) — not a reply, so it doesn't
+    # count. Game 2: Bravo bans Kiriko first (order 1), Alpha replies with D.Va
+    # (order 2) — a genuine counter-ban, tracked regardless of map.
+    got = _run(f"return simModelFrom({_ONE},'Alpha',0);", tmp_path)
+    assert got["counter"] == {"Kiriko": {"D.Va": 1}}
+    gk = _run(f"return [...simModelFrom({_ONE},'Alpha',0).gkCounter['Kiriko']].sort();",
+              tmp_path)
+    assert gk == ["m1:2"]
+
+
 _MODEL = ("{banByMap:{Oasis:{'D.Va':3,Zarya:1}},bansAll:{Zarya:10,'D.Va':3,Kiriko:2},"
           "pick:{},gkPick:{},gkBanAll:{},gkBanMap:{}}")
 
 
-def test_ban_suggest_ranks_a_strong_overall_staple_above_one_on_map_ban(tmp_path) -> None:
+def test_ban_suggest_ranks_on_map_bans_above_a_bigger_overall_total(tmp_path) -> None:
     got = _run(f"return banSuggest({_MODEL},'Oasis',new Set()).map(s=>s.hero);", tmp_path)
-    assert got == ["Zarya", "D.Va", "Kiriko"]   # 1*2+10 > 3*2+3 > 0+2
+    # D.Va: 3 bans on Oasis beats Zarya's 1 on Oasis, even though Zarya has a
+    # much bigger overall total (10 vs 3) — on-map signal leads, not overall.
+    assert got == ["D.Va", "Zarya", "Kiriko"]
 
 
 def test_ban_suggest_excludes_illegal_heroes_and_caps_at_seven(tmp_path) -> None:
@@ -754,6 +767,32 @@ def test_ban_suggest_excludes_illegal_heroes_and_caps_at_seven(tmp_path) -> None
     big = ("{banByMap:{Oasis:{}},bansAll:"
            "{A:8,B:7,C:6,D:5,E:4,F:3,G:2,H:1,I:0},pick:{},gkPick:{},gkBanAll:{},gkBanMap:{}}")
     assert len(_run(f"return banSuggest({big},'Oasis',new Set());", tmp_path)) == 7
+
+
+_COUNTER_MODEL = ("{banByMap:{Oasis:{'D.Va':3,Zarya:1}},bansAll:{Zarya:10,'D.Va':3,Kiriko:2},"
+                   "counter:{Cassidy:{Kiriko:1,Zarya:4}},"
+                   "pick:{},gkPick:{},gkBanAll:{},gkBanMap:{}}")
+
+
+def test_ban_suggest_prioritizes_a_counter_ban_reply_when_given_vsBan(tmp_path) -> None:
+    # Without vsBan, on-map data leads as usual (D.Va first, per the test above).
+    plain = _run(f"return banSuggest({_COUNTER_MODEL},'Oasis',new Set()).map(s=>s.hero);",
+                 tmp_path)
+    assert plain[0] == "D.Va"
+    # With vsBan='Cassidy', the team's on-record reply to a Cassidy ban (Zarya,
+    # 4x) outranks D.Va's on-map count even though D.Va has never been banned
+    # as a reply to Cassidy at all.
+    got = _run(f"return banSuggest({_COUNTER_MODEL},'Oasis',new Set(),'Cassidy')"
+               ".map(s=>({hero:s.hero,counter:s.counter}));", tmp_path)
+    assert got[0] == {"hero": "Zarya", "counter": 4}
+    assert got[1]["hero"] == "Kiriko" and got[1]["counter"] == 1   # smaller reply count, still above D.Va
+    assert got[2]["hero"] == "D.Va" and got[2]["counter"] == 0     # no reply history -> falls back to on-map/overall
+
+
+def test_auto_ban_uses_vsBan_to_pick_the_counter_reply(tmp_path) -> None:
+    assert _run(f"return autoBan({_COUNTER_MODEL},'Oasis',new Set());", tmp_path) == "D.Va"
+    assert _run(f"return autoBan({_COUNTER_MODEL},'Oasis',new Set(),'Cassidy');",
+                tmp_path) == "Zarya"
 
 
 def test_sig_lift_requires_a_real_sample_and_lift(tmp_path) -> None:
@@ -797,7 +836,7 @@ def test_allowed_cats_g1_is_control_and_repeats_only_after_all_used(tmp_path) ->
 def test_auto_ban_returns_null_when_everything_is_illegal(tmp_path) -> None:
     assert _run(f"return autoBan({_MODEL},'Oasis',new Set(['Zarya','D.Va','Kiriko']));",
                 tmp_path) is None
-    assert _run(f"return autoBan({_MODEL},'Oasis',new Set());", tmp_path) == "Zarya"
+    assert _run(f"return autoBan({_MODEL},'Oasis',new Set());", tmp_path) == "D.Va"
 
 
 def test_map_explain_phrases_team_data_vs_division_fallback(tmp_path) -> None:
@@ -843,6 +882,24 @@ def test_ban_explain_flags_no_history_and_single_case(tmp_path) -> None:
         "return banExplain('Alpha','Oasis','Zarya',0,0,false,false,false).text;", tmp_path)
     assert _run("return banExplain('Alpha','Oasis','Zarya',1,1,false,false,false).thin;",
                 tmp_path) is True
+
+
+def test_ban_explain_leads_with_a_counter_ban_reply(tmp_path) -> None:
+    # A counter-ban reason takes priority over the overall/on-map claims, even
+    # when isTopOverall/isTopOnMap are also true.
+    text = _run("return banExplain('Alpha','Oasis','Zarya',10,1,true,false,false,"
+                "{vsBan:'Cassidy',n:4}).text;", tmp_path)
+    assert "reply when the opponent opens by banning Cassidy" in text
+    assert "4× this season, any map" in text
+    assert "most-banned hero overall" not in text
+    # A single-case reply (n=1) is flagged thin even with a big overall count.
+    assert _run("return banExplain('Alpha','Oasis','Zarya',10,1,true,false,false,"
+                "{vsBan:'Cassidy',n:1}).thin;", tmp_path) is True
+    # A hero with zero overall bans but a real counter-ban history is still
+    # explainable (not "no ban history") — the reply itself IS the history.
+    text2 = _run("return banExplain('Alpha','Oasis','Zarya',0,0,false,false,false,"
+                 "{vsBan:'Cassidy',n:2}).text;", tmp_path)
+    assert "no ban history" not in text2 and "2× this season" in text2
 
 
 def test_mode_explain_mentions_league_share_and_team_preference(tmp_path) -> None:
