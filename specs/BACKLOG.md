@@ -312,3 +312,31 @@ tested pure helpers were relocated to `owdb/firstrun.py` (tests moved to
 Domain is registered (owdb.io, 2026-08-09) and the site/capture/upload-worker all
 point at it; a rename pass over user-visible strings (site title, capture app,
 worker messages, docs) is still outstanding.
+
+## Added 2026-08-10
+
+### P2 — "Most wanted" codes should follow the selected division
+
+Overview's "Most wanted" card (`app.js` `leagueQueue()` / `scoutQueue`,
+~line 1214) lists live replay codes league-wide, ignoring the division switcher
+the user has active. A scout working one division sees codes from every other
+division mixed in. Scope it to the currently selected division (like the rest of
+Overview already is), keeping the league-wide count as a separate signal.
+
+### P3 — Draft simulator bugs (user report)
+
+Reported while testing the draft simulator (known beta):
+
+- **Top bar doesn't update "first pick & ban".** After simulating, the header
+  still shows a stale team (user: "still says AR9 a different team") — the
+  pick/ban attribution row isn't re-rendered.
+- **Ban suggestion ignores role constraints.** The sim recommended the 2nd team
+  ban Mauga when the 1st team should have banned D.Va — "can't ban the same
+  role", so the two bans can't both be tanks. The suggestion logic doesn't
+  enforce the tank/damage/support split between the two ban phases.
+- **Ban suggestion is map-agnostic.** It recommends the overall most-banned hero
+  rather than the specific map's ban pattern ("obviously no one bans Mauga in
+  Dorado"). Should condition on the map the sim is running.
+
+`specs/2026-08-05-draft-sim-explainable-*.md` is the design reference for the
+current (explainable) draft sim; fix these in that module.
