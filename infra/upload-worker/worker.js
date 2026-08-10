@@ -10,7 +10,7 @@
  * credential worth stealing.
  *
  * What keeps an open endpoint sane:
- *  - a name writes exactly one file: data/captures/<name>.json
+ *  - a name writes exactly one file: data/captures/<season>/<name>.json
  *  - shape checks + 5 MB cap here; REAL validation (games must exist on
  *    FACEIT, teams must match) runs at site build, where junk is dropped
  *    loudly and every upload is a git commit - i.e. revertable
@@ -29,6 +29,10 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const MIN_INTERVAL_MS = 30_000;
 const REFRESH_COOLDOWN_MS = 10 * 60_000;   // a site rebuild takes ~2 minutes
 const FORMAT = 1;
+// Bump at each season cutover — see specs/2026-08-10-season10-cutover-design.md
+// for the full runbook. Every upload path below is keyed off this so a cutover
+// is a one-line change, not a migration.
+const CURRENT_SEASON = "s9";
 
 export default {
   async fetch(request, env) {
@@ -195,7 +199,7 @@ export default {
     data.contributor = displayName;        // server-side identity, always
     if (sess) data.discord_id = sess.d;    // account attribution when logged in
     else delete data.discord_id;           // never let a keyless upload assert one
-    const path = `data/captures/${claimKey}.json`;
+    const path = `data/captures/${CURRENT_SEASON}/${claimKey}.json`;
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
 
     const gh = (url, init = {}) => fetch(`https://api.github.com/repos/${env.REPO}/${url}`, {
@@ -416,7 +420,7 @@ async function adminContributorDetail(request, env) {
   const key = (url.searchParams.get("key") || "").trim();
   if (!key) return json(400, { error: "missing key" });
   if (key.includes("..") || key.includes("/") || key.includes("\\")) return json(400, { error: "invalid key" });
-  const gh = await fetch(`https://api.github.com/repos/${env.REPO}/contents/data/captures/${encodeURIComponent(key)}.json`, {
+  const gh = await fetch(`https://api.github.com/repos/${env.REPO}/contents/data/captures/${CURRENT_SEASON}/${encodeURIComponent(key)}.json`, {
     headers: {
       Authorization: `Bearer ${env.GITHUB_TOKEN}`,
       Accept: "application/vnd.github+json",
