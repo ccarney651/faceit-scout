@@ -882,6 +882,28 @@ function renderPlayoffs(){
 
   wrap.appendChild(brCard);
 
+  // Final standings — fills in from the bottom as lower-bracket rounds and
+  // the grand final resolve (see playoffPlacements). Teams still alive in the
+  // bracket simply don't have a row yet; nothing here is ever projected.
+  const placements=playoffPlacements(po, N, ubRounds, lbRounds);
+  if(placements.length){
+    const stCard=el(`<div class="card"></div>`);
+    stCard.appendChild(el(`<p class="eyebrow">Final standings</p>`));
+    stCard.appendChild(el(`<p class="note">Confirmed as each round completes — teams still competing aren’t listed yet.</p>`));
+    const sg2=el(`<div></div>`);
+    placements.forEach(t=>{
+      const label=placeRangeLabel(t.start, t.size);
+      t.teams.forEach(name=>{
+        sg2.appendChild(el(`<div class="crow"><span style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;overflow:hidden">`+
+          `<span class="br-seed">${esc(label)}</span>`+
+          `<span class="pside tscout" data-scout="${esc(name)}" title="Scout ${esc(name)}">${teamAvatar(name,16)}<span class="pn">${esc(name)}</span>${capBtn(name)}</span>`+
+          `</span></div>`));
+      });
+    });
+    stCard.appendChild(sg2);
+    wrap.appendChild(stCard);
+  }
+
   // Projected seeds
   const seedCard=el(`<div class="card"></div>`);
   seedCard.appendChild(el(`<p class="eyebrow">Projected seeds (top ${N})</p>`));

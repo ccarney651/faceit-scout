@@ -183,6 +183,56 @@ function playoffStageKey(m, ubRounds, lbRounds){
   if(g===1) return r<ubRounds ? r : gfCol;            // upper bracket, else grand final
   return gfCol;                                       // unknown leg -> grand final
 }
+// Ordinal label for a placement, and the range label for a tied tier
+// ("3rd", "5th–13th").
+function ordinal(n){
+  const s=['th','st','nd','rd'], v=n%100;
+  return n+(s[(v-20)%10]||s[v]||s[0]);
+}
+function placeRangeLabel(start, size){
+  return size<=1 ? ordinal(start) : ordinal(start)+'–'+ordinal(start+size-1);
+}
+// Final playoff standings, filled in bottom-up as lower-bracket rounds and the
+// grand final resolve. FACEIT keeps the bracket topology "clean" even when a
+// division's qualifier count isn't a power of 2 (Advanced seeds 24 teams into
+// a 32-slot bracket) by auto-generating placeholder matches against a pseudo
+// team literally named 'bye' at every round that needs one — pre-FINISHED,
+// with no real loser. So a round can be fully resolved (all its real matches
+// exist and are FINISHED) yet eliminate nobody (an all-bye round); that must
+// NOT be confused with "this round hasn't been scheduled yet" (no match rows
+// at all), which is where placement has to stop — later rounds can't be
+// numbered correctly until every earlier round's real elimination count is
+// known, since the tier boundaries are counted from the bottom (`remaining`)
+// rather than read off theoretical bracket-shape math.
+function playoffPlacements(matches, n, ubRounds, lbRounds){
+  const gfCol=ubRounds+lbRounds;
+  const byStage=new Map();
+  (matches||[]).forEach(m=>{
+    if(!m||!m.f1||!m.f2) return;
+    const k=playoffStageKey(m, ubRounds, lbRounds);
+    if(!byStage.has(k)) byStage.set(k, []);
+    byStage.get(k).push(m);
+  });
+  const loserOf=(m)=> m.winner_team===m.f1 ? m.f2 : m.f1;
+  const tiers=[];
+  let remaining=n;
+  for(let i=0;i<lbRounds;i++){
+    const stage=byStage.get(ubRounds+i)||[];
+    if(!stage.length) break;                                   // round not reached yet
+    if(stage.some(m=>m.status!=='FINISHED'||!m.winner_team)) break;  // round in progress
+    const losers=stage.filter(m=>m.f1!=='bye'&&m.f2!=='bye').map(loserOf);
+    if(losers.length){
+      tiers.push({start:remaining-losers.length+1, size:losers.length, teams:losers});
+      remaining-=losers.length;
+    }
+  }
+  const gf=(byStage.get(gfCol)||[])[0];
+  if(gf && gf.status==='FINISHED' && gf.winner_team){
+    tiers.push({start:2, size:1, teams:[loserOf(gf)]});
+    tiers.push({start:1, size:1, teams:[gf.winner_team]});
+  }
+  return tiers.sort((a,b)=>a.start-b.start);
+}
 
 // Click-to-codes: mid:gno -> the replay-code context an evidence row's popover
 // needs. `team` is whose perspective opp/won are read from (may be falsy).

@@ -329,6 +329,94 @@ def test_playoff_stage_key_gf_clamp_scales_to_the_bracket_size(tmp_path) -> None
     assert got == [10, 10, 9]   # over-span -> GF; LB round 6 is the last LB column
 
 
+# --- playoffs: final standings ---------------------------------------------
+# playoffPlacements fills in placement tiers bottom-up as lower-bracket rounds
+# and the grand final resolve, so a partially played bracket returns only the
+# tiers that are actually known yet.
+
+def test_ordinal_labels_placements(tmp_path) -> None:
+    got = _run("return [ordinal(1),ordinal(2),ordinal(3),ordinal(4)," +
+               "ordinal(11),ordinal(12),ordinal(13),ordinal(21)];", tmp_path)
+    assert got == ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st"]
+
+
+def test_place_range_label_single_vs_tied(tmp_path) -> None:
+    got = _run("return [placeRangeLabel(3,1),placeRangeLabel(5,2)];", tmp_path)
+    assert got == ["3rd", "5th–6th"]
+
+
+_MASTER_BRACKET_JS = """
+const ms=[
+  {group:1,round:1,f1:'A',f2:'H',status:'FINISHED',winner_team:'A'},
+  {group:1,round:1,f1:'D',f2:'E',status:'FINISHED',winner_team:'D'},
+  {group:1,round:1,f1:'B',f2:'G',status:'FINISHED',winner_team:'B'},
+  {group:1,round:1,f1:'C',f2:'F',status:'FINISHED',winner_team:'C'},
+  {group:1,round:2,f1:'A',f2:'D',status:'FINISHED',winner_team:'A'},
+  {group:1,round:2,f1:'B',f2:'C',status:'FINISHED',winner_team:'B'},
+  {group:1,round:3,f1:'A',f2:'B',status:'FINISHED',winner_team:'A'},
+  {group:2,round:1,f1:'H',f2:'E',status:'FINISHED',winner_team:'H'},
+  {group:2,round:1,f1:'G',f2:'F',status:'FINISHED',winner_team:'G'},
+  {group:2,round:2,f1:'H',f2:'D',status:'FINISHED',winner_team:'H'},
+  {group:2,round:2,f1:'G',f2:'C',status:'FINISHED',winner_team:'G'},
+  {group:2,round:3,f1:'H',f2:'G',status:'FINISHED',winner_team:'H'},
+  {group:2,round:4,f1:'H',f2:'B',status:'FINISHED',winner_team:'B'},
+  {group:null,round:1,f1:'B',f2:'A',status:'FINISHED',winner_team:'A'},
+];
+"""
+
+
+def test_playoff_placements_full_8_team_bracket(tmp_path) -> None:
+    # Full Master bracket (ubRounds=3, lbRounds=4): A wins it all, B is runner-up
+    # after beating H in the LB final, H is 3rd, G 4th, D/C tied 5th-6th, E/F
+    # tied 7th-8th.
+    got = _run(_MASTER_BRACKET_JS +
+               "return playoffPlacements(ms, 8, 3, 4);", tmp_path)
+    assert got == [
+        {"start": 1, "size": 1, "teams": ["A"]},
+        {"start": 2, "size": 1, "teams": ["B"]},
+        {"start": 3, "size": 1, "teams": ["H"]},
+        {"start": 4, "size": 1, "teams": ["G"]},
+        {"start": 5, "size": 2, "teams": ["D", "C"]},
+        {"start": 7, "size": 2, "teams": ["E", "F"]},
+    ]
+
+
+def test_playoff_placements_partial_bracket_only_reveals_resolved_tiers(tmp_path) -> None:
+    # Only lower-bracket round 1 has been played so far: the podium and every
+    # tier above round 1 must stay unlisted, not guessed.
+    got = _run(
+        "const ms=[" +
+        "{group:2,round:1,f1:'H',f2:'E',status:'FINISHED',winner_team:'H'}," +
+        "{group:2,round:1,f1:'G',f2:'F',status:'FINISHED',winner_team:'G'}," +
+        "{group:2,round:2,f1:'H',f2:'D',status:'SCHEDULED',winner_team:null}," +
+        "];" +
+        "return playoffPlacements(ms, 8, 3, 4);", tmp_path)
+    assert got == [{"start": 7, "size": 2, "teams": ["E", "F"]}]
+
+
+def test_playoff_placements_all_bye_round_does_not_shift_later_tiers(tmp_path) -> None:
+    # FACEIT keeps bracket topology clean by inserting pre-FINISHED matches
+    # against a pseudo team named 'bye' at rounds that need one — this can
+    # produce a fully-resolved round with zero real eliminations, which must
+    # not be mistaken for "round not reached yet" nor consume a placement slot.
+    got = _run(
+        "const ms=[" +
+        "{group:2,round:1,f1:'A',f2:'bye',status:'FINISHED',winner_team:'A'}," +
+        "{group:2,round:2,f1:'A',f2:'B',status:'FINISHED',winner_team:'A'}," +
+        "];" +
+        "return playoffPlacements(ms, 4, 1, 2);", tmp_path)
+    assert got == [{"start": 4, "size": 1, "teams": ["B"]}]
+
+
+def test_playoff_placements_forfeit_win_still_counts_as_an_elimination(tmp_path) -> None:
+    got = _run(
+        "const ms=[" +
+        "{group:2,round:1,f1:'A',f2:'B',status:'FINISHED',winner_team:'A',forfeit:true}," +
+        "];" +
+        "return playoffPlacements(ms, 2, 1, 1);", tmp_path)
+    assert got == [{"start": 2, "size": 1, "teams": ["B"]}]
+
+
 # --- click-to-codes: code lookup + resolution -----------------------------
 # codeLookup/codesFor are pure data transforms (no DOM, no esc/el/rcChip), so
 # they're declared above bootApp and directly testable here.
