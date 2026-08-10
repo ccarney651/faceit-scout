@@ -789,7 +789,7 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   setd('setL',!vid.srcObject); setd('setR',!vid.srcObject); setd('fscal',!vid.srcObject);
   setd('fixreads',!(vid.srcObject&&boxes.a&&boxes.b));
   setd('finish',!(session&&session.snaps.length));
-  maybeAutoPop(); updateGuide(); }
+  maybeAutoPop(); warmOcr(); updateGuide(); }
 let _firstVisit=null;
 function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit;
   const name=(localStorage.getItem('owdb_name')||'').trim(); return (_firstVisit=!name&&!(boxes.a&&boxes.b)); }
@@ -976,7 +976,7 @@ function confidentLeft(leftNames,rightNames,t1,t2){
 // Re-detect/Auto-detect actually retries instead of replaying the same dead
 // promise for the rest of the session.
 const OCR_LOAD_TIMEOUT_MS=30000;
-let _ocrWorker=null, _ocrLoading=null;
+let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false;
 function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
   if(_ocrLoading) return _ocrLoading;
   const attempt=(async()=>{
@@ -996,6 +996,12 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
     new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load (slow or blocked network?) - try again')),OCR_LOAD_TIMEOUT_MS))]
   ).catch(e=>{ _ocrLoading=null; throw e; });
   return _ocrLoading; }
+// Preload the OCR engine the moment the tool is capture-ready, so the FIRST
+// Snapshot's automatic side-detect doesn't pay the CDN download (script + wasm
+// + eng.traineddata, can be tens of seconds on a slow link) while the operator
+// stares at "detecting sides…" with nothing to do but wait or force Swap L/R.
+// No-op once it's running; harmless if OCR is never used.
+function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().catch(()=>{}); }
 // Name bar sits at ~48-90% of each portrait cell's height (mirror of the .exe's
 // read_hud_names); grayscale + 6x upscale + a light contrast stretch lift the
 // ~10px text enough for OCR.
@@ -1009,7 +1015,7 @@ function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
     g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
   cx.putImageData(im,0,0); return cv; }
 const OCR_READ_TIMEOUT_MS=8000;
-async function ocrNames(){ const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
+async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       let data;
@@ -1121,7 +1127,19 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
   const tell=(text,cls)=>{ setDetectMsg(text,cls); snapMsg(text,cls==='warn'); };
   try{
     tell('detecting sides…'); ocrProgress(0);
-    const res=await detectSides(); ocrProgress(null);
+    let res=await detectSides();
+    // A single HUD frame can catch a transition (killcam, respawn, hero select)
+    // where the name bars aren't inside the calibrated boxes yet, making an
+    // otherwise-fine setup read as "couldn't identify sides". One bounded retry
+    // with a FRESH frame (detectSides re-grabs on every call) clears that case;
+    // still capped so a genuinely unreadable HUD doesn't stall capture forever.
+    let tries=1;
+    while(!res.left && !res.stale && session===s && tries<2){
+      await new Promise(r=>setTimeout(r,1200));
+      tell('detecting sides… (retry '+(tries+1)+')'); ocrProgress(0);
+      res=await detectSides(); tries++;
+    }
+    ocrProgress(null);
     if(res.stale || session!==s) return false;   // operator moved to a different replay meanwhile — say nothing, they're not waiting on this one
     if(res.left){ s.sideResolved=true;
       tell(`${ico('sparkle')} ${sideTeamName(currentLeftId())} on the left`,'ok'); return true; }

@@ -125,8 +125,8 @@ def test_worker_setup_whitelists_the_hud_gamertag_charset() -> None:
 
 def _names_js(timeout_ms: int) -> str:
     html = APP.read_text(encoding="utf-8")
-    state_start = html.index("let _ocrWorker=null, _ocrLoading=null;")
-    state_end = state_start + len("let _ocrWorker=null, _ocrLoading=null;")
+    state_start = html.index("let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false;")
+    state_end = state_start + len("let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false;")
     state = html[state_start:state_end]
     start = html.index("const OCR_READ_TIMEOUT_MS=")
     end = html.index("return out; }", start) + len("return out; }")
