@@ -1593,21 +1593,21 @@ function pipColors(){ const cs=getComputedStyle(document.documentElement); const
   return {bg:v('--bg'),surface2:v('--surface2'),fg:v('--fg'),muted:v('--muted'),line:v('--line'),line2:v('--line2'),
     accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
 function pipPanelCss(c){
-  return `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
-    `#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}`+
-    `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
-    `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
+  return `#pinfo{padding:5px 8px 1px;color:${c.muted};font-size:11px}`+
+    `#pmsg{padding:0 8px;min-height:14px;font-size:11px}`+
+    `.prow{display:flex;flex-wrap:wrap;gap:3px;align-items:center;padding:2px 6px}`+
+    `.prow .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
     `.prow.warn .lbl{color:${c.bad}}`+
-    `button{padding:6px 9px;border:1px solid ${c.line2};background:${c.surface2};color:${c.fg};border-radius:6px;cursor:pointer;font-size:12px}`+
+    `button{padding:4px 7px;border:1px solid ${c.line2};background:${c.surface2};color:${c.fg};border-radius:5px;cursor:pointer;font-size:11px}`+
     `button.go{background:${c.accent};color:${c.onAccent};font-weight:700;border:0;flex:1 1 100%}`+
-    `button.fin{border-color:${c.good};color:${c.good}}button.fin.go{background:${c.good};color:${c.onAccent};font-weight:700;border:0;margin-top:4px;padding:8px 9px}`+
+    `button.fin{border-color:${c.good};color:${c.good}}button.fin.go{background:${c.good};color:${c.onAccent};font-weight:700;border:0;margin-top:3px;padding:7px 9px}`+
     `button.on{background:${c.accent};color:${c.onAccent};border:0;font-weight:600}`+
-    `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
+    `.pt{padding:2px 8px}.pt h3{margin:0 0 1px;font-size:9.5px;color:${c.muted};text-transform:uppercase}`+
     `.prow label{font-size:11px;color:${c.muted};display:flex;align-items:center;gap:5px}`+
     `.prow input{margin:0}`+
-    `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
-    `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
-    `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
+    `.slot{display:flex;justify-content:space-between;align-items:center;padding:1px 0;border-top:1px solid ${c.line};font-size:11px}.slot:first-of-type{border-top:0}`+
+    `.hp{width:16px;height:16px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
+    `.sc{font-size:10.5px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
 // Re-applies the current palette to an already-open control panel, so a
 // mid-session palette change doesn't require closing and reopening it.
 function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors();
@@ -1615,9 +1615,13 @@ function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors
   const st=pipWin.document.getElementById('pipstyle'); if(st) st.textContent=pipPanelCss(c); }
 async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Control panel needs Chrome/Edge 116+ or Firefox 151+ (Document Picture-in-Picture).','warn'); return; }
   if(pipWin&&!pipWin.closed) return;   // already open — keep the one window
-  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w; pipAutoShown=true; setPopBtn();
+  try{ const w=await documentPictureInPicture.requestWindow({width:360,height:500}); pipWin=w; pipAutoShown=true; setPopBtn();
     const c=pipColors();
-    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`;
+    // overflow-y:auto is a safety net, not just sizing - if the operator (or a
+    // future palette/content change) ever makes this taller than the window,
+    // everything scrolls into reach instead of the Finish button clipping off
+    // the bottom silently.
+    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif;height:100vh;overflow-y:auto;box-sizing:border-box`;
     const st=w.document.createElement('style'); st.id='pipstyle'; st.textContent=pipPanelCss(c);
     w.document.head.appendChild(st);
     w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="prow" id="prow-opts"><label><input type="checkbox" id="pautofetch"> auto-fetch next map</label></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div><div id="prow-finish"></div>';
