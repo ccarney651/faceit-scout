@@ -49,7 +49,7 @@ log = logging.getLogger("owdb.contribute")
 # do not understand rather than silently misreading a contributor's data.
 CONTRIB_FORMAT = 1
 
-CONTRIB_DIR = "data/captures"
+CONTRIB_DIR = "data/captures/s9"
 
 # The deployed upload worker. Baked into builds so end users configure
 # NOTHING; empty until the curator deploys infra/upload-worker.
