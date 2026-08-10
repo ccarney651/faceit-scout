@@ -50,6 +50,11 @@ faceit_sync = [
     # (see _dashboard.py); a wheel needs them alongside the module.
     "dashboard/*.html",
     "dashboard/*.js",
+    # Canonical copy of the shared design tokens/fonts (mirrored to
+    # docs/theme.css + docs/fonts/ for the static site); _dashboard.py reads
+    # these at import time, so a non-editable install needs them bundled too.
+    "dashboard/theme.css",
+    "dashboard/fonts/*.woff2",
 ]
 
 [tool.mypy]

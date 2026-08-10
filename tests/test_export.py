@@ -142,6 +142,37 @@ def test_export_html_is_self_contained_and_valid(db: Database) -> None:
     assert div["summary"]["matches_with_attribution"] == 1  # restart_dc has live democracy
 
 
+def test_dashboard_theme_assets_match_docs_copies() -> None:
+    """faceit_sync/dashboard/theme.css and fonts/ are the canonical copies a
+    non-editable install ships (see package-data); docs/theme.css and
+    docs/fonts/ are tracked copies the static site (docs/scrims.html,
+    docs/capture/*.html) links directly. Nothing reconciles the two at build
+    time, so if someone edits one and forgets the other, this must fail."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    docs_dir = repo_root / "docs"
+    dashboard_dir = repo_root / "faceit_sync" / "dashboard"
+
+    docs_css = (docs_dir / "theme.css").read_bytes()
+    dashboard_css = (dashboard_dir / "theme.css").read_bytes()
+    assert docs_css == dashboard_css, "docs/theme.css and dashboard/theme.css have diverged"
+
+    docs_fonts = sorted((docs_dir / "fonts").glob("*.woff2"))
+    assert docs_fonts, "no fonts found under docs/fonts"
+    for docs_font in docs_fonts:
+        dashboard_font = dashboard_dir / "fonts" / docs_font.name
+        assert dashboard_font.is_file(), f"{dashboard_font} missing"
+        assert docs_font.read_bytes() == dashboard_font.read_bytes(), (
+            f"{docs_font.name} differs between docs/fonts and dashboard/fonts"
+        )
+
+    dashboard_only_fonts = sorted((dashboard_dir / "fonts").glob("*.woff2"))
+    assert len(dashboard_only_fonts) == len(docs_fonts), (
+        "dashboard/fonts has extra/missing files vs docs/fonts"
+    )
+
+
 def test_dashboard_inlines_theme_css_with_embedded_fonts() -> None:
     """The dashboard's shared design tokens come from docs/theme.css, inlined
     with fonts base64-embedded — not linked (that would break the

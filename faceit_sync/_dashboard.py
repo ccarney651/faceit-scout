@@ -21,29 +21,33 @@ import re
 from pathlib import Path
 
 _DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
-_DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
 _PARTS = ("head.html", "pure.js", "app.js", "boot.js")
 
 _FONT_URL_RE = re.compile(r"url\('fonts/([^']+\.woff2)'\)")
 
 
 def _inline_theme_css() -> str:
-    """Read docs/theme.css and embed its fonts as base64 data URIs.
+    """Read the dashboard's theme.css and embed its fonts as base64 data URIs.
 
-    docs/scrims.html and docs/capture/*.html link docs/theme.css directly
-    (real files, real requests — fine, they aren't self-contained). The
-    exported dashboard can't do that: it must stay a single file with zero
-    external loads (tests/test_export.py::
+    ``faceit_sync/dashboard/theme.css`` and ``faceit_sync/dashboard/fonts/``
+    are the canonical copies (bundled via package-data, so a non-editable
+    install — e.g. ``pip install .`` with no sibling ``docs/`` checked out —
+    still has them at import time). ``docs/theme.css`` and ``docs/fonts/`` are
+    tracked *copies* linked directly by docs/scrims.html and
+    docs/capture/*.html (real files, real requests — fine, they aren't
+    self-contained); tests/test_export.py asserts the two stay byte-identical.
+    The exported dashboard can't link a separate file: it must stay a single
+    file with zero external loads (tests/test_export.py::
     test_export_html_is_self_contained_and_valid), and its CSP's
     ``font-src data:`` wouldn't permit a separate font file anyway. So for
     this build only, every ``url('fonts/NAME.woff2')`` reference becomes a
     base64 data URI, and the whole file gets inlined into the page's
     ``<style>`` block in place of the ``__THEME_CSS__`` marker.
     """
-    theme_css = (_DOCS_DIR / "theme.css").read_text(encoding="utf-8")
+    theme_css = (_DASHBOARD_DIR / "theme.css").read_text(encoding="utf-8")
 
     def _embed(match: re.Match[str]) -> str:
-        font_bytes = (_DOCS_DIR / "fonts" / match.group(1)).read_bytes()
+        font_bytes = (_DASHBOARD_DIR / "fonts" / match.group(1)).read_bytes()
         encoded = base64.b64encode(font_bytes).decode("ascii")
         return f"url(data:font/woff2;base64,{encoded})"
 
@@ -57,10 +61,10 @@ def _build_template() -> str:
     execute), the ``bootApp`` body, and the data-delivery bootstrap each live
     in their own file under ``dashboard/``. Import-time assembly keeps the
     parts the single source of truth — no stale generated artifact to forget.
-    The shared design tokens/primitives in docs/theme.css get inlined here
-    (fonts base64-embedded) so the exported page stays self-contained while
-    still sharing one canonical stylesheet with the capture app and scrims
-    page.
+    The shared design tokens/primitives in dashboard/theme.css get inlined
+    here (fonts base64-embedded) so the exported page stays self-contained
+    while still sharing one canonical stylesheet (mirrored to docs/theme.css)
+    with the capture app and scrims page.
     """
     parts = "".join(
         (_DASHBOARD_DIR / name).read_text(encoding="utf-8") for name in _PARTS
