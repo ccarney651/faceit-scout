@@ -189,7 +189,7 @@ rule "scoreboard: rebuild":
     @Condition not setup_active
     if scoreboard_id != null:
         destroyHudText(scoreboard_id)
-    sb_header = "OW SCOUT SCRIM  {} - {}".format(
+    sb_header = "OWDB SCRIM  {} - {}".format(
         teamScore(Team.TEAM_1), teamScore(Team.TEAM_2))
     sb_body = "TEAM 1"
     for loop_i in range(1, 6):

@@ -70,7 +70,7 @@ Added above the tab content, always rendered (part of the page shell, not
 per-tab), one line of framing + two equal-weight CTAs:
 
 ```
-OW Scout — FACEIT League scouting, built from real match data + fan-captured comps.
+owdb — FACEIT League scouting, built from real match data + fan-captured comps.
 [ Scout a team → ]     [ Contribute a capture → ]
 ```
 

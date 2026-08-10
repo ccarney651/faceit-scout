@@ -199,7 +199,7 @@ rule "HUD Setup: Setup Info":
     @Condition (getMatchRound() == 1 or ReadyUp_FreqMode == 0) == true
     @Condition isInSetup() == true
     
-    hudSubtext(getAllPlayers(), "OW SCOUT SCRIM", HudPosition.LEFT, 0, Colour_TextTypeB, HudReeval.VISIBILITY_AND_STRING)
+    hudSubtext(getAllPlayers(), "OWDB SCRIM", HudPosition.LEFT, 0, Colour_TextTypeB, HudReeval.VISIBILITY_AND_STRING)
     hudSubheader(getAllPlayers(), "Countdown will start when", HudPosition.LEFT, 0.1, Colour_TextTypeA, HudReeval.VISIBILITY_AND_STRING)
     hudSubheader(getAllPlayers(), "both teams are ready" if ReadyUp_CaptainMode == 1 else "{2} [{0}/{1}]".format(len(getAllPlayers().filter(lambda player: player.ReadyUp_PlayerReady)), max(getNumberOfPlayers(Team.ALL), ReadyUp_MinimumPlayersToStart), "all players are ready"), HudPosition.LEFT, 0.1, Colour_TextTypeA, HudReeval.VISIBILITY_AND_STRING)
     hudSubtext(getAllPlayers(), Team.1, HudPosition.LEFT, 1, Colour_TeamOne, HudReeval.VISIBILITY_AND_STRING)

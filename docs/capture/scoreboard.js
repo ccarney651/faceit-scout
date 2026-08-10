@@ -9,7 +9,7 @@
 // sortOrder drives vertical stacking. GroupMode 0 ("Group by role, sort by
 // team", the default) lays out three role blocks:
 //
-//   <header: OW SCOUT SCRIM <a> - <b>>          (ignored — no stat shape)
+//   <header: OWDB SCRIM <a> - <b>>          (ignored — no stat shape)
 //   K • D • DD • DT • ACC • UU                  DPS legend
 //   <dps entries, team1 then team2>             sortOrder 1.1 / 1.2
 //   K • D • DD • DT • DB • UU                   Tank legend

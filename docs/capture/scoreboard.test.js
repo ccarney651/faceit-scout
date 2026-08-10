@@ -24,7 +24,7 @@ function entry({ icon = '?', k, d, dd, dt, x, uu }) {
 // A full 10-player GroupMode-0 board: team1 block above team2 within each role.
 function fullBoard() {
   return [
-    'OW SCOUT SCRIM  2 - 3',
+    'OWDB SCRIM  2 - 3',
     LEGENDS.dps,
     entry({ k: 7, d: 3, dd: 4597, dt: 1957, x: '30%', uu: 1 }),   // t1 dps
     entry({ k: 16, d: 4, dd: 6811, dt: 2112, x: '45%', uu: 3 }),  // t1 dps
@@ -77,7 +77,7 @@ test('skips leading non-numeric icon token on entries', () => {
 });
 
 test('ignores the header and empty lines', () => {
-  const res = SB.parse(['OW SCOUT SCRIM  2 - 3', '', LEGENDS.dps, '   ']);
+  const res = SB.parse(['OWDB SCRIM  2 - 3', '', LEGENDS.dps, '   ']);
   assert.strictEqual(res.entries.length, 0);
   assert.strictEqual(res.matchTime, null);
 });
