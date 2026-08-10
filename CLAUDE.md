@@ -41,7 +41,7 @@ faceit-sync fetch --matches-file matches.txt        # seed + keyless transitive 
 faceit-sync fetch --championship <id>               # enumerate (needs FACEIT_API_KEY)
 faceit-sync export --format html --out docs/index.html   # build the site (all regions)
 faceit-sync export --format html --out docs/index.html --region na      # narrow to one region
-owdb ... contribute merge --dir data/captures --out owdb_comps.json  # merge captures
+owdb ... contribute merge --dir data/captures/s9 --out owdb_comps.json  # merge captures
 ```
 
 ### Verifying the dashboard
@@ -63,7 +63,7 @@ FACEIT API ──fetch──► faceit.sqlite3 ──export──► docs/index.
                             │                          ▲
                        (read-only ATTACH)              │ (captures merged at build)
                             ▼                          │
-OW replay ──capture──► owdb.sqlite3 ──publish──► data/captures/<you>.json
+OW replay ──capture──► owdb.sqlite3 ──publish──► data/captures/s9/<you>.json
                             ▲
                (browser IndexedDB "owscout-capture")
                docs/capture/ ──scrim──► private scrims (this browser only)
@@ -79,10 +79,10 @@ OW replay ──capture──► owdb.sqlite3 ──publish──► data/captur
    from *your* DB. Never hand-edit `docs/index.html` — regenerate via `export`.
 2. **Two independent copies of `faceit.sqlite3`** — yours and the one CI keeps in
    its Actions cache. Both rebuild from the same API; nothing reconciles them.
-3. **`data/captures/<contributor>.json` is committed; `owdb_comps.json` is
-   generated at build and NOT committed** — the report is always recomputed from
-   raw observations so analysis improvements apply retroactively. The CI merge
-   does first-wins on contested maps by commit date.
+3. **`data/captures/<season>/<contributor>.json` is committed; `owdb_comps.json`
+   is generated at build and NOT committed** — the report is always recomputed
+   from raw observations so analysis improvements apply retroactively. The CI
+   merge does first-wins on contested maps by commit date.
 4. **`owdb` never writes the faceit DB** — it `ATTACH`es it read-only
    (`mode=ro` URI, see `owdb/db.py::attach_faceit`) for cross-DB context.
 5. **Private scrims live only in the browser.** The capture app's scrim mode
@@ -154,6 +154,15 @@ subcommands (`calibrate`, `refs`, `capture`, `scout`, `contribute`, `codes`,
   sends a descriptive `faceit-sync/…` UA — don't change it to impersonate a browser.
 - The stats endpoint is `…/stats/v1/stats/matches/{id}` (the documented `/time`
   segment 404s).
+- **Captures are season-scoped** (`data/captures/<season>/`, currently `s9`).
+  Both writers — the upload Worker (`infra/upload-worker/worker.js`
+  `CURRENT_SEASON`) and the Python CLI's curator-fallback push
+  (`owdb/contribute.py` `CONTRIB_DIR`) — key off a single per-season constant
+  each. When Season 9 actually finishes, follow the cutover runbook in
+  `specs/2026-08-10-season10-cutover-design.md` (archive export, bump both
+  constants, add S10 to `matches.txt`, flip the live `--season` filter in
+  `update.yml`) rather than improvising — the design doc has the full sequence
+  and the reasoning behind it.
 
 ## Roadmap & conventions
 
