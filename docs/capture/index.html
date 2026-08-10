@@ -425,6 +425,7 @@ if(!HAS_CAPTURE){
 }
 function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const nf=(n)=>(n==null?'—':Number(n).toLocaleString('en-US'));
 
 // ---------- feedback: SVG icons, toasts, modal, progress ----------
 const ICONS={
