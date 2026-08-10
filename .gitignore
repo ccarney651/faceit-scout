@@ -51,6 +51,9 @@ overwatch-hero-icons/
 # Capture/calibration debug crops (created at runtime)
 crops/
 
+# Visual brainstorming companion scratch files (superpowers:brainstorming)
+.superpowers/
+
 # OverPy toolchain for the scrim workshop code (tools/scrim_code/)
 tools/scrim_code/node_modules/
 # Generated paste-ready workshop text (rebuilt via `npm run build`)
