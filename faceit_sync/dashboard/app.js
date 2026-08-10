@@ -110,12 +110,18 @@ const CAPTURED=new Set(DATA.owdb_captured||[]);
 // date can never be replayed, so it is only "scoutable" if already captured.
 const CODE_WIPE=DATA.code_wipe||null;
 const codeDead=(when)=>!!(CODE_WIPE&&when&&String(when).slice(0,10)<=CODE_WIPE);
-// League-wide queue of still-scoutable games (see scoutQueue above), computed
-// once per page load — matches don't change mid-session, and every consumer
-// (nav badge, Most wanted, wipe line) wants the same stable number.
-let _leagueQueue;
-const leagueQueue=()=> _leagueQueue!==undefined ? _leagueQueue
-  : (_leagueQueue=scoutQueue(DIVS, CAPTURED, CODE_WIPE));
+// Queue of still-scoutable games for the ACTIVE division/view (see scoutQueue
+// above), cached per view id — matches don't change mid-session, and every
+// consumer (nav badge, Most wanted, wipe line, funnel) wants the same number,
+// scoped to whatever's selected so it agrees with what the capture tool's
+// division-filtered deep links actually offer.
+const _queueCache={};
+function viewQueue(){
+  const v=viewOf(CURRENT_VIEW);
+  if(_queueCache[v.id]) return _queueCache[v.id];
+  const divs={}; v.divisions.forEach(cid=>divs[cid]=DIVS[cid]);
+  return (_queueCache[v.id]=scoutQueue(divs, CAPTURED, CODE_WIPE));
+}
 // Capture sections append the sample's REAL date range to their subtitle. The
 // old label read "captures since <wipe date>", which claimed the comps were
 // post-patch when in practice the whole sample usually predates the wipe that
@@ -755,8 +761,14 @@ const regionOf=(name)=>['EMEA','NA'].find(r=>String(name||'').toUpperCase().repl
 // Deep-link into the browser capture tool, pre-filtered to a team (+ its division).
 // The division must be REGION-QUALIFIED ("EMEA Master") to match the labels
 // tools/build_capture_data.py emits — a bare tier merges both regions there.
-const captureUrl=(team)=>{ const c=String((D().summary||{}).championship||''), t=tierOf(c), r=regionOf(c);
-  const d=(r&&t)?r+' '+t:''; return 'capture/?team='+encodeURIComponent(team)+(d?'&division='+encodeURIComponent(d):''); };
+const currentDivisionLabel=()=>{ const c=String((D().summary||{}).championship||''), t=tierOf(c), r=regionOf(c);
+  return (r&&t)?r+' '+t:''; };
+const captureUrl=(team)=>{ const d=currentDivisionLabel();
+  return 'capture/?team='+encodeURIComponent(team)+(d?'&division='+encodeURIComponent(d):''); };
+// Same division deep-link, no team filter — for generic "go capture" entry
+// points (nav badge, hero CTA, wipe line) that aren't about one team.
+const captureDivisionUrl=()=>{ const d=currentDivisionLabel();
+  return 'capture/'+(d?'?division='+encodeURIComponent(d):''); };
 // Deep-link into the capture tool by replay code alone. A code is unique across
 // the whole feed (unlike a match id, which is only unique within its division),
 // so the capture page can locate it without a team/division hint.
@@ -1232,7 +1244,7 @@ function renderOverview(){
     zcd.appendChild(zrow);
     // Point at a live code involving one of these teams when one exists; the
     // funnel then hands over an exact replay instead of a generic call to action.
-    const zt=leagueQueue().find(r=>cap.includes(r.f1)||cap.includes(r.f2));
+    const zt=viewQueue().find(r=>cap.includes(r.f1)||cap.includes(r.f2));
     zcd.appendChild(el(zt
       ? `<a class="btn" href="${captureCodeUrl(zt.code)}" title="Open a live replay of ${esc(zt.f1)} vs ${esc(zt.f2)} on ${esc(zt.map)} in the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12.5px;white-space:nowrap">Scout a zero-capture team's live replay →</a>`
       : `<a class="btn" href="capture/" title="Open the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12.5px;white-space:nowrap">Open the capture tool →</a>`));
@@ -1242,7 +1254,7 @@ function renderOverview(){
   // Most wanted — the live replay codes no one has captured yet, newest first.
   // A concrete one-minute task for a cold visitor, with the leaderboard below as
   // proof it's a real community effort. Hidden when nothing is scoutable.
-  const qq=leagueQueue();
+  const qq=viewQueue();
   if(qq.length){
     const mw=el(`<div class="card mt20"></div>`);
     mw.appendChild(el(`<p class="eyebrow">Most wanted · ${qq.length} live replay code${qq.length===1?'':'s'} waiting</p>`));
@@ -3132,6 +3144,9 @@ function updateHeader(){
   document.getElementById('title').textContent=s.championship;
   const sub=document.getElementById('subtitle');
   sub.textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`+(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
+  const ncl=document.getElementById('navcapcount'); const capLink=document.getElementById('navcapturelink');
+  if(ncl){ const nq=viewQueue().length; ncl.textContent=nq?'· '+nq+' left':''; }
+  if(capLink) capLink.href=captureDivisionUrl();
   // On-demand refresh: the page is static, so the button asks the upload worker
   // to start a rebuild - which pulls new FACEIT matches, re-merges every
   // contribution and republishes. ~2 minutes, then reload.
@@ -3156,7 +3171,7 @@ function updateHeader(){
   }
 }
 function setDivision(id){
-  CURRENT_VIEW=id; rememberDivision(id); recomputeDivision(); updateHeader();
+  CURRENT_VIEW=id; rememberDivision(id); recomputeDivision(); updateHeader(); updateWipeNote();
   const dsel=document.getElementById('division'); if(dsel) dsel.value=id;   // keep header in sync
   const cur=document.querySelector('nav button.active');
   show(cur?cur.dataset.id:'overview');
@@ -3166,11 +3181,11 @@ function setDivision(id){
 // scout or the feed has no wipe date on record.
 function updateWipeNote(){
   const el=document.getElementById('wipenote'); if(!el) return;
-  const q=leagueQueue();
+  const q=viewQueue();
   if(!CODE_WIPE || !q.length){ el.style.display='none'; return; }
   el.style.display='block';
   el.innerHTML=`<span style="color:var(--mid)">Replay codes wiped <b>${esc(CODE_WIPE)}</b> — ${q.length} live replay code${q.length===1?'':'s'} still need a capture before the next patch.</span> `+
-    `<a href="capture/" style="color:var(--accent);font-weight:700;text-decoration:none">Pick one →</a>`;
+    `<a href="${captureDivisionUrl()}" style="color:var(--accent);font-weight:700;text-decoration:none">Pick one →</a>`;
 }
 function init(){
   recomputeDivision();
@@ -3183,11 +3198,9 @@ function init(){
   updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
-  const ncl=document.getElementById('navcapcount');
-  if(ncl){ const nq=leagueQueue().length; if(nq) ncl.textContent='· '+nq+' left'; }
   updateWipeNote();
   document.getElementById('heroScout').onclick=()=>{ if(!SCOUT_TEAM) SCOUT_TEAM=(D().team_names||[])[0]||null; show('scout'); };
-  document.getElementById('heroCapture').onclick=()=>{ location.href='capture/'; };
+  document.getElementById('heroCapture').onclick=()=>{ location.href=captureDivisionUrl(); };
   hashDispatch();
 }
 window.addEventListener('hashchange',hashDispatch);
