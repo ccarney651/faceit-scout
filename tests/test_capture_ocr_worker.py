@@ -113,3 +113,83 @@ def test_worker_setup_whitelists_the_hud_gamertag_charset() -> None:
     whitelist = params["tessedit_char_whitelist"]
     for ch in "AZaz09_-.'~":
         assert ch in whitelist, f"{ch!r} missing from whitelist"
+
+
+# ---------------------------------------------------------------------------
+# ocrNames(): the per-name-crop recognize() loop has its own hang risk,
+# separate from ocrWorker()'s load - the fix above only covered getting the
+# worker loaded in the first place. A stalled/wedged w.recognize() call (the
+# reported "detecting sides..." hang recurring even after the load fix
+# shipped) left ocrNames() awaiting forever with no deadline of its own.
+# ---------------------------------------------------------------------------
+
+def _names_js(timeout_ms: int) -> str:
+    html = APP.read_text(encoding="utf-8")
+    state_start = html.index("let _ocrWorker=null, _ocrLoading=null;")
+    state_end = state_start + len("let _ocrWorker=null, _ocrLoading=null;")
+    state = html[state_start:state_end]
+    start = html.index("const OCR_READ_TIMEOUT_MS=")
+    end = html.index("return out; }", start) + len("return out; }")
+    body = html[start:end]
+    assert "const OCR_READ_TIMEOUT_MS=8000;" in body, "read-timeout constant moved/changed"
+    body = body.replace("const OCR_READ_TIMEOUT_MS=8000;", f"const OCR_READ_TIMEOUT_MS={timeout_ms};")
+    return state + "\n" + body
+
+
+def _run_names(body: str, timeout_ms: int = 50) -> str:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    stubs = r"""
+    global.boxes={a:{x:0,y:0,w:500,h:80}, b:{x:600,y:0,w:500,h:80}};
+    global.grabFrame=()=>({});
+    global.nameCanvas=()=>({});
+    global.setDetectMsg=()=>{};
+    global.ocrProgress=()=>{};
+    """
+    src = stubs + "\n" + _names_js(timeout_ms) + "\n" + body
+    proc = subprocess.run([node, "-e", src], capture_output=True, text=True, timeout=15)
+    assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    return proc.stdout.strip()
+
+
+def test_a_stalled_recognize_call_times_out_instead_of_hanging_forever() -> None:
+    body = r"""
+    global.ocrWorker=async()=>({ recognize: () => new Promise(()=>{}), terminate: async()=>{} });
+    ocrNames().then(
+      () => console.log('FAIL:resolved'),
+      e => console.log('rejected:' + e.message)
+    );
+    """
+    out = _run_names(body)
+    assert out == "rejected:OCR read timed out", out
+
+
+def test_a_timed_out_read_discards_the_wedged_worker() -> None:
+    # tesseract.js processes jobs sequentially per worker, so a call that
+    # never returns likely wedges the whole worker, not just that one read -
+    # the fix must throw the worker away (terminate + clear the module cache)
+    # rather than let future reads queue forever behind the dead job.
+    body = r"""
+    let terminated=false;
+    global.ocrWorker=async()=>({ recognize: () => new Promise(()=>{}), terminate: async()=>{ terminated=true; } });
+    ocrNames().catch(()=>{}).then(() => {
+      console.log(JSON.stringify({terminated, ocrWorkerCleared: _ocrWorker===null, loadingCleared: _ocrLoading===null}));
+    });
+    """
+    out = _run_names(body)
+    result = json.loads(out)
+    assert result == {"terminated": True, "ocrWorkerCleared": True, "loadingCleared": True}, result
+
+
+def test_a_healthy_recognize_call_reads_all_ten_names_normally() -> None:
+    body = r"""
+    let calls=0;
+    global.ocrWorker=async()=>({ recognize: () => { calls++; return Promise.resolve({data:{text:'Player'+calls}}); } });
+    ocrNames().then(names => console.log(JSON.stringify({calls, a:names.a, b:names.b})));
+    """
+    out = _run_names(body, timeout_ms=5000)
+    result = json.loads(out)
+    assert result["calls"] == 10
+    assert result["a"] == ["Player1", "Player2", "Player3", "Player4", "Player5"]
+    assert result["b"] == ["Player6", "Player7", "Player8", "Player9", "Player10"]

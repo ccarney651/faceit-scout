@@ -1008,10 +1008,24 @@ function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
   for(let i=0;i<d.length;i+=4){ let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
     g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
   cx.putImageData(im,0,0); return cv; }
+const OCR_READ_TIMEOUT_MS=8000;
 async function ocrNames(){ const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      const {data}=await w.recognize(nameCanvas(frame,cell));
+      let data;
+      try{
+        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell)),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]));
+      }catch(e){
+        // tesseract.js processes jobs sequentially on one worker, so a stalled
+        // recognize() call likely wedges the worker itself, not just this one
+        // read - queuing later reads behind it would hang them too. Throw the
+        // whole worker away so the next ocrWorker() call starts a fresh one
+        // instead of stacking up behind a dead job.
+        try{ w.terminate(); }catch(_){}
+        _ocrWorker=null; _ocrLoading=null;
+        throw e;
+      }
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       setDetectMsg('reading HUD names… '+(++done)+'/10'); ocrProgress(done/10); } }
   return out; }
@@ -1594,6 +1608,8 @@ function pipColors(){ const cs=getComputedStyle(document.documentElement); const
     accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
 function pipPanelCss(c){
   return `#pinfo{padding:5px 8px 1px;color:${c.muted};font-size:11px}`+
+    `#pinfo .pmap{color:${c.fg};font-weight:600;font-size:12.5px;margin-top:1px}`+
+    `#pinfo .pteams{font-size:11px;margin-top:1px}#pinfo .tl{color:#5a9bd8}#pinfo .tr{color:#e9694f}`+
     `#pmsg{padding:0 8px;min-height:14px;font-size:11px}`+
     `.prow{display:flex;flex-wrap:wrap;gap:3px;align-items:center;padding:2px 6px}`+
     `.prow .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
@@ -1631,8 +1647,16 @@ async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Con
         localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; }
     renderPipControls();
     w.document.addEventListener('keydown',handleKey);          // shortcuts work from the control panel too
+    // Map + teams: the operator is watching the game, not the browser tab, so
+    // the one place they DO see (this floating panel) should say what's being
+    // scouted without needing to alt-tab back to the main page to check.
     const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
-      if(el) el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; };
+      if(!el) return;
+      if(!session){ el.textContent=c?'':'pick a replay'; return; }
+      const {leftName,rightName}=sideNames();
+      el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
+        `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
+        `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; };
     w._tick=setInterval(tick,600); tick();
     w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; setPopBtn(); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
   }catch(err){ toast('Pop-out failed: '+esc(err&&err.message?err.message:String(err)),'bad'); } }
