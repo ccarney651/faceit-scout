@@ -976,16 +976,16 @@ function confidentLeft(leftNames,rightNames,t1,t2){
 // Re-detect/Auto-detect actually retries instead of replaying the same dead
 // promise for the rest of the session.
 const OCR_LOAD_TIMEOUT_MS=30000;
-let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false;
+let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false;
 function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
   if(_ocrLoading) return _ocrLoading;
   const attempt=(async()=>{
     if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
-      s.crossOrigin='anonymous';
+      s.src='tesseract.min.js';
       s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
-    const w=await Tesseract.createWorker('eng');
+    const _base=window.location?new URL('./',window.location.href).href:'';
+    const w=await Tesseract.createWorker('eng',1,{
+      workerPath:_base+'worker.min.js', langPath:_base, corePath:_base });
     // Single text line, and restrict to the charset HUD gamertags actually use -
     // cuts stray glyphs the HUD border/icons bleed into the crop from diluting
     // simScore's fuzzy ratio against the known roster name.
@@ -994,14 +994,13 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
     _ocrWorker=w; return w; })();
   _ocrLoading=Promise.race([attempt,
     new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load (slow or blocked network?) - try again')),OCR_LOAD_TIMEOUT_MS))]
-  ).catch(e=>{ _ocrLoading=null; throw e; });
+  ).catch(e=>{ _ocrLoading=null; _ocrLoadFailed=true; throw e; });
   return _ocrLoading; }
 // Preload the OCR engine the moment the tool is capture-ready, so the FIRST
-// Snapshot's automatic side-detect doesn't pay the CDN download (script + wasm
-// + eng.traineddata, can be tens of seconds on a slow link) while the operator
-// stares at "detecting sides…" with nothing to do but wait or force Swap L/R.
-// No-op once it's running; harmless if OCR is never used.
-function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().catch(()=>{}); }
+// Snapshot's automatic side-detect doesn't pay the worker spin-up cost while
+// the operator stares at "detecting sides…" with nothing to do but wait or
+// force Swap L/R. No-op once it's running; harmless if OCR is never used.
+function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().then(()=>{ _ocrLoadFailed=false; },()=>{}); }
 // Name bar sits at ~48-90% of each portrait cell's height (mirror of the .exe's
 // read_hud_names); grayscale + 6x upscale + a light contrast stretch lift the
 // ~10px text enough for OCR.
@@ -1099,6 +1098,7 @@ async function autoDetect(){ const c=selectedCode();
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ setDetectMsg('share your screen and calibrate first.','warn'); return; }
   const btn=document.getElementById('autodetect'); if(btn) btn.disabled=true;
   try{
+    _ocrLoadFailed=false;
     setDetectMsg('loading OCR (first use downloads a small pack)…'); ocrProgress(0);
     const res=await detectSides(); ocrProgress(null);
     if(res.left&&session) session.sideResolved=true;
@@ -1154,6 +1154,7 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
   s._detecting=true;
   const tell=(text,cls)=>{ setDetectMsg(text,cls); snapMsg(text,cls==='warn'); };
   try{
+    if(_ocrLoadFailed){ tell('OCR engine failed to load — set the LEFT team above (or Swap teams), then press Snapshot again.','warn'); return false; }
     tell('detecting sides…'); ocrProgress(0);
     let res=await detectSides();
     // A single HUD frame can catch a transition (killcam, respawn, hero select)
@@ -1444,19 +1445,17 @@ function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
 async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
+  // Control maps: capture needs to know which sub-map the round is played on.
+  // Checked FIRST so the operator gets instant feedback ("pick a sub-map")
+  // instead of waiting through OCR only to be refused afterwards.
+  if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   // Auto-detect sides on this map's first snapshot (see ensureSideResolved).
   // Fast path: once resolved, this is a synchronous no-op on every later call.
-  // Runs BEFORE the sub-map gate so a control map's first press still kicks off
-  // side-detection + OCR (cold-load + reads) instead of refusing instantly and
-  // deferring that wait to a second press. The sub-map gate has no side
-  // dependency, unlike the attacker gate below (whose picker shows team names).
   if(!(await ensureSideResolved())) return;
   // If the operator just manually fixed the side (Swap L/R / picking a team),
   // onSideChange kicked off a background player re-tag — wait for it so this
   // very snapshot carries the fresh names instead of an empty set.
   if(session&&session._retagging) await retagPlayers();
-  // Control maps: capture needs to know which sub-map the round is played on.
-  if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   // Escort/Hybrid round 3+: attacker is time-bank based, not parity — refuse to
   // guess (see setAttacker/nextRound). Checked AFTER side-detect since the
   // attack picker's team names depend on knowing which side is which.
