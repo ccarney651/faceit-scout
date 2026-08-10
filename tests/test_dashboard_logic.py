@@ -23,9 +23,9 @@ from faceit_sync._dashboard import HTML_TEMPLATE
 
 def _pure_js() -> str:
     """Everything in the dashboard script above bootApp: no DOM, no globals."""
-    m = re.search(r"<script>(.*)</script>", HTML_TEMPLATE, re.S)
-    assert m, "no <script> block in the dashboard template"
-    head, sep, _ = m.group(1).partition("function bootApp(")
+    blocks = re.findall(r"<script>(.*?)</script>", HTML_TEMPLATE, re.S)
+    assert blocks, "no <script> block in the dashboard template"
+    head, sep, _ = blocks[-1].partition("function bootApp(")
     assert sep, "bootApp not found — the pure/impure split moved"
     return head
 

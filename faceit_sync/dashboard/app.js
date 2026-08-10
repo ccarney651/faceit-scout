@@ -11,6 +11,33 @@ const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined 
 const DIV_KEY='owdb.division';
 const readDivision=()=>{ try{ return localStorage.getItem(DIV_KEY); }catch(e){ return null; } };
 const rememberDivision=(id)=>{ try{ localStorage.setItem(DIV_KEY,id); }catch(e){} };
+// Remembered theme (palette + light/dark mode). Same guarded pattern as the
+// division: the early <head> script applies it before first paint, this twin
+// wires the picker and re-applies on change. 'auto' mode removes the override
+// so prefers-color-scheme drives light vs dark, exactly like today.
+const THEME_KEY='owdb.theme', PAL_KEY='owdb.palette';
+const readPref=(k)=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+const rememberPref=(k,v)=>{ try{ v?localStorage.setItem(k,v):localStorage.removeItem(k); }catch(e){} };
+function applyTheme(){
+  const m=readPref(THEME_KEY), p=readPref(PAL_KEY);
+  const h=document.documentElement;
+  if(m==='light'||m==='dark') h.setAttribute('data-theme',m); else h.removeAttribute('data-theme');
+  if(p==='original') h.setAttribute('data-palette','original'); else h.removeAttribute('data-palette');
+  const pal=document.getElementById('palette'); if(pal) pal.value=(p==='original')?'original':'current';
+  const tg=document.getElementById('modetoggle'); if(tg){
+    const cur=(m==='light'||m==='dark')?m:'auto';
+    tg.querySelectorAll('span[data-mode]').forEach(s=>s.classList.toggle('on',s.dataset.mode===cur));
+  }
+  const mc=document.querySelector('meta[name="theme-color"]');
+  if(mc){ const bg=getComputedStyle(h).getPropertyValue('--bg').trim(); if(bg) mc.content=bg; }
+}
+function initTheme(){
+  const pal=document.getElementById('palette');
+  if(pal) pal.onchange=()=>{ rememberPref(PAL_KEY,pal.value==='original'?'original':null); applyTheme(); };
+  const tg=document.getElementById('modetoggle');
+  if(tg) tg.querySelectorAll('span[data-mode]').forEach(s=>s.onclick=()=>{ rememberPref(THEME_KEY,s.dataset.mode==='auto'?null:s.dataset.mode); applyTheme(); });
+  applyTheme();
+}
 let CURRENT_VIEW = pickDivision(readDivision(), VIEWS);
 const viewOf = (id)=> VIEWS.find(v=>v.id===id);
 const _vcache = {};
@@ -3146,6 +3173,7 @@ function updateWipeNote(){
 }
 function init(){
   recomputeDivision();
+  initTheme();
   const dsel=document.getElementById('division');
   VIEWS.forEach(v=>dsel.appendChild(el(`<option value="${v.id}">${esc(v.label)}</option>`)));
   dsel.value=CURRENT_VIEW;

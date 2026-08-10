@@ -173,6 +173,30 @@ def test_dashboard_theme_assets_match_docs_copies() -> None:
     )
 
 
+def test_dashboard_theme_css_ships_original_palette() -> None:
+    """The theme picker's 'Original' palette (the pre-redesign indigo look)
+    must ship in the inlined theme.css as data-palette blocks covering all
+    four mode/palette combinations. Pins the two accents so a future palette
+    edit can't silently rename the mechanism's entry point."""
+    from faceit_sync._dashboard import HTML_TEMPLATE
+
+    # The four composed selectors: palette light/dark (auto mode) plus the two
+    # forced-mode variants, exactly as initTheme()/applyTheme() set attributes.
+    assert ':root[data-palette="original"]' in HTML_TEMPLATE
+    assert ':root[data-theme="dark"][data-palette="original"]' in HTML_TEMPLATE
+    assert ':root[data-theme="light"][data-palette="original"]' in HTML_TEMPLATE
+    # Original accents: #4f46e5 light, #8087ff dark — from the pre-redesign
+    # head.html tokens (git 03f70cb^).
+    assert "--accent:#4f46e5" in HTML_TEMPLATE
+    assert "--accent:#8087ff" in HTML_TEMPLATE
+    # The picker is wired: a palette <select> plus a Light/Auto/Dark toggle.
+    assert 'id="palette"' in HTML_TEMPLATE
+    assert 'data-mode="auto"' in HTML_TEMPLATE
+    assert 'data-mode="dark"' in HTML_TEMPLATE
+    # The early-apply script must not have been stripped by concatenation.
+    assert "owdb.theme" in HTML_TEMPLATE
+
+
 def test_dashboard_inlines_theme_css_with_embedded_fonts() -> None:
     """The dashboard's shared design tokens come from docs/theme.css, inlined
     with fonts base64-embedded — not linked (that would break the
@@ -472,10 +496,13 @@ def test_dashboard_javascript_is_syntactically_valid(tmp_path):
         "// __DATA_INLINE__",
         'var __OWDB_DATA__={"divisions":{},"views":[],"heroes":[],"roster":{},'
         '"maps":[],"owdb_comps":{},"hero_icons":{}};')
-    js = re.search(r"<script>(.*)</script>", html, re.S)
+    js = re.findall(r"<script>(.*?)</script>", html, re.S)
     assert js, "no <script> block found in the dashboard template"
     script = tmp_path / "dash.js"
-    script.write_text(js.group(1), encoding="utf-8")
+    # The bootApp script (pure.js + app.js + boot.js) is the LAST block; the
+    # early head <script> is a tiny inline theme-apply snippet that needs no
+    # parse check.
+    script.write_text(js[-1], encoding="utf-8")
     proc = subprocess.run([node, "--check", str(script)],
                           capture_output=True, text=True)
     assert proc.returncode == 0, f"dashboard JS is invalid:\n{proc.stderr}"

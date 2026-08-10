@@ -3,6 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+// Apply the remembered theme before first paint so there's no flash of the
+// wrong palette. localStorage throws in some privacy modes and on file://
+// origins, so both ends are guarded (see app.js — this is the read-side twin).
+(function(){try{
+  var t=localStorage.getItem('owdb.theme');
+  var p=localStorage.getItem('owdb.palette');
+  if(t==='light'||t==='dark') document.documentElement.setAttribute('data-theme',t);
+  if(p==='original') document.documentElement.setAttribute('data-palette','original');
+}catch(e){}})();
+</script>
 <title>owdb &mdash; FACEIT League</title>
 <meta name="description" content="Overwatch 2 composition scouting for the FACEIT League. Hero comps, bans, map picks and a draft simulator for every team — EMEA and NA.">
 <meta name="theme-color" content="#0d1015">
@@ -32,6 +43,15 @@
 .brand h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
 .brand .meta{color:var(--muted);font-size:12.5px}
 .toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+/* theme picker row: palette select + Light/Auto/Dark segmented toggle. Reuses
+   the shared .sidetoggle for the mode segment; only the row layout and the
+   pointer cursor are dashboard-specific. */
+.themerow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.themerow .themepick{font:inherit;font-size:12px;font-weight:600;padding:4px 7px;border-radius:4px;
+  background:var(--surface2);border:1px solid var(--line);color:var(--fg)}
+.themerow .themepick:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.themerow .sidetoggle span{cursor:pointer}
+.themerow .sidetoggle span.on{cursor:default}
 main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
 
 /* ---- primitives ---- */
@@ -597,6 +617,15 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
       <select id="division" class="hidden" aria-label="Division"></select>
       <span class="meta" id="subtitle"></span></div>
     <div class="sidebox">
+      <div class="themerow">
+        <select id="palette" class="themepick" aria-label="Colour palette" title="Colour palette">
+          <option value="current">Violet</option>
+          <option value="original">Original</option>
+        </select>
+        <div class="sidetoggle" id="modetoggle" title="Light / dark">
+          <span data-mode="light">Light</span><span data-mode="auto" class="on">Auto</span><span data-mode="dark">Dark</span>
+        </div>
+      </div>
       <div class="sidetoggle"><span class="on">Data</span><a href="capture/" title="Scout comps in your browser &mdash; no install, no exe">Capture <span id="navcapcount"></span></a></div>
     </div>
   </div>

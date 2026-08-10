@@ -41,6 +41,29 @@
   --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
 
+/* Original palette — the pre-redesign look (indigo accent, cool slate
+   neutrals), opt-in via data-palette="original"; the app's theme picker sets
+   it. Same token contract as the current palette, so every component re-themes
+   without any structural changes. */
+:root[data-palette="original"]{color-scheme:light;--bg:#f5f7fa;--surface:#ffffff;--surface2:#eef1f6;--fg:#171a20;--muted:#5c6674;
+  --faint:#8b95a4;--line:#e3e8f0;--line2:#d6dce6;--accent:#4f46e5;--accent-bright:#4338ca;--accent-weak:rgba(79,70,229,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+@media (prefers-color-scheme: dark){
+  :root[data-palette="original"]{color-scheme:dark;--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;
+    --faint:#6b7686;--line:#252c37;--line2:#313a48;--accent:#8087ff;--accent-bright:#a5abff;--accent-weak:rgba(128,135,255,.16);--on-accent:#0b1020;
+    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+    --shadow:0 1px 2px rgba(0,0,0,.3);}
+}
+:root[data-theme="dark"][data-palette="original"]{color-scheme:dark;--bg:#0d1015;--surface:#161a21;--surface2:#1d232c;--fg:#e7ebf2;--muted:#98a2b2;
+  --faint:#6b7686;--line:#252c37;--line2:#313a48;--accent:#8087ff;--accent-bright:#a5abff;--accent-weak:rgba(128,135,255,.16);--on-accent:#0b1020;
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);}
+:root[data-theme="light"][data-palette="original"]{color-scheme:light;--bg:#f5f7fa;--surface:#ffffff;--surface2:#eef1f6;--fg:#171a20;--muted:#5c6674;
+  --faint:#8b95a4;--line:#e3e8f0;--line2:#d6dce6;--accent:#4f46e5;--accent-bright:#4338ca;--accent-weak:rgba(79,70,229,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font-variant-numeric:tabular-nums;
