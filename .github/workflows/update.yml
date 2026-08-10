@@ -126,13 +126,14 @@ jobs:
             echo "push event ($EVENT) - skipping FACEIT fetch; re-exporting from the cached DB"
           fi
           # Scouting data arrives as RAW OBSERVATIONS, one file per contributor
-          # under data/captures/. Merge them here rather than committing a derived
-          # payload: the report is then always computed by the current analysis,
-          # so improvements apply retroactively to every past contribution.
+          # under data/captures/s9/ (season-scoped, so a future season's captures
+          # never mix into this one). Merge them here rather than committing a
+          # derived payload: the report is then always computed by the current
+          # analysis, so improvements apply retroactively to every past contribution.
           # First-wins on a contested map, ordered by commit date (a contributor
           # cannot vote on their own priority) - see owdb/contribute.py.
-          if [ -n "$(ls -A data/captures/*.json 2>/dev/null)" ]; then
-            owdb --faceit-db faceit.sqlite3 contribute merge --dir data/captures --out owdb_comps.json --captured-out docs/captured.json
+          if [ -n "$(ls -A data/captures/s9/*.json 2>/dev/null)" ]; then
+            owdb --faceit-db faceit.sqlite3 contribute merge --dir data/captures/s9 --out owdb_comps.json --captured-out docs/captured.json
           else
             echo "no contributions yet - dashboard will build without captured comps"
           fi
