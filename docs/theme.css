@@ -233,6 +233,13 @@ h1,h2,h3,.section-h h2,.tile .n,.gsc,.pname,.cmp-name,.brand h1{font-family:var(
 .sidetoggle span.on{background:var(--accent);color:var(--on-accent)}
 .sidetoggle a:hover{color:var(--fg);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 
+/* shared palette-picker <select>; the dashboard also wraps this in its own
+   .themerow (adds the Light/Auto/Dark toggle beside it) but the bare class
+   here is what capture/scrim pages use directly, no mode toggle. */
+.themepick{font:inherit;font-size:12px;font-weight:600;padding:4px 7px;border-radius:4px;
+  background:var(--surface2);border:1px solid var(--line);color:var(--fg)}
+.themepick:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+
 /* topbar tab nav — shared between the dashboard and scrims.html (capture
    pages use their own <header>, not a tab bar; harmless if unused there). */
 nav{display:flex;gap:2px;margin-top:10px}

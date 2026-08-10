@@ -1,5 +1,16 @@
 <!doctype html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
+<script>
+// Apply the remembered palette before first paint (no flash). Shares the
+// dashboard's owdb.palette localStorage key (same origin) — pick a palette
+// on one page, it carries to the others. Palette-only: this page stays
+// dark-only by design (video-capture context), no light/dark override.
+(function(){try{
+  var p=localStorage.getItem('owdb.palette');
+  if(['violet','ocean','forest','sunset','teal','overwatch'].indexOf(p)>=0) document.documentElement.setAttribute('data-palette',p);
+  else document.documentElement.setAttribute('data-palette','original');
+}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>owdb — Capture comps (Scrims)</title>
 <meta name="description" content="Private scrim scouting: share your screen, calibrate once, and capture team comps round-by-round. Stays on your browser — never published.">
@@ -161,6 +172,15 @@
       <h1>Capture comps — Scrims</h1>
     </div>
     <div class="sidebox">
+      <select id="palette" class="themepick" aria-label="Colour palette" title="Colour palette">
+        <option value="original">Original</option>
+        <option value="violet">Violet</option>
+        <option value="ocean">Ocean</option>
+        <option value="forest">Forest</option>
+        <option value="sunset">Sunset</option>
+        <option value="teal">Teal</option>
+        <option value="overwatch">Overwatch</option>
+      </select>
       <div class="sidetoggle"><a href="index.html">League</a><span class="on">Scrims</span></div>
       <div class="sidetoggle"><a href="../scrims.html">Data</a><span class="on">Capture</span></div>
     </div>
@@ -1479,23 +1499,36 @@ function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; co
     mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
   else atk.className='prow';
 }
+// Reads the palette currently active on this page (via getComputedStyle, not
+// a guessed token table) so the floating overlay always matches — including
+// palettes added after this code was written.
+function pipColors(){ const cs=getComputedStyle(document.documentElement); const v=n=>cs.getPropertyValue(n).trim();
+  return {bg:v('--bg'),surface2:v('--surface2'),fg:v('--fg'),muted:v('--muted'),line:v('--line'),line2:v('--line2'),
+    accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
+function pipPanelCss(c){
+  return `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
+    `#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}`+
+    `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
+    `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
+    `.prow.warn .lbl{color:${c.bad}}`+
+    `button{padding:6px 9px;border:1px solid ${c.line2};background:${c.surface2};color:${c.fg};border-radius:6px;cursor:pointer;font-size:12px}`+
+    `button.go{background:${c.accent};color:${c.onAccent};font-weight:700;border:0;flex:1 1 100%}`+
+    `button.fin{border-color:${c.good};color:${c.good}}button.on{background:${c.accent};color:${c.onAccent};border:0;font-weight:600}`+
+    `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
+    `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
+    `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
+    `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
+// Re-applies the current palette to an already-open floating overlay, so a
+// mid-session palette change doesn't require closing and reopening it.
+function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors();
+  pipWin.document.body.style.background=c.bg; pipWin.document.body.style.color=c.fg;
+  const st=pipWin.document.getElementById('pipstyle'); if(st) st.textContent=pipPanelCss(c); }
 async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).','warn'); return; }
   if(pipWin&&!pipWin.closed) return;
   try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w; setPopBtn();
-    w.document.body.style.cssText='margin:0;background:#0d1015;color:#e7ebf2;font:13px system-ui,sans-serif';
-    const st=w.document.createElement('style'); st.textContent=
-      '#pinfo{padding:6px 10px 1px;color:#98a2b2;font-size:11px}'+
-      '#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}'+
-      '.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}'+
-      '.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#98a2b2;margin-right:2px}'+
-      '.prow.warn .lbl{color:#e5624a}'+
-      'button{padding:6px 9px;border:1px solid #313a48;background:#1d232c;color:#e7ebf2;border-radius:6px;cursor:pointer;font-size:12px}'+
-      'button.go{background:#8087ff;color:#0b1020;font-weight:700;border:0;flex:1 1 100%}'+
-      'button.fin{border-color:#34b877;color:#34b877}button.on{background:#8087ff;color:#0b1020;border:0;font-weight:600}'+
-      '.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:#98a2b2;text-transform:uppercase}'+
-      '.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid #252c37;font-size:12px}.slot:first-of-type{border-top:0}'+
-      '.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}'+
-      '.sc{font-size:11px}.hi{color:#34b877}.mid{color:#d3a02a}.lo{color:#e5624a}.warn{color:#e5624a}.ok{color:#34b877}';
+    const c=pipColors();
+    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`;
+    const st=w.document.createElement('style'); st.id='pipstyle'; st.textContent=pipPanelCss(c);
     w.document.head.appendChild(st);
     w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
     target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
@@ -1598,6 +1631,16 @@ document.addEventListener('paste', e=>{
 buildScrimMapOptions();
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owdb_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owdb_howto_closed', ht.open?'0':'1')); })();
+// Palette picker — shares owdb.palette with the dashboard (same origin).
+// Reapplying also restyles the control panel if it's open, so it never goes
+// stale mid-session.
+(()=>{ const PALETTES=['original','violet','ocean','forest','sunset','teal','overwatch'];
+  const pal=document.getElementById('palette');
+  pal.value=document.documentElement.getAttribute('data-palette')||'original';
+  pal.onchange=()=>{ const v=PALETTES.indexOf(pal.value)>=0?pal.value:'original';
+    try{ localStorage.setItem('owdb.palette',v); }catch(e){}
+    document.documentElement.setAttribute('data-palette',v);
+    restylePipPanel(); }; })();
 updateBtns(); loadRefs(); loadTeamNames(); renderScrimPanel();
 setTimeout(maybeShowTour, 900);   // after feeds kick off, so nothing feels jumpy
 </script></body></html>
