@@ -6,6 +6,7 @@ import csv
 import html
 import json
 import os
+import re
 import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -522,6 +523,22 @@ def _region_of(name: str | None) -> str | None:
         return None
     words = name.upper().replace("-", " ").split()
     return next((r for r in REGIONS if r in words), None)
+
+
+_SEASON_RE = re.compile(r"\bS(\d+)\b", re.IGNORECASE)
+
+
+def _season_of(name: str | None) -> str | None:
+    """The season a championship name encodes ('s9', 's10', ...), or None.
+
+    Matched with a word boundary (mirrors ``_region_of``): a bare substring
+    test would let "S90 EMEA..." match "s9", or a name merely containing
+    "s9" mid-word false-match.
+    """
+    if not name:
+        return None
+    m = _SEASON_RE.search(name)
+    return f"s{m.group(1)}" if m else None
 
 
 def _is_playoff(name: str | None) -> bool:

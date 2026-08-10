@@ -288,6 +288,29 @@ def test_tier_and_region_classify_championship_names() -> None:
     assert _region_of(None) is None
 
 
+def test_season_classifies_championship_names() -> None:
+    """Season is embedded in the same championship-name string region/tier
+    already parse ("S9 EMEA Advanced Central - Regular Season")."""
+    from faceit_sync.export import _season_of
+
+    assert _season_of("S9 EMEA Master Central - Regular Season") == "s9"
+    assert _season_of("S9 NA Expert Central - Playoffs") == "s9"
+    assert _season_of("S10 EMEA Master Central - Regular Season") == "s10"
+    assert _season_of("Winter Finale Cup") is None
+    assert _season_of(None) is None
+
+
+def test_season_matches_whole_word_only() -> None:
+    """A bare prefix/substring test would let 'S90 EMEA...' match 's9', or let
+    a name merely containing 's9' mid-word false-match. Word-boundary regex,
+    mirroring the _region_of guard just above."""
+    from faceit_sync.export import _season_of
+
+    assert _season_of("S90 EMEA Master Central - Regular Season") == "s90"
+    assert _season_of("S9 EMEA Master Central - Regular Season") == "s9"
+    assert _season_of("Class9 Something") is None
+
+
 def test_region_matches_whole_words_only() -> None:
     """A bare '"NA" in name' substring test classifies any championship merely
     CONTAINING those letters as NA — which, now that NA actually ships, would
