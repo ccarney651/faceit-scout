@@ -212,6 +212,18 @@ audiences if the analytics are strong enough.
 - **Don't overengineer unless necessary for expandability.** The dashboard is
   modularized into concatenated static parts (`faceit_sync/dashboard/`); keep
   new features landing in the right part file rather than growing one string.
+- **Shared design tokens/primitives live in `docs/theme.css`** — colors,
+  fonts, `.card`, `.btn`, the `.prodname` wordmark, `.sidetoggle`/`.sidebox`,
+  `nav`, and `.eyebrow`. `docs/scrims.html` and `docs/capture/*.html` link it
+  directly; `docs/index.html` can't (it must stay self-contained — see
+  `tests/test_export.py::test_export_html_is_self_contained_and_valid`), so
+  `faceit_sync/_dashboard.py` inlines the same file's content (with fonts
+  base64-embedded) into the dashboard build instead. Edit `docs/theme.css`
+  for anything in that shared set; don't re-add a per-page copy — that
+  duplication is exactly what caused the pre-redesign inconsistency.
+  Everything else (tables, chips, tags, pills, and all page-specific
+  components) stays defined per-page, since it already consumes these same
+  tokens and re-themes automatically.
 - The dead native GUI (`owdb/gui.py`, `owdb_app.py`, PyInstaller spec
   files, `Scout app.cmd`) was removed in 2026-08-08 — don't resurrect it.
 - The two scrims implementations were consolidated in 2026-08-08 — the
