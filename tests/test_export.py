@@ -386,6 +386,29 @@ def test_region_filter_still_narrows_the_export(db: Database) -> None:
     assert [v["label"] for v in data["views"]] == ["NA Master"]
 
 
+def test_season_filter_narrows_the_export(db: Database) -> None:
+    """--season restricts the export to one season's championships — the
+    mechanism the future S9/S10 cutover relies on."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    for cid, nm in [("s9m", "S9 EMEA Master Central - Regular Season"),
+                    ("s10m", "S10 EMEA Master Central - Regular Season")]:
+        c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+                  (cid, nm, "ow2"))
+        _insert_match(db, cid, f"m-{cid}", "FINISHED", "t1", "t2", "faction1", None,
+                      "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    db.conn.commit()
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s9")
+    data = json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+    assert [v["label"] for v in data["views"]] == ["EMEA Master"]
+    assert list(data["divisions"].keys()) == ["s9m"]
+
+
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):
     """The dashboard renders its whole body in JS, so ONE syntax error (e.g. a
     duplicate `const`) yields a completely blank page — which balanced-bracket

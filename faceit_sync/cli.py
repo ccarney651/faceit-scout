@@ -125,6 +125,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             with open(out_path, "w", newline="", encoding="utf-8") as out:
                 n = export_html(db, out, championship_id=args.championship,
                                 only_tier=args.tier, only_region=args.region,
+                                only_season=args.season,
                                 data_path=data_path)
             if data_path:
                 log.info("wrote shell data to %s", data_path)
@@ -233,6 +234,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="restrict the HTML dashboard to one skill tier (default: all)")
     e.add_argument("--region", choices=("emea", "na"), default=None,
                    help="restrict the HTML dashboard to one region (default: all)")
+    e.add_argument("--season", default=None,
+                   help="restrict the HTML dashboard to one season, e.g. 's9' (default: all)")
     e.add_argument("--out", default=None,
                    help="output file (csv/json default: stdout; html default: dashboard-<id>.html)")
     e.add_argument("--external-data", action="store_true",

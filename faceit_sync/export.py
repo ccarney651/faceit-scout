@@ -551,14 +551,16 @@ def _is_playoff(name: str | None) -> bool:
 
 def export_html(db: Database, out: TextIO, championship_id: str | None = None,
                 only_tier: str | None = None, only_region: str | None = None,
+                only_season: str | None = None,
                 data_path: str | None = None) -> int:
     """Render the multi-division dashboard.
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
-    (master/expert/advanced/open) and ``only_region`` ('emea'/'na') restrict the
-    dashboard; the DB may hold several divisions across tiers and regions.
-    Returns the number of divisions with data.
+    (master/expert/advanced/open), ``only_region`` ('emea'/'na') and
+    ``only_season`` ('s9', 's10', ...) restrict the dashboard; the DB may hold
+    several divisions across tiers, regions and (once a cutover has happened)
+    seasons. Returns the number of divisions with data.
     """
     want_tier: str | None = None
     if only_tier:
@@ -568,6 +570,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
     if only_region:
         w = only_region.strip().lower()
         want_region = "EMEA" if w.startswith("e") else "NA" if w.startswith("n") else None
+    want_season: str | None = only_season.strip().lower() if only_season else None
 
     if championship_id:
         cids = [championship_id]
@@ -577,6 +580,8 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
             rows = [r for r in rows if _tier_of(r["name"]) == want_tier]
         if want_region:
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
+        if want_season:
+            rows = [r for r in rows if _season_of(r["name"]) == want_season]
         cids = [str(r["id"]) for r in rows]
 
     # Split off playoff championships: they become the Playoffs tab's real results
