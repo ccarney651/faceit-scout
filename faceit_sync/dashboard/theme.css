@@ -21,23 +21,23 @@
   color-scheme:light;
   --bg:#f7f5fb; --surface:#ffffff; --surface2:#eeeaf7; --fg:#1c1730; --muted:#5a5270;
   --faint:#867a99; --line:#e2dcf0; --line2:#d3caea;
-  --accent:#7c3aed; --accent-bright:#6d28d9; --accent-weak:rgba(124,58,237,.10);
+  --accent:#7c3aed; --accent-bright:#6d28d9; --accent-weak:rgba(124,58,237,.10); --on-accent:#fff;
   --tank:#3f80c4; --damage:#d5563f; --support:#33a06a;
   --good:#1f9d61; --mid:#b8860b; --bad:#cf4b36;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);
 }
 @media (prefers-color-scheme: dark){
   :root{color-scheme:dark;--bg:#130f24;--surface:#1e1730;--surface2:#241d3a;--fg:#f0e9fb;--muted:#cfc7e2;
-    --faint:#8f7ea8;--line:#2e2846;--line2:#3a3358;--accent:#a855f7;--accent-bright:#e2b8ff;--accent-weak:rgba(216,111,255,.15);
+    --faint:#8f7ea8;--line:#2e2846;--line2:#3a3358;--accent:#a855f7;--accent-bright:#e2b8ff;--accent-weak:rgba(216,111,255,.15);--on-accent:#130f24;
     --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
     --shadow:0 1px 2px rgba(0,0,0,.3);}
 }
 :root[data-theme="dark"]{color-scheme:dark;--bg:#130f24;--surface:#1e1730;--surface2:#241d3a;--fg:#f0e9fb;--muted:#cfc7e2;
-  --faint:#8f7ea8;--line:#2e2846;--line2:#3a3358;--accent:#a855f7;--accent-bright:#e2b8ff;--accent-weak:rgba(216,111,255,.15);
+  --faint:#8f7ea8;--line:#2e2846;--line2:#3a3358;--accent:#a855f7;--accent-bright:#e2b8ff;--accent-weak:rgba(216,111,255,.15);--on-accent:#130f24;
   --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
   --shadow:0 1px 2px rgba(0,0,0,.3);}
 :root[data-theme="light"]{color-scheme:light;--bg:#f7f5fb;--surface:#ffffff;--surface2:#eeeaf7;--fg:#1c1730;--muted:#5a5270;
-  --faint:#867a99;--line:#e2dcf0;--line2:#d3caea;--accent:#7c3aed;--accent-bright:#6d28d9;--accent-weak:rgba(124,58,237,.10);
+  --faint:#867a99;--line:#e2dcf0;--line2:#d3caea;--accent:#7c3aed;--accent-bright:#6d28d9;--accent-weak:rgba(124,58,237,.10);--on-accent:#fff;
   --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
 
@@ -60,10 +60,10 @@ h1,h2,h3,.section-h h2,.tile .n,.gsc,.pname,.cmp-name,.brand h1{font-family:var(
 
 /* buttons: outlined by default (matches the approved mockup); .primary is
    an available filled variant for a page's one standout CTA, opt-in. */
-.btn{cursor:pointer;font-weight:650;font:inherit;background:transparent;color:var(--accent-bright);
+.btn{cursor:pointer;font:inherit;font-weight:650;background:transparent;color:var(--accent-bright);
   border:1px solid var(--accent);border-radius:4px;padding:8px 11px}
 .btn:hover{background:var(--accent-weak)}
-.btn.primary{background:var(--accent);color:#fff;border-color:transparent}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
 .btn.primary:hover{filter:brightness(1.06);background:var(--accent)}
 
 /* wordmark: lowercase "owdb" in brackets, split-weight. Markup:
@@ -81,7 +81,7 @@ h1,h2,h3,.section-h h2,.tile .n,.gsc,.pname,.cmp-name,.brand h1{font-family:var(
 .sidebox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
 .sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface2)}
 .sidetoggle a,.sidetoggle span{padding:6px 14px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap;color:var(--muted)}
-.sidetoggle span.on{background:var(--accent);color:#fff}
+.sidetoggle span.on{background:var(--accent);color:var(--on-accent)}
 .sidetoggle a:hover{color:var(--fg);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 
 /* topbar tab nav — shared between the dashboard and scrims.html (capture
