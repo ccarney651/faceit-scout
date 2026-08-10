@@ -141,7 +141,11 @@ jobs:
           # No --region: the site ships EVERY division the DB holds, as switchable
           # views grouped by region (EMEA Master/Expert/Advanced + Combined, then
           # NA Master/Expert + Combined). Pass --region emea|na to narrow it again.
-          faceit-sync --db faceit.sqlite3 export --format html --out docs/index.html
+          # --season s9 pins the live site to Season 9 even once S10 championship
+          # ids start appearing in the DB during the overlap period (S10 seeded
+          # into matches.txt before S9's playoffs finish). Bump to s10 at the
+          # actual cutover — see specs/2026-08-10-season10-cutover-design.md.
+          faceit-sync --db faceit.sqlite3 export --season s9 --format html --out docs/index.html
           # Codes + rosters feed for the browser capture app (docs/capture/). It
           # CONSUMES this instead of crawling FACEIT; refs.json is curator-committed.
           python tools/build_capture_data.py || echo "capture feed: skipped"
