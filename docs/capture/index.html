@@ -979,21 +979,31 @@ const OCR_LOAD_TIMEOUT_MS=30000;
 let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false;
 function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
   if(_ocrLoading) return _ocrLoading;
+  const CDN='https://cdn.jsdelivr.net/npm';
+  const SRI='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
   const attempt=(async()=>{
-    if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='tesseract.min.js';
-      s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
-    const _base=window.location?new URL('./',window.location.href).href:'';
-    const w=await Tesseract.createWorker('eng',1,{
-      workerPath:_base+'worker.min.js', langPath:_base, corePath:_base });
-    // Single text line, and restrict to the charset HUD gamertags actually use -
-    // cuts stray glyphs the HUD border/icons bleed into the crop from diluting
-    // simScore's fuzzy ratio against the known roster name.
+    if(!window.Tesseract){ await new Promise((res,rej)=>{
+      // Try local bundled tesseract.min.js first, fall back to CDN on failure.
+      const s=document.createElement('script'); let fallback=false;
+      s.onload=res;
+      s.onerror=()=>{
+        if(!fallback){ fallback=true;
+          s.removeAttribute('integrity'); s.removeAttribute('crossOrigin');
+          s.src=CDN+'/tesseract.js@5.1.1/dist/tesseract.min.js'; return; }
+        rej(new Error('could not load the OCR library (offline?)')); };
+      s.src='tesseract.min.js'; document.head.appendChild(s); }); }
+    // Probe whether local worker/lang/core assets exist; if they do, use them
+    // (zero-network). Otherwise let tesseract.js download from its default CDN.
+    const _b=window.location?new URL('./',window.location.href).href:'';
+    let opts={};
+    try{ const r=await fetch(_b+'worker.min.js',{method:'HEAD',mode:'same-origin'});
+      if(r.ok) opts={ workerPath:_b+'worker.min.js', langPath:_b, corePath:_b }; }catch(_){}
+    const w=await Tesseract.createWorker('eng',1,opts);
     await w.setParameters({ tessedit_pageseg_mode:'7',
       tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
     _ocrWorker=w; return w; })();
   _ocrLoading=Promise.race([attempt,
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load (slow or blocked network?) - try again')),OCR_LOAD_TIMEOUT_MS))]
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load - try again')),OCR_LOAD_TIMEOUT_MS))]
   ).catch(e=>{ _ocrLoading=null; _ocrLoadFailed=true; throw e; });
   return _ocrLoading; }
 // Preload the OCR engine the moment the tool is capture-ready, so the FIRST
