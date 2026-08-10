@@ -53,7 +53,7 @@ consolidation, not a rebuild.
 | Typography | Space Grotesk (headings/stat numbers/team names) + Inter (body/tables/labels), self-hosted woff2 | A distinctive typeface is the highest-leverage fix for "feels generic"; self-hosted (not CDN) so the capture app has no external dependency; Space Grotesk chosen over more literally "gamer" faces (Chakra Petch, Rajdhani) to keep the analyst-tool half of the mood rather than lean all the way into broadcast-HUD lettering. |
 | Shape language | Flat surfaces, thin border, 3px left accent bar (replacing filled/bordered cards); outlined buttons except primary CTAs | Quietest of the three options explored — reads as data tool first, lets the accent color carry the esports energy instead of heavy chrome. |
 | Wordmark | `[ow` bold/bright + `db]` dimmer, brackets in accent color, keeps the existing lowercase | User likes lowercase but wanted more visual presence than plain styled text; brackets echo a scoreboard/terminal readout without literally reworking the logotype. |
-| CSS architecture | One shared `docs/theme.css`, all four pages `<link>` it | Root-causes the inconsistency complaint instead of re-skinning four copies in parallel; stays within the "no build step, plain static files" convention — one more static asset, not a bundler. |
+| CSS architecture | One shared `docs/theme.css`; scrims/capture `<link>` it, the dashboard inlines it at build time (a test requires the exported dashboard stay a single self-contained file — see Architecture) | Root-causes the inconsistency complaint instead of re-skinning four copies in parallel; stays within the "no build step, plain static files" convention — one more static asset, not a bundler. |
 | Structural changes | In scope, but bounded: no tab/IA/routing/JS-logic changes; only component-pattern unification (toggle style, card header hierarchy, hero banner treatment, button emphasis) | Explicit requirement: "open to structural, but don't break anything." Full IA rework wasn't requested and isn't warranted by the specific complaints raised. |
 | Rollout | Incremental, one surface at a time (foundation → dashboard → scrims → capture → consistency pass), each step verified before the next | `docs/index.html` is live and CI-regenerated; a single big-bang diff across four files has a much larger blast radius than four independently-verified steps, especially given the recent branding-regression incident. |
 | Verification per step | Real local build artifacts (local `dashboard.html` export, the actual `docs/scrims.html`/`docs/capture/*.html`), shared as a `file://` path plus a headless-Edge screenshot, checked against the real thing in the user's own browser before proceeding | Explicit requirement — mockups get the direction right, but the actual generated/static files are what must be verified once real code is being changed. |
@@ -131,29 +131,64 @@ toggle class (replacing today's two different patterns — the dashboard's
 `sidebox` link-cluster for Data/Capture and the `sidetoggle` used for
 League/Scrims).
 
-- `faceit_sync/dashboard/head.html` gains `<link rel="stylesheet"
-  href="theme.css">`. Because this lives in the *template* CI regenerates
-  `docs/index.html` from, every future CI run carries the design forward
-  automatically — this directly closes the failure mode from the prior
-  branding-regression incident (fixing only the generated output would not).
+**Constraint discovered during planning:** `tests/test_export.py`'s
+`test_export_html_is_self_contained_and_valid` deliberately asserts the
+*dashboard* (`docs/index.html`) is a single self-contained file — no
+`<link rel="stylesheet">` is permitted (only `canonical`/`icon` rels pass),
+and no separate asset loads at all. This is an intentional, tested
+invariant (the exported file must render fully offline on its own), not an
+oversight, so the dashboard cannot simply `<link>` `theme.css` the way the
+design originally assumed. `docs/scrims.html` and `docs/capture/*.html` are
+static hand-authored files with no such test and are unaffected.
+
+The mechanism therefore differs by surface, while the *source of truth*
+stays singular:
+
 - `docs/capture/index.html` and `docs/capture/scrim.html` link
-  `../theme.css`; `docs/scrims.html` links `theme.css` (same directory level
-  as `docs/index.html`).
+  `../theme.css`; `docs/scrims.html` links `theme.css` directly (same
+  directory level as `docs/index.html`). CSP on these three pages gets
+  `style-src 'unsafe-inline' 'self'` (was `'unsafe-inline'` only) so the
+  `<link>` is permitted to load.
+- The dashboard instead gets `theme.css` **inlined at build time**:
+  `faceit_sync/_dashboard.py` reads `docs/theme.css`'s content and
+  concatenates it into the assembled `<style>` block of the generated
+  `docs/index.html`, the same way it already concatenates `head.html`/
+  `pure.js`/`app.js`/`boot.js`. Because this read happens in the *template
+  assembly step* CI runs on every export, every future CI run carries the
+  shared stylesheet forward automatically — this still closes the failure
+  mode from the prior branding-regression incident (fixing only the
+  generated output would not), just via inlining instead of a `<link>`.
+  `docs/index.html`'s CSP (`style-src 'unsafe-inline'`) needs no change,
+  since the content lands inline.
 - Page-specific CSS that has no cross-page equivalent stays inline per page:
   the dashboard's radar-chart SVG styling, capture's video-capture
   stage/calibration-overlay/toast/modal/tour/stepper components, scrims'
   `.scrim-card`/`.map-row` styling. Only the genuinely duplicated core
   (tokens, cards, tables, nav, buttons, chips) moves to the shared file.
-- Before relying on this, implementation must confirm `faceit-sync export`
-  only ever writes `docs/index.html` and never clears or touches other files
-  under `docs/` — needed so `docs/theme.css` and `docs/fonts/` are safe as
-  permanently tracked files that CI's export step won't clobber. (High
-  confidence from the current export code path; a one-line check before
-  building on top of it.)
+- Confirmed during planning: `faceit-sync export` opens exactly the path
+  passed via `--out` (`open(args.out, "w", ...)` in `faceit_sync/cli.py`)
+  and touches nothing else — `docs/theme.css` and `docs/fonts/` are safe as
+  permanently tracked files the export step will never clobber.
 
 This keeps the project's existing "no build step, plain concatenated static
-files" convention intact — `theme.css` is one more static asset served
-as-is, not a bundler or preprocessor.
+files" convention intact — `theme.css` is one more static asset, read either
+by the browser (`<link>`, for scrims/capture) or by the existing Python
+concatenation step (for the dashboard), never by a bundler or preprocessor.
+
+### Fonts: same split, for the same reason
+
+`docs/fonts/*.woff2` (self-hosted Space Grotesk 600/700, Inter
+400/500/600/700) are real files, referenced by normal `@font-face
+{ src: url('fonts/…woff2') }` rules inside `docs/theme.css`. That works
+as-is for scrims/capture (real file, real request, cacheable) — but a real
+file request is exactly what the dashboard's self-contained test and its
+`font-src data:` CSP both forbid. So for the dashboard build only,
+`faceit_sync/_dashboard.py` additionally base64-encodes each `.woff2` and
+substitutes `url('fonts/…woff2')` for `url(data:font/woff2;base64,…)` before
+inlining — the dashboard's `<style>` block ends up with fonts embedded
+directly, `docs/theme.css` itself stays untouched/human-readable, and no CSP
+change is needed on the dashboard for fonts (`font-src data:` already
+permits it).
 
 ### Component-pattern changes (bounded)
 
@@ -177,8 +212,10 @@ before the next begins:
 
 1. **Foundation** — create `docs/theme.css` (full token set + shared
    components) and `docs/fonts/` (self-hosted woff2s). No page changes.
-2. **Dashboard** — link `theme.css` from `head.html`, apply wordmark/shape/
-   component changes, remove the inline CSS it replaces. Verify: `pytest
+2. **Dashboard** — wire `faceit_sync/_dashboard.py` to inline `theme.css`
+   (fonts base64-embedded) into the assembled `<style>` block, apply
+   wordmark/shape/component changes, remove the inline CSS it replaces.
+   Verify: `pytest
    tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`;
    build a local `dashboard.html` export preview; share its `file://` path
    plus a headless-Edge screenshot (`msedge --headless
