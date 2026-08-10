@@ -197,6 +197,50 @@ def test_dashboard_theme_css_ships_original_palette() -> None:
     assert "owdb.theme" in HTML_TEMPLATE
 
 
+def test_dashboard_theme_css_ships_all_palettes() -> None:
+    """Every palette offered in the picker must have a full data-palette block
+    set (light/dark auto + the two forced-mode variants) in the inlined
+    theme.css, and appear as a <select> option with the matching value. The
+    early-apply script whitelist must recognise each palette too, or a stored
+    preference would silently fail to apply before first paint."""
+    from faceit_sync._dashboard import HTML_TEMPLATE
+
+    palettes = {
+        # value: light accent, dark accent (pinned for each family).
+        "original": ("--accent:#4f46e5", "--accent:#8087ff"),
+        "ocean": ("--accent:#2a5fd0", "--accent:#7aa2ff"),
+        "forest": ("--accent:#187a4d", "--accent:#41c07e"),
+        "sunset": ("--accent:#b54012", "--accent:#ff7d52"),
+        "teal": ("--accent:#0b7064", "--accent:#3ecfc0"),
+        "overwatch": ("--accent:#9a5300", "--accent:#f99e1a"),
+    }
+    for name, (light_accent, dark_accent) in palettes.items():
+        sel = f':root[data-palette="{name}"]'
+        assert sel in HTML_TEMPLATE, f"missing palette block: {name}"
+        assert f':root[data-theme="dark"][data-palette="{name}"]' in HTML_TEMPLATE
+        assert f':root[data-theme="light"][data-palette="{name}"]' in HTML_TEMPLATE
+        assert light_accent in HTML_TEMPLATE, f"missing light accent for {name}"
+        assert dark_accent in HTML_TEMPLATE, f"missing dark accent for {name}"
+        # The <select> option exists with the palette value.
+        assert f'<option value="{name}">' in HTML_TEMPLATE, f"missing picker option: {name}"
+        # The early-apply script whitelist covers it.
+        assert f"'{name}'" in HTML_TEMPLATE, f"early-apply whitelist misses {name}"
+
+
+def test_dashboard_theme_light_mode_is_warm_paper() -> None:
+    """Light mode must not be blinding pure-white: the default (palette-less)
+    light blocks — bare :root and the forced :root[data-theme="light"] — use
+    warm cream neutrals (#f7f4ee bg, #fffdf9 surface) instead of the old
+    near-white (#f7f5fb/#ffffff). Original is exempt: it's the faithful
+    pre-redesign reproduction and intentionally keeps its own palette."""
+    from faceit_sync._dashboard import HTML_TEMPLATE
+
+    assert "--bg:#f7f4ee" in HTML_TEMPLATE, "default light background is not warm paper"
+    assert "--surface:#fffdf9" in HTML_TEMPLATE, "default light surface is pure white"
+    # The forced-light default block must carry the same warm tokens.
+    assert ':root[data-theme="light"]{color-scheme:light;--bg:#f7f4ee' in HTML_TEMPLATE
+
+
 def test_dashboard_inlines_theme_css_with_embedded_fonts() -> None:
     """The dashboard's shared design tokens come from docs/theme.css, inlined
     with fonts base64-embedded — not linked (that would break the

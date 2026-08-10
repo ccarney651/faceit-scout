@@ -19,8 +19,8 @@
   --font-display:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --font-body:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   color-scheme:light;
-  --bg:#f7f5fb; --surface:#ffffff; --surface2:#eeeaf7; --fg:#1c1730; --muted:#5a5270;
-  --faint:#867a99; --line:#e2dcf0; --line2:#d3caea;
+  --bg:#f7f4ee; --surface:#fffdf9; --surface2:#f1ebdf; --fg:#241d17; --muted:#63594b;
+  --faint:#94897a; --line:#e8e0d2; --line2:#d8ccb9;
   --accent:#7c3aed; --accent-bright:#6d28d9; --accent-weak:rgba(124,58,237,.10); --on-accent:#fff;
   --tank:#3f80c4; --damage:#d5563f; --support:#33a06a;
   --good:#1f9d61; --mid:#b8860b; --bad:#cf4b36;
@@ -36,8 +36,8 @@
   --faint:#8f7ea8;--line:#2e2846;--line2:#3a3358;--accent:#a855f7;--accent-bright:#e2b8ff;--accent-weak:rgba(216,111,255,.15);--on-accent:#130f24;
   --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
   --shadow:0 1px 2px rgba(0,0,0,.3);}
-:root[data-theme="light"]{color-scheme:light;--bg:#f7f5fb;--surface:#ffffff;--surface2:#eeeaf7;--fg:#1c1730;--muted:#5a5270;
-  --faint:#867a99;--line:#e2dcf0;--line2:#d3caea;--accent:#7c3aed;--accent-bright:#6d28d9;--accent-weak:rgba(124,58,237,.10);--on-accent:#fff;
+:root[data-theme="light"]{color-scheme:light;--bg:#f7f4ee;--surface:#fffdf9;--surface2:#f1ebdf;--fg:#241d17;--muted:#63594b;
+  --faint:#94897a;--line:#e8e0d2;--line2:#d8ccb9;--accent:#7c3aed;--accent-bright:#6d28d9;--accent-weak:rgba(124,58,237,.10);--on-accent:#fff;
   --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
 
@@ -61,6 +61,107 @@
   --shadow:0 1px 2px rgba(0,0,0,.3);}
 :root[data-theme="light"][data-palette="original"]{color-scheme:light;--bg:#f5f7fa;--surface:#ffffff;--surface2:#eef1f6;--fg:#171a20;--muted:#5c6674;
   --faint:#8b95a4;--line:#e3e8f0;--line2:#d6dce6;--accent:#4f46e5;--accent-bright:#4338ca;--accent-weak:rgba(79,70,229,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+
+/* Ocean palette — deep blue accent, navy-tinted neutrals. */
+:root[data-palette="ocean"]{color-scheme:light;--bg:#eef2f7;--surface:#fbfcfe;--surface2:#e2e9f3;--fg:#1a2436;--muted:#5b6b84;
+  --faint:#8b9bb1;--line:#d9e2ee;--line2:#c6d2e3;--accent:#2a5fd0;--accent-bright:#1e46a0;--accent-weak:rgba(47,111,235,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+@media (prefers-color-scheme: dark){
+  :root[data-palette="ocean"]{color-scheme:dark;--bg:#0b1424;--surface:#101b30;--surface2:#16223c;--fg:#e7edf7;--muted:#a6b6cf;
+    --faint:#7486a6;--line:#22304c;--line2:#2e4066;--accent:#7aa2ff;--accent-bright:#c3d4ff;--accent-weak:rgba(122,162,255,.16);--on-accent:#0b1424;
+    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+    --shadow:0 1px 2px rgba(0,0,0,.3);}
+}
+:root[data-theme="dark"][data-palette="ocean"]{color-scheme:dark;--bg:#0b1424;--surface:#101b30;--surface2:#16223c;--fg:#e7edf7;--muted:#a6b6cf;
+  --faint:#7486a6;--line:#22304c;--line2:#2e4066;--accent:#7aa2ff;--accent-bright:#c3d4ff;--accent-weak:rgba(122,162,255,.16);--on-accent:#0b1424;
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);}
+:root[data-theme="light"][data-palette="ocean"]{color-scheme:light;--bg:#eef2f7;--surface:#fbfcfe;--surface2:#e2e9f3;--fg:#1a2436;--muted:#5b6b84;
+  --faint:#8b9bb1;--line:#d9e2ee;--line2:#c6d2e3;--accent:#2a5fd0;--accent-bright:#1e46a0;--accent-weak:rgba(47,111,235,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+
+/* Forest palette — green accent, sage-tinted neutrals. */
+:root[data-palette="forest"]{color-scheme:light;--bg:#f1f6f1;--surface:#fbfdfb;--surface2:#e3eee4;--fg:#1b2520;--muted:#5a6e61;
+  --faint:#8ba196;--line:#d8e5da;--line2:#c4d8c8;--accent:#187a4d;--accent-bright:#0f5c39;--accent-weak:rgba(30,142,90,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+@media (prefers-color-scheme: dark){
+  :root[data-palette="forest"]{color-scheme:dark;--bg:#0e1a12;--surface:#142419;--surface2:#1a2d20;--fg:#e6f3ea;--muted:#a5c0ae;
+    --faint:#718f7b;--line:#223d2a;--line2:#2d5138;--accent:#41c07e;--accent-bright:#8ee2ae;--accent-weak:rgba(65,192,126,.16);--on-accent:#0e1a12;
+    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+    --shadow:0 1px 2px rgba(0,0,0,.3);}
+}
+:root[data-theme="dark"][data-palette="forest"]{color-scheme:dark;--bg:#0e1a12;--surface:#142419;--surface2:#1a2d20;--fg:#e6f3ea;--muted:#a5c0ae;
+  --faint:#718f7b;--line:#223d2a;--line2:#2d5138;--accent:#41c07e;--accent-bright:#8ee2ae;--accent-weak:rgba(65,192,126,.16);--on-accent:#0e1a12;
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);}
+:root[data-theme="light"][data-palette="forest"]{color-scheme:light;--bg:#f1f6f1;--surface:#fbfdfb;--surface2:#e3eee4;--fg:#1b2520;--muted:#5a6e61;
+  --faint:#8ba196;--line:#d8e5da;--line2:#c4d8c8;--accent:#187a4d;--accent-bright:#0f5c39;--accent-weak:rgba(30,142,90,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+
+/* Sunset palette — warm coral accent, sand-tinted neutrals. */
+:root[data-palette="sunset"]{color-scheme:light;--bg:#faf4ee;--surface:#fffdfa;--surface2:#f3e9dd;--fg:#2a211a;--muted:#6f6050;
+  --faint:#a08f7a;--line:#ecddcb;--line2:#e0ccb4;--accent:#b54012;--accent-bright:#8a2f0c;--accent-weak:rgba(217,89,44,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+@media (prefers-color-scheme: dark){
+  :root[data-palette="sunset"]{color-scheme:dark;--bg:#1a0f09;--surface:#241712;--surface2:#2e1d15;--fg:#f9ede4;--muted:#d2b8a6;
+    --faint:#a2806b;--line:#412c1e;--line2:#533a2b;--accent:#ff7d52;--accent-bright:#ffb294;--accent-weak:rgba(255,125,82,.16);--on-accent:#1a0f09;
+    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+    --shadow:0 1px 2px rgba(0,0,0,.3);}
+}
+:root[data-theme="dark"][data-palette="sunset"]{color-scheme:dark;--bg:#1a0f09;--surface:#241712;--surface2:#2e1d15;--fg:#f9ede4;--muted:#d2b8a6;
+  --faint:#a2806b;--line:#412c1e;--line2:#533a2b;--accent:#ff7d52;--accent-bright:#ffb294;--accent-weak:rgba(255,125,82,.16);--on-accent:#1a0f09;
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);}
+:root[data-theme="light"][data-palette="sunset"]{color-scheme:light;--bg:#faf4ee;--surface:#fffdfa;--surface2:#f3e9dd;--fg:#2a211a;--muted:#6f6050;
+  --faint:#a08f7a;--line:#ecddcb;--line2:#e0ccb4;--accent:#b54012;--accent-bright:#8a2f0c;--accent-weak:rgba(217,89,44,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+
+/* Teal palette — aqua accent, teal-tinted neutrals. */
+:root[data-palette="teal"]{color-scheme:light;--bg:#eff6f5;--surface:#fbfdfd;--surface2:#e2efed;--fg:#1a2623;--muted:#59716c;
+  --faint:#8ba09a;--line:#d7e8e5;--line2:#c2dcd7;--accent:#0b7064;--accent-bright:#08544c;--accent-weak:rgba(14,155,140,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+@media (prefers-color-scheme: dark){
+  :root[data-palette="teal"]{color-scheme:dark;--bg:#0b1715;--surface:#12231f;--surface2:#172b27;--fg:#e4f3ef;--muted:#a3c4bd;
+    --faint:#6f9188;--line:#1f3d37;--line2:#2a5048;--accent:#3ecfc0;--accent-bright:#8ce8dc;--accent-weak:rgba(62,207,192,.16);--on-accent:#0b1715;
+    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+    --shadow:0 1px 2px rgba(0,0,0,.3);}
+}
+:root[data-theme="dark"][data-palette="teal"]{color-scheme:dark;--bg:#0b1715;--surface:#12231f;--surface2:#172b27;--fg:#e4f3ef;--muted:#a3c4bd;
+  --faint:#6f9188;--line:#1f3d37;--line2:#2a5048;--accent:#3ecfc0;--accent-bright:#8ce8dc;--accent-weak:rgba(62,207,192,.16);--on-accent:#0b1715;
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);}
+:root[data-theme="light"][data-palette="teal"]{color-scheme:light;--bg:#eff6f5;--surface:#fbfdfd;--surface2:#e2efed;--fg:#1a2623;--muted:#59716c;
+  --faint:#8ba09a;--line:#d7e8e5;--line2:#c2dcd7;--accent:#0b7064;--accent-bright:#08544c;--accent-weak:rgba(14,155,140,.12);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+
+/* Overwatch palette — the game's signature orange (#f99e1a, PMS 137 C) with
+   the near-black navy UI it ships, warm paper light neutrals. */
+:root[data-palette="overwatch"]{color-scheme:light;--bg:#f7f1e9;--surface:#fffdf9;--surface2:#efe7da;--fg:#201b14;--muted:#6b5f4d;
+  --faint:#9b8c75;--line:#e8ddca;--line2:#d8c7ab;--accent:#9a5300;--accent-bright:#7a3f00;--accent-weak:rgba(249,158,26,.14);--on-accent:#fff;
+  --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
+@media (prefers-color-scheme: dark){
+  :root[data-palette="overwatch"]{color-scheme:dark;--bg:#0a0d15;--surface:#10151f;--surface2:#171d2a;--fg:#eceff4;--muted:#a9b2bf;
+    --faint:#717b8c;--line:#252d3a;--line2:#313a4b;--accent:#f99e1a;--accent-bright:#ffc863;--accent-weak:rgba(249,158,26,.18);--on-accent:#1a1206;
+    --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+    --shadow:0 1px 2px rgba(0,0,0,.3);}
+}
+:root[data-theme="dark"][data-palette="overwatch"]{color-scheme:dark;--bg:#0a0d15;--surface:#10151f;--surface2:#171d2a;--fg:#eceff4;--muted:#a9b2bf;
+  --faint:#717b8c;--line:#252d3a;--line2:#313a4b;--accent:#f99e1a;--accent-bright:#ffc863;--accent-weak:rgba(249,158,26,.18);--on-accent:#1a1206;
+  --tank:#5a9bd8;--damage:#e9694f;--support:#46b57c;--good:#34b877;--mid:#d3a02a;--bad:#e5624a;
+  --shadow:0 1px 2px rgba(0,0,0,.3);}
+:root[data-theme="light"][data-palette="overwatch"]{color-scheme:light;--bg:#f7f1e9;--surface:#fffdf9;--surface2:#efe7da;--fg:#201b14;--muted:#6b5f4d;
+  --faint:#9b8c75;--line:#e8ddca;--line2:#d8c7ab;--accent:#9a5300;--accent-bright:#7a3f00;--accent-weak:rgba(249,158,26,.14);--on-accent:#fff;
   --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05);}
 

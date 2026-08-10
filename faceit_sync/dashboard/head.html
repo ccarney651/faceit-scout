@@ -11,7 +11,7 @@
   var t=localStorage.getItem('owdb.theme');
   var p=localStorage.getItem('owdb.palette');
   if(t==='light'||t==='dark') document.documentElement.setAttribute('data-theme',t);
-  if(p==='original') document.documentElement.setAttribute('data-palette','original');
+  if(['original','ocean','forest','sunset','teal','overwatch'].indexOf(p)>=0) document.documentElement.setAttribute('data-palette',p);
 }catch(e){}})();
 </script>
 <title>owdb &mdash; FACEIT League</title>
@@ -621,6 +621,11 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
         <select id="palette" class="themepick" aria-label="Colour palette" title="Colour palette">
           <option value="current">Violet</option>
           <option value="original">Original</option>
+          <option value="ocean">Ocean</option>
+          <option value="forest">Forest</option>
+          <option value="sunset">Sunset</option>
+          <option value="teal">Teal</option>
+          <option value="overwatch">Overwatch</option>
         </select>
         <div class="sidetoggle" id="modetoggle" title="Light / dark">
           <span data-mode="light">Light</span><span data-mode="auto" class="on">Auto</span><span data-mode="dark">Dark</span>
