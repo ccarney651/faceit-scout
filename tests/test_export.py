@@ -208,6 +208,7 @@ def test_dashboard_theme_css_ships_all_palettes() -> None:
     palettes = {
         # value: light accent, dark accent (pinned for each family).
         "original": ("--accent:#4f46e5", "--accent:#8087ff"),
+        "violet": ("--accent:#7c3aed", "--accent:#a855f7"),
         "ocean": ("--accent:#2a5fd0", "--accent:#7aa2ff"),
         "forest": ("--accent:#187a4d", "--accent:#41c07e"),
         "sunset": ("--accent:#b54012", "--accent:#ff7d52"),
@@ -227,18 +228,37 @@ def test_dashboard_theme_css_ships_all_palettes() -> None:
         assert f"'{name}'" in HTML_TEMPLATE, f"early-apply whitelist misses {name}"
 
 
-def test_dashboard_theme_light_mode_is_warm_paper() -> None:
-    """Light mode must not be blinding pure-white: the default (palette-less)
-    light blocks — bare :root and the forced :root[data-theme="light"] — use
-    warm cream neutrals (#f7f4ee bg, #fffdf9 surface) instead of the old
-    near-white (#f7f5fb/#ffffff). Original is exempt: it's the faithful
-    pre-redesign reproduction and intentionally keeps its own palette."""
+def test_dashboard_theme_default_light_is_original_and_violet_is_warm_paper() -> None:
+    """The palette-less default (no stored preference, and pages without the
+    picker) is the Original palette: #f5f7fa background, #ffffff surfaces —
+    the faithful pre-redesign look. The warm-paper fix (cream neutrals instead
+    of pure white) now lives in the explicit Violet palette blocks."""
     from faceit_sync._dashboard import HTML_TEMPLATE
 
-    assert "--bg:#f7f4ee" in HTML_TEMPLATE, "default light background is not warm paper"
-    assert "--surface:#fffdf9" in HTML_TEMPLATE, "default light surface is pure white"
-    # The forced-light default block must carry the same warm tokens.
-    assert ':root[data-theme="light"]{color-scheme:light;--bg:#f7f4ee' in HTML_TEMPLATE
+    # Palette-less default light is Original.
+    assert "--bg:#f5f7fa" in HTML_TEMPLATE, "default light background is not Original"
+    assert "--surface:#ffffff" in HTML_TEMPLATE, "default light surface is not Original"
+    # The forced-light default block carries the same Original tokens.
+    assert ':root[data-theme="light"]{color-scheme:light;--bg:#f5f7fa' in HTML_TEMPLATE
+    # Violet's light blocks are the warm-paper cream that replaced pure white.
+    assert ':root[data-palette="violet"]{color-scheme:light;--bg:#f7f4ee' in HTML_TEMPLATE
+    assert "--surface:#fffdf9" in HTML_TEMPLATE, "violet light surface is pure white"
+
+
+def test_dashboard_defaults_to_original_palette() -> None:
+    """With no stored preference the dashboard must render the Original
+    palette: the early-apply script and applyTheme() both fall back to
+    data-palette="original" (the palette-less default), and 'Original' is the
+    picker's first option. Violet is an explicit, selectable alternative."""
+    from faceit_sync._dashboard import HTML_TEMPLATE
+
+    # Early <head> script: absent/unrecognised preference -> Original, with the
+    # whitelist now covering violet (which is no longer the palette-less default).
+    assert "else document.documentElement.setAttribute('data-palette','original');" in HTML_TEMPLATE
+    # app.js applyTheme() twin falls back the same way.
+    assert "else h.setAttribute('data-palette','original');" in HTML_TEMPLATE
+    # The picker lists Original first (the default), Violet as an opt-in.
+    assert HTML_TEMPLATE.index('<option value="original">') < HTML_TEMPLATE.index('<option value="violet">')
 
 
 def test_dashboard_inlines_theme_css_with_embedded_fonts() -> None:

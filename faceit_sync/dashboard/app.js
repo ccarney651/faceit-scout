@@ -22,9 +22,9 @@ function applyTheme(){
   const m=readPref(THEME_KEY), p=readPref(PAL_KEY);
   const h=document.documentElement;
   if(m==='light'||m==='dark') h.setAttribute('data-theme',m); else h.removeAttribute('data-theme');
-  const PALETTES=['original','ocean','forest','sunset','teal','overwatch'];
-  if(PALETTES.indexOf(p)>=0) h.setAttribute('data-palette',p); else h.removeAttribute('data-palette');
-  const pal=document.getElementById('palette'); if(pal) pal.value=(PALETTES.indexOf(p)>=0)?p:'current';
+  const PALETTES=['original','violet','ocean','forest','sunset','teal','overwatch'];
+  if(PALETTES.indexOf(p)>=0) h.setAttribute('data-palette',p); else h.setAttribute('data-palette','original');
+  const pal=document.getElementById('palette'); if(pal) pal.value=(PALETTES.indexOf(p)>=0)?p:'original';
   const tg=document.getElementById('modetoggle'); if(tg){
     const cur=(m==='light'||m==='dark')?m:'auto';
     tg.querySelectorAll('span[data-mode]').forEach(s=>s.classList.toggle('on',s.dataset.mode===cur));
@@ -34,7 +34,7 @@ function applyTheme(){
 }
 function initTheme(){
   const pal=document.getElementById('palette');
-  if(pal) pal.onchange=()=>{ rememberPref(PAL_KEY,pal.value==='current'?null:pal.value); applyTheme(); };
+  if(pal) pal.onchange=()=>{ rememberPref(PAL_KEY,pal.value); applyTheme(); };
   const tg=document.getElementById('modetoggle');
   if(tg) tg.querySelectorAll('span[data-mode]').forEach(s=>s.onclick=()=>{ rememberPref(THEME_KEY,s.dataset.mode==='auto'?null:s.dataset.mode); applyTheme(); });
   applyTheme();
