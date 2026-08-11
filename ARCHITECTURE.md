@@ -544,12 +544,12 @@ Cross-database joins work; cross-database foreign keys do not, so FACEIT keys
 are plain validated columns.
 
 **Replay codes are invalidated by every Overwatch patch — a "code wipe."** The
-wipe date is duplicated in **two** places that must be updated together:
-`_SEED_WIPES` in `owdb/db.py`, which drives the value that reaches the site, and
-`CODE_WIPE_DATE` in `tools/build_capture_data.py`, which drives the capture
-tool. The pinned assertions in `owdb/tests/test_codes.py` and
-`owdb/tests/test_context.py` must be updated in the same change. The procedure
-is in [section 10](#10-lifecycles-and-operations).
+wipe date has **one** source: `_SEED_WIPES` in `owdb/db.py`, whose maximum is
+`LATEST_KNOWN_WIPE`. Both consumers derive from it — the value that reaches the
+site, and `CODE_WIPE_DATE` in `tools/build_capture_data.py`, which imports it
+rather than restating it. The pinned assertions in `owdb/tests/test_context.py`
+must be updated in the same change. The procedure is in
+[section 10](#10-lifecycles-and-operations).
 
 **Type checking does not cover this package.** The documented command is
 `mypy faceit_sync`, and `owdb` is not part of the must-stay-clean contract — at
@@ -902,7 +902,7 @@ app never has to crawl FACEIT itself.
 
 ```json
 {
-  "built_at": "…", "code_wipe_date": "2026-07-28",
+  "built_at": "…", "code_wipe_date": "2026-08-11",
   "regions": ["EMEA", "NA"], "divisions": ["EMEA Master", "…"],
   "codes": [
     {"code": "2RYPJJ", "match_id": "1-57b84ab3-…", "game_no": 1,
@@ -964,11 +964,16 @@ downstream follows it, including `CODE_WIPE_DATE` in
 
 1. Append `("YYYY-MM-DD", "observed", "<why>")` to `_SEED_WIPES` in
    `owdb/db.py`.
-2. Update the pinned assertions that name the previous date —
-   `owdb/tests/test_codes.py` and `owdb/tests/test_context.py`.
+2. Update the pinned assertions that name the previous date and the wipe count —
+   `test_wipe_seeded_idempotently` in `owdb/tests/test_context.py`.
 3. Run the suite. The capture tool stops offering pre-wipe codes automatically.
 
-Recorded wipes so far: 2026-07-14 and 2026-07-28.
+Fixtures whose matches must stay *alive* derive their dates from
+`LATEST_KNOWN_WIPE` (`ALIVE_AT` in `owdb/tests/test_codes.py`, and the same
+trick in `tests/test_capture_feed.py`), so a new wipe does not silently flip
+them to dead. Keep new fixtures on that pattern rather than hard-coding a date.
+
+Recorded wipes so far: 2026-07-14, 2026-07-28 and 2026-08-11.
 
 ### Season cutover
 

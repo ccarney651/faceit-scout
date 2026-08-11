@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
+from datetime import date, timedelta
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from owdb.comps import comp_id_for
-from owdb.db import Database
+from owdb.db import LATEST_KNOWN_WIPE, Database
 from owdb.models import CodeContext
+
+# The day after the latest wipe: a match finished then still has a live code.
+# Derived rather than hard-coded so registering a new wipe does not flip these
+# fixtures' "alive" matches to dead (see tests/test_capture_feed.py, same trick).
+ALIVE_AT = f"{(date.fromisoformat(LATEST_KNOWN_WIPE) + timedelta(days=1)).isoformat()}T20:00:00Z"
 
 
 @pytest.fixture()
@@ -35,9 +41,9 @@ def _faceit(path: Path) -> str:
     c.execute("INSERT INTO championships VALUES('cm','S9 Master Central'),('ce','S9 Expert Central')")
     c.execute("INSERT INTO teams VALUES('tA','Alpha'),('tB','Bravo'),('tC','Cabra')")
     c.execute("INSERT INTO maps VALUES('m-ilios','Ilios','Control')")
-    # pre-wipe match (2026-07-08) and post-wipe match (2026-07-29), both Master
+    # pre-wipe match (2026-07-08) and post-wipe match (ALIVE_AT), both Master
     c.execute("INSERT INTO matches VALUES('OLD','tA','tB','2026-07-08T20:00:00Z','cm')")
-    c.execute("INSERT INTO matches VALUES('NEW','tA','tC','2026-07-29T20:00:00Z','cm')")
+    c.execute("INSERT INTO matches VALUES('NEW','tA','tC',?,'cm')", (ALIVE_AT,))
     c.executemany("INSERT INTO games VALUES(?,?,?,?)", [
         ("OLD", 1, "m-ilios", "OLD111"),
         ("NEW", 1, "m-ilios", "NEW111"),
@@ -108,7 +114,7 @@ def test_list_codes_skips_empty_code(db: Database, tmp_path: Path) -> None:
 def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
     fp = _faceit(tmp_path / "faceit.sqlite3")
     con = sqlite3.connect(fp)
-    con.execute("INSERT INTO matches VALUES('EXP','tA','tB','2026-07-29T20:00:00Z','ce')")
+    con.execute("INSERT INTO matches VALUES('EXP','tA','tB',?,'ce')", (ALIVE_AT,))
     con.execute("INSERT INTO games VALUES('EXP',1,'m-ilios','EXP111')")
     con.commit()
     con.close()
@@ -120,7 +126,9 @@ def test_list_codes_division_filter(db: Database, tmp_path: Path) -> None:
 def test_code_age_summary(db: Database, tmp_path: Path) -> None:
     fp = _faceit(tmp_path / "faceit.sqlite3")
     s = db.code_age_summary(fp)
-    assert s["latest_wipe"] == "2026-07-28"
+    # The pinned value lives in test_context.test_wipe_seeded_idempotently; here
+    # the point is that the summary reports the seeded wipe, whatever it is.
+    assert s["latest_wipe"] == LATEST_KNOWN_WIPE
     assert s["total_codes"] == 3
     assert s["alive_codes"] == 2 and s["dead_codes"] == 1
 

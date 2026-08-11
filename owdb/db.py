@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS hero_corrections (
 _SEED_WIPES = [
     ("2026-07-14", "observed", "invalidated all S9 regular season codes"),
     ("2026-07-28", "observed", "mid-season patch; invalidated all pre-patch S9 codes"),
+    ("2026-08-11", "observed", "hero-release patch; invalidated all pre-patch S9 codes"),
 ]
 # The date the site and merge use without a database: a game finished on or
 # before this can never be replayed unless it was captured first. Update this

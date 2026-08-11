@@ -19,6 +19,13 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-08-11
 
+### Changed
+- **Registered the 2026-08-11 patch code wipe.** Every replay code from before
+  the patch is dead; the site and the capture tool now count those maps as lost
+  to the wipe rather than offering them. Test fixtures that need a live code now
+  derive their match dates from `LATEST_KNOWN_WIPE` instead of hard-coding one,
+  so future wipes no longer silently flip them to dead.
+
 ### Added
 - `ARCHITECTURE.md` — one document explaining every part of the project and how
   the parts connect, with `tests/test_docs_links.py` verifying that every repo

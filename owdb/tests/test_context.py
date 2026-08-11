@@ -86,8 +86,8 @@ def test_wipe_seeded_idempotently(tmp_path: Path) -> None:
     Database(p).close()
     db2 = Database(p)  # re-open: init_schema runs again
     try:
-        assert db2.latest_wipe_date() == "2026-07-28"
-        assert db2.conn.execute("SELECT COUNT(*) FROM wipes").fetchone()[0] == 2
+        assert db2.latest_wipe_date() == "2026-08-11"
+        assert db2.conn.execute("SELECT COUNT(*) FROM wipes").fetchone()[0] == 3
     finally:
         db2.close()
 

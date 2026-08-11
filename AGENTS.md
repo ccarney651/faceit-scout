@@ -112,7 +112,8 @@ canonical and this copy is the bug.
   date has **one** source: `_SEED_WIPES` in `owdb/db.py`.
   `tools/build_capture_data.py` imports `LATEST_KNOWN_WIPE` rather than
   restating it. When a patch lands, add the entry and update the pinned
-  assertions in `owdb/tests/test_codes.py` and `owdb/tests/test_context.py`.
+  assertions in `owdb/tests/test_context.py`. Fixture matches that must stay
+  alive derive their dates from `LATEST_KNOWN_WIPE` — never hard-code one.
 - **The capture pages' Content-Security-Policy lives in a `<meta>` tag**, so
   `curl -I` shows nothing. It has silently broken browser APIs before — check it
   first when something fails quietly in `docs/capture/`.
