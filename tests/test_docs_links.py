@@ -27,6 +27,14 @@ RUNTIME_PATHS = {
     "dashboard.html",
     "owdb_refs.zip",
     ".venv/Scripts/python.exe",
+    # Present on a working machine, absent from a fresh clone: local tool state
+    # and build byproducts. Section 2 names them, so they have to be nameable.
+    "overwatch-hero-icons/",
+    "faceit_sync.egg-info/",
+    ".mypy_cache/",
+    ".pytest_cache/",
+    ".ruff_cache/",
+    ".venv/",
 }
 
 _CODE_SPAN = re.compile(r"`([^`\n]+)`")
