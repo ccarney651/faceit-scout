@@ -727,9 +727,222 @@ screenshot-session import.
 
 What runs outside this repository: the Cloudflare Worker and the GitHub Actions workflow that is the sole writer of the live site.
 
+### What it does
+
+Two pieces of infrastructure keep the site alive without anyone's computer being
+on. A GitHub Actions workflow fetches new matches and rebuilds the site on a
+schedule. A Cloudflare Worker accepts capture uploads, handles login, and
+coordinates live scouting claims between scouts.
+
+### How it works — the CI workflow
+
+`.github/workflows/update.yml` is the **only writer of `docs/index.html`**. It
+runs on four triggers: the daily schedule, a manual dispatch, a
+`repository_dispatch` of type `refresh` (which is what the site's "Refresh now"
+button fires through the Worker), and a push touching `data/captures/**`,
+`faceit_sync/**`, `owdb/**`, `tools/**`, `docs/capture/**`, `refs.json`, or
+`matches.txt`.
+
+**The daily schedule is two crons with a gate**, because GitHub cron is UTC-only
+while the target is 9pm London. Both `17 20 * * *` and `17 21 * * *` are
+registered, and a `gate` job runs only the one where it is actually 21:00 in
+London, skipping the shadow. Minute 17 is chosen because on-the-hour crons are
+GitHub's most congested slot. The gate logs the computed London hour on every
+run — that line is the only evidence the runner's timezone database resolves at
+all.
+
+**Fetching is skipped when it is not needed.** Only the schedule, a manual run,
+and a refresh dispatch set `DO_FETCH=true`. A code or contribution push
+re-exports from the cached database in seconds. A missing cache self-heals by
+forcing a full fetch, since the seed list rebuilds every division through
+transitive discovery.
+
+**The database is carried between runs in the Actions cache**, keyed on the run
+ID and restored by prefix. The checkout uses `fetch-depth: 0` on purpose:
+`git_submission_order` in `owdb/contribute.py` decides who owns a contested map
+by the commit that *added* their file, and a shallow clone cannot see it — every
+file would look equally old and silently fall back to name order.
+
+**The build order per run** is: fetch matches → backfill Battle.net game names →
+merge `data/captures/s9/` into `owdb_comps.json` and `docs/captured.json` →
+export `docs/index.html` pinned with `--season s9` → rebuild
+`docs/capture/data.json` → publish a compacted, gzipped database snapshot to
+`docs/faceit.sqlite3.gz` → commit and push if anything changed.
+
+### How it works — the Cloudflare Worker
+
+`infra/upload-worker/worker.js` is deployed to `upload.owdb.io`. Its routes:
+
+| Route | Purpose |
+| --- | --- |
+| `/` (POST) | Accept a capture upload and commit it to `data/captures/s9/<name>.json` via the GitHub contents API |
+| `/refresh` | Fire a `repository_dispatch` at the site repo — the "Refresh now" button |
+| `/claims`, `/claim`, `/unclaim`, `/claims/ws` | Live scouting claims, held in the `ClaimRoom` Durable Object |
+| `/auth/login`, `/auth/callback` | Discord OAuth login |
+| `/admin/contributors`, `/admin/claims`, `/admin/contributor` | The admin roster panel |
+
+`ClaimRoom` is a single global SQLite-backed Durable Object holding the claim
+room and every scout's WebSocket, which keeps it on the Workers free plan.
+Contributor display names are reserved in a KV namespace bound as `NAMES`.
+
+### Files
+
+| File | Responsibility |
+| --- | --- |
+| `.github/workflows/update.yml` | The scheduled build; the only writer of the live site |
+| `infra/upload-worker/worker.js` | Uploads, refresh dispatch, auth, claims |
+| `infra/upload-worker/wrangler.toml` | Routes, bindings, the `NAMES` KV namespace, the DO migration |
+| `infra/upload-worker/DISCORD_SETUP.md` | How the Discord app is configured |
+
+### How it connects
+
+CI reads `matches.txt` and `data/captures/`, writes `docs/index.html`,
+`docs/captured.json`, `docs/capture/data.json`, and `docs/faceit.sqlite3.gz`. The
+Worker writes into `data/captures/`, which triggers CI. The capture app talks to
+the Worker; the dashboard's refresh button reaches CI through it.
+
+### Gotchas
+
+**The Worker is deployed by hand, not by CI.** `wrangler deploy` is run by a
+human and bypasses git and GitHub Pages entirely — so the Worker's live code can
+differ from what is committed here, and a change committed to
+`infra/upload-worker/worker.js` is **not live until someone deploys it**.
+
+**Its secrets are separate from GitHub's.** `GITHUB_TOKEN`,
+`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `SESSION_SECRET` are set with
+`wrangler secret put`. A valid, correctly-scoped GitHub PAT is not enough — if
+the Worker's stored copy is stale, the refresh button returns 401 while
+everything else looks fine.
+
+**Two independent copies of `faceit.sqlite3` exist and nothing reconciles
+them** — the local one and CI's cached one. See
+[section 1](#1-the-map) and [invariant 2](#12-invariants).
+
+**Season is pinned in the export flag.** CI passes `--season s9` so the live site
+stays on Season 9 even once Season 10 championship IDs start appearing in the
+database during the overlap. Changing it is part of the cutover, not a casual
+edit — see [section 10](#10-lifecycles-and-operations).
+
+**Fetch errors are tolerated; the export is not.** A stray unreachable match must
+never block the daily update, so both fetch steps swallow errors and continue.
+
 ## 9. Data contracts
 
 The exact shape of every file that crosses a subsystem boundary.
+
+Shapes below were read from the live files, not from a specification.
+
+### `data/captures/<season>/<contributor>.json` — the durable record
+
+Written by the upload Worker or by `owdb contribute push`; read by
+`owdb contribute merge`. **This is the one committed artifact that cannot be
+regenerated** — everything else in the scouting pipeline is derived from it.
+
+```json
+{
+  "format": 1,
+  "contributor": "ccarn",
+  "tool_version": "0.1.0",
+  "heroes": {},
+  "maps": [
+    {
+      "match_id": "1-4b63acd1-…", "game_no": 1, "demo_code": "GPJW93",
+      "map_guid": "0x080000000000066D", "map_name": "Ilios",
+      "map_category": "Control",
+      "side_a_team_id": "db15d8f5-…", "side_a_team": "Wasp",
+      "side_b_team_id": "d2ce5415-…", "side_b_team": "Dystopia",
+      "winner_side": "a", "captured_at": "2026-07-18T12:49:01Z",
+      "bans": ["0x02E00000000004E3"],
+      "profile": {"w": 2560, "h": 1440, "hud_variant": "default"},
+      "observations": [
+        {"side": "a", "ts": 0, "sub_map": "Ruins", "round_no": 1,
+         "phase": null, "heroes": ["0x02E0000000000516", "…"]}
+      ]
+    }
+  ]
+}
+```
+
+Every hero and map is a GUID, never a name — names change, GUIDs do not.
+`observations` are raw samples with a timestamp, which is what makes the whole
+scheme work: the report is recomputed from them at every build, so analysis
+improvements apply retroactively.
+
+**Contested maps resolve first-wins by commit date.** `git_submission_order` in
+`owdb/contribute.py` orders contributor files by the commit that added each one,
+because the contributing machine cannot be trusted to timestamp its own
+submission. Files git knows nothing about sort last, by name.
+
+### `owdb_comps.json` — the derived report
+
+Written by `owdb contribute merge` at build time, read by
+`faceit_sync/export.py`. **Never committed** — `.gitignore` excludes it, so a
+stale report can never outlive the observations it came from or freeze the
+analysis that produced it.
+
+### `docs/captured.json` — coverage index
+
+Written by the same merge step, read by the dashboard to show which maps are
+already captured. A `format` and `generated_at` header over a flat list of
+`"<match_id>:<game_no>"` strings.
+
+```json
+{"format": 1, "generated_at": "2026-08-11T01:41:39Z",
+ "captured": ["1-00a16ee9-…:1", "…"]}
+```
+
+### `docs/capture/data.json` — the capture app's feed
+
+Written by `tools/build_capture_data.py` on every CI run; read by
+`docs/capture/index.html` and `docs/capture/scrim.html`. It exists so the capture
+app never has to crawl FACEIT itself.
+
+```json
+{
+  "built_at": "…", "code_wipe_date": "2026-07-28",
+  "regions": ["EMEA", "NA"], "divisions": ["EMEA Master", "…"],
+  "codes": [
+    {"code": "2RYPJJ", "match_id": "1-57b84ab3-…", "game_no": 1,
+     "map": "Antarctica", "map_category": "Control",
+     "map_guid": "0x0800000000000CF2", "division": "NA Expert",
+     "team_a": "…", "team_b": "…", "t1": "<uuid>", "t2": "<uuid>",
+     "finished_at": "2026-08-11T01:41:39Z"}
+  ],
+  "rosters": {
+    "<match_id>": {
+      "<team_id>": {"name": "Qwiz Esports",
+        "players": [{"id": "…", "nick": "qeezyow", "game_name": "qeezy"}]}
+    }
+  }
+}
+```
+
+`game_name` is the Battle.net name the Overwatch HUD actually shows, which is
+why ingest backfills it separately — the FACEIT nickname often differs.
+
+### `docs/capture/refs.json` — the hero reference library
+
+Written by `tools/build_capture_refs.py` from a curator's local library and
+committed by hand; read by `docs/capture/index.html` and `docs/scrims.html`. It
+carries the calibration geometry the references were captured at, then one
+record per hero-state with a name, GUID, visual state, and the image data.
+
+```json
+{"w": 2560, "h": 1440, "left_fraction": 0.0, "top_fraction": 0.0,
+ "refs": [{"n": "<name>", "g": "<hero guid>", "v": "<state>", "d": "<image>"}]}
+```
+
+`refs.json` carries **names only, not roles** — which is why `docs/scrims.html`
+keeps its own hero-role table.
+
+### The inlined dashboard payload
+
+Written into `docs/index.html` by `faceit_sync/export.py` as
+`var __OWDB_DATA__={…}`, or into a sibling `data.json` under `--external-data`.
+It carries the divisions, rosters, maps, the merged comps, contributor lists,
+inlined team avatars and hero icons, the code-wipe date, the refresh endpoint,
+and a `built_at` timestamp so anyone can tell at a glance whether their
+contribution has landed.
 
 ## 10. Lifecycles and operations
 
