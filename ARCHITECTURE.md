@@ -184,6 +184,140 @@ and is not in git.
 
 How FACEIT League match data gets into a local SQLite database, and the data-quality hazards that shape the design.
 
+### What it does
+
+`faceit-sync fetch` pulls every FACEIT League match it can reach — teams,
+schedules, results, map vetoes, hero bans, per-player stats, and replay codes —
+and stores them in a local SQLite file. It is incremental and idempotent: run it
+as often as you like, and the second run changes nothing the first already got
+right.
+
+### How it works
+
+**Three payloads per match.** `faceit_sync/client.py` fetches each match from
+three separate endpoints and `faceit_sync/sync.py::extract_bundle` reconciles
+them into one typed `MatchBundle`:
+
+| Payload | Endpoint | Carries |
+| --- | --- | --- |
+| Match detail | `api.faceit.com/match/v2/match/{id}` | teams, rosters, results, the map and hero voting record, replay codes |
+| Democracy | `api.faceit.com/democracy/v1/match/{id}` | **who** banned what and who picked which map |
+| Stats | `api.faceit.com/stats/v1/stats/matches/{id}` | per-player per-game numbers |
+
+Only championship enumeration needs a `FACEIT_API_KEY`; those three are keyless.
+
+**Keyless transitive discovery** is the trick that makes an API key optional.
+`SyncEngine.run` in `faceit_sync/sync.py` starts from the teams already known
+for a championship — one seed match is enough — enumerates each team's matches,
+and every match ingested reveals new opponents, which are then enumerated in
+turn until the team graph is exhausted. In a connected schedule this reaches
+every team and every match from any single seed. `matches.txt` holds those
+seeds. `SyncEngine.run_all` crawls regular-season divisions **before** their
+playoff siblings, because a bracket is seeded from the sibling division's
+qualifiers and those teams must be discovered first.
+
+**Idempotency** is deliberate and split by row type, documented at the top of
+`faceit_sync/db.py`. Reference rows (championships, teams, players, heroes,
+maps, matches) are written with `INSERT … ON CONFLICT DO UPDATE`. Per-match
+child rows (games, map picks, hero bans, round players) are deleted and
+re-inserted together inside one transaction by `Database.replace_children`. The
+result is that re-running a sync never duplicates rows and leaves counts
+unchanged.
+
+**Finished matches are skipped on re-run**, because their veto, results, and
+stats are immutable. `SyncEngine._skip_stored` makes that call, with two
+exceptions computed once per run by `Database.matches_needing_backfill`:
+
+1. a **partial gap** — some games in a match have replay codes and some do not,
+   the only signature consistent with an incomplete publish; and
+2. a **just-ingested match** — stored within the last 12 hours
+   (`DEFAULT_BACKFILL_FRESH_HOURS`), where codes may genuinely not be up yet.
+
+Everything else is left alone, and this is measured rather than assumed: across
+676 real matches, 87 had no code on any game, only 4 had a partial gap, and
+re-fetching all of them recovered **zero** codes. Replays were simply never
+published for those matches. **A match missing codes on every game is missing
+them permanently — it is not late.** Do not rebuild a blanket backfill.
+
+**Upcoming matches are stored as bare fixtures.** A match in any of the
+pre-finish states listed in `SCHEDULED_STATES` gets a row with teams, scheduled
+time, and round, but no games. It is never skipped, and is upgraded to a full
+ingest once it reaches `FINISHED`. Export keeps standings and counts
+`FINISHED`-only and ships upcoming matches as a separate payload — a scheduled
+row counted as a result would read as a walkover.
+
+**Politeness.** `faceit_sync/client.py` holds one `requests.Session`, a global
+rate limit defaulting to 4 requests per second, exponential backoff with jitter
+on 429 (honouring `Retry-After`), and retries on 5xx.
+
+### Files
+
+| File | Responsibility |
+| --- | --- |
+| `faceit_sync/client.py` | HTTP only: endpoints, rate limiting, retries, pagination |
+| `faceit_sync/sync.py` | Extraction, reconciliation, and orchestration — the hazards live here |
+| `faceit_sync/db.py` | Schema, connection handling, idempotent write helpers |
+| `faceit_sync/models.py` | Typed records and the stat-code mapping |
+| `faceit_sync/cli.py` | The `faceit-sync` command surface |
+| `matches.txt` | Seed list of match IDs and championship URLs |
+
+### How it connects
+
+Ingest writes `faceit.sqlite3` and nothing else. Two consumers read it:
+`faceit_sync/export.py` builds the dashboard from it ([section 4](#4-dashboard-build)),
+and the `owdb` package attaches it **read-only** for cross-referencing
+([section 5](#5-capture--the-python-owdb-package)). Ingest itself never reads
+capture data — the two halves meet only at export.
+
+### Gotchas
+
+**The three data hazards.** These are the reason the project exists rather than
+being a thin API wrapper. Each is handled explicitly in `faceit_sync/sync.py`
+and each has a dedicated test.
+
+- **Hazard A — zeroed player rows are not forfeits.** A game played to
+  completion whose stat capture failed (a team disconnecting at the end) returns
+  rows with role `-` and all-zero stats. Writing those zeros would corrupt every
+  average. Ingest writes `NULL` — never `0` — sets `stats_captured = False`, and
+  takes the game outcome from `results[]` instead. Guarded by
+  `tests/test_stats_null.py`.
+- **Hazard B — an admin restart destroys that game's veto ticket.** A restarted
+  game's democracy hero ticket comes back all-`open`. Ingest does not trust
+  `sessions[]` (absent from every observed payload); it reconciles instead — a
+  game present in `results[]` with an empty ticket was restarted, so the bans
+  still come from the match payload but `banned_by_faction` is `NULL` and
+  `was_restarted` is `True`. Guarded by `tests/test_restart.py`.
+- **Hazard C — the democracy feed is ephemeral, roughly seven days.** When the
+  whole payload 404s, no game in that match has veto attribution and the loss is
+  permanent. This is why ingest must run often enough to catch matches while
+  they are fresh. Guarded by `tests/test_history.py`.
+
+**Veto slots are joined by ban-set equality, not by position.** A restarted game
+leaves an `open` slot that shifts every later index, so positional alignment
+between democracy slots and played games is unreliable. `_match_slot` joins on
+the set of banned heroes instead. The same misalignment risk applies to
+`demoURLs`: when the alignment cannot be trusted, ingest drops **all** replay
+codes for that match rather than label a game with its neighbour's replay.
+
+**The opaque stat codes are empirical.** FACEIT returns `i8`, `i9`, `i10`,
+`i13`, `i14`, `i17` with no schema. `STAT_FIELD_MAP` in `faceit_sync/models.py`
+maps them to eliminations, deaths, assists, damage, healing, and damage
+mitigated, established by correlating each code against player role across real
+matches. If FACEIT changes the schema, correct it there — it is the only place
+the mapping exists.
+
+**Never change the User-Agent to impersonate a browser.** FACEIT's edge returns
+403 for `Mozilla/5.0`-style agents but accepts a descriptive one, so the client
+sends `faceit-sync/…`. See `DEFAULT_USER_AGENT` in `faceit_sync/client.py`.
+
+**The stats endpoint has no `/time` segment.** The documented
+`/stats/time/matches/{id}` path 404s; the working path is
+`/stats/v1/stats/matches/{id}`.
+
+**One bad match must never abort a run.** Both `_ingest_and_tally` and the team
+enumeration loop catch broadly and tally an error, so a single unreachable match
+cannot block the daily update.
+
 ## 4. Dashboard build
 
 How the live site at `docs/index.html` is assembled from static parts, and why a single JavaScript error blanks the page.

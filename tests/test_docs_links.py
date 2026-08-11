@@ -39,8 +39,8 @@ RUNTIME_PATHS = {
 
 _CODE_SPAN = re.compile(r"`([^`\n]+)`")
 # Skip anything that is plainly not a literal path: command lines (whitespace),
-# placeholders like <season>, globs, and URLs.
-_NOT_A_PATH = re.compile(r"[<>*?\s]|^https?://")
+# placeholders like <season> or {id}, and globs.
+_NOT_A_PATH = re.compile(r"[<>{}*?\s]")
 _PATH_SUFFIXES = (
     ".md",
     ".py",
@@ -56,10 +56,23 @@ _PATH_SUFFIXES = (
 
 
 def _cited_paths(text: str) -> set[str]:
-    """Repo-relative paths cited in inline code spans."""
+    """Repo-relative paths cited in inline code spans.
+
+    A cited path counts only when it is rooted in a real top-level entry --
+    ``faceit_sync/...``, ``docs/...``, ``README.md``. That rule is what keeps
+    URLs (``api.faceit.com/match/v2/...``), endpoint fragments
+    (``/stats/v1/...``), and header values (``Mozilla/5.0``) out of the check
+    while still catching the failure that matters: a path into this repository
+    that no longer resolves because something was renamed or moved.
+    """
+    top_level = {entry.name for entry in REPO_ROOT.iterdir()}
     found: set[str] = set()
     for span in _CODE_SPAN.findall(text):
-        if _NOT_A_PATH.search(span):
+        if _NOT_A_PATH.search(span) or span.startswith("/") or "://" in span:
+            continue
+        # pytest node ids (`tests/test_x.py::test_name`) cite a real file.
+        span = span.split("::", 1)[0]
+        if span.split("/", 1)[0] not in top_level:
             continue
         if "/" not in span and not span.endswith(_PATH_SUFFIXES):
             continue
