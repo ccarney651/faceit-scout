@@ -23,7 +23,10 @@ const server = http.createServer((req, res) => {
 });
 
 (async () => {
-  await new Promise(r => server.listen(0, r));
+  // Bind loopback explicitly. Node's default is every interface, which would
+  // publish this whole repo - faceit.sqlite3, .env, git history - to the LAN
+  // with no auth for as long as the screenshot takes.
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const browser = await firefox.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1200, height: 630 } });
