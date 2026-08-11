@@ -8,6 +8,8 @@ venv/
 .env
 *.sqlite3
 *.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
 # The docker-compose volume lives here and stays ignored, but contributor
 # scouting files MUST be tracked - they are the input the site is built from.
 # (A plain `data/` exclusion cannot be undone for a child path, hence data/*.)
@@ -27,6 +29,8 @@ owdb_comps.json
 # committing it would put a 3 MB artifact in the repo that can disagree with the
 # real page.
 dashboard.html
+# Same thing, saved under a second name when publishing a preview elsewhere.
+dashboard_artifact.html
 
 # runtime
 auto-update.log
@@ -53,6 +57,9 @@ crops/
 
 # Visual brainstorming companion scratch files (superpowers:brainstorming)
 .superpowers/
+
+# opencode agent workspace (its own plugins + node_modules)
+.opencode/
 
 # OverPy toolchain for the scrim workshop code (tools/scrim_code/)
 tools/scrim_code/node_modules/
