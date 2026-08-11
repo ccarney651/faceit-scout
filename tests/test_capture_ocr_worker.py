@@ -98,6 +98,21 @@ def test_a_successful_load_is_cached_and_not_reloaded() -> None:
     assert out == "calls:1", out
 
 
+def test_a_successful_load_clears_a_stale_failure_flag() -> None:
+    # ensureSideResolved() surfaces _ocrLoadFailed as a "retrying..." hint but
+    # deliberately does NOT let it block a fresh attempt (see
+    # test_capture_ocr_load_retry.py) - that only stays honest if a real
+    # success actually clears the flag back off, or the hint would show
+    # forever even once OCR is healthy again.
+    body = r"""
+    _ocrLoadFailed=true; _ocrLoadError='could not load the OCR library (offline?)';
+    global.Tesseract={ createWorker: () => Promise.resolve({setParameters: async()=>{}}) }; global.window={ Tesseract: global.Tesseract };
+    ocrWorker().then(() => console.log(JSON.stringify({failed:_ocrLoadFailed})));
+    """
+    out = _run(body, timeout_ms=5000)
+    assert out == '{"failed":false}', out
+
+
 def test_worker_setup_whitelists_the_hud_gamertag_charset() -> None:
     # Restricting recognition to the charset HUD names actually use cuts stray
     # glyphs (border/icon bleed) from diluting simScore's fuzzy match ratio.
@@ -125,8 +140,10 @@ def test_worker_setup_whitelists_the_hud_gamertag_charset() -> None:
 
 def _names_js(timeout_ms: int) -> str:
     html = APP.read_text(encoding="utf-8")
-    state_start = html.index("let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false;")
-    state_end = state_start + len("let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false;")
+    # Anchored on the stable prefix, not the full var list, so adding another
+    # _ocr* state var doesn't break this extraction again.
+    state_start = html.index("let _ocrWorker=null")
+    state_end = html.index(";", state_start) + 1
     state = html[state_start:state_end]
     start = html.index("const OCR_READ_TIMEOUT_MS=")
     end = html.index("return out; }", start) + len("return out; }")

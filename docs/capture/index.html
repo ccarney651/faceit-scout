@@ -977,7 +977,12 @@ function confidentLeft(leftNames,rightNames,t1,t2){
 // Re-detect/Auto-detect actually retries instead of replaying the same dead
 // promise for the rest of the session.
 const OCR_LOAD_TIMEOUT_MS=30000;
-let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false;
+// _ocrLoadError holds the reason text from the LAST failed attempt (warmOcr's
+// background retry swallows the promise rejection to avoid an unhandled-
+// rejection console spam, so without this the operator - and anyone we ask
+// for a screenshot - only ever sees "OCR engine failed to load" with no way
+// to tell a timeout from a real network/CORS/CDN error).
+let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false, _ocrLoadError=null;
 function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
   if(_ocrLoading) return _ocrLoading;
   const attempt=(async()=>{
@@ -989,10 +994,12 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
     const w=await Tesseract.createWorker('eng');
     await w.setParameters({ tessedit_pageseg_mode:'7',
       tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
-    _ocrWorker=w; return w; })();
+    _ocrWorker=w; _ocrLoadFailed=false; return w; })();
   _ocrLoading=Promise.race([attempt,
     new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load - try again')),OCR_LOAD_TIMEOUT_MS))]
-  ).catch(e=>{ _ocrLoading=null; _ocrLoadFailed=true; throw e; });
+  ).catch(e=>{ _ocrLoading=null; _ocrLoadFailed=true;
+    _ocrLoadError=(e&&e.message)?e.message:String(e); console.error('[owdb] OCR load failed:',e);
+    throw e; });
   return _ocrLoading; }
 // Preload the OCR engine the moment the tool is capture-ready, so the FIRST
 // Snapshot's automatic side-detect doesn't pay the worker spin-up cost while
@@ -1152,8 +1159,17 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
   s._detecting=true;
   const tell=(text,cls)=>{ setDetectMsg(text,cls); snapMsg(text,cls==='warn'); };
   try{
-    if(_ocrLoadFailed){ tell('OCR engine failed to load — set the LEFT team above (or Swap teams), then press Snapshot again.','warn'); return false; }
-    tell('detecting sides…'); ocrProgress(0);
+    // _ocrLoadFailed is diagnostic only (surfaced via the catch below through
+    // e.message, and logged to console) - it does NOT short-circuit a retry
+    // here. ocrWorker()/ocrNames() already clear their own caches on failure,
+    // so a fresh attempt is cheap when the earlier failure was transient (a
+    // network blip during the background warmOcr() preload, say) and still
+    // safely bounded by OCR_LOAD_TIMEOUT_MS/OCR_READ_TIMEOUT_MS when it isn't.
+    // A prior version hard-blocked every Snapshot after one failure until the
+    // operator noticed and clicked Re-detect - worse than just trying again.
+    if(_ocrLoadFailed) tell('OCR failed before ('+esc(_ocrLoadError||'unknown reason')+') — retrying…');
+    else tell('detecting sides…');
+    ocrProgress(0);
     let res=await detectSides();
     // A single HUD frame can catch a transition (killcam, respawn, hero select)
     // where the name bars aren't inside the calibrated boxes yet, making an
