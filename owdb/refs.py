@@ -668,7 +668,8 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
             cv2.waitKey(1)
             gtxt = f"{s.guess_name} ({s.score:.2f})" if s.guess_name else "no guess"
             raw = input(f"  slot {s.side}#{s.slot_index} looks like: {gtxt}  "
-                        f"[ENTER=yes, name=fix, n=next slot, s=skip, q=quit]: ").strip()
+                        f"[ENTER=yes, TYPE A HERO NAME to correct it, "
+                        f"n=next slot, s=skip, q=quit]: ").strip()
             low = raw.lower()
             if low == "q":
                 cv2.destroyWindow(win)
@@ -719,6 +720,10 @@ def run_refs_verify(
 
     with connect_ro(faceit_db_path) as fdb:
         heroes = load_heroes(fdb)
+    # Operator-added heroes count too — they are exactly the ones most likely to
+    # be missing a ref, being new. prepare_learn and refs export both merge them;
+    # without this, verify reported "all heroes have a ref" without ever looking.
+    heroes = heroes + db.list_custom_heroes()
     refs = db.get_refs(profile.id)
 
     missing = find_missing(heroes, refs)
