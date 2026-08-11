@@ -1115,7 +1115,14 @@ async function detectSides(){ const c=selectedCode(), s=session;
   const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
   const lRoster=teamRoster(leftId), rRoster=teamRoster(rightId);
   const aIds=attribute(names.a,lRoster), bIds=attribute(names.b,rRoster);
-  if(s) s.players={a:aIds,b:bIds};
+  // Keep the RAW HUD reads next to the ids they produced. attribute() is lossy —
+  // a slot the current matcher can't resolve is stored as null and the text that
+  // produced it is gone forever, so every matcher improvement is frozen out of
+  // already-captured maps. Persisting the reads (see finishMap) makes future
+  // captures re-matchable offline. Session-level, exactly like `players`: a
+  // mid-map retag rewrites both together so a raw read always explains the id
+  // published beside it.
+  if(s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b}; }
   return {left, aIds, bIds, lRoster, rRoster};
 }
 // Manual re-run/override: sides now resolve automatically on the first snapshot
@@ -1161,7 +1168,7 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
       if(session!==s || selectedCode()!==c) return;
       const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
       const aIds=attribute(names.a,teamRoster(leftId)), bIds=attribute(names.b,teamRoster(rightId));
-      if(session===s) s.players={a:aIds,b:bIds};
+      if(session===s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b}; }
       const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
       setDetectMsg(hit?`${hit}/10 players tagged`:'still couldn’t read HUD names — check calibration.','ok');
     }catch(e){ if(session===s) setDetectMsg('player re-tag failed: '+(e.message||e),'warn'); }
@@ -1458,6 +1465,9 @@ function currentLeftId(){ const c=selectedCode(); if(!c) return null;
 // to the previous orientation's rosters) — clear them rather than publish wrong ids.
 // Picking an actual team locks sideResolved (stops ensureSideResolved's automatic
 // retry below); picking back to "auto/blank" explicitly hands control back to it.
+// (playersRaw deliberately survives: a raw HUD read is orientation-independent —
+// slot A is the left of the HUD whichever team stands there — so it stays valid
+// and worth publishing even if the follow-up retag fails and leaves ids empty.)
 function onSideChange(){ if(session){ session.players=null;
   session.sideResolved=!!((document.querySelector('input[name=side]:checked')||{}).value||'');
   if(session.sideResolved) retagPlayers(); }
@@ -1589,18 +1599,37 @@ async function idbAll(){ const db=await idb(); return new Promise(res=>{ const r
 async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }
 
+// The published per-observation shape. Pure so the alignment rules below are
+// testable without a DOM (same pattern as attackerGateOk/usedSubmaps).
+//
+// `ingame_names` is the raw OCR HUD read for each slot, parallel to `heroes`
+// and `pairs`. It exists so a better battletag->FACEIT matcher can be re-run
+// over already-published captures instead of only helping maps captured after
+// it ships (the ids in `pairs` are whatever THIS build's attribute() could
+// resolve — ~73% of slots, the rest permanently null without this).
+//
+// The alignment is the load-bearing part: empty hero slots are dropped, so all
+// three arrays must be appended inside the same skip so index i means the same
+// slot in each. `pairs` keeps its 2-tuple arity — owdb/contribute.py and
+// tools/audit_capture_sides.py read pair[1] positionally.
+function buildObservations(snaps, players, playersRaw, phased){
+  const observations=[];
+  for(const s of (snaps||[])){ for(const side of ['a','b']){ const slots=(side==='a'?s.a:s.b)||[];
+    const pids=(players&&players[side])||[];        // per-slot FACEIT ids from Auto-detect
+    const raws=(playersRaw&&playersRaw[side])||[];  // per-slot raw OCR read behind those ids
+    const heroes=[], pairs=[], ingame_names=[];
+    for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue;
+      heroes.push(g); pairs.push([g, pids[i]||null]); ingame_names.push(raws[i]||null); }
+    observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
+      phase: phased? (s.attacker===side?'attack':'defend') : null,
+      heroes, pairs, ingame_names }); } }
+  return observations;
+}
 async function finishMap(){ if(!session||!session.snaps.length) return; const c=session.code;
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
   const leftId = sideId||c.t1, rightId = (leftId===c.t1)?c.t2:c.t1;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nm=id=>(rs[id]&&rs[id].name)||null;
-  const observations=[];
-  for(const s of session.snaps){ for(const side of ['a','b']){ const slots=(side==='a'?s.a:s.b);
-    const pids=(session.players&&session.players[side])||[];   // per-slot FACEIT ids from Auto-detect
-    const heroes=[], pairs=[];                                  // pair hero i with player i, then drop empty slots
-    for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue; heroes.push(g); pairs.push([g, pids[i]||null]); }
-    observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
-      phase: session.phased? (s.attacker===side?'attack':'defend') : null,
-      heroes, pairs }); } }
+  const observations=buildObservations(session.snaps, session.players, session.playersRaw, session.phased);
   const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
