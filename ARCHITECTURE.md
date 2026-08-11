@@ -165,6 +165,9 @@ and is not in git.
 | `FEATURES.md` | Long-form reference: every feature in both packages. Known to lag the code. | reference |
 | `SPEC.md` | The original `owdb` design reference — design intent, not current state. | reference |
 | `ARCHITECTURE.md` | This document. | reference |
+| `CHANGELOG.md` | What changed and when, reconstructed back to the first commit. | reference |
+| `AGENTS.md` | Canonical instructions for coding agents — every agent reads this one. | reference |
+| `CLAUDE.md` | A pointer to `AGENTS.md`. | reference |
 | `specs/` | Design and implementation-plan documents, one pair per feature, plus `specs/BACKLOG.md`. | reference |
 | `verify_accuracy.py` | Standalone audit script that re-derives dashboard numbers independently. | reference |
 | `Dockerfile`, `docker-compose.yml` | Containerised ingest, for running the sync somewhere other than a desktop. | reference |
