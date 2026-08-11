@@ -564,9 +564,164 @@ removed in August 2026. Only the tested first-run helpers in
 
 The zero-install capture tool at `docs/capture/` — the only supported capture path.
 
+### What it does
+
+`docs/capture/index.html` does in a browser tab what the Python package does on
+a desktop: the scout shares their screen while an Overwatch replay plays, the
+page reads the hero portraits and player names off the HUD, and the finished map
+is uploaded as a contribution. It needs no install, no Python, and no
+command line — which is the entire point, because capture adoption is the
+project's binding constraint.
+
+### How it works
+
+**Screen capture is `getDisplayMedia`.** The page draws the shared stream to a
+canvas and template-matches hero portraits against reference images the scout
+has learned, held in the browser's own IndexedDB.
+
+**Player names are read with OCR.** `tesseract.js` is loaded lazily from
+jsDelivr on first use and runs in a worker. It is optional: when it fails to
+load, capture continues without name attribution rather than breaking.
+
+**The app is fed by two committed JSON files rather than by crawling FACEIT.**
+`docs/capture/data.json` carries the capturable replay codes and the rosters, and
+is rebuilt by `tools/build_capture_data.py` on every CI run.
+`docs/capture/refs.json` carries the curator's hero reference library and is
+committed by hand via `tools/build_capture_refs.py`.
+
+**Scouts do not collide, in real time.** Every open capture page holds one
+WebSocket to a Durable Object claim room on the Worker. Claiming or releasing a
+map is pushed to everyone instantly, and a dropped socket frees that scout's
+claims immediately. If the socket cannot be established the page falls back to
+HTTP polling, and if the endpoints are not deployed at all every claim call
+degrades to a no-op — the page always works.
+
+**Identity is a browser-local token.** A random 24-byte token is generated on
+first use and kept in `localStorage`; the first upload under a display name
+claims that name for that browser. Uploads go to `https://upload.owdb.io`, which
+commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
+
+### Files
+
+| File | Responsibility |
+| --- | --- |
+| `docs/capture/index.html` | The league capture app — 2,138 lines, self-contained apart from theme and OCR |
+| `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
+| `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js` |
+| `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
+| `docs/capture/refs.json` | Curator-committed hero reference library |
+| `docs/capture/hero_icons.json` | Hero portrait art for the UI |
+| `tools/build_capture_data.py` | Builds `docs/capture/data.json` from the ingest database |
+| `tools/build_capture_refs.py` | Builds `docs/capture/refs.json` from a curator's local library |
+
+### How it connects
+
+The app reads the two committed feeds, writes to browser IndexedDB while
+working, and publishes finished maps to the Worker. The Worker commits them to
+`data/captures/`, which triggers a CI rebuild of the site
+([section 8](#8-infrastructure-and-ci)). The dashboard links into this app: every
+replay-code chip opens it with that code pre-loaded, and every team name offers a
+capture icon that pre-filters it to that team.
+
+### Gotchas
+
+**The Content-Security-Policy lives in a `<meta>` tag, not in a header.** A
+`curl -I` against the page shows no CSP at all, which makes it invisible when
+debugging. This cost four sessions once, when the policy silently blocked
+`tesseract.js` from starting its blob worker. **When a browser API fails
+silently on these pages, check the CSP meta tag first.** `tests/test_capture_csp.py`
+now pins the four clauses that matter: `worker-src blob:`, `wasm-unsafe-eval`,
+the `data:` connect source, and the jsDelivr origin the OCR library is loaded
+from.
+
+**The page is not an artifact and may use a CDN.** Unlike `docs/index.html`,
+which must stay self-contained, this page links `docs/theme.css` directly and
+pulls `tesseract.js` from jsDelivr.
+
+**These pages are tested from Python.** The suite in `tests/` parses the HTML and
+runs `node --check` over the inline scripts — see
+`tests/test_capture_scrim.py::test_league_capture_html_inline_script_is_syntactically_valid`.
+Editing a capture page without running those tests risks shipping a page that
+does not parse.
+
 ## 7. Scrims
 
 The private, browser-local side channel for scrim data, and the separate page that reads it.
+
+> **Current state: scrim capture is switched off in production.**
+> `docs/capture/scrim.html` renders an unconditional full-screen overlay
+> (`#scrimpaused`, `z-index: 999999`) reading "Scrims are paused", and no script
+> ever removes it. This was deliberate — commit `f2881cf`, "Capture:
+> control-panel-only flow, pause scrims, drop scoreboard capture". Everything
+> below describes machinery that is built and reachable in the code but not
+> currently usable by anyone. Un-pausing it is the roadmap's next major item.
+
+### What it does
+
+Scrims are private practice matches, and their compositions must never become
+public. Scrim mode records them into the browser and nowhere else: a scrim is
+captured the same way a league map is, but the result stays in local storage and
+is readable only by the person who recorded it.
+
+### How it works
+
+**Storage is one IndexedDB database, `owscout-capture`, at schema version 4.**
+Both capture pages open it with an explicit version and create the stores they
+need: `docs/capture/index.html` owns `maps`, `refs`, and `heroes`;
+`docs/capture/scrim.html` adds `scrims` and `scrim_maps`.
+
+**`docs/scrims.html` is the one scrims viewer**, reached from the League/Scrims
+toggle in the top bar. It works because `docs/capture/` and `docs/` are the same
+origin, so the page can open the very same IndexedDB. It opens it **without a
+version argument** — which is precisely how it reads the data without ever
+triggering an upgrade.
+
+**Scrim records store hero GUIDs, not names.** Hero names and roles are not part
+of the league data payload, so `docs/scrims.html` resolves GUIDs by fetching
+`docs/capture/refs.json` for names, then inferring each hero's role from its own
+small `ROLE_MAP` table, because `refs.json` carries names only.
+
+### Files
+
+| File | Responsibility |
+| --- | --- |
+| `docs/capture/scrim.html` | Scrim capture — currently behind the pause overlay |
+| `docs/scrims.html` | The one scrims viewer; read-only consumer of the IndexedDB |
+| `tools/scrim_code/` | OverPy source for the in-game Workshop scrim helper |
+| `tests/test_capture_scrim.py` | Session-text parsing, map filtering, side detection, script validity |
+
+### How it connects
+
+It deliberately connects to almost nothing. Scrim data is **never** published to
+the Worker, **never** merged into `data/captures/`, and **never** read by the
+league dashboard. The only link is the same-origin IndexedDB read by
+`docs/scrims.html`, and the only shared file is `docs/capture/refs.json` for
+hero-name resolution.
+
+### Gotchas
+
+**Never bump the IndexedDB schema version from `docs/scrims.html`.** It is a
+read-only consumer. Opening with a higher version would trigger an upgrade
+transaction from a page that does not own the schema, and the capture app is the
+only writer.
+
+**Never add scrims into the dashboard build.** The two scrims implementations
+were consolidated in August 2026 — the dashboard's vestigial "Scrims tab" was an
+unused `HERO_BY_GUID` map plus the `guid` payload field it read, and both were
+removed. `docs/scrims.html` is the single viewer, and the private side stays
+separate.
+
+**The advertised league-code block is not implemented.** The page's own help
+text says "league codes are blocked", and the replay-code field at `#scrimcode`
+is described as optional and private — but there is no validation anywhere in
+`docs/capture/scrim.html` that checks an entered code against the known league
+codes in `docs/capture/data.json`. The guarantee is currently moot, since the
+page is paused, but **it must be built before scrims are un-paused**, or a league
+map recorded as a scrim would silently stay private instead of being published.
+
+**Four features on the page carry `WIP` badges** and are not trustworthy yet:
+auto side-detection, the scoreboard OCR read, the score-box read, and
+screenshot-session import.
 
 ## 8. Infrastructure and CI
 
