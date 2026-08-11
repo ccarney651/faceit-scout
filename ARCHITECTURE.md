@@ -429,6 +429,137 @@ error. Regenerate the cache with
 
 How hero compositions are read off the Overwatch observer HUD and turned into typed, stored observations.
 
+### What it does
+
+FACEIT's API never says which heroes were played. `owdb` recovers that by
+watching an in-client replay: it reads the observer HUD's hero portraits by
+template matching, resolves each slot to a player and a hero, and stores the
+result as timestamped observations in `owdb.sqlite3`. Those observations become
+per-team composition scouting.
+
+This is the original capture path and still the reference implementation of the
+analysis. The path contributors actually use is the browser app
+([section 6](#6-browser-capture-app)).
+
+### How it works
+
+The pipeline runs in stages, each owned by one module.
+
+1. **Calibrate** — `owdb/calibrate.py`. The operator drags boxes over each
+   team's hero-portrait strip and over two or three pieces of fixed HUD
+   furniture. Each strip is subdivided into equal per-slot regions of interest.
+   **Pixel coordinates live in the database, never in source.** The anchors let
+   the runtime tell a live match view from a menu, killcam, or loading screen.
+2. **Build the reference library** — `owdb/refs.py`. Reference portraits must be
+   captured *from the client at the operator's exact resolution* — wiki and CDN
+   art does not match in-game rendering. Each hero is stored in both visual
+   states, alive and dead, with a perceptual hash. `owdb refs verify` reports
+   gaps and near-collisions.
+3. **Derive context from the replay code** — `owdb/context.py`. Six characters
+   of replay code are enough: with `faceit.sqlite3` attached, the tool derives
+   the match, game number, map, both teams, the winner, the bans, and all ten
+   players with their roles, and reports whether that map was already captured.
+4. **Capture** — `owdb/capture.py`. A one-to-two frames-per-second sampling loop
+   grabs the screen through `dxcam`, falling back to `mss`. Screen capture is a
+   **read only**; nothing is ever injected into the game process. Those libraries
+   are heavy and Windows-specific, so they are imported lazily — importing the
+   module, and therefore the CLI, must not require them until a real grab
+   happens.
+5. **Match** — `owdb/match.py`. **This is where the accuracy comes from.** Before
+   matching a slot, the candidate set is reduced by the map's bans (a banned hero
+   is impossible, not merely unlikely) and by the role expected for that slot,
+   since the observer HUD orders slots by role. A tank slot becomes a 1-of-14
+   decision instead of 1-of-52.
+6. **Check integrity** — `owdb/integrity.py`. Two checks matter most. A slot that
+   resolves to a *banned* hero is provably wrong, which makes it a better
+   HUD-drift detector than an anchor similarity score — it is a logical
+   impossibility rather than a threshold. And a map name OCR'd from the replay
+   that disagrees with the stored map for that code exposes the `demoURLs`
+   index-misalignment problem in ingest: `owdb` can see the map and
+   `faceit_sync` cannot, which makes `owdb` a validator for it.
+7. **Canonicalise comps** — `owdb/comps.py`. A comp is a *set* of heroes, not an
+   ordered list, so `comp_id` is the SHA-1 of the sorted hero GUIDs and
+   order-independence is structural rather than enforced.
+8. **Interpret** — `owdb/analysis.py`. A comp is a **family**, not an exact
+   lineup: two lineups are the same comp when they share four or more heroes, or
+   exactly three including the same tank — in 5v5 the tank anchors a comp's
+   identity. A mid-map change is then a FLEX swap (core intact) or a CORE swap (a
+   genuinely different comp), and a core swap can be attributed to the enemy
+   lineup at the moment it happened.
+9. **Report** — `owdb/derive.py` and `owdb/scout.py`. The binding constraint here
+   is sample depth — a median of roughly two games per team-map — so the rules
+   are enforced in code: always report `n` beside a percentage, never render a
+   bare percentage below the minimum sample size, and fall back from
+   `(team, map)` to `(team, map category)` to `(team, all)` while stating which
+   level was used.
+
+**The testable-core pattern is used throughout.** Every module separates pure,
+injectable logic from the IO shell that drives it, and only the pure half is
+unit-tested — the frame grabs, OpenCV calls, and operator prompts are the
+injected defaults, exercised only at runtime.
+
+### Files
+
+| File | Responsibility |
+| --- | --- |
+| `owdb/cli.py` | The `owdb` command surface — `calibrate`, `refs`, `capture`, `match`, `codes`, `review`, `drafts`, `doctor`, `heroes`, `scout`, `comps`, `contribute`, `export`, `code` |
+| `owdb/db.py` | Schema, writes, and the read-only attach of the ingest database |
+| `owdb/calibrate.py` | ROI and anchor capture |
+| `owdb/refs.py` | The reference-portrait library |
+| `owdb/capture.py` | Screen capture and the sampling pipeline |
+| `owdb/match.py` | Constraint-reduced frame matching |
+| `owdb/integrity.py` | The checks that stop the tool lying quietly |
+| `owdb/comps.py` | Comp canonicalisation |
+| `owdb/analysis.py` | Comp families and swap classification |
+| `owdb/derive.py`, `owdb/scout.py` | Scouting statistics and per-team reports |
+| `owdb/context.py` | Replay-code context derivation |
+| `owdb/contribute.py` | Export, publish, and the multi-contributor merge |
+| `owdb/firstrun.py` | First-run helpers, retained from the removed native GUI |
+| `SPEC.md` | The original design reference these modules cite by section |
+
+### How it connects
+
+`owdb` reads `faceit.sqlite3` and writes `owdb.sqlite3`. `owdb contribute
+export` and `owdb contribute push` turn local observations into a contributor
+file under `data/captures/`; `owdb contribute merge` combines everyone's files
+into `owdb_comps.json`, which `faceit_sync/export.py` reads at build time
+([section 4](#4-dashboard-build)). The contribution formats are specified in
+[section 9](#9-data-contracts).
+
+**The unit of contribution is the raw observation, never a finished report.**
+Two summaries cannot be merged, and a summary is frozen against the analysis
+that produced it. Publishing observations instead means improvements to the
+analysis apply retroactively to every past contribution — which is exactly why
+`owdb_comps.json` is regenerated at every build and never committed.
+
+### Gotchas
+
+**`owdb` must never write the ingest database.** `Database.attach_faceit` in
+`owdb/db.py` attaches it with a `mode=ro` URI, so read-only is enforced by
+SQLite itself rather than by discipline — a write against `faceit.*` raises.
+Cross-database joins work; cross-database foreign keys do not, so FACEIT keys
+are plain validated columns.
+
+**Replay codes are invalidated by every Overwatch patch — a "code wipe."** The
+wipe date is duplicated in **two** places that must be updated together:
+`_SEED_WIPES` in `owdb/db.py`, which drives the value that reaches the site, and
+`CODE_WIPE_DATE` in `tools/build_capture_data.py`, which drives the capture
+tool. The pinned assertions in `owdb/tests/test_codes.py` and
+`owdb/tests/test_context.py` must be updated in the same change. The procedure
+is in [section 10](#10-lifecycles-and-operations).
+
+**Type checking does not cover this package.** The documented command is
+`mypy faceit_sync`, and `owdb` is not part of the must-stay-clean contract — at
+the time of writing `mypy owdb` reports two errors in `owdb/contribute.py`.
+`pyproject.toml` adds `ignore_missing_imports` and `follow_imports = "skip"`
+overrides for `cv2`, `dxcam`, `mss`, `numpy`, and `keyboard`, which ship no
+usable stubs. The tests, not the type checker, are this package's safety net.
+
+**The native Windows GUI is gone and must not come back.** `owdb/gui.py`,
+`owdb_app.py`, the PyInstaller spec files, and the `Scout app.cmd` launcher were
+removed in August 2026. Only the tested first-run helpers in
+`owdb/firstrun.py` survive.
+
 ## 6. Browser capture app
 
 The zero-install capture tool at `docs/capture/` — the only supported capture path.

@@ -37,6 +37,18 @@ RUNTIME_PATHS = {
     ".venv/",
 }
 
+# Files the document names precisely because they were REMOVED. Naming them is
+# the point -- it is how a reader learns not to resurrect them -- so they are
+# exempt from the existence check. Adding a path here is a statement that it
+# must stay gone.
+REMOVED_PATHS = {
+    "owdb/gui.py",
+    "owdb_app.py",
+    "poc/browser-capture.html",
+    "DISTRIBUTION.md",
+    "GUIDED",
+}
+
 _CODE_SPAN = re.compile(r"`([^`\n]+)`")
 # Skip anything that is plainly not a literal path: command lines (whitespace),
 # placeholders like <season> or {id}, and globs.
@@ -77,6 +89,8 @@ def _cited_paths(text: str) -> set[str]:
         if "/" not in span and not span.endswith(_PATH_SUFFIXES):
             continue
         if span in RUNTIME_PATHS or span.rstrip("/") + "/" in RUNTIME_PATHS:
+            continue
+        if span in REMOVED_PATHS:
             continue
         found.add(span)
     return found
