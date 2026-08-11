@@ -32,7 +32,7 @@ SEAT_ORDER: tuple[str, ...] = (TANK, HITSCAN, FLEX_DPS, MAIN_SUPPORT, FLEX_SUPPO
 # has not classified yet are left out and fall back to base role.
 SUBROLE: dict[str, str] = {
     # Tanks are one seat.
-    "D.mon": TANK, "DVa": TANK, "Domina": TANK, "Doomfist": TANK, "Hazard": TANK,
+    "D.Mon": TANK, "DVa": TANK, "Domina": TANK, "Doomfist": TANK, "Hazard": TANK,
     "Junker Queen": TANK, "Mauga": TANK, "Orisa": TANK, "Ramattra": TANK,
     "Reinhardt": TANK, "Roadhog": TANK, "Sigma": TANK, "Winston": TANK,
     "Wrecking Ball": TANK, "Zarya": TANK,
