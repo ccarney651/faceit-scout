@@ -54,3 +54,45 @@ def test_all_five_strong_matches_need_no_elimination() -> None:
     names = "['Alison','Sivaartt','Kroxz','Zorrow','Benislover']"
     got = _run(f"return attribute({names},{_ROSTER});")
     assert got == ["p1", "p2", "p3", "p4", "p5"]
+
+
+# --- both names per player (Battle.net + FACEIT) -------------------------------
+# The HUD renders the Battle.net name, which differs from the FACEIT nick for
+# ~78% of league players. The native path always matched against both; the
+# browser had drifted to game_name only, so the nick was never consulted.
+
+# Shaped as teamRoster() now emits: `names` holds every alias for that player.
+_DUAL = ("[{id:'p1',names:['Dip','Dip_impact']},"
+         "{id:'p2',names:['aes','PRDZII']},"
+         "{id:'p3',names:['gogo','GOGOOGOOO']}]")
+
+
+def test_a_hud_read_matches_the_battletag() -> None:
+    got = _run(f"return attribute(['Dip','aes','gogo'],{_DUAL});")
+    assert got == ["p1", "p2", "p3", None, None]
+
+
+def test_a_hud_read_matches_the_faceit_nick_too() -> None:
+    # If the HUD happens to show the FACEIT handle (or the operator is reading a
+    # scoreboard rather than the play HUD), the nick must still resolve.
+    got = _run(f"return attribute(['Dip_impact','PRDZII','GOGOOGOOO'],{_DUAL});")
+    assert got == ["p1", "p2", "p3", None, None]
+
+
+def test_matching_only_the_primary_name_would_have_missed_these() -> None:
+    # Guard against a regression back to single-name matching: "PRDZII" scores
+    # essentially nothing against the battletag "aes", so a primary-name-only
+    # implementation cannot resolve it.
+    only_primary = "[{id:'p2',name:'aes'}]"
+    assert _run(f"return attribute(['PRDZII'],{only_primary});") == [None] * 5
+    assert _run(f"return attribute(['PRDZII'],{_DUAL});")[0] == "p2"
+
+
+def test_accents_are_folded_before_comparing() -> None:
+    # tessedit_char_whitelist is plain ASCII, so OCR can only ever emit "Hev"
+    # for a HUD showing "Hev" with a macron - the roster name must still match.
+    roster = "[{id:'p1',names:['H\\u0113v']}]"
+    assert _run(f"return attribute(['Hev'],{roster});")[0] == "p1"
+    # and the same in reverse (accented read, plain roster entry)
+    roster2 = "[{id:'p1',names:['Hev']}]"
+    assert _run(f"return attribute(['H\\u0113v'],{roster2});")[0] == "p1"

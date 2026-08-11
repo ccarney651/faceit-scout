@@ -948,7 +948,13 @@ function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
   let tot=best;
   if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
   return tot; }
-function simScore(a,b){ a=(a||'').toLowerCase().trim(); b=(b||'').toLowerCase().trim();
+// Fold accents before comparing: the HUD renders the real Battle.net name
+// (e.g. "Hēv"), but tessedit_char_whitelist is plain ASCII, so OCR can only
+// ever return "Hev" - without this, an otherwise-perfect read scores as a
+// near-miss purely because of a diacritic it was never allowed to emit.
+function _normName(s){ return String(s==null?'':s).normalize('NFD')
+  .replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
+function simScore(a,b){ a=_normName(a); b=_normName(b);
   const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }  // 0..100
 function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
   let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
@@ -1039,9 +1045,20 @@ async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker(); c
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       setDetectMsg('reading HUD names… '+(++done)+'/10'); ocrProgress(done/10); } }
   return out; }
+// Each player carries BOTH names: `game_name` is the Battle.net name the OW HUD
+// actually renders, `nick` is the FACEIT handle. They differ for ~78% of league
+// players (e.g. nick "Dip_impact" vs HUD "Dip", nick "PRDZII" vs HUD "aes"), so
+// matching only one throws away a free second chance at a hit. This mirrors what
+// the native capture path already does (owdb/capture.py builds its candidate
+// list from `(p.game_name, p.nickname)`); the browser had drifted to game_name
+// alone, which - since the feed populates it for every player - meant the FACEIT
+// nick was never consulted at all.
+function rosterNames(p){ return (p&&p.names&&p.names.length)?p.names:[p&&p.name].filter(Boolean); }
 function teamRoster(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
   const t=((DATA.rosters||{})[c.match_id]||{})[teamId]; if(!t||!t.players) return [];
-  return t.players.map(p=>({ id:p.id||null, name:(p.game_name||p.nick||'').trim() })).filter(x=>x.name); }
+  return t.players.map(p=>{ const game=(p.game_name||'').trim(), nick=(p.nick||'').trim();
+    return { id:p.id||null, name:game||nick, names:[...new Set([game,nick].filter(Boolean))] }; })
+    .filter(x=>x.names.length); }
 // FACEIT player id -> display name, from either team's roster for this match.
 function playerName(pid){ if(!pid) return ''; const c=selectedCode(); if(!c) return '';
   const rs=((DATA.rosters||{})[c.match_id]||{}); if(!c.t1&&!c.t2) return '';
@@ -1052,7 +1069,10 @@ function playerName(pid){ if(!pid) return ''; const c=selectedCode(); if(!c) ret
 // threshold, no player used twice. Returns [id|null x5] aligned to slots.
 function attribute(names,roster){ const out=[null,null,null,null,null], cand=[];
   for(let i=0;i<names.length;i++){ if(!names[i]) continue;
-    for(const p of roster){ if(!p.id) continue; cand.push({i, id:p.id, s:simScore(names[i],p.name)}); } }
+    for(const p of roster){ if(!p.id) continue;
+      // Best of the player's names (Battle.net + FACEIT) — see rosterNames.
+      let s=0; for(const r of rosterNames(p)) s=Math.max(s,simScore(names[i],r));
+      cand.push({i, id:p.id, s}); } }
   cand.sort((x,y)=>y.s-x.s); const usedSlot=new Set(), usedId=new Set();
   for(const c of cand){ if(c.s<STRONG_NAME_SCORE) break;
     if(usedSlot.has(c.i)||usedId.has(c.id)) continue;
@@ -1082,7 +1102,10 @@ async function detectSides(){ const c=selectedCode(), s=session;
   const names=await ocrNames();
   if(selectedCode()!==c || session!==s)
     return {left:null, aIds:[], bIds:[], lRoster:[], rRoster:[], stale:true};
-  const t1n=teamRoster(c.t1).map(x=>x.name), t2n=teamRoster(c.t2).map(x=>x.name);
+  // flatMap, not map: feed confidentLeft every known alias per player (Battle.net
+  // AND FACEIT), since affinity() takes the best match per OCR read — more
+  // candidates can only sharpen the left/right verdict, never weaken it.
+  const t1n=teamRoster(c.t1).flatMap(rosterNames), t2n=teamRoster(c.t2).flatMap(rosterNames);
   const left=confidentLeft(names.a,names.b,t1n,t2n);
   if(left){ const leftId=left==='t1'?c.t1:c.t2;
     document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===leftId); });
@@ -1503,6 +1526,18 @@ function nextAttackerState(phased, prevAttacker, newRound){
   return {attacker:prevAttacker, confirmed:false};   // prevAttacker is only a UI hint now
 }
 function attackerGateOk(s){ return !(s&&s.phased&&s.round>=3&&!s.attackerConfirmed); }
+// Control maps play each sub-map ONCE — a round never revisits one — so a
+// sub-map already captured in an EARLIER round is spent. Returns that spent
+// set, which the picker dims so the operator eliminates as they go instead of
+// re-reading the list each round. Scoped to other rounds on purpose: the
+// round in progress is the active pick, not a used-up one. The picker keeps
+// these clickable (dimmed, not disabled) — a mis-picked earlier round should
+// stay correctable rather than locking the real sub-map out of reach.
+function usedSubmaps(snaps, currentRound){
+  const used=new Set();
+  for(const s of (snaps||[])){ if(s&&s.sub&&s.round!==currentRound) used.add(s.sub); }
+  return used;
+}
 function nextRound(){ if(!session) return;
   session.history.push({type:'round', round:session.round, sub:session.sub,
     attacker:session.attacker, attackerConfirmed:session.attackerConfirmed});
@@ -1647,7 +1682,8 @@ function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; co
   sub.innerHTML='';
   if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
     const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
-    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
+    const spent=usedSubmaps(session.snaps, session.round);
+    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
   else sub.className='prow';
   // attack row (escort/hybrid) — click the team that's attacking this round;
   // warn colour from round 3 while unconfirmed (time-bank, not parity — see
@@ -1687,6 +1723,9 @@ function pipPanelCss(c){
     `button.go{background:${c.accent};color:${c.onAccent};font-weight:700;border:0;flex:1 1 100%}`+
     `button.fin{border-color:${c.good};color:${c.good}}button.fin.go{background:${c.good};color:${c.onAccent};font-weight:700;border:0;margin-top:3px;padding:7px 9px}`+
     `button.on{background:${c.accent};color:${c.onAccent};border:0;font-weight:600}`+
+    // spent sub-map (already captured in an earlier round) — dimmed to eliminate
+    // it by sight, still clickable so a mis-pick stays fixable.
+    `button.used{opacity:.4;text-decoration:line-through}`+
     `.pt{padding:2px 8px}.pt h3{margin:0 0 1px;font-size:9.5px;color:${c.muted};text-transform:uppercase}`+
     `.prow label{font-size:11px;color:${c.muted};display:flex;align-items:center;gap:5px}`+
     `.prow input{margin:0}`+
