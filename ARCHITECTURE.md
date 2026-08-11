@@ -948,14 +948,167 @@ contribution has landed.
 
 The recurring procedures: code wipes, season cutover, and deploying each piece.
 
+### Registering a code wipe
+
+Every Overwatch patch invalidates all existing replay codes. A game finished on
+or before the latest wipe can never be replayed unless it was captured first,
+which makes the wipe date the deadline the whole capture effort runs against.
+
+**The wipe date has one source.** Add the new entry to `_SEED_WIPES` in
+`owdb/db.py`; `LATEST_KNOWN_WIPE` is the maximum of that list and everything
+downstream follows it, including `CODE_WIPE_DATE` in
+`tools/build_capture_data.py`, which imports the value rather than restating it.
+
+1. Append `("YYYY-MM-DD", "observed", "<why>")` to `_SEED_WIPES` in
+   `owdb/db.py`.
+2. Update the pinned assertions that name the previous date —
+   `owdb/tests/test_codes.py` and `owdb/tests/test_context.py`.
+3. Run the suite. The capture tool stops offering pre-wipe codes automatically.
+
+Recorded wipes so far: 2026-07-14 and 2026-07-28.
+
+### Season cutover
+
+Season 10 cutover is **deliberately deferred until Season 9 finishes**, and the
+safe-now subset (season-scoped captures and a season-filtered export) is already
+shipped. The live site is pinned with `--season s9` in
+`.github/workflows/update.yml`.
+
+Do not improvise the cutover. The full sequence and the reasoning behind it —
+archive export, bumping the season constants in both the Worker and
+`owdb/contribute.py`, seeding Season 10 into `matches.txt`, flipping the live
+`--season` filter — is in `specs/2026-08-10-season10-cutover-design.md`. A useful
+property noted there: a season boundary is in practice one more wipe entry, so
+once Season 10's wipe date is registered the capture tool stops offering Season 9
+codes on its own.
+
+### Deploying each piece
+
+| Piece | How it goes live |
+| --- | --- |
+| The site (`docs/index.html`) | Automatically, by `.github/workflows/update.yml`. Never by hand. |
+| The capture app (`docs/capture/`) | Commit to `main`; GitHub Pages serves it directly. |
+| The scrims page (`docs/scrims.html`) | Same — commit and it is live. |
+| The Cloudflare Worker | **A human runs `wrangler deploy`.** A commit alone changes nothing. |
+| Worker secrets | `wrangler secret put <NAME>`, separately from GitHub's secrets. |
+
 ## 11. Glossary
 
 The project's vocabulary, defined once.
+
+| Term | Meaning |
+| --- | --- |
+| **Replay code** | Six characters that let the Overwatch client replay a specific game. The only way to see what heroes were played. |
+| **Code wipe** | An Overwatch patch invalidating every existing replay code. The capture deadline. |
+| **Veto / democracy** | The pre-match map and hero ban process. FACEIT calls the feed "democracy". |
+| **Ban** | A hero removed from the pool for one game. Ingest stores which faction banned it when attribution survives. |
+| **Comp** | The five heroes a team fields. Stored as a *set*, so slot order is irrelevant. |
+| **Comp family** | A group of near-identical comps — four or more shared heroes, or exactly three including the same tank. |
+| **FLEX swap** | A mid-map hero change that keeps the comp's core intact. |
+| **CORE swap** | A mid-map change to a genuinely different comp. |
+| **Sub-role** | A finer classification than Tank/Damage/Support — see `faceit_sync/subroles.py`. |
+| **Region** | EMEA or NA. Parsed from the championship name. |
+| **Tier** | Master, Expert, Advanced, or Open — the division's competitive level. |
+| **Division** | A region-and-tier competition, e.g. "EMEA Master Central". |
+| **Season** | A league season, e.g. `s9`. Parsed from the championship name. |
+| **Faction** | FACEIT's name for a side in a match: `faction1` or `faction2`. |
+| **Side** | The HUD's left/right, stored as `a` and `b`. Not the same as faction. |
+| **Sub-map** | A stage within a Control map, e.g. Ilios's Ruins. |
+| **Segment** | The unit scouting aggregates over: attack or defend on Escort/Hybrid, the sub-map on Control, else the whole map. |
+| **Observation** | One timestamped sample of one side's five heroes. The raw unit of contribution. |
+| **Capture** | One recorded map — a set of observations plus its context. |
+| **Contributor** | Someone who captures maps. Owns one file under `data/captures/<season>/`. |
+| **Curator** | The person who commits the shared hero reference library, `docs/capture/refs.json`. |
+| **Claim** | A live lock on a map, so two scouts do not capture the same replay. |
+| **Scrim** | A private practice match. Never published. |
+| **GUID** | FACEIT's stable identifier for a hero or map, e.g. `0x02E0000000000516`. Used everywhere in preference to names. |
+| **`game_name`** | A player's Battle.net name — what the Overwatch HUD shows. Often differs from their FACEIT nickname. |
 
 ## 12. Invariants
 
 Rules that must not be broken, each with the failure mode it prevents.
 
+1. **Never hand-edit `docs/index.html`.** `.github/workflows/update.yml`
+   regenerates it from `faceit_sync/dashboard/head.html` on every run, so the
+   edit disappears at the next build. Fix the part file instead.
+2. **Never run `faceit-sync export` locally to "just regenerate" the site.** The
+   local `faceit.sqlite3` is routinely days behind CI's cached copy, so
+   exporting and committing overwrites fresh match data with stale data.
+3. **Always run
+   `tests/test_export.py::test_dashboard_javascript_is_syntactically_valid`
+   after editing anything under `faceit_sync/dashboard/`.** The page is rendered
+   entirely in JavaScript, so one syntax error yields a blank page — and
+   bracket-balance checks will not catch it.
+4. **Bump the code-wipe date only in `_SEED_WIPES` in `owdb/db.py`.** Everything
+   downstream derives from it. Hand-editing a derived constant creates the
+   disagreement the single source exists to prevent.
+5. **Never bump the IndexedDB schema version from `docs/scrims.html`.** It is a
+   read-only consumer opening the capture app's store; an upgrade transaction
+   from a non-owner corrupts the contract between the two pages.
+6. **Never commit `owdb_comps.json`.** A committed report would outlive the
+   observations it came from and freeze the analysis that produced it, defeating
+   the reason contributions are raw observations.
+7. **Never change the client User-Agent to impersonate a browser.** FACEIT's
+   edge returns 403 for `Mozilla/5.0`-style agents. Keep the descriptive
+   `faceit-sync/…` string in `faceit_sync/client.py`.
+8. **Never add scrims into the dashboard build.** Scrim data is private and
+   browser-local; the dashboard must never touch that IndexedDB.
+9. **Always `git fetch` before pushing.** CI auto-commits to `origin/main` every
+   few minutes. Expect a merge, and resolve it by keeping CI's data and
+   reapplying your own diff on top.
+10. **Never put developer documentation in `docs/`.** That directory is the
+    GitHub Pages web root, so anything added there is published to owdb.io.
+11. **`wrangler deploy` is run by a human.** A change committed to
+    `infra/upload-worker/worker.js` is not live until someone deploys it.
+
 ## 13. Testing map
 
 Which tests guard which subsystem, and the commands that prove nothing is broken.
+
+### Commands
+
+```bash
+.venv/Scripts/python.exe -m pytest                      # everything
+.venv/Scripts/python.exe -m pytest tests/test_export.py # one file
+.venv/Scripts/python.exe -m pytest -k scheduled         # by keyword
+.venv/Scripts/python.exe -m mypy faceit_sync            # strict; must stay clean
+```
+
+`pyproject.toml` sets `testpaths = ["tests", "owdb/tests"]`, so a bare `pytest`
+covers both suites.
+
+**`mypy` covers `faceit_sync` only.** `owdb` is not part of the must-stay-clean
+contract and currently reports two errors in `owdb/contribute.py`. The tests are
+that package's safety net.
+
+### Which tests guard what
+
+| Subsystem | Tests |
+| --- | --- |
+| Ingest orchestration | `tests/test_sync.py`, `tests/test_idempotency.py`, `tests/test_pagination.py`, `tests/test_backoff.py` |
+| Data hazard A — zeroed rows | `tests/test_stats_null.py` |
+| Data hazard B — restarts | `tests/test_restart.py` |
+| Data hazard C — ephemeral veto | `tests/test_history.py` |
+| Replay-code alignment | `tests/test_demo_urls.py` |
+| Scheduled fixtures | `tests/test_scheduled.py` |
+| Playoffs | `tests/test_playoff_crawl.py` |
+| Dashboard export and self-containment | `tests/test_export.py` |
+| Dashboard pure logic | `tests/test_dashboard_logic.py` |
+| Assets | `tests/test_team_logos.py`, `tests/test_snapshot_download.py` |
+| Browser capture app | the `tests/test_capture_*.py` family — CSP, OCR, onboarding, attribution, observations, sub-maps, controls, filters, publish preview |
+| Scrims | `tests/test_capture_scrim.py` |
+| This document | `tests/test_docs_links.py` |
+| Capture pipeline and analysis | `owdb/tests/` — matching, comps, swaps, integrity, refs, codes, context, contribute, scout, derive |
+
+### The three that must always run after a dashboard change
+
+```bash
+.venv/Scripts/python.exe -m pytest \
+  tests/test_export.py::test_dashboard_javascript_is_syntactically_valid \
+  tests/test_export.py::test_export_html_is_self_contained_and_valid \
+  tests/test_dashboard_logic.py
+```
+
+For a visual check, build a local preview and screenshot it with headless Edge —
+on Windows use `--screenshot=FILE`, **not** `--dump-dom`, because the GUI
+executable produces no stdout.
