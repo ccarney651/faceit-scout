@@ -1193,24 +1193,32 @@ refused and expired codes are marked."
 Last, not first. Everything that makes un-pausing safe is now in place.
 
 **Files:**
-- Modify: `docs/capture/scrim.html`
+- Modify: `docs/capture/scrim.html`, **`docs/scrims.html`**
 - Test: `tests/test_capture_scrim.py`
+
+**There are TWO pause overlays, not one.** `docs/capture/scrim.html:160` blocks *capturing* a scrim and `docs/scrims.html:120` blocks *viewing* one — both `id="scrimpaused"`, both unconditional, both removed here. Removing only the capture one ships a tool that records scrims into a page you cannot open.
 
 - [ ] **Step 1: Write the failing test**
 
 Add to `tests/test_capture_scrim.py`:
 
 ```python
-def test_scrim_capture_is_not_paused() -> None:
-    """The pause overlay is gone and cannot silently come back.
+def test_scrim_pages_are_not_paused() -> None:
+    """Both pause overlays are gone and cannot silently come back.
 
-    docs/capture/scrim.html rendered an unconditional full-screen
-    #scrimpaused overlay that no script removed (commit f2881cf). Phase 1
-    removes it; this test is what stops it reappearing.
+    Two pages carried an unconditional full-screen #scrimpaused overlay that
+    no script removed (commit f2881cf): docs/capture/scrim.html blocked
+    capturing, docs/scrims.html blocked viewing. Phase 1 removes both; this
+    test is what stops either reappearing. It covers both files because an
+    earlier draft of this plan removed only the capture one, which would have
+    shipped scrims you could record but not read.
     """
-    html = APP.read_text(encoding="utf-8")
-    assert "scrimpaused" not in html
-    assert "Scrims are paused" not in html
+    viewer = APP.parents[1] / "scrims.html"
+    assert viewer.exists(), "docs/scrims.html moved — update this guard"
+    for page in (APP, viewer):
+        html = page.read_text(encoding="utf-8")
+        assert "scrimpaused" not in html, f"{page.name} still has the overlay"
+        assert "Scrims are paused" not in html, f"{page.name} still has the copy"
 
 
 def test_scrim_page_loads_the_session_engine_module() -> None:
@@ -1224,9 +1232,9 @@ def test_scrim_page_loads_the_session_engine_module() -> None:
 Run: `.venv/Scripts/python.exe -m pytest tests/test_capture_scrim.py -k paused -v`
 Expected: FAIL — `assert 'scrimpaused' not in html`
 
-- [ ] **Step 3: Delete the overlay**
+- [ ] **Step 3: Delete both overlays**
 
-Remove the `<div id="scrimpaused">` block at `docs/capture/scrim.html:160-167` in full.
+Remove the `<div id="scrimpaused">` block at `docs/capture/scrim.html:160-167` in full, **and** the one at `docs/scrims.html:120-127`. Check the exact line numbers before deleting — earlier tasks have shifted them.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
