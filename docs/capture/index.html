@@ -615,9 +615,11 @@ let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=nul
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
 // live in engine/calibration.js (shared with scrim.html). drawOverlay and
-// pickBox carry scrim.html's scoreboard/score_readout handling too - it's
-// inert here since index.html never sets boxes.scoreboard/boxes.score_readout.
-const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx});
+// pickBox carry scrim.html's scoreboard/score_readout handling too, but
+// boxKeys:['a','b'] (this page only owns the two portrait boxes) keeps that
+// handling from rendering/carrying-forward a scoreboard/score_readout box
+// left in the shared 'owdb_cap_boxes' localStorage key by scrim.html.
+const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx, boxKeys:['a','b']});
 const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
        clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
 addEventListener('resize', fitOverlay);

@@ -14,12 +14,19 @@
 // a scoreboard/score_readout calibration feature (the "Set SCOREBOARD box" /
 // "Set SCORE box" buttons, wired only in scrim.html) that index.html has no
 // UI for. All three took the scrim.html body because each addition is a
-// strict superset: the extra 'scoreboard'/'score_readout' handling only
-// fires when boxes.scoreboard or boxes.score_readout is set, which never
-// happens on index.html (it has no button that sets them), so the extra
-// code is inert there rather than wrong. renderCalPreview's +20 was read in
-// full and is the same cosmetic em-dash-escape drift as calMsg, not a
-// behaviour change.
+// strict superset. renderCalPreview's +20 was read in full and is the same
+// cosmetic em-dash-escape drift as calMsg, not a behaviour change.
+//
+// CORRECTION (fix round 1): the scoreboard/score_readout handling in
+// drawOverlay/autoCalibrate is NOT inert on index.html just because
+// index.html has no button that SETS those keys. Both pages read the SAME
+// localStorage['owdb_cap_boxes'] key (index.html:614, scrim.html:509,
+// pre-existing, unrelated to this extraction) - so if the same browser ever
+// calibrated scrim.html's scoreboard/score_readout boxes, index.html's
+// `boxes` picks them up too, and would render/carry-forward a box it has no
+// UI to show or clear. `ctx.boxKeys` (below) closes that gap by filtering at
+// read time instead of relying on "the key is never set here", which was
+// only true in isolation, not in a shared-profile browsing session.
 //
 // pendingCal (the candidate placement awaiting the scout's "Use these
 // boxes" confirmation) and AUTO_STRIPS (the fixed HUD-strip geometry, a
@@ -38,10 +45,18 @@
 // setStageHint - all resolved at call time, after the page has defined
 // them, via the shared global lexical scope classic <script> tags get.
 //
-// ctx = {doc, video, ov, octx} - only the DOM handles this module can't
-// reach any other way (a Node test harness has no document/canvas). Every
-// other dependency is a free-variable lookup, same convention as
-// engine/frames.js.
+// ctx = {doc, video, ov, octx, boxKeys} - doc/video/ov/octx are the DOM
+// handles this module can't reach any other way (a Node test harness has no
+// document/canvas). boxKeys is the list of `boxes` keys THIS PAGE owns
+// (index.html: ['a','b']; scrim.html: ['a','b','scoreboard','score_readout']).
+// It exists because both pages read the SAME localStorage key
+// ('owdb_cap_boxes', pre-existing, not owned by this module) - so `boxes` on
+// index.html can still contain a leftover boxes.scoreboard/score_readout if
+// the same browser was ever used to calibrate scrim.html. Without boxKeys,
+// drawOverlay/autoCalibrate would render/carry-forward a box the current
+// page has no UI to set or clear, which is a real visible regression, not a
+// hypothetical one. Every other dependency is a free-variable lookup, same
+// convention as engine/frames.js.
 //
 // Works as a browser global (`window.OWDBCalibration`) and as a CommonJS
 // module for node:test / pytest.
@@ -60,6 +75,15 @@
     // state (see frames.js's work/wctx) because nothing outside this
     // cluster reads it.
     var pendingCal = null;
+
+    // The 'a'/'b' portrait boxes are universal; anything else in
+    // ctx.boxKeys (scrim.html's 'scoreboard'/'score_readout') is page-owned
+    // extra UI. Keys NOT in ctx.boxKeys are never drawn or carried forward,
+    // even if present in the shared localStorage-derived `boxes` object -
+    // see the module header for why that can happen.
+    function extraBoxKeys() {
+      return (ctx.boxKeys || []).filter(function (k) { return k !== 'a' && k !== 'b'; });
+    }
 
     function boxesFromStrips(R, dx, dy) {
       var o = {};
@@ -127,9 +151,10 @@
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two
-      // portrait strips. Inert on index.html, which never sets
-      // boxes.scoreboard or boxes.score_readout.
-      ['scoreboard', 'score_readout'].forEach(function (extra) { if (boxes[extra]) best[extra] = boxes[extra]; });
+      // portrait strips. Filtered by ctx.boxKeys so a leftover
+      // boxes.scoreboard/score_readout from a shared browser profile is
+      // never carried forward on a page that doesn't own those keys.
+      extraBoxKeys().forEach(function (extra) { if (boxes[extra]) best[extra] = boxes[extra]; });
       // Preview BEFORE commit: show where the boxes WOULD go and how
       // confident the read is, so a bad placement is rejected instead of
       // silently saved. Nothing is written until the scout clicks "Use
@@ -207,6 +232,7 @@
       // candidate placement before committing it.
       var src = pendingCal ? pendingCal.boxes : boxes;
       ['a', 'b'].forEach(function (side) {
+        if ((ctx.boxKeys || []).indexOf(side) === -1) return;
         var b = src[side]; if (!b) return;
         octx.strokeStyle = pendingCal ? css('--accent') : (side === 'a' ? css('--blue') : css('--red'));
         octx.lineWidth = 2; octx.strokeRect(b.x * s, b.y * s, b.w * s, b.h * s);
@@ -217,9 +243,11 @@
         }
         octx.setLineDash([]);
       });
-      // scrim.html only: boxes.scoreboard/boxes.score_readout are never set
-      // on index.html, so this loop is inert there.
-      ['scoreboard', 'score_readout'].forEach(function (side) {
+      // scrim.html only: filtered by ctx.boxKeys so a leftover
+      // boxes.scoreboard/boxes.score_readout from a shared browser profile
+      // (both pages read the same localStorage key) is never drawn on a
+      // page that doesn't own those keys.
+      extraBoxKeys().forEach(function (side) {
         var b = boxes[side]; if (!b) return;
         octx.strokeStyle = css('--accent'); octx.lineWidth = 2;
         octx.strokeRect(b.x * s, b.y * s, b.w * s, b.h * s);

@@ -104,8 +104,10 @@ _CAL_BODY = r"""
 const results=[];
 const check=(name,cond)=>{ results.push({name, ok:!!cond}); };
 
-const cal=OWDBCalibration.make({ doc:global.document, video:global.vid, ov:global.ov, octx:global.octx });
-const {autoCalibrate, commitCal, retryCal, clearCalPreview}=cal;
+// boxKeys mirrors index.html's real wiring: this page owns only the two
+// portrait boxes, NOT scoreboard/score_readout (scrim.html-only).
+const cal=OWDBCalibration.make({ doc:global.document, video:global.vid, ov:global.ov, octx:global.octx, boxKeys:['a','b'] });
+const {autoCalibrate, commitCal, retryCal, clearCalPreview, drawOverlay}=cal;
 
 autoCalibrate();
 check('preview panel shown', el('calpreview').style.display==='block');
@@ -141,6 +143,20 @@ autoCalibrate();
 check('autoCalibrate guards no-video', el('calhint').innerHTML.indexOf('Share your screen first')>=0);
 commitCal();
 check('guarded autoCalibrate created no pending candidate', JSON.stringify(global.boxes)===boxesBeforeGuard);
+
+// Regression guard (fix round 1): both pages read the SAME localStorage key
+// ('owdb_cap_boxes'), so a scoreboard/score_readout box left behind by a
+// scrim.html calibration session in the same browser can still show up in
+// this page's `boxes`. ctx.boxKeys=['a','b'] (this page's real wiring) must
+// stop drawOverlay from rendering a key it does not own, even though the
+// key is present in `boxes`.
+global.vid.videoWidth=1920; global.vid.srcObject={};
+global.boxes.a={x:1,y:2,w:100,h:20}; global.boxes.b={x:3,y:4,w:100,h:20};
+global.boxes.scoreboard={x:5,y:6,w:10,h:10};   // simulated scrim.html leakage
+_strokeRectCalls=0;
+drawOverlay();
+check('drawOverlay does not render a box key this page does not own', _strokeRectCalls===2);
+delete global.boxes.scoreboard;
 
 console.log(JSON.stringify(results));
 """

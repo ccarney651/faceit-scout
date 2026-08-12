@@ -511,7 +511,8 @@ let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=nul
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
 // live in engine/calibration.js (shared with index.html), including this
 // page's scoreboard/score_readout box handling in drawOverlay/pickBox.
-const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx});
+// boxKeys lists every box key this page owns/shows UI for.
+const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx, boxKeys:['a','b','scoreboard','score_readout']});
 const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
        clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
 addEventListener('resize', fitOverlay);
