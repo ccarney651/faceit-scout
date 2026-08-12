@@ -297,6 +297,9 @@ def test_ui_modal_collects_textarea_fields() -> None:
     broke once during the engine extraction.
     """
     util = (APP.parent / "engine" / "util.js").read_text(encoding="utf-8")
-    assert "input,select,textarea" in util.replace(" ", "")
+    # Anchored to the call itself, not to the file's prose: an earlier version
+    # of this guard matched the explanatory comment, so reverting the real
+    # querySelectorAll still passed.
+    assert "querySelectorAll('input,select,textarea')" in util.replace(" ", "")
     html = APP.read_text(encoding="utf-8")
     assert 'id="rawocr"' in html, "the textarea this guard exists for moved or was renamed"
