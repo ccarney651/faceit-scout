@@ -405,6 +405,7 @@ button:disabled{opacity:.45;cursor:default}
 <script src="engine/idb.js"></script>
 <script src="engine/frames.js"></script>
 <script src="engine/calibration.js"></script>
+<script src="engine/refs.js"></script>
 <script>
 const {normName, simScore, affinity,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
@@ -622,6 +623,16 @@ let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=nul
 const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx, boxKeys:['a','b']});
 const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
        clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
+// addRef/bestMatch/matchCrop/learnCrop/refTemplate/exportRefs/importRefs/
+// clearLearnedRefs/heroCatalog/heroName/heroSlug/heroPortrait/onlyLostKnown/
+// ocrWorker now live in engine/refs.js (shared with scrim.html). REF_W/REF_H/
+// PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON and
+// _ocrWorker/_ocrLoading/_ocrLoadFailed/_ocrLoadError stay page-level globals
+// (this page's own ensureSideResolved/warmOcr/ocrNames read and clear the
+// _ocr* ones directly) - see engine/refs.js's header for why.
+const refs=OWDBRefs.make({doc:document});
+const {addRef, bestMatch, matchCrop, learnCrop, refTemplate, exportRefs, importRefs,
+       clearLearnedRefs, heroCatalog, heroName, heroSlug, heroPortrait, onlyLostKnown, ocrWorker}=refs;
 addEventListener('resize', fitOverlay);
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
@@ -767,16 +778,9 @@ function maybeShowTour(){
   tourOpen();
 }
 
-// ---------- matcher ----------
-function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
-  const offs = fast ? [PAD] : [0,PAD,2*PAD];   // fast = centre only: sensitive to box offset, for the calibrate sweep
-  for(const dy of offs) for(const dx of offs){ const cand=new Float32Array(REF_W*REF_H); let m=0;
-    for(let y=0;y<REF_H;y++){ const s=(y+dy)*W+dx; for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
-    m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
-    for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
-  return best; }
-function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
-function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
+// bestMatch/heroSlug/heroPortrait now live in engine/refs.js (shared with
+// scrim.html) - see that file's header for the bestMatch/importRefs
+// cosmetic-only-divergence finding and the ocrWorker real one.
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 // read both sides -> {a:[{name,guid,score}], b:[...]}; render to target
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
@@ -818,48 +822,36 @@ function confidentLeft(leftNames,rightNames,t1,t2){
     if(best>=STRONG_NAME_SCORE) strong++; }
   return strong>=MIN_STRONG_NAMES ? got : null; }
 
-// tesseract.js, loaded lazily from CDN on first use (this page isn't an artifact,
-// so no CSP block). warmOcr() (below) kicks the download off the moment the tool
-// is capture-ready, so it's ready by the time a Snapshot needs it.
-// The script tag + Tesseract.createWorker() both pull more assets (core wasm,
-// eng.traineddata) from CDNs with no built-in deadline, so a stalled (not
-// failed - a genuine network *error* already rejects via onload/onerror)
-// connection hangs forever with no way to notice. Race a timeout alongside it,
-// and - unlike a plain memoized promise - clear _ocrLoading on ANY failure so
-// Re-detect/Auto-detect actually retries instead of replaying the same dead
-// promise for the rest of the session.
-const OCR_LOAD_TIMEOUT_MS=30000;
+// ocrWorker now lives in engine/refs.js (shared with scrim.html) - see that
+// file's header for why the char whitelist below stays here instead of
+// moving with it: scrim.html reuses the SAME shared worker for
+// scoreboard/screenshot OCR (full sentences, spaces, dashes), which this
+// gamertag-only whitelist would silently mangle if it were baked into the
+// shared ocrWorker() itself.
+// _ocrWorker/_ocrLoading/_ocrLoadFailed/_ocrLoadError stay page-level globals
+// - ocrWorker() (engine/refs.js) sets them, and warmOcr/ensureSideResolved/
+// ocrNames below read and clear them directly, so they can't become
+// module-private state without breaking that.
 // _ocrLoadError holds the reason text from the LAST failed attempt (warmOcr's
 // background retry swallows the promise rejection to avoid an unhandled-
 // rejection console spam, so without this the operator - and anyone we ask
 // for a screenshot - only ever sees "OCR engine failed to load" with no way
 // to tell a timeout from a real network/CORS/CDN error).
 let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false, _ocrLoadError=null;
-function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
-  if(_ocrLoading) return _ocrLoading;
-  const attempt=(async()=>{
-    if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
-      s.crossOrigin='anonymous';
-      s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
-    const w=await Tesseract.createWorker('eng');
-    await w.setParameters({ tessedit_pageseg_mode:'7',
-      tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
-    _ocrWorker=w; _ocrLoadFailed=false; return w; })();
-  _ocrLoading=Promise.race([attempt,
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load - try again')),OCR_LOAD_TIMEOUT_MS))]
-  ).catch(e=>{ _ocrLoading=null; _ocrLoadFailed=true;
-    _ocrLoadError=(e&&e.message)?e.message:String(e); console.error('[owdb] OCR load failed:',e);
-    throw e; });
-  return _ocrLoading; }
 // Preload the OCR engine the moment the tool is capture-ready, so the FIRST
 // Snapshot's automatic side-detect doesn't pay the worker spin-up cost while
 // the operator stares at "detecting sides…" with nothing to do but wait or
 // force Swap L/R. No-op once it's running; harmless if OCR is never used.
 function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().then(()=>{ _ocrLoadFailed=false; },()=>{}); }
 const OCR_READ_TIMEOUT_MS=8000;
-async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker(); const out={a:[],b:[]}; let done=0;
+async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
+  // Restrict recognition to the charset HUD gamertags actually use - cuts
+  // stray glyphs (border/icon bleed) from diluting simScore's fuzzy match
+  // ratio. Scoped to this page's own use of the shared worker, not set
+  // inside engine/refs.js's ocrWorker() itself - see this file's ocrWorker
+  // comment above for why.
+  await w.setParameters({ tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
+  const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       let data;
@@ -1059,38 +1051,9 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
   }finally{ s._detecting=false; }
 }
 
-// ---------- hero recognition: learn a miss / add a new hero ----------
-// A ref = a 64x36 grayscale portrait template. The built-in library is refs.json
-// (curator-baked); operators can LEARN more from the live frame here — a fix when
-// a portrait reads wrong, or a brand-new hero the library has never seen. Learned
-// refs persist in IndexedDB, merge into REFS on load, and export as JSON so the
-// curator can fold the good ones back into refs.json.
-// Mirror of loadFeeds' refs.json decode: center + L2-normalise so bestMatch's
-// cosine similarity is comparable to the baked refs. Tagged local for Clear.
-function refTemplate(rec){ const px=b64bytes(rec.d); if(px.length!==REF_W*REF_H) return null;
-  let m=0; for(let i=0;i<px.length;i++) m+=px[i]; m/=px.length;
-  const c=new Float32Array(px.length); let ss=0; for(let i=0;i<px.length;i++){ c[i]=px[i]-m; ss+=c[i]*c[i]; }
-  return {n:rec.n, g:rec.g, v:rec.v, c, norm:Math.sqrt(ss)||1, local:true}; }
-async function addRef(rec){ if(!rec.id) rec.id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
-  const t=refTemplate(rec); if(!t) return false;
-  LOCAL_REFS.push(rec); REFS.push(t); try{ await idbPutIn('refs',rec); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; return true; }
-// The 64x36 grayscale icon crop for slot i on a side — the SAME icon region the
-// matcher reads (right 1-LF width, top TF height of the cell), so a learned ref
-// lines up with future reads.
-function learnCrop(side,i){ const b=boxes[side]; const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-  const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  const cv=document.createElement('canvas'); cv.width=REF_W; cv.height=REF_H;
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(grabFrame(), fx,fy,fw,fh, 0,0,REF_W,REF_H);
-  const d=cx.getImageData(0,0,REF_W,REF_H).data, px=new Uint8Array(REF_W*REF_H);
-  for(let j=0,k=0;j<d.length;j+=4,k++) px[k]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
-  return bytesToB64(px); }
-// Every hero the picker offers = unique guids in REFS (built-in + learned) plus
-// operator-added heroes, by name.
-function heroCatalog(){ const m={}; for(const r of REFS) if(r.g) m[r.g]=r.n;
-  for(const g in CUSTOM_HEROES) m[g]=CUSTOM_HEROES[g].name;
-  return Object.keys(m).map(g=>({g, n:m[g]})).sort((a,b)=>a.n.localeCompare(b.n)); }
+// refTemplate/addRef/learnCrop/heroCatalog now live in engine/refs.js
+// (shared with scrim.html) - see that file for the ref-library docstring
+// this section used to carry.
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
@@ -1144,11 +1107,7 @@ async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i, wr
 // Recognition can misread; here the operator fixes a whole map's comp before it
 // goes out — remap a wrong hero to the right one, or drop a spurious read, across
 // every observation of that map (player attribution is carried along).
-function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
-// Re-run the matcher on a stored 64x36 grayscale crop (centre it in the padded buffer).
-function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
-  for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
-  return bestMatch(gp, side); }
+// heroName/matchCrop now live in engine/refs.js (shared with scrim.html).
 function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
   const opts='<option value="">— fix to… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ new hero…</option>';
   for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
@@ -1238,20 +1197,8 @@ async function assignPlayer(rec, side, heroGuid, playerId, host){
   renderReview(rec, host); }
 // Persist a reviewed + corrected map to the maps store so edits stick.
 async function saveReviewRec(rec){ await idbPut(rec); }
-function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-  const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
-    refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
-  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }
-async function importRefs(file){ try{ const j=JSON.parse(await file.text());
-  if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size — skipped.','warn'); return; }
-  for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
-  let n=0; for(const r of (j.refs||[])){ if(r.d && r.g && r.v){ await addRef({n:r.n, g:r.g, v:r.v, d:r.d, added_at:Date.now()}); n++; } }
-  refMsg('imported '+n+' refs.','ok');
- }catch(e){ refMsg('import failed: '+(e.message||e),'warn'); } }
-async function clearLearnedRefs(){ if(!(await uiConfirm('Remove all learned refs? The built-in library stays; operator-added heroes are kept.','Clear learned refs'))) return;
-  REFS=REFS.filter(t=>!t.local); LOCAL_REFS=[]; try{ await idbClear('refs'); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent='0 learned'; refMsg('cleared learned refs.','ok'); }
+// exportRefs/importRefs/clearLearnedRefs now live in engine/refs.js (shared
+// with scrim.html).
 
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
@@ -1311,8 +1258,7 @@ function refreshSession(){ if(!session) return;
     el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames,s.aPlayers)}  vs  ${fmt(s.bNames,s.bPlayers)}`; ol.appendChild(el); });
   updateBtns(); renderPipControls();
 }
-function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
-  for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
+// onlyLostKnown now lives in engine/refs.js (shared with scrim.html).
 function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:'';
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }

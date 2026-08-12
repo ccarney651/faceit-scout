@@ -183,7 +183,7 @@ def test_auto_calibrate_previews_before_committing() -> None:
 # Guided first-capture tour
 # ---------------------------------------------------------------------------
 
-_TOUR_BLOCK = _extract("const TOUR_KEY='owdb_tour_done';", "// ---------- matcher ----------")
+_TOUR_BLOCK = _extract("const TOUR_KEY='owdb_tour_done';", "function slotClass(s){")
 
 _TOUR_STUBS = _FAKE_DOM + r"""
 global.HAS_CAPTURE=true;

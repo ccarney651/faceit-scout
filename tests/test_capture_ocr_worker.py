@@ -6,8 +6,24 @@ network *error* already rejects via the script tag's onerror) connection
 used to hang "detecting sides..." forever with no escape but a page reload,
 and any genuine failure poisoned `_ocrLoading` for the rest of the session
 (Re-detect/Auto-detect would just replay the same dead rejected promise).
-This pins the fix: a race against OCR_LOAD_TIMEOUT_MS, and clearing
-_ocrLoading on any failure so a later call actually retries.
+This pins the fix: a race against a load timeout, and clearing _ocrLoading
+on any failure so a later call actually retries.
+
+ocrWorker() itself moved into docs/capture/engine/refs.js (shared with
+scrim.html) - these tests now load the REAL module instead of extracting
+raw text from index.html, same pattern as test_capture_autocalibrate.py
+uses for engine/frames.js and engine/calibration.js. The page-level
+OCR_LOAD_TIMEOUT_MS constant became ctx.ocrLoadTimeoutMs (see refs.js's
+header) so these tests can shrink it without string-patching source text.
+
+tessedit_char_whitelist deliberately stayed OUT of the shared ocrWorker() -
+scrim.html reuses the same cached worker for scoreboard/screenshot OCR
+(full sentences, spaces, dashes) that the HUD-gamertag whitelist would
+mangle. index.html applies it itself, in ocrNames(), right after getting
+the worker - see engine/refs.js's header and index.html's own ocrWorker
+comment for the full reasoning. This file's whitelist test now covers both
+halves of that split: ocrWorker() itself must NOT set it, and index.html's
+ocrNames() must.
 """
 from __future__ import annotations
 
@@ -19,25 +35,47 @@ from pathlib import Path
 import pytest
 
 APP = Path(__file__).resolve().parents[1] / "docs" / "capture" / "index.html"
+ENGINE_REFS = Path(__file__).resolve().parents[1] / "docs" / "capture" / "engine" / "refs.js"
 
+# _ocrWorker/_ocrLoading/_ocrLoadFailed/_ocrLoadError are page-level globals
+# refs.js's ocrWorker() reads/writes as free variables (see refs.js's header
+# for why they can't be module-private) - declared here exactly like
+# index.html declares them before engine/refs.js's functions are ever
+# called.
+_STATE = "let _ocrWorker=null, _ocrLoading=null, _ocrLoadFailed=false, _ocrLoadError=null;\n"
 
-def _pure_js(timeout_ms: int) -> str:
-    html = APP.read_text(encoding="utf-8")
-    start = html.index("const OCR_LOAD_TIMEOUT_MS=")
-    end = html.index("  return _ocrLoading; }") + len("  return _ocrLoading; }")
-    assert end > start, "extraction anchors moved in index.html"
-    js = html[start:end]
-    assert "const OCR_LOAD_TIMEOUT_MS=30000;" in js, "timeout constant moved/changed"
-    # Swap in a short timeout so the hang test doesn't take 30s.
-    return js.replace("const OCR_LOAD_TIMEOUT_MS=30000;", f"const OCR_LOAD_TIMEOUT_MS={timeout_ms};")
+_DOC_STUB = r"""
+global.document={ head:{appendChild(){}}, createElement(t){ if(t!=='script') throw new Error('unexpected createElement '+t);
+  return {}; } };
+var module = { exports: {} };
+"""
+
+_WIRE_REFS = r"""
+const OWDBRefs = module.exports;
+const refs = OWDBRefs.make({ doc: global.document, ocrLoadTimeoutMs: %(timeout_ms)d });
+const { ocrWorker } = refs;
+"""
 
 
 def _run(body: str, timeout_ms: int = 50) -> str:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not available to run the capture app's helpers")
-    src = _pure_js(timeout_ms) + "\n" + body
-    proc = subprocess.run([node, "-e", src], capture_output=True, text=True, timeout=15)
+    refs_src = ENGINE_REFS.read_text(encoding="utf-8")
+    src = (
+        _STATE + _DOC_STUB + "\n" + refs_src + "\n"
+        + (_WIRE_REFS % {"timeout_ms": timeout_ms}) + "\n" + body
+    )
+    # Written to a temp file rather than passed via `node -e` - refs.js's
+    # header comment alone is large enough to trip Windows' CreateProcess
+    # command-line length limit ("[WinError 206] The filename or extension
+    # is too long").
+    script = Path(__file__).resolve().parent / "_tmp_ocr_worker_check.js"
+    script.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(script)], capture_output=True, text=True, timeout=15)
+    finally:
+        script.unlink(missing_ok=True)
     assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
     return proc.stdout.strip()
 
@@ -113,21 +151,42 @@ def test_a_successful_load_clears_a_stale_failure_flag() -> None:
     assert out == '{"failed":false}', out
 
 
-def test_worker_setup_whitelists_the_hud_gamertag_charset() -> None:
-    # Restricting recognition to the charset HUD names actually use cuts stray
-    # glyphs (border/icon bleed) from diluting simScore's fuzzy match ratio.
+def test_ocr_worker_itself_does_not_restrict_the_charset_scrim_needs() -> None:
+    # scrim.html reuses this SAME shared worker for readScoreboard()/
+    # ocrTextFromImage() (full sentences: map names with spaces, "VICTORY"/
+    # "DEFEAT", score dashes) - if ocrWorker() itself whitelisted the
+    # HUD-gamertag charset, that reuse would silently mangle scrim.html's
+    # scoreboard/screenshot OCR the first time the cached worker got reused
+    # for anything but a HUD-name crop. Only the base pageseg_mode (what both
+    # pages already used as the worker's resting configuration) belongs here.
     body = r"""
-    let captured=null;
-    global.Tesseract={ createWorker: () => Promise.resolve({ setParameters: async (p) => { captured = p; } }) };
+    let calls=[];
+    global.Tesseract={ createWorker: () => Promise.resolve({ setParameters: async (p) => { calls.push(p); } }) };
     global.window={ Tesseract: global.Tesseract };
-    ocrWorker().then(() => console.log(JSON.stringify(captured)));
+    ocrWorker().then(() => console.log(JSON.stringify(calls)));
     """
     out = _run(body, timeout_ms=5000)
-    params = json.loads(out)
-    assert params["tessedit_pageseg_mode"] == "7"
-    whitelist = params["tessedit_char_whitelist"]
+    calls = json.loads(out)
+    assert calls == [{"tessedit_pageseg_mode": "7"}], calls
+
+
+def test_index_html_layers_the_gamertag_whitelist_onto_the_shared_worker() -> None:
+    # The whitelist itself (see the module-boundary test above for why it's
+    # NOT in engine/refs.js) is applied by index.html's own ocrNames(),
+    # scoped to this page's own use of the shared worker.
+    html = APP.read_text(encoding="utf-8")
+    start = html.index("async function ocrNames()")
+    end = html.index("return out; }", start) + len("return out; }")
+    assert end > start, "ocrNames anchor moved in index.html"
+    body = html[start:end]
+    assert "const w=await ocrWorker();" in body
+    assert "tessedit_char_whitelist" in body, "index.html no longer restricts the OCR charset for HUD names"
+    marker = 'tessedit_char_whitelist:"'
+    i = body.index(marker) + len(marker)
+    whitelist = body[i:body.index('"', i)]
     for ch in "AZaz09_-.'~":
         assert ch in whitelist, f"{ch!r} missing from whitelist"
+    assert " " not in whitelist, "whitelist should stay restrictive (no space) for HUD gamertags"
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +231,7 @@ def _run_names(body: str, timeout_ms: int = 50) -> str:
 
 def test_a_stalled_recognize_call_times_out_instead_of_hanging_forever() -> None:
     body = r"""
-    global.ocrWorker=async()=>({ recognize: () => new Promise(()=>{}), terminate: async()=>{} });
+    global.ocrWorker=async()=>({ setParameters: async()=>{}, recognize: () => new Promise(()=>{}), terminate: async()=>{} });
     ocrNames().then(
       () => console.log('FAIL:resolved'),
       e => console.log('rejected:' + e.message)
@@ -189,7 +248,7 @@ def test_a_timed_out_read_discards_the_wedged_worker() -> None:
     # rather than let future reads queue forever behind the dead job.
     body = r"""
     let terminated=false;
-    global.ocrWorker=async()=>({ recognize: () => new Promise(()=>{}), terminate: async()=>{ terminated=true; } });
+    global.ocrWorker=async()=>({ setParameters: async()=>{}, recognize: () => new Promise(()=>{}), terminate: async()=>{ terminated=true; } });
     ocrNames().catch(()=>{}).then(() => {
       console.log(JSON.stringify({terminated, ocrWorkerCleared: _ocrWorker===null, loadingCleared: _ocrLoading===null}));
     });
@@ -202,7 +261,7 @@ def test_a_timed_out_read_discards_the_wedged_worker() -> None:
 def test_a_healthy_recognize_call_reads_all_ten_names_normally() -> None:
     body = r"""
     let calls=0;
-    global.ocrWorker=async()=>({ recognize: () => { calls++; return Promise.resolve({data:{text:'Player'+calls}}); } });
+    global.ocrWorker=async()=>({ setParameters: async()=>{}, recognize: () => { calls++; return Promise.resolve({data:{text:'Player'+calls}}); } });
     ocrNames().then(names => console.log(JSON.stringify({calls, a:names.a, b:names.b})));
     """
     out = _run_names(body, timeout_ms=5000)

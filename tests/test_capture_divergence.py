@@ -23,14 +23,26 @@ def test_report_finds_the_known_shared_surface() -> None:
     # cluster, so - same as simScore above - it can no longer be "shared" or
     # "diverged" by this name-matching tool.
     assert "calMsg" not in rep["shared"], "calMsg should have moved to engine/calibration.js"
+    # bestMatch and importRefs both showed up in this tool's diverged report
+    # (bestMatch by one comment index.html carried and scrim.html didn't;
+    # importRefs by an em-dash-escape-vs-literal drift, same pattern as
+    # calMsg) - neither was a real behavioural difference, confirmed with
+    # difflib.SequenceMatcher over the raw bodies before moving. Hero
+    # recognition extraction (docs/capture/engine/refs.js) moved the whole
+    # cluster out of both pages, so - same as simScore/calMsg above - these
+    # can no longer be "shared" or "diverged" by this name-matching tool.
+    assert "bestMatch" not in rep["shared"], "bestMatch should have moved to engine/refs.js"
+    assert "importRefs" not in rep["shared"], "importRefs should have moved to engine/refs.js"
 
 
 def test_bodies_are_extracted_with_balanced_braces() -> None:
     # calMsg (the original worked example here) moved to
-    # engine/calibration.js; bestMatch is still a named function in both
-    # pages (hero-matching isn't extracted yet) and serves the same purpose:
-    # a real multi-brace function body to exercise the balanced-brace scan.
+    # engine/calibration.js, then bestMatch (the second worked example) moved
+    # to engine/refs.js; fixReads is still a named function in both pages
+    # (it stayed page-side - see engine/refs.js's header for why) and serves
+    # the same purpose: a real multi-brace function body to exercise the
+    # balanced-brace scan.
     bodies = function_bodies("index.html")
-    body = bodies["bestMatch"]
+    body = bodies["fixReads"]
     assert body.startswith("{") and body.endswith("}")
     assert body.count("{") == body.count("}")

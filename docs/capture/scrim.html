@@ -374,7 +374,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -515,6 +515,17 @@ let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=nul
 const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx, boxKeys:['a','b','scoreboard','score_readout']});
 const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
        clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
+// addRef/bestMatch/matchCrop/learnCrop/refTemplate/exportRefs/importRefs/
+// clearLearnedRefs/heroCatalog/heroName/heroSlug/heroPortrait/onlyLostKnown/
+// ocrWorker now live in engine/refs.js (shared with index.html). REF_W/REF_H/
+// PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON and
+// _ocrWorker/_ocrLoading stay page-level globals - see engine/refs.js's
+// header for why, and for why this page's own readScoreboard()/
+// ocrTextFromImage() (further down) still reconfigure the shared worker's
+// pageseg_mode per call instead of that living in the shared module.
+const refs=OWDBRefs.make({doc:document});
+const {addRef, bestMatch, matchCrop, learnCrop, refTemplate, exportRefs, importRefs,
+       clearLearnedRefs, heroCatalog, heroName, heroSlug, heroPortrait, onlyLostKnown, ocrWorker}=refs;
 addEventListener('resize', fitOverlay);
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
@@ -660,16 +671,9 @@ function maybeShowTour(){
   tourOpen();
 }
 
-// ---------- matcher ----------
-function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
-  const offs = fast ? [PAD] : [0,PAD,2*PAD];
-  for(const dy of offs) for(const dx of offs){ const cand=new Float32Array(REF_W*REF_H); let m=0;
-    for(let y=0;y<REF_H;y++){ const s=(y+dy)*W+dx; for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
-    m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
-    for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
-  return best; }
-function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
-function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
+// bestMatch/heroSlug/heroPortrait now live in engine/refs.js (shared with
+// index.html) - see that file's header for the bestMatch/importRefs
+// cosmetic-only-divergence finding and the ocrWorker real one.
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
 function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
@@ -680,26 +684,8 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
       if(host){ const row=document.createElement('div'); row.className='slot';
         row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">\u2014</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
-// ---------- hero recognition ----------
-function refTemplate(rec){ const px=b64bytes(rec.d); if(px.length!==REF_W*REF_H) return null;
-  let m=0; for(let i=0;i<px.length;i++) m+=px[i]; m/=px.length;
-  const c=new Float32Array(px.length); let ss=0; for(let i=0;i<px.length;i++){ c[i]=px[i]-m; ss+=c[i]*c[i]; }
-  return {n:rec.n, g:rec.g, v:rec.v, c, norm:Math.sqrt(ss)||1, local:true}; }
-async function addRef(rec){ if(!rec.id) rec.id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
-  const t=refTemplate(rec); if(!t) return false;
-  LOCAL_REFS.push(rec); REFS.push(t); try{ await idbPutIn('refs',rec); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; return true; }
-function learnCrop(side,i){ const b=boxes[side]; const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-  const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  const cv=document.createElement('canvas'); cv.width=REF_W; cv.height=REF_H;
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(grabFrame(), fx,fy,fw,fh, 0,0,REF_W,REF_H);
-  const d=cx.getImageData(0,0,REF_W,REF_H).data, px=new Uint8Array(REF_W*REF_H);
-  for(let j=0,k=0;j<d.length;j+=4,k++) px[k]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
-  return bytesToB64(px); }
-function heroCatalog(){ const m={}; for(const r of REFS) if(r.g) m[r.g]=r.n;
-  for(const g in CUSTOM_HEROES) m[g]=CUSTOM_HEROES[g].name;
-  return Object.keys(m).map(g=>({g, n:m[g]})).sort((a,b)=>a.n.localeCompare(b.n)); }
+// refTemplate/addRef/learnCrop/heroCatalog now live in engine/refs.js
+// (shared with index.html).
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
@@ -745,10 +731,7 @@ async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i, wr
 }
 
 // ---------- review & correct a captured map ----------
-function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
-function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
-  for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
-  return bestMatch(gp, side); }
+// heroName/matchCrop now live in engine/refs.js (shared with index.html).
 function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
   const opts='<option value="">\u2014 fix to\u2026 \u2014</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">\uff0b new hero\u2026</option>';
   for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
@@ -796,20 +779,8 @@ async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
   await saveReviewRec(rec);
   renderReview(rec, host); }
 async function saveReviewRec(rec){ await idbPutScrimMap(rec); }
-function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-  const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
-    refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
-  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }
-async function importRefs(file){ try{ const j=JSON.parse(await file.text());
-  if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size \u2014 skipped.','warn'); return; }
-  for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
-  let n=0; for(const r of (j.refs||[])){ if(r.d && r.g && r.v){ await addRef({n:r.n, g:r.g, v:r.v, d:r.d, added_at:Date.now()}); n++; } }
-  refMsg('imported '+n+' refs.','ok');
- }catch(e){ refMsg('import failed: '+(e.message||e),'warn'); } }
-async function clearLearnedRefs(){ if(!(await uiConfirm('Remove all learned refs? The built-in library stays; operator-added heroes are kept.','Clear learned refs'))) return;
-  REFS=REFS.filter(t=>!t.local); LOCAL_REFS=[]; try{ await idbClear('refs'); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent='0 learned'; refMsg('cleared learned refs.','ok'); }
+// exportRefs/importRefs/clearLearnedRefs now live in engine/refs.js (shared
+// with index.html).
 
 // ---------- capture session ----------
 let session=null, pipWin=null;
@@ -841,8 +812,7 @@ function refreshSession(){ if(!session) return;
     el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames,s.aPlayers)}  vs  ${fmt(s.bNames,s.bPlayers)}`; ol.appendChild(el); });
   updateBtns(); renderPipControls();
 }
-function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
-  for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
+// onlyLostKnown now lives in engine/refs.js (shared with index.html).
 function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:'';
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
@@ -955,19 +925,19 @@ async function readScoreboard(frame){
       out.readout=Scoreboard.parseScoreReadout((data.text||'')); }
     return out;
   }catch(e){ console.warn('scoreboard read skipped:',e); return null; } }
-let _ocrWorker=null, _ocrLoading=null;
-function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
-  if(_ocrLoading) return _ocrLoading;
-  _ocrLoading=(async()=>{
-    if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
-      s.crossOrigin='anonymous';
-      s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
-    const w=await Tesseract.createWorker('eng');
-    await w.setParameters({ tessedit_pageseg_mode:'7' });
-    _ocrWorker=w; return w; })();
-  return _ocrLoading; }
+// ocrWorker now lives in engine/refs.js (shared with index.html) - it now
+// races a load timeout and clears its own cache on failure (index.html's
+// existing fix for a real hang bug: a stalled Tesseract.createWorker() used
+// to hang this page's OCR forever with no escape but a reload). It does NOT
+// set tessedit_char_whitelist - this page reuses the shared worker for
+// readScoreboard()/ocrTextFromImage() below (full sentences, spaces,
+// dashes), which a HUD-gamertag-only whitelist would break; see
+// engine/refs.js's header for the full reasoning. _ocrLoadFailed/
+// _ocrLoadError are new here (index.html already had them) - purely so the
+// shared ocrWorker() has somewhere to write; nothing on this page reads them
+// yet, same as this page carrying calibration.js's boxKeys entries for boxes
+// index.html doesn't set.
+let _ocrWorker=null, _ocrLoading=null, _ocrLoadFailed=false, _ocrLoadError=null;
 async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return null;
   const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
