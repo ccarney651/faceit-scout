@@ -115,6 +115,17 @@ Resolved once per session, from the ten names in the ready-up list. The existing
 `readHudNames()` nameplate read remains the fallback for joining mid-map or a
 lobby running no workshop code at all.
 
+**The ready-up list renders the actual battletag**, which is the same identity
+`game_name` holds in the database — CI already backfills that column. Matching is
+therefore **exact-first**: normalise, compare for equality, and fall back to
+`simScore` only to repair OCR damage. A 5/5 exact match is effectively certain,
+where a 5/5 fuzzy match is merely confident.
+
+Normalisation before comparison: casefold, trim, and drop anything from a `#`
+onward. Stored `game_name` values carry no discriminator (`Mappsy`,
+`TWERKNATION`), so stripping one if the HUD renders it makes the comparison
+correct whichever form appears.
+
 `docs/capture/data.json` already ships rosters as
 `{match_id: {team_id: {name, players:[{id, nick, game_name}]}}}`, where
 `game_name` is the Battle.net name shown in game. Aggregated across matches, that
@@ -369,10 +380,15 @@ New tests this design requires:
 
 Human-only in-game validation, which cannot be verified from code:
 
-- Whether the ready-up list or the HUD nameplates give the more reliable name
-  read.
 - That the legend anchor locates the scoreboard at all three sizes.
 - That the shape check does not reject valid reads in real lobbies.
+- Whether the ready-up list renders the discriminator (`Name#1234`) or the bare
+  name. The normalisation in §4.2 is correct either way, so this is a
+  confirmation rather than a blocker.
+
+Settled by the operator, no longer open: the ready-up list is authoritative for
+identity — it renders the actual battletag, so it is the primary name source and
+the HUD nameplate read is purely a fallback.
 
 ## 11. Open items, deliberately deferred
 
