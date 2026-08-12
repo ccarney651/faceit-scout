@@ -374,7 +374,9 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script>
+const {normName, simScore, affinity, confidentOrientation,
+       AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45;
 let HERO_ICON={};
@@ -502,30 +504,9 @@ async function buildLearnedRosters(){
     }
   }
   const out={}; for(const k in rosters) out[k]=[...rosters[k]]; return out; }
-const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=2;
-function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
-  for(let i=ai;i<aj;i++){ const nj={};
-    for(let j=bi;j<bj;j++){ if(a[i]===b[j]){ const k=(j2[j-1]||0)+1; nj[j]=k;
-      if(k>best){besti=i-k+1;bestj=j-k+1;best=k;} } } j2=nj; }
-  let tot=best;
-  if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
-  return tot; }
-function simScore(a,b){ a=(a||'').toLowerCase().trim(); b=(b||'').toLowerCase().trim();
-  const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }
-function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
-  let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
-function confidentOrientation(leftNames,rightNames,aRoster,bRoster){
-  const direct=affinity(leftNames,aRoster)+affinity(rightNames,bRoster);
-  const swap=affinity(leftNames,bRoster)+affinity(rightNames,aRoster);
-  let got,lead,rosters;
-  if(direct>=swap){ got='a'; lead=direct-swap; rosters=[aRoster,bRoster]; }
-  else { got='b'; lead=swap-direct; rosters=[bRoster,aRoster]; }
-  if(lead<AUTO_SIDE_MARGIN) return null;
-  let strong=0; const sides=[leftNames,rightNames];
-  for(let k=0;k<2;k++) for(const n of sides[k]){ if(!n) continue;
-    let best=0; for(const r of rosters[k]) best=Math.max(best,simScore(n,r));
-    if(best>=STRONG_NAME_SCORE) strong++; }
-  return strong>=MIN_STRONG_NAMES ? got : null; }
+// normName/simScore/affinity/confidentOrientation and the
+// AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/MIN_STRONG_NAMES constants live in
+// engine/names.js now (shared with index.html).
 async function detectScrimSides(){
   const c=selectedCode(); if(!c) return {left:null, source:null};
   const names=await readHudNames(); if(!names) return {left:null, source:null};

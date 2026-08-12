@@ -16,11 +16,25 @@ APP = Path(__file__).resolve().parents[1] / "docs" / "capture" / "index.html"
 
 
 def _pure_js() -> str:
+    """attribute()'s dependencies - normName/simScore/affinity and the
+    AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/MIN_STRONG_NAMES constants - moved to
+    docs/capture/engine/names.js in the engine extraction, so they're loaded
+    from the module now. The rest of the region attribute() needs
+    (confidentLeft, rosterNames, attribute itself, ...) is still sliced
+    straight out of index.html, just starting from confidentLeft instead of
+    the now-deleted AUTO_SIDE_MARGIN declaration.
+    """
+    engine = (APP.parent / "engine" / "names.js").read_text(encoding="utf-8")
     html = APP.read_text(encoding="utf-8")
-    start = html.index("const AUTO_SIDE_MARGIN=")
+    start = html.index("function confidentLeft(")
     end = html.index("function setDetectMsg(")
     assert end > start, "extraction anchors moved in index.html"
-    return html[start:end]
+    return "\n".join([
+        "var module={exports:{}};",
+        engine,
+        "const {normName,simScore,affinity,AUTO_SIDE_MARGIN,STRONG_NAME_SCORE,MIN_STRONG_NAMES}=module.exports;",
+        html[start:end],
+    ])
 
 
 def _run(body: str) -> object:

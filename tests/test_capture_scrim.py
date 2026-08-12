@@ -27,14 +27,25 @@ def _extract(*anchors: tuple[str, str]) -> str:
 
 
 def _pure_js() -> str:
-    # Three non-overlapping regions that avoid the DOM-heavy top-level wiring
-    # between them.  Cluster A gives the map list; Cluster B gives the roster
-    # similarity helpers; Cluster C gives the screenshot-import parser.
-    return _extract(
-        ("const CONTROL_SUBMAPS=", "const AUTO_SIDE_MARGIN="),
-        ("const AUTO_SIDE_MARGIN=", "async function detectScrimSides()"),
-        ("function bestMapMatch(text)", "async function importSessionFromScreenshot(file)"),
-    )
+    """Cluster A: the map list. Cluster C: the screenshot-import parser.
+
+    The roster-similarity helpers (formerly cluster B) moved to
+    docs/capture/engine/names.js in the engine extraction; they are loaded
+    from the module now rather than sliced out of the page. Cluster A's end
+    anchor used to be the deleted block's own `const AUTO_SIDE_MARGIN=`
+    declaration; since that text no longer exists in scrim.html, Cluster A
+    now runs straight through to `detectScrimSides` (the same span it
+    covered before, just without a mid-anchor split).
+    """
+    engine = (APP.parent / "engine" / "names.js").read_text(encoding="utf-8")
+    return "\n".join([
+        engine,
+        "const {normName,simScore,affinity,confidentOrientation}=module.exports;",
+        _extract(
+            ("const CONTROL_SUBMAPS=", "async function detectScrimSides()"),
+            ("function bestMapMatch(text)", "async function importSessionFromScreenshot(file)"),
+        ),
+    ])
 
 
 # Minimal browser stubs so the extracted script can load in Node without the
@@ -43,6 +54,7 @@ _STUBS = """
 var window = {isSecureContext: true};
 var navigator = {mediaDevices: {getDisplayMedia: function() {}}};
 var document = {getElementById: function() { return null; }};
+var module = {exports: {}};
 """
 
 

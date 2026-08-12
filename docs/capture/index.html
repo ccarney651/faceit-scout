@@ -400,7 +400,10 @@ button:disabled{opacity:.45;cursor:default}
     </div>
   </div>
 </div>
+<script src="engine/names.js"></script>
 <script>
+const {normName, simScore, affinity,
+       AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
 let HERO_ICON={};   // {heroSlug: colored portrait data-URI} — optional, from sibling hero_icons.json
@@ -924,40 +927,14 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
 // clearly wins. Same difflib ratio as the exe (owdb/capture.py), so a
 // garbled read still can't assign sides or players from noise.
 //
-// MIN_STRONG_NAMES is lower here (2, vs the exe's 3) — a deliberate, browser-
-// only divergence. The exe's thresholds were measured against Windows' native
-// OCR on dxcam frames (owdb/capture.py: good reads cleared 5-6 strong
-// names, a known-garbage misaligned frame scored 0). tesseract.js reading a
-// getDisplayMedia canvas is a weaker OCR engine on a lossier source, and
-// field use since the auto-detect-on-Snapshot gate shipped (2026-07-31) put
-// its real hit rate around 70% at MIN_STRONG_NAMES=3 — clearing snapshots
-// often enough to be reliable, but failing (and blocking capture entirely,
-// since this gate is now mandatory) often enough to be frustrating. Dropping
-// to 2 is the single most targeted loosening: it only lowers how many
-// individually-strong reads are required, not the match-quality bar
-// (STRONG_NAME_SCORE) or the aggregate-lead bar (AUTO_SIDE_MARGIN, the
-// stronger anti-noise gate — it alone would already reject the exe's
-// documented garbage case, margin 25 vs this 100 threshold).
-const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=2;
-// difflib.SequenceMatcher.ratio() = 2*M/(len a+len b), M = total size of the
-// longest matching blocks (Ratcliff/Obershelp). Names are short → skip junk.
-function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
-  for(let i=ai;i<aj;i++){ const nj={};
-    for(let j=bi;j<bj;j++){ if(a[i]===b[j]){ const k=(j2[j-1]||0)+1; nj[j]=k;
-      if(k>best){besti=i-k+1;bestj=j-k+1;best=k;} } } j2=nj; }
-  let tot=best;
-  if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
-  return tot; }
-// Fold accents before comparing: the HUD renders the real Battle.net name
-// (e.g. "Hēv"), but tessedit_char_whitelist is plain ASCII, so OCR can only
-// ever return "Hev" - without this, an otherwise-perfect read scores as a
-// near-miss purely because of a diacritic it was never allowed to emit.
-function _normName(s){ return String(s==null?'':s).normalize('NFD')
-  .replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
-function simScore(a,b){ a=_normName(a); b=_normName(b);
-  const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }  // 0..100
-function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
-  let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
+// normName/simScore/affinity and the AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/
+// MIN_STRONG_NAMES constants live in engine/names.js now (shared with
+// scrim.html) — see that file for the MIN_STRONG_NAMES rationale.
+//
+// confidentLeft below is index.html-only: it returns 't1'/'t2', not the
+// 'a'/'b' vocabulary of scrim.html's confidentOrientation (which moved into
+// the shared module unchanged). Unifying the two return vocabularies is a
+// later phase, not part of this mechanical extraction.
 // Which faction is on the LEFT HUD strip: 't1', 't2', or null when unclear.
 function confidentLeft(leftNames,rightNames,t1,t2){
   const direct=affinity(leftNames,t1)+affinity(rightNames,t2);
