@@ -202,30 +202,63 @@ honest.
 ### 5.1 The stats join
 
 The portrait bar gives **player → hero** (position identifies the player). The
-scoreboard row gives **hero → stats**. Both are in the same frame, and team colour
-separates the sides. Since hero limit is always on, hero is unique within a team,
-so `player → hero → stats` resolves completely — with no player names and no
-assumption about row order.
+scoreboard row gives **hero → stats**. Both are in the same frame, and hero limit
+means hero is unique within a team, so `player → hero → stats` resolves with no
+player names and no assumption about row order — and it survives mid-map swaps,
+because both regions change together in the same frame.
 
-This is why the scoreboard's grouping-style setting does not matter, and it
-survives mid-map hero swaps: both regions change together in the same frame.
+**The row's hero must be recognised from its icon, and that icon is an image.**
+The workshop renders `heroIcon(hero)` as a glyph, not text, so OCR cannot read it
+— `docs/capture/scoreboard.js` documents this and discards the token as noise.
+`hero_icons.json` does not help: it holds 53 display portraits for the live
+preview, while recognition runs off `refs.json`, which holds HUD portrait patches.
+Neither is the workshop glyph.
+
+Identifying the row's hero therefore needs **its own reference set of workshop
+hero glyphs**. This is tractable rather than research: the glyphs are a fixed,
+finite, deterministic set rendered at a known size, the template-matching
+machinery already exists for portraits, and the existing "teach it a miss" flow
+can bootstrap the set from real scoreboards. It is nonetheless **net-new work,
+and phase 3 owns it**.
+
+Until that reference set exists, attribution degrades by role rather than
+failing:
+
+| Role | Per-team rows | Attribution without glyph recognition |
+| --- | --- | --- |
+| Tank | 1 | **Exact** — one row, one player |
+| DPS | 2 | Ambiguous within the pair |
+| Support | 2 | Ambiguous within the pair |
+
+Two mitigations, in preference order. First, **detect the grouping mode**: under
+"Group by team, sort by slot" the rows are already in slot order and join
+positionally to the portrait bar with no glyph recognition at all. Second, where
+the mode is role-grouped and glyphs are unavailable, store the ambiguous pair's
+stats against the **role slot** rather than guessing a player, so the data is
+honest about what it knows. Team-level and comp-level analysis is unaffected in
+every case; only per-player attribution is.
 
 ### 5.2 Read validation by shape
 
 Because the format is fixed at 5v5 / 1-2-2, every valid read has a known shape.
 A read is accepted only if:
 
-- there are 5 + 5 rows, split by team colour;
-- within each team the hero icons give exactly one tank, two DPS, two supports;
-- within each team the sixth column gives exactly one Damage-Blocked, two
-  Accuracy-`%`, two Healing values;
-- and those two agree.
+- there are 5 + 5 rows, split by team;
+- the legend rows partition them into exactly two tank, four DPS and four
+  support entries;
+- the sixth column agrees with that partition — exactly two Damage-Blocked, four
+  Accuracy-`%` and four Healing values;
+- and the portrait bar independently reads 1-2-2 per team.
 
-Otherwise the read is discarded and retried. This catches a single misread hero
-icon by shape and often localises it: if the icons say two tanks and the columns
-say one, the disagreeing row is the suspect. **The same 1-2-2 shape check applies
-to the portrait-bar comp read**, so a bad comp snapshot is rejected rather than
-stored.
+Roles here come from the **legend rows**, which are text and already parsed by
+`scoreboard.js` — not from the hero glyphs. The shape check therefore works
+whether or not glyph recognition (§5.1) exists yet.
+
+Otherwise the read is discarded and retried. Two independent signals covering the
+same fact is what makes this useful: if the legend partition says four DPS rows
+but only three columns carry a `%`, one row was misread and the disagreeing row
+is the suspect. **The same 1-2-2 check applies to the portrait-bar comp read**, so
+a bad comp snapshot is rejected rather than stored.
 
 ### 5.3 Locating the scoreboard
 
@@ -379,7 +412,7 @@ that invites a bad merge (`AGENTS.md` invariant 9).
 | 0 | Extract `calibration.js` / `refs.js` / `snapshot.js` / `overlay.js` from both capture pages | No behaviour change; league flow provably unchanged |
 | 1 | Un-pause; session scaffold; **league-code block**; wipe-date check; manual add | Scrims are capturable |
 | 2 | Ready-up name read; roster search over all teams; opponent registry; auto sides | No more typing team names |
-| 3 | Legend-anchored scoreboard locate; shape check; hero join; finish-map final read; optional per-round outcomes | Stats |
+| 3 | Legend-anchored scoreboard locate; shape check; **workshop hero-glyph reference set**; hero join; finish-map final read; optional per-round outcomes | Stats |
 | 4 | Viewer: sessions / comps / opponents / players, plus parity tests | The four requested outputs |
 | 5 | Discord sync; share link, warning, revoke, TTL | PC↔laptop, send a scout |
 | 6 | Auto map detection, reactive retained as fallback | Minimal interaction |
@@ -410,8 +443,12 @@ New tests this design requires:
   aliases for that `team_id`; "not them" discards them; aliases never appear in
   a shared scout payload.
 - Shape validation: reads that are not 5+5 / 1-2-2 / column-consistent are
-  rejected; a single misread icon is localised.
+  rejected; a single misread row is localised by the disagreeing signal.
 - Hero join: stats attach to the right player, including across a mid-map swap.
+- Degraded attribution: with no glyph reference set, tank rows attach exactly and
+  DPS/support pairs are stored against the role slot rather than guessed.
+- Grouping-mode detection: slot-ordered lobbies join positionally without glyph
+  recognition.
 - Sync merge: per-record newest-`updated_at`-wins, both directions.
 - Viewer parity: JS and Python aggregations agree on a shared fixture.
 
