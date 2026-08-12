@@ -323,10 +323,12 @@ Start here rather than with `util.js`: `names.js` is pure, already has pytest co
 - Consumes: nothing
 - Produces: global `OWDBNames` / CommonJS export with:
   - `normName(s) -> string`
-  - `simScore(a, b) -> number` (0–200 scale, unchanged)
-  - `affinity(names, roster) -> number`
-  - `confidentOrientation(leftNames, rightNames, aRoster, bRoster) -> 'a' | 'b' | null`
+  - `simScore(a, b) -> number` — **0–100 scale**. Identical strings score 100, a single-character miss about 80, unrelated names about 20. The formula reads `200 * matched / (a.length + b.length)`, and the denominator counts both strings, so 100 is the maximum. `STRONG_NAME_SCORE = 75` is a threshold on this 0–100 scale.
+  - `affinity(names, roster) -> number` — sum of each name's best `simScore`, so its range is `0 … 100 × names.length`
+  - `confidentOrientation(leftNames, rightNames, aRoster, bRoster) -> 'a' | 'b' | null` — **exists only in `scrim.html`**; it is moved, not reconciled
   - constants `AUTO_SIDE_MARGIN = 100`, `STRONG_NAME_SCORE = 75`, `MIN_STRONG_NAMES = 2`
+
+**`index.html` has no `confidentOrientation`.** It has a different function for the same job — `confidentLeft(leftNames, rightNames, t1, t2)`, which returns `'t1'`/`'t2'` rather than `'a'`/`'b'`. Do **not** merge the two in this task: move `scrim.html`'s `confidentOrientation` into the module unchanged, leave `confidentLeft` in `index.html` untouched, and let phase 2 unify them when it generalises the roster search. Reconciling two different return vocabularies is not a mechanical move, and the league page's side detection is not what this plan is here to change.
 
 - [ ] **Step 1: Write the failing JS test**
 
@@ -347,23 +349,33 @@ test('normName drops a battletag discriminator', () => {
   assert.equal(Names.normName('Kirbz#2183'), Names.normName('Kirbz'));
 });
 
-test('simScore is 200 for an exact match and 0 for empties', () => {
-  assert.equal(Names.simScore('Kirbz', 'Kirbz'), 200);
+test('simScore is 100 for an exact match and 0 for empties', () => {
+  // 0-100 scale: the formula's denominator counts both strings, so an exact
+  // match is 100, not 200. STRONG_NAME_SCORE = 75 is a threshold on this.
+  assert.equal(Names.simScore('Kirbz', 'Kirbz'), 100);
   assert.equal(Names.simScore('', ''), 0);
 });
 
 test('simScore ignores case and surrounding whitespace', () => {
-  assert.equal(Names.simScore(' KIRBZ ', 'kirbz'), 200);
+  assert.equal(Names.simScore(' KIRBZ ', 'kirbz'), 100);
 });
 
-test('simScore scores a one-character OCR miss below exact but well above zero', () => {
+test('a single-character OCR miss still clears STRONG_NAME_SCORE', () => {
+  // This is the tolerance the design relies on for smurfs and OCR damage:
+  // one wrong character must not drop a name below the strong-match bar.
   const s = Names.simScore('Kirbz', 'Klrbz');
-  assert.ok(s > 100 && s < 200, `expected partial score, got ${s}`);
+  assert.ok(s < 100, `expected below exact, got ${s}`);
+  assert.ok(s >= Names.STRONG_NAME_SCORE,
+    `one-character miss must stay a strong match, got ${s}`);
+});
+
+test('an unrelated name scores far below the strong-match bar', () => {
+  assert.ok(Names.simScore('Kirbz', 'Zzzzz') < Names.STRONG_NAME_SCORE);
 });
 
 test('affinity sums each name best match against the roster', () => {
   const roster = ['Kirbz', 'Vega'];
-  assert.equal(Names.affinity(['Kirbz'], roster), 200);
+  assert.equal(Names.affinity(['Kirbz'], roster), 100);
   assert.equal(Names.affinity([], roster), 0);
 });
 
@@ -400,9 +412,9 @@ Create `docs/capture/engine/names.js`. Move `_normName`, `_matchTotal`, `simScor
 | --- | --- | --- |
 | `_matchTotal` | Identical | Move as-is |
 | `affinity` | Identical | Move as-is |
-| `confidentOrientation` | Identical | Move as-is |
 | `simScore` | **Real drift** | Take `index.html`'s `_normName()` version. `scrim.html`'s `toLowerCase().trim()` is the older, weaker form, and phase 2 aims this function at battletag matching |
 | `_normName` | Only in `index.html` | Move, and **extend it to strip a `#` discriminator** per the design's §4.2 normalisation rule |
+| `confidentOrientation` | Only in `scrim.html` | Move unchanged. `index.html`'s `confidentLeft` is a *different* function and stays put — see the Interfaces note above |
 
 `normName` must be exported (the tests above call it directly) and must: casefold, trim, and drop everything from the first `#` onward.
 
