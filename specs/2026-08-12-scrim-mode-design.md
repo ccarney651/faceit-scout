@@ -141,10 +141,43 @@ Resolution order:
 | Condition | Outcome |
 | --- | --- |
 | One side matches our own roster | Sides resolved with no click — this replaces the WIP "Detect sides" button |
-| Other side matches a league team 5/5 | Labelled that team, pinned by `team_id` |
-| Other side matches 3–4/5 | "Probably *X*?" — one confirmation |
+| Other side matches a league team on **3 or more** of 5 | Labelled that team, pinned by `team_id` |
 | Matches a known local group | That opponent, with "you've played them N times" |
 | No match | A new local opponent, saved silently as "Opponent" |
+
+**The bar is three recognised tags, not five, because players routinely show up
+to scrims on smurf accounts.** A team fielding two smurfs is still that team, and
+demanding five would push the common case back into manual typing — the exact
+friction this design exists to remove.
+
+The label is applied without a confirmation dialog, but the session header shows
+how many of five matched and offers a one-click "not them", so a low-confidence
+identification is visible and cheap to correct rather than blocking.
+
+**Tie-break, which the lower bar makes reachable.** Two teams can now each match
+three. Resolution order: highest match count wins; if still level, the existing
+`confidentOrientation` margin decides; if that too is inconclusive, no team is
+assigned and the side falls through to the local-group path with both candidates
+offered as one-click labels.
+
+### 4.3 Learning smurfs
+
+When a side is identified as a league team, the names that did **not** match are
+very likely smurf accounts belonging to that team's players. They are recorded as
+learned aliases for that `team_id`, so the same alt matches outright next time and
+the identification strengthens with use rather than staying permanently marginal.
+
+`buildLearnedRosters()` already exists for this shape of data and is consulted
+before the FACEIT rosters in the current side-detection path; this generalises it
+from a side-detection aid to the alias store for the opponent registry.
+
+Two safeguards, since this writes identity data automatically:
+
+- Aliases are only learned from an identification the user did not correct.
+  Pressing "not them" discards the aliases learned from that read.
+- Learned aliases are local to the browser and never uploaded with a shared
+  scout, which would otherwise leak the mapping between a player's main and their
+  alt accounts.
 
 **Matched league teams are pinned by `team_id`, not by name**, so the label
 survives a Battle.net or team rename. Unmatched groups have nothing but names to
@@ -370,8 +403,12 @@ New tests this design requires:
   `scoreboard.js` / `scoreboard.test.js` pattern.
 - League-code block: a code present in `data.json` is refused as a scrim.
 - Wipe-date check: codes older than `code_wipe_date` are marked dead.
-- Roster search: 5/5 auto-labels, 3–4/5 asks, below that falls through to the
-  local registry.
+- Roster search: 3-of-5 or better labels the team; below that falls through to
+  the local registry; two teams tied at three resolve by the documented
+  tie-break, and an inconclusive tie assigns no team.
+- Smurf learning: unmatched names from an uncorrected identification become
+  aliases for that `team_id`; "not them" discards them; aliases never appear in
+  a shared scout payload.
 - Shape validation: reads that are not 5+5 / 1-2-2 / column-consistent are
   rejected; a single misread icon is localised.
 - Hero join: stats attach to the right player, including across a mid-map swap.
