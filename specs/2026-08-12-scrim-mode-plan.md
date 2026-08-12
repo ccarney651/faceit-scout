@@ -504,11 +504,17 @@ equal to the stored game_name."
 - [ ] **Step 1: Confirm the divergence classification for this module's functions**
 
 Run: `.venv/Scripts/python.exe tools/capture_divergence.py`
-Expected: of this module's functions only `uiModal` appears in the diverged list, at +9 characters — a cosmetic difference. Everything else is identical. If the report disagrees, stop and reclassify before moving anything.
+Expected: of this module's functions only `uiModal` appears in the diverged list, at +9 characters. Everything else is identical.
+
+**Those 9 characters are `,textarea`, and they are behavioural, not cosmetic.** `scrim.html`'s `uiModal` collects `input,select,textarea`; `index.html`'s collects `input,select`. The scrim page's OCR-import fallback builds a `<textarea id="rawocr">` inside a `collect:true` modal and reads it back through `fields.rawocr` — taking `index.html`'s selector makes that field permanently `undefined` and silently breaks the "edit the OCR text and re-parse" recovery path.
+
+So `uiModal` is **real drift, and the superset wins**: the shared version must collect `input,select,textarea`. Adding `textarea` cannot harm `index.html`, which has no textarea in any collect modal.
+
+A character-count diff does not tell you whether a change is cosmetic. Read the actual difference before classifying it.
 
 - [ ] **Step 2: Create the module**
 
-Create `docs/capture/engine/util.js` with the UMD shell, moving `esc`, `css`, `scl`, `ico`, `evp`, `b64bytes`, `bytesToB64`, `isTyping`, `toast`, `uiModal`, `uiConfirm` from `index.html`. Take `index.html`'s `uiModal`.
+Create `docs/capture/engine/util.js` with the UMD shell, moving `esc`, `css`, `scl`, `ico`, `evp`, `b64bytes`, `bytesToB64`, `isTyping`, `toast`, `uiModal`, `uiConfirm` from `index.html`. Take `index.html`'s copies **except `uiModal`'s collect selector, which must be the superset `input,select,textarea`** (see Step 1).
 
 `toast`, `uiModal` and `uiConfirm` touch the DOM but only through `document`, which both pages provide identically — they move as plain functions, not through `make(ctx)`.
 
