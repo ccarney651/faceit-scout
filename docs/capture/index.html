@@ -403,6 +403,7 @@ button:disabled{opacity:.45;cursor:default}
 <script src="engine/names.js"></script>
 <script src="engine/util.js"></script>
 <script src="engine/idb.js"></script>
+<script src="engine/frames.js"></script>
 <script>
 const {normName, simScore, affinity,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
@@ -602,6 +603,13 @@ document.getElementById('skip').onclick=nextCode;
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
+// ensureWork/grabFrame/grayCanvas/cellGrayPadded/nameCanvas/detectContentRect/
+// stopCapture/togglePreview/readyForCapture now live in engine/frames.js
+// (shared with scrim.html). stopCapture's teardown is page-specific -
+// index.html releases its live-scouting claim (a system scrims don't have),
+// so onStop is releaseClaim here and null on scrim.html.
+const frames=OWDBFrames.make({doc:document, video:vid, onStop:releaseClaim});
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
 addEventListener('resize', fitOverlay);
@@ -637,20 +645,6 @@ function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const ok=cal
 // owdb/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
 // the captured resolution — no dragging. Self-test then confirms alignment.
 const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
-// Find the game render area inside the capture, stripping near-black letterbox /
-// pillarbox (odd aspect ratios / resolutions), capped at 20% per edge. Does NOT
-// strip a window title bar (it isn't black) — share the whole screen for that.
-function detectContentRect(){ const W=vid.videoWidth,H=vid.videoHeight; if(!W) return {x:0,y:0,w:W,h:H};
-  const sw=Math.min(320,W), sh=Math.max(1,Math.round(H*sw/W));
-  const cv=document.createElement('canvas'); cv.width=sw; cv.height=sh; const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(vid,0,0,sw,sh);
-  const d=cx.getImageData(0,0,sw,sh).data, BLACK=24;
-  const rowMax=y=>{let m=0;for(let x=0;x<sw;x++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
-  const colMax=x=>{let m=0;for(let y=0;y<sh;y++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
-  const cY=Math.floor(sh*0.2), cX=Math.floor(sw*0.2);
-  let t=0; while(t<cY&&rowMax(t)<BLACK)t++; let b=sh-1; while(b>sh-1-cY&&rowMax(b)<BLACK)b--;
-  let l=0; while(l<cX&&colMax(l)<BLACK)l++; let r=sw-1; while(r>sw-1-cX&&colMax(r)<BLACK)r--;
-  const sx=W/sw, sy=H/sh; return {x:l*sx,y:t*sy,w:(r-l+1)*sx,h:(b-t+1)*sy};
-}
 function boxesFromStrips(R,dx,dy){ const o={}; for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s];
   o[s]={x:R.x+(fx+dx)*R.w, y:R.y+(fy+dy)*R.h, w:fw*R.w, h:fh*R.h}; } return o; }
 // Sum of the 10 cells' best centre-match scores — higher = better aligned.
@@ -692,8 +686,6 @@ function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal
   drawOverlay(); updateBtns(); selfTest(); }
 function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
 function clearCalPreview(){ pendingCal=null; const p=document.getElementById('calpreview'); if(p) p.style.display='none'; drawOverlay(); }
-function stopCapture(){ clearCalPreview(); if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
-  releaseClaim(); drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
 // Set which box we're about to draw, updating the hint in both the page and the
 // (fullscreen) stage. Used by the setup buttons and the in-stage buttons alike.
 function pickBox(side){ clearCalPreview(); drawMode=side;
@@ -709,8 +701,6 @@ document.addEventListener('fullscreenchange',()=>{ setTimeout(()=>{ fitOverlay()
   // fullscreen calibration — hide it there, bring it back on exit.
   const t=document.getElementById('tour'), fs=!!(document.fullscreenElement);
   if(t){ t.style.display = (fs||tourIdx<0) ? 'none' : 'block'; } });
-function togglePreview(){ const L=document.getElementById('layout'); L.classList.toggle('nopreview');
-  document.getElementById('hidep').textContent=L.classList.contains('nopreview')?'Show preview':'Hide preview'; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     clearCalPreview();
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
@@ -838,12 +828,6 @@ function maybeShowTour(){
 }
 
 // ---------- matcher ----------
-const work=document.createElement('canvas'); let wctx;
-function ensureWork(){ work.width=REF_W+2*PAD; work.height=REF_H+2*PAD; wctx=work.getContext('2d',{willReadFrequently:true}); }
-function cellGrayPadded(frame, cell){ const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  wctx.drawImage(frame,fx,fy,fw,fh,0,0,work.width,work.height);
-  const d=wctx.getImageData(0,0,work.width,work.height).data, g=new Float32Array(work.width*work.height);
-  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; return g; }
 function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
   const offs = fast ? [PAD] : [0,PAD,2*PAD];   // fast = centre only: sensitive to box offset, for the calibrate sweep
   for(const dy of offs) for(const dx of offs){ const cand=new Float32Array(REF_W*REF_H); let m=0;
@@ -851,7 +835,6 @@ function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,n
     m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
     for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
   return best; }
-function grabFrame(){ const c=document.createElement('canvas'); c.width=vid.videoWidth; c.height=vid.videoHeight; c.getContext('2d').drawImage(vid,0,0); return c; }
 function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
 function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
@@ -935,18 +918,6 @@ function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
 // the operator stares at "detecting sides…" with nothing to do but wait or
 // force Swap L/R. No-op once it's running; harmless if OCR is never used.
 function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().then(()=>{ _ocrLoadFailed=false; },()=>{}); }
-// Name bar sits at ~48-90% of each portrait cell's height (mirror of the .exe's
-// read_hud_names); grayscale + 6x upscale + a light contrast stretch lift the
-// ~10px text enough for OCR.
-function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
-  const sx=Math.max(0,cell.x-padX), sy=cell.y+cell.h*0.48, sw=cell.w+2*padX, sh=cell.h*0.42, sc=6;
-  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(sw*sc)); cv.height=Math.max(1,Math.round(sh*sc));
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(frame, sx,sy,sw,sh, 0,0,cv.width,cv.height);
-  const im=cx.getImageData(0,0,cv.width,cv.height), d=im.data;
-  for(let i=0;i<d.length;i+=4){ let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-    g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
-  cx.putImageData(im,0,0); return cv; }
 const OCR_READ_TIMEOUT_MS=8000;
 async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
@@ -1238,14 +1209,6 @@ function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r
 function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
   for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
   return bestMatch(gp, side); }
-// Render a stored grayscale crop to a (scaled) canvas for the review portraits.
-function grayCanvas(b64, scale){ scale=scale||2; const px=b64bytes(b64);
-  const tmp=document.createElement('canvas'); tmp.width=REF_W; tmp.height=REF_H;
-  const im=tmp.getContext('2d').createImageData(REF_W,REF_H);
-  for(let i=0,j=0;i<px.length;i++,j+=4){ im.data[j]=im.data[j+1]=im.data[j+2]=px[i]; im.data[j+3]=255; }
-  tmp.getContext('2d').putImageData(im,0,0);
-  const cv=document.createElement('canvas'); cv.width=REF_W*scale; cv.height=REF_H*scale;
-  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false; cx.drawImage(tmp,0,0,cv.width,cv.height); return cv; }
 function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
   const opts='<option value="">— fix to… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ new hero…</option>';
   for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
@@ -1728,7 +1691,6 @@ function setPopBtn(){ const b=document.getElementById('pop'); if(!b) return;
 // flips by itself — instead we ARM it then, and fire it on the next click or
 // capture keypress. Only ever auto-opens once per page load; after the scout
 // closes it themselves we don't fight them, the button reopens it.
-function readyForCapture(){ return !!(vid.srcObject&&boxes.a&&boxes.b&&selectedCode()); }
 function maybeAutoPop(){
   if(pipAutoShown||!('documentPictureInPicture' in window)) return;
   if(!readyForCapture()){ pipAutoPending=false; return; }

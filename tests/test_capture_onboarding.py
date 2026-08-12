@@ -55,7 +55,7 @@ global.requestAnimationFrame=()=>0;
 # Calibrate preview state machine
 # ---------------------------------------------------------------------------
 
-_CAL_BLOCK = _extract("function autoCalibrate", "function stopCapture")
+_CAL_BLOCK = _extract("function autoCalibrate", "function pickBox")
 
 _CAL_STUBS = _FAKE_DOM + r"""
 global.vid={ videoWidth:1920, videoHeight:1080, srcObject:{}, clientWidth:640, clientHeight:360 };
