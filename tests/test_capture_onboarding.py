@@ -9,6 +9,20 @@ session changed are pinned here so a future edit can't silently regress them:
   behaviour committed on sweep; these tests pin the new transition order.
 - The guided tour opens at the first incomplete step, walks prev/next, and only
   marks itself done when completed or explicitly dismissed.
+
+The calibrate-preview state machine (autoCalibrate/commitCal/retryCal/
+clearCalPreview) later moved into docs/capture/engine/calibration.js (shared
+with scrim.html; see tools/capture_divergence.py and that module's own
+docstring). This test now loads the REAL module via OWDBCalibration.make(),
+same as a page would, instead of splicing extracted function text into the
+script - boxesFromStrips/scoreBoxes/calOk/renderCalPreview/drawOverlay/
+commitCal/retryCal/clearCalPreview are now internal closures of one make()
+instance, so they can no longer be overridden with global stubs the way they
+could when they were free-standing page functions. `pendingCal` is instance-
+private too (see calibration.js), so these checks now observe only what a
+page can observe: DOM state (calhint/calpreview), the persisted `boxes`
+global, and the free variables the module still calls out to (readComp,
+detectContentRect, selfTest, updateBtns, setStageHint).
 """
 
 from __future__ import annotations
@@ -21,6 +35,7 @@ from pathlib import Path
 import pytest
 
 APP = Path(__file__).resolve().parents[1] / "docs" / "capture" / "index.html"
+ENGINE_CALIBRATION = Path(__file__).resolve().parents[1] / "docs" / "capture" / "engine" / "calibration.js"
 
 
 def _extract(start: str, end: str) -> str:
@@ -55,52 +70,77 @@ global.requestAnimationFrame=()=>0;
 # Calibrate preview state machine
 # ---------------------------------------------------------------------------
 
-_CAL_BLOCK = _extract("function autoCalibrate", "function pickBox")
-
 _CAL_STUBS = _FAKE_DOM + r"""
 global.vid={ videoWidth:1920, videoHeight:1080, srcObject:{}, clientWidth:640, clientHeight:360 };
 global.boxes={};
-global.REFS=[];
+global.drawMode=null; global.dragS=null; global.dragC=null;
+global.REFS=[];   // empty: skips the sweep, so scoreBoxes (real, needs
+                   // ensureWork/cellGrayPadded/bestMatch) never actually runs here.
 global.detectContentRect=()=>({x:0,y:0,w:1920,h:1080});
-global.boxesFromStrips=()=>({ a:{x:1,y:2,w:100,h:20}, b:{x:3,y:4,w:100,h:20} });
-global.scoreBoxes=()=>1;
-global.calOk=(bx)=>(bx&&bx.a&&bx.b?9:null);   // "9/10 confident" read
-global.drawOverlay=()=>{ global._draw=1; };
+// calOk/renderCalPreview/drawOverlay/commitCal/retryCal/clearCalPreview are
+// now internal to the calibration.js instance below, so they can't be
+// stubbed - only the free variables the module still calls out to can be.
+// readComp backs calOk's "N/10 confident" read; mirror the old calOk stub's
+// 9-of-10 result whenever both boxes are present.
+global.readComp=(bx)=>{ if(!bx||!bx.a||!bx.b) return null;
+  return { a:[{score:0.9},{score:0.9},{score:0.9},{score:0.9},{score:0.9}],
+           b:[{score:0.9},{score:0.9},{score:0.9},{score:0.9},{score:0.1}] }; };
 global.updateBtns=()=>{ global._update=1; };
 global.selfTest=()=>{ global._selftest=1; };
 global.setStageHint=()=>{};
+global.ov={ width:640, height:360 };
+let _strokeRectCalls=0;
+global.octx={ strokeStyle:'', lineWidth:0, clearRect(){}, strokeRect(){ _strokeRectCalls++; },
+  beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, setLineDash(){} };
+global.css=()=>'#8087ff';
+global.scl=()=>1;
+"""
+
+_WIRE_CAL = r"""
+var module = { exports: {} };
 """
 
 _CAL_BODY = r"""
 const results=[];
 const check=(name,cond)=>{ results.push({name, ok:!!cond}); };
 
+const cal=OWDBCalibration.make({ doc:global.document, video:global.vid, ov:global.ov, octx:global.octx });
+const {autoCalibrate, commitCal, retryCal, clearCalPreview}=cal;
+
 autoCalibrate();
-check('pendingCal set (nothing committed yet)', !!pendingCal && !!pendingCal.boxes && pendingCal.ok===9);
 check('preview panel shown', el('calpreview').style.display==='block');
 check('hint shows the confidence', el('calhint').innerHTML.indexOf('9/10')>=0);
-check('overlay redrawn with candidate boxes', global._draw===1);
+check('overlay redrawn with candidate boxes', _strokeRectCalls>0);
 check('boxes NOT committed by autoCalibrate', global.boxes.a===undefined);
 
 commitCal();
 check('boxes committed after confirm', !!global.boxes.a && !!global.boxes.b);
 check('boxes persisted', (global.localStorage.getItem('owdb_cap_boxes')||'').indexOf('x')>=0);
 check('panel hidden after commit', el('calpreview').style.display==='none');
-check('pendingCal cleared after commit', global.pendingCal===null);
 check('self-test runs after commit', global._selftest===1);
 
-global.vid.srcObject=null;
-pendingCal={boxes:{},ok:5}; el('calpreview').style.display='block';
-retryCal();
-check('retryCal clears preview when no video', el('calpreview').style.display==='none' && global.pendingCal===null);
+// pendingCal is instance-private now (see calibration.js) - observe that it
+// was cleared indirectly: a second commitCal() with no fresh autoCalibrate()
+// has nothing pending, so it must be a no-op (boxes unchanged).
+const boxesAfterFirstCommit=JSON.stringify(global.boxes);
+commitCal();
+check('pendingCal cleared after commit (second commit is a no-op)', JSON.stringify(global.boxes)===boxesAfterFirstCommit);
 
-pendingCal={boxes:{},ok:8}; el('calpreview').style.display='block';
+global.vid.srcObject=null;
+el('calpreview').style.display='block';
+retryCal();
+check('retryCal clears preview when no video', el('calpreview').style.display==='none');
+
+el('calpreview').style.display='block';
 clearCalPreview();
-check('clearCalPreview discards candidate + hides', global.pendingCal===null && el('calpreview').style.display==='none');
+check('clearCalPreview hides the preview panel', el('calpreview').style.display==='none');
 
 global.vid.videoWidth=0; global.vid.srcObject=null;
+const boxesBeforeGuard=JSON.stringify(global.boxes);
 autoCalibrate();
-check('autoCalibrate guards no-video', el('calhint').innerHTML.indexOf('Share your screen first')>=0 && global.pendingCal===null);
+check('autoCalibrate guards no-video', el('calhint').innerHTML.indexOf('Share your screen first')>=0);
+commitCal();
+check('guarded autoCalibrate created no pending candidate', JSON.stringify(global.boxes)===boxesBeforeGuard);
 
 console.log(JSON.stringify(results));
 """
@@ -110,7 +150,12 @@ def test_auto_calibrate_previews_before_committing() -> None:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not available to run the capture app's helpers")
-    src = _CAL_STUBS + "\n" + _CAL_BLOCK + "\n" + _CAL_BODY
+    calibration_src = ENGINE_CALIBRATION.read_text(encoding="utf-8")
+    src = (
+        _CAL_STUBS + "\n" + _WIRE_CAL + "\n" + calibration_src
+        + "\nconst OWDBCalibration = module.exports;\n"
+        + _CAL_BODY
+    )
     proc = subprocess.run([node, "-e", src], capture_output=True, text=True)
     assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
     results = json.loads(proc.stdout)

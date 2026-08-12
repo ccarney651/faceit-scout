@@ -374,7 +374,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -507,19 +507,14 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:null});
 const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
-function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
+// autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
+// clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
+// live in engine/calibration.js (shared with index.html), including this
+// page's scoreboard/score_readout box handling in drawOverlay/pickBox.
+const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx});
+const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
+       clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
 addEventListener('resize', fitOverlay);
-function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scl();
-  // During a calibration preview, draw the PROPOSED boxes (accent, dashed)
-  // instead of the committed ones — the scout reviews the candidate placement
-  // before committing it.
-  const src=pendingCal?pendingCal.boxes:boxes;
-  for(const side of ['a','b']){ const b=src[side]; if(!b) continue;
-    octx.strokeStyle=pendingCal?css('--accent'):(side==='a'?css('--blue'):css('--red')); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
-    octx.setLineDash(pendingCal?[4,3]:[3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
-  for(const side of ['scoreboard','score_readout']){ const b=boxes[side]; if(!b) continue;
-    octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s); }
-  if(dragS&&dragC){ octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); } }
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
@@ -532,56 +527,8 @@ ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s
   document.getElementById('calhint').textContent=t; setStageHint(t);
   drawOverlay(); updateBtns(); if(done) selfTest(); });
 function setStageHint(html){ const e=document.getElementById('stagehint'); if(e) e.innerHTML=html; }
-function calOk(bx){ const comp=readComp(bx); if(!comp) return null; return [...comp.a,...comp.b].filter(s=>s.score>=0.55).length; }
-function calMsg(ok){ return ok>=8?`<span class="ok">calibration looks good \u2014 ${ok}/10 portraits recognised.</span>`
-    : ok>=5?`calibration: ${ok}/10 recognised \u2014 usable; nudge the boxes if some read ??.`
-    : `<span class="warn">only ${ok}/10 recognised \u2014 boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`; }
 function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const ok=calOk(boxes); if(ok==null) return;
   const msg=calMsg(ok); document.getElementById('calhint').innerHTML=msg; setStageHint(msg); }
-const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
-function boxesFromStrips(R,dx,dy){ const o={}; for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s];
-  o[s]={x:R.x+(fx+dx)*R.w, y:R.y+(fy+dy)*R.h, w:fw*R.w, h:fh*R.h}; } return o; }
-function scoreBoxes(frame, bxs){ ensureWork(); let sum=0;
-  for(const side of ['a','b']){ const b=bxs[side];
-    for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      sum += bestMatch(cellGrayPadded(frame,cell), side, true).score; } }
-  return sum; }
-let pendingCal=null;   // {boxes, ok} — candidate placement awaiting the scout's confirmation
-function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share your screen first.</span>';
-    document.getElementById('calhint').innerHTML=w; setStageHint(w); return; }
-  const R=detectContentRect();
-  let best=boxesFromStrips(R,0,0);
-  if(REFS.length){ const frame=grabFrame(); let bestScore=scoreBoxes(frame,best);
-    for(let dyi=-8;dyi<=8;dyi++) for(let dxi=-2;dxi<=2;dxi++){ if(!dyi&&!dxi) continue;
-      const cand=boxesFromStrips(R, dxi*0.01, dyi*0.01), sc=scoreBoxes(frame,cand);
-      if(sc>bestScore){ bestScore=sc; best=cand; } } }
-  for(const extra of ['scoreboard','score_readout']) if(boxes[extra]) best[extra]=boxes[extra];
-  // Preview BEFORE commit: show where the boxes WOULD go and how confident the
-  // read is, so a bad placement is rejected instead of silently saved. Nothing
-  // is written until the scout clicks "Use these boxes".
-  pendingCal={boxes:best, ok:calOk(best)};
-  renderCalPreview(); drawOverlay(); }
-function renderCalPreview(){ const p=document.getElementById('calpreview'); if(!p||!pendingCal) return;
-  const ok=pendingCal.ok, head=ok==null?`Auto-calibrate found the boxes \u2014 review the placement below.`
-    : ok>=8?`<span class="ok">${ok}/10 portraits confident \u2014 this looks right.</span>`
-    : ok>=5?`${ok}/10 portraits confident \u2014 usable, but check the boxes below.`
-    : `<span class="warn">only ${ok}/10 portraits confident \u2014 the placement is likely off.</span>`;
-  p.querySelector('.calprev-msg').innerHTML=head;
-  p.style.display='block';
-  document.getElementById('calhint').innerHTML=head; setStageHint(head); }
-function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal=null;
-  localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes));
-  const p=document.getElementById('calpreview'); if(p) p.style.display='none';
-  drawOverlay(); updateBtns(); selfTest(); }
-function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
-function clearCalPreview(){ pendingCal=null; const p=document.getElementById('calpreview'); if(p) p.style.display='none'; drawOverlay(); }
-function pickBox(side){ clearCalPreview(); drawMode=side;
-  const t = side==='a' ? 'Drag a box over the 5 BLUE (left) portraits.'
-    : side==='b' ? 'Drag a box over the 5 RED (right) portraits.'
-    : side==='scoreboard' ? 'Drag a box over the scrim scoreboard panel (top-left, below the portraits).'
-    : 'Drag a box over the top-centre score readout (e.g. 2 - 3).';
-  document.getElementById('calhint').textContent=t; setStageHint(t); }
-function enterFsCal(){ const s=document.getElementById('stage'); if(s.requestFullscreen) s.requestFullscreen().catch(()=>{}); }
 document.addEventListener('fullscreenchange',()=>{ setTimeout(()=>{ fitOverlay(); drawOverlay(); }, 60);
   // The tour panel is outside the fullscreen node, so it would vanish during
   // fullscreen calibration — hide it there, bring it back on exit.
