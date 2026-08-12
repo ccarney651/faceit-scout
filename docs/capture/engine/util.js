@@ -17,8 +17,11 @@
 // bytesToB64, isTyping, toast and uiConfirm were identical between the
 // pages. uiModal had drifted by 9 characters — index.html's collect-mode
 // field scan used `m.querySelectorAll('input,select')`, scrim.html's added
-// ',textarea'. index.html's version was kept (cosmetic difference; no modal
-// in either page currently collects a textarea field).
+// ',textarea'. This is real (not cosmetic) drift: scrim.html's OCR-import
+// fallback puts a <textarea id="rawocr"> inside a collect:true modal and
+// reads the edited text back via fields.rawocr. Took the superset —
+// 'input,select,textarea' — since adding textarea support cannot affect
+// index.html, which has no textarea in any collect modal.
 //
 // Works as a browser global (`window.OWDBUtil`) and as a CommonJS module for
 // node:test / pytest.
@@ -112,7 +115,7 @@
       var done = function (v) {
         back.classList.remove('open'); back.innerHTML = ''; document.removeEventListener('keydown', onkey, true);
         if (!opts.collect) { res(v); return; }
-        var fields = {}; m.querySelectorAll('input,select').forEach(function (el) { fields[el.id] = el.value; }); res({ value: v, fields: fields });
+        var fields = {}; m.querySelectorAll('input,select,textarea').forEach(function (el) { fields[el.id] = el.value; }); res({ value: v, fields: fields });
       };
       var acts = opts.actions || [{ label: 'OK', value: true }];
       acts.forEach(function (a) {

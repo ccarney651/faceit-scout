@@ -287,3 +287,16 @@ def test_scrims_html_script_is_syntactically_valid() -> None:
         assert proc.returncode == 0, f"node --check failed on scrims.html:\n{proc.stderr}"
     finally:
         check.unlink(missing_ok=True)
+
+
+def test_ui_modal_collects_textarea_fields() -> None:
+    """scrim.html's OCR-import fallback edits raw text in a <textarea> inside a
+    collect:true modal and reads it back via fields.rawocr. A collect selector
+    without `textarea` makes that field permanently undefined and silently
+    breaks the 'edit the OCR text and re-parse' recovery path - which is how it
+    broke once during the engine extraction.
+    """
+    util = (APP.parent / "engine" / "util.js").read_text(encoding="utf-8")
+    assert "input,select,textarea" in util.replace(" ", "")
+    html = APP.read_text(encoding="utf-8")
+    assert 'id="rawocr"' in html, "the textarea this guard exists for moved or was renamed"
