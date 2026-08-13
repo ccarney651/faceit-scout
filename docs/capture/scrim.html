@@ -1020,7 +1020,7 @@ async function renderScrimPanel(){
   const scrims=await idbScrims();
   const sel=document.getElementById('scrimpick');
   const saved=localStorage.getItem('owdb_cap_scrim');
-  sel.innerHTML='<option value="">\uff0b new scrim\u2026</option>'+scrims.map(s=>`<option value="${esc(s.id)}">${esc(s.team_us||'us')} vs ${esc(s.opponent||'opponent')}${s.date?' \u00B7 '+esc(s.date):''}</option>`).join('');
+  sel.innerHTML='<option value="">\uff0b new scrim\u2026</option>'+scrims.map(s=>`<option value="${esc(s.id)}">${esc(scrimLabel(s))}</option>`).join('');
   if(saved && scrims.some(s=>s.id===saved)){ sel.value=saved; activeScrim=scrims.find(s=>s.id===saved); }
   else activeScrim=null;
   fillScrimForm();
@@ -1035,6 +1035,28 @@ async function onScrimPick(){
   const scrims=await idbScrims(); activeScrim=scrims.find(s=>s.id===id)||null;
   if(activeScrim) localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   fillScrimForm(); renderScrimMaps(); updateBtns();
+}
+// ensureScrim(): opening the scrim tool means a scrim block is already in
+// progress, so capturing the first map must not wait on paperwork. Team names
+// are metadata the operator can add whenever - and phase 2 resolves the
+// opponent off the HUD automatically - so they must never stand between
+// someone and their first Snapshot. An unnamed block is labelled by its date.
+async function ensureScrim(){
+  if(activeScrim) return activeScrim;
+  activeScrim={ id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    created_at:new Date().toISOString(), map_no:1,
+    team_us:'', opponent:'', date:new Date().toISOString().slice(0,10),
+    notes:'', auto_created:true, updated_at:new Date().toISOString() };
+  await idbPutScrim(activeScrim);
+  localStorage.setItem('owdb_cap_scrim', activeScrim.id);
+  await renderScrimPanel();
+  return activeScrim;
+}
+// scrimLabel(): what an unnamed block is called in the picker, so it does not
+// read as a scrim against a team literally called "opponent".
+function scrimLabel(s){
+  if(s.team_us||s.opponent) return (s.team_us||'us')+' vs '+(s.opponent||'opponent');
+  return 'Scrim'+(s.date?' · '+s.date:'');
 }
 async function saveScrim(){
   const team_us=(document.getElementById('scus').value||'').trim();
@@ -1090,7 +1112,7 @@ async function refuseIfLeagueCode(code){
   return true;
 }
 async function startScrimMap(){
-  if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
+  await ensureScrim();
   const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
   const code=(document.getElementById('scrimcode').value||'').trim();
   if(await refuseIfLeagueCode(code)) return;
@@ -1100,7 +1122,7 @@ async function startScrimMap(){
   toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
 }
 async function startQueuedMap(m){
-  if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
+  await ensureScrim();
   if(session){ toast('finish the current map first','warn'); return; }
   if(await refuseIfLeagueCode(m.code)) return;
   activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
@@ -1298,9 +1320,10 @@ async function ocrTextFromImage(file){
   return text; }
 async function importSessionFromScreenshot(file){
   if(!file) return;
-  const team_us=(document.getElementById('scus').value||'').trim();
-  const opponent=(document.getElementById('scopp').value||'').trim();
-  if(!team_us||!opponent){ toast('enter Our team and Opponent first','warn'); return; }
+  // No name gate here either: importing a session or starting one is capture
+  // work, and team names are metadata that can arrive at any point (phase 2
+  // fills the opponent in from the HUD).
+  await ensureScrim();
   const ocrText=await ocrTextFromImage(file);
   let rows=parseScrimSessionText(ocrText);
   if(!rows.length){
@@ -1380,15 +1403,22 @@ async function addScaffoldMapByHand(){
 // header), not a UI nicety a user could route around by hand.
 async function startScaffoldSession(){
   if(!SCAFFOLD.length){ toast('nothing to start \u2014 import a screenshot or add a map first','warn'); return; }
-  const team_us=(document.getElementById('scus').value||'').trim();
-  const opponent=(document.getElementById('scopp').value||'').trim();
-  if(!team_us||!opponent){ toast('enter Our team and Opponent first','warn'); return; }
+  // No name gate here either: importing a session or starting one is capture
+  // work, and team names are metadata that can arrive at any point (phase 2
+  // fills the opponent in from the HUD).
+  await ensureScrim();
   const checks=[...document.querySelectorAll('#scrimqueuelist input[type=checkbox]')];
   const rows=checks.filter(cb=>cb.checked).map(cb=>SCAFFOLD[+cb.dataset.i]).filter(r=>r&&!r.league);
   if(!rows.length){ toast('nothing checked to start','warn'); return; }
-  if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
-  Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
-    date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
+  // Carry over whatever names have been typed so far, without requiring any:
+  // ensureScrim() has already created the block, and blanks stay blank rather
+  // than being filled with the placeholders "us" and "opponent", which would
+  // later be indistinguishable from a team genuinely named that.
+  Object.assign(activeScrim,{
+    team_us:(document.getElementById('scus').value||'').trim(),
+    opponent:(document.getElementById('scopp').value||'').trim(),
+    date:document.getElementById('scdate').value || activeScrim.date,
+    notes:(document.getElementById('scnotes').value||'').trim(),
     updated_at:new Date().toISOString()});
   await idbPutScrim(activeScrim); localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   const startNo=activeScrim.map_no||1;

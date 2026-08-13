@@ -375,3 +375,40 @@ def test_ui_modal_collects_textarea_fields() -> None:
     assert "querySelectorAll('input,select,textarea')" in util.replace(" ", "")
     html = APP.read_text(encoding="utf-8")
     assert 'id="rawocr"' in html, "the textarea this guard exists for moved or was renamed"
+
+
+def test_capturing_never_waits_on_team_names() -> None:
+    """Opening the scrim tool means a scrim block is already in progress.
+
+    The page used to refuse to start a map until a scrim had been created with
+    at least one team name typed in - which the operator hit immediately as
+    "clunky to set up". Team names are metadata (phase 2 resolves the opponent
+    off the HUD anyway) and must never stand between someone and their first
+    Snapshot. The design says as much: nothing here blocks capture.
+    """
+    html = APP.read_text(encoding="utf-8")
+    assert "create / pick a scrim first" not in html, (
+        "starting a map refuses again until a scrim is created by hand"
+    )
+    assert "enter Our team and Opponent first" not in html, (
+        "importing or starting a session demands team names again"
+    )
+    assert "async function ensureScrim()" in html, (
+        "ensureScrim() is what creates the block implicitly - it is gone"
+    )
+    # Every entry point into capture must go through it.
+    assert html.replace(" ", "").count("awaitensureScrim();") >= 3, (
+        "a capture entry point no longer creates the scrim block implicitly"
+    )
+
+
+def test_an_unnamed_scrim_block_is_not_labelled_as_a_team() -> None:
+    """A block with no names must read as a date, not as 'us vs opponent'.
+
+    Filling blanks with those placeholders makes an unnamed block
+    indistinguishable from a scrim against a team genuinely called that, and
+    the placeholder then gets stored on every map record.
+    """
+    html = APP.read_text(encoding="utf-8")
+    assert "function scrimLabel(s)" in html
+    assert "esc(scrimLabel(s))" in html, "the picker no longer uses scrimLabel"
