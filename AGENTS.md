@@ -117,6 +117,10 @@ canonical and this copy is the bug.
 - **The capture pages' Content-Security-Policy lives in a `<meta>` tag**, so
   `curl -I` shows nothing. It has silently broken browser APIs before — check it
   first when something fails quietly in `docs/capture/`.
+- **The capture pages share an engine under `docs/capture/engine/`.** A fix to
+  calibration, hero recognition, the overlay or name matching belongs in the
+  module, not in a page. The snapshot/review/finish cluster is still forked
+  between the two pages until phase 3 — check both when touching it.
 - **Captures are season-scoped** (`data/captures/s9/`). Two writers key off a
   per-season constant each: `CURRENT_SEASON` in `infra/upload-worker/worker.js`
   and `CONTRIB_DIR` in `owdb/contribute.py`. At the cutover, follow

@@ -586,6 +586,42 @@ has learned, held in the browser's own IndexedDB.
 jsDelivr on first use and runs in a worker. It is optional: when it fails to
 load, capture continues without name attribution rather than breaking.
 
+**`docs/capture/index.html` and `docs/capture/scrim.html` share a JS engine
+under `docs/capture/engine/`, not by copy-paste.** The two pages used to be
+hand-maintained forks of one another: a 2026-08-12 audit
+(`tools/capture_divergence.py`) found 104 top-level functions defined in both
+files, 44 of them silently drifted apart. Seven modules were extracted so the
+logic is owned once:
+
+| Module | Owns |
+| --- | --- |
+| `engine/names.js` | Name normalisation, similarity scoring, roster affinity, `confidentOrientation` |
+| `engine/util.js` | HTML/attr escaping, CSS injection, base64 helpers, toasts, modals, the `ICONS` table |
+| `engine/idb.js` | IndexedDB open/read/write; `open(version, stores)` takes its store list from the caller rather than hard-coding one |
+| `engine/frames.js` | Screen share, frame grab, greyscale canvases; `ctx.onStop` is the page-specific teardown hook |
+| `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
+| `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
+| `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
+
+**The module contract is a UMD IIFE plus `make(ctx)` for anything stateful.**
+Every module exports the same way `docs/capture/scoreboard.js` always has —
+`module.exports = Mod` under Node, `global.OWDBxxx` (`OWDBNames`, `OWDBUtil`,
+`OWDBIdb`, `OWDBFrames`, `OWDBCalibration`, `OWDBRefs`, `OWDBOverlay`,
+`OWDBTour`) in the browser — so the same file runs under `node --test` and in
+either page unmodified. A module that needs per-page state (DOM handles,
+which boxes to draw, what happens on stop) takes a `make(ctx)` factory and
+reads its behaviour from `ctx`; page differences are **injected, never
+branched on inside the module**. `docs/capture/scoreboard.js` is the original
+of this pattern — the engine modules generalise it.
+
+**The snapshot/review/finish cluster is deliberately not extracted.**
+`finishMap` and its neighbours stay forked, defined separately in each page,
+until phase 3: `finishMap` is roughly 1,530 characters in `index.html`
+against a roughly 110-character stub in `scrim.html`, and phase 3 rewrites the
+scrim finish flow anyway, which would waste an extraction done now. Anyone
+touching snapshot, review, or finish logic must check **both**
+`docs/capture/index.html` and `docs/capture/scrim.html`.
+
 **The app is fed by two committed JSON files rather than by crawling FACEIT.**
 `docs/capture/data.json` carries the capturable replay codes and the rosters, and
 is rebuilt by `tools/build_capture_data.py` on every CI run.
@@ -608,14 +644,16 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 
 | File | Responsibility |
 | --- | --- |
-| `docs/capture/index.html` | The league capture app — 2,138 lines, self-contained apart from theme and OCR |
+| `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js` |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, each with a co-located `*.test.js` |
+| `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |
 | `docs/capture/hero_icons.json` | Hero portrait art for the UI |
 | `tools/build_capture_data.py` | Builds `docs/capture/data.json` from the ingest database |
 | `tools/build_capture_refs.py` | Builds `docs/capture/refs.json` from a curator's local library |
+| `tools/capture_divergence.py` | Reports which top-level functions still differ between the two pages — run it before touching shared code |
 
 ### How it connects
 
@@ -637,6 +675,14 @@ now pins the four clauses that matter: `worker-src blob:`, `wasm-unsafe-eval`,
 the `data:` connect source, and the jsDelivr origin the OCR library is loaded
 from.
 
+**`script-src` lacked `'self'` until commit `bc91c1f` (2026-08-12), and that
+silently blocked every same-origin script.** `style-src`, `img-src`, and
+`font-src` all carried `'self'`; `script-src` did not, so `<script
+src="scoreboard.js">` never loaded in production — `window.Scoreboard` was
+undefined on both pages the whole time, with no console error pointing at the
+CSP. Adding `'self'` was a prerequisite for the engine extraction below, since
+every `engine/*.js` file is loaded the same same-origin way.
+
 **The page is not an artifact and may use a CDN.** Unlike `docs/index.html`,
 which must stay self-contained, this page links `docs/theme.css` directly and
 pulls `tesseract.js` from jsDelivr.
@@ -645,7 +691,21 @@ pulls `tesseract.js` from jsDelivr.
 runs `node --check` over the inline scripts — see
 `tests/test_capture_scrim.py::test_league_capture_html_inline_script_is_syntactically_valid`.
 Editing a capture page without running those tests risks shipping a page that
-does not parse.
+does not parse. **`tests/test_capture_js_units.py` runs every
+`docs/capture/**/*.test.js` file under `node --test`** — before this shim
+existed, `scoreboard.test.js`'s 9 tests sat green in the repo but were never
+actually executed by anything. Run `tools/capture_divergence.py` before
+touching any function shared between the two pages; it reports which
+top-level functions still differ so a fix does not silently apply to only one
+page.
+
+**Real drift the extraction fixed, as a sample of what "104 shared functions,
+44 diverged" meant in practice:** `simScore` — the scrim page's name
+normaliser was weaker than the league page's; `uiModal` — the scrim copy had
+dropped the `textarea` case, which broke editing and re-parsing an OCR read
+on that page only; `ocrWorker` — the scrim page never got the league page's
+OCR load timeout, so a stuck load could hang forever on scrim capture but not
+on league capture.
 
 ## 7. Scrims
 

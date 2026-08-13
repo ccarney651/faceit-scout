@@ -17,6 +17,35 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-13
+
+### Changed
+- **`docs/capture/index.html` and `docs/capture/scrim.html` now share a JS
+  engine instead of being hand-maintained forks.** The two pages had drifted:
+  104 top-level functions existed in both, 44 of them silently different.
+  Seven modules — `names.js`, `util.js`, `idb.js`, `frames.js`,
+  `calibration.js`, `refs.js`, `overlay.js`, `tour.js` — moved to
+  `docs/capture/engine/`, cutting the shared-but-forked count to 34. No
+  user-visible behaviour changed; where the code lives did. The
+  snapshot/review/finish cluster (`finishMap` and neighbours) stays forked
+  until phase 3 rewrites the scrim finish flow. See `ARCHITECTURE.md` §6.
+- `tools/capture_divergence.py` reports which functions still differ between
+  the two pages, and `tests/test_capture_js_units.py` now runs every
+  `docs/capture/**/*.test.js` under `node --test` via pytest —
+  `scoreboard.test.js`'s 9 tests were previously never executed by anything.
+
+### Fixed
+- **The capture pages' CSP was silently blocking every same-origin script.**
+  `script-src` lacked `'self'` while `style-src`/`img-src`/`font-src` all had
+  it, so `<script src="scoreboard.js">` had never loaded in production.
+  Commit `bc91c1f` adds `'self'`, which is also a prerequisite for the shared
+  engine above.
+- Real drift caught during the extraction: `simScore` (the scrim page had a
+  weaker name normaliser), `uiModal` (the scrim copy had dropped the
+  `textarea` case, breaking OCR edit-and-reparse on that page), and
+  `ocrWorker` (the scrim page lacked the league page's OCR load timeout, so
+  its OCR could hang forever).
+
 ## 2026-08-11
 
 ### Changed
