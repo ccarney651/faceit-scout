@@ -473,3 +473,30 @@ the HUD nameplate read is purely a fallback.
   handling is out of scope.
 - **Auto map detection** (phase 6) — deliberately last, so the reactive flow is
   proven in real scrims before anything automates on top of it.
+
+- **Promoting a scrim capture to a league capture.** Today the league-code block
+  refuses a league code outright. The better outcome, when someone has *already*
+  captured a map and only then realises it was a league match, is to promote the
+  record rather than discard the work. This is cheaper than it sounds, because
+  the two records already share their payload:
+
+  | | League map | Scrim map |
+  | --- | --- | --- |
+  | id | `match_id:game_no` | `scrim_id:map_no` |
+  | shared | `observations`, `bans`, `profile`, `captured_at`, `winner_side` | same fields |
+  | missing | — | `match_id`, `game_no` |
+
+  Both missing fields come from the code itself: `data.json`'s entry carries
+  `{code, match_id, game_no, map, division, team_a, team_b}`. Promotion is then a
+  lookup, a re-key, and a write into the `maps` store, after which the existing
+  publish path handles it unchanged.
+
+  **The one piece of real work is team orientation.** A scrim record stores
+  `side_a_team`/`side_b_team` (us / them) while a league record needs FACEIT's
+  `team_a`/`team_b`. The code entry carries both names so it is mappable, but
+  getting it backwards would publish comps attributed to the wrong team — which
+  is worse than not publishing at all. That mapping needs its own test before
+  this ships.
+
+  Deferred to phase 2, and deliberately not bolted onto the block: refusing is
+  correct today, and promotion is a separate, riskier feature.
