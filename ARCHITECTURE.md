@@ -711,14 +711,6 @@ on league capture.
 
 The private, browser-local side channel for scrim data, and the separate page that reads it.
 
-> **Current state: scrim capture is switched off in production.**
-> `docs/capture/scrim.html` renders an unconditional full-screen overlay
-> (`#scrimpaused`, `z-index: 999999`) reading "Scrims are paused", and no script
-> ever removes it. This was deliberate — commit `f2881cf`, "Capture:
-> control-panel-only flow, pause scrims, drop scoreboard capture". Everything
-> below describes machinery that is built and reachable in the code but not
-> currently usable by anyone. Un-pausing it is the roadmap's next major item.
-
 ### What it does
 
 Scrims are private practice matches, and their compositions must never become
@@ -748,7 +740,7 @@ small `ROLE_MAP` table, because `refs.json` carries names only.
 
 | File | Responsibility |
 | --- | --- |
-| `docs/capture/scrim.html` | Scrim capture — currently behind the pause overlay |
+| `docs/capture/scrim.html` | Scrim capture |
 | `docs/scrims.html` | The one scrims viewer; read-only consumer of the IndexedDB |
 | `tools/scrim_code/` | OverPy source for the in-game Workshop scrim helper |
 | `tests/test_capture_scrim.py` | Session-text parsing, map filtering, side detection, script validity |
@@ -774,17 +766,23 @@ unused `HERO_BY_GUID` map plus the `guid` payload field it read, and both were
 removed. `docs/scrims.html` is the single viewer, and the private side stays
 separate.
 
-**The advertised league-code block is not implemented.** The page's own help
-text says "league codes are blocked", and the replay-code field at `#scrimcode`
-is described as optional and private — but there is no validation anywhere in
-`docs/capture/scrim.html` that checks an entered code against the known league
-codes in `docs/capture/data.json`. The guarantee is currently moot, since the
-page is paused, but **it must be built before scrims are un-paused**, or a league
-map recorded as a scrim would silently stay private instead of being published.
+**The league-code block lives in `docs/capture/engine/session.js`.**
+`buildCodeIndex()` turns `docs/capture/data.json`'s `codes` array into a
+lookup keyed by normalized code; `classifyCode()` checks an entered code
+against that index and against `data.json`'s `code_wipe_date` to say whether
+it's a live league code and, if so, which division. `docs/capture/scrim.html`
+calls this at every point a code can start a scrim capture
+(`refuseIfLeagueCode()`), and on a match shows a modal naming the division and
+offering to jump to League capture instead of letting the save proceed. A
+league map's replay code can no longer be recorded as a private scrim.
 
-**Four features on the page carry `WIP` badges** and are not trustworthy yet:
-auto side-detection, the scoreboard OCR read, the score-box read, and
-screenshot-session import.
+**Three features on the page still carry `WIP` badges** and are not
+trustworthy yet: auto side-detection, the scoreboard OCR read, and the
+score-box read. Screenshot-session import has graduated — it is now the
+session manifest (`buildScaffold()` in `engine/session.js`), the scaffolding
+that maps a parsed replay-history screenshot to a scrim session for capture,
+not a substitute for capturing. The three remaining WIP reads are scoped to
+phases 2 and 3 of `specs/2026-08-12-scrim-mode-design.md`.
 
 ## 8. Infrastructure and CI
 

@@ -26,7 +26,7 @@ connect.** Read it before deep work. Fast paths:
 | Ingest and the three data hazards | `ARCHITECTURE.md` §3 |
 | How `docs/index.html` is built | `ARCHITECTURE.md` §4 |
 | The capture pipeline | `ARCHITECTURE.md` §5-6 |
-| Scrims (currently paused) | `ARCHITECTURE.md` §7 |
+| Scrims | `ARCHITECTURE.md` §7 |
 | CI and the Cloudflare Worker | `ARCHITECTURE.md` §8 |
 | File formats crossing a boundary | `ARCHITECTURE.md` §9 |
 | Code wipes and season cutover | `ARCHITECTURE.md` §10 |
@@ -144,14 +144,13 @@ canonical and this copy is the bug.
    adoption** — watch where new scouts stall and remove the next friction.
    Remaining P2 items: NA Advanced seeding (one line in `matches.txt`), and
    `--external-data` page splitting only if page weight grows.
-2. **Ship scrim mode.** Scrim capture is currently **switched off in
-   production** — `docs/capture/scrim.html` renders an unconditional
-   `#scrimpaused` overlay that no script removes (commit `f2881cf`). Un-pausing
-   it means: graduating the four WIP-badged features (auto side-detection, the
-   scoreboard OCR read, the score-box read, screenshot import), bringing scrim
-   analytics to parity with league scouting, and **implementing the league-code
-   block that the page's help text already advertises but the code does not do**
-   — see `ARCHITECTURE.md` §7.
+2. **Scrim mode, phases 2–6.** Phases 0 (shared capture engine extraction) and
+   1 (un-pause, session scaffold, league-code block, wipe-date check, manual
+   add) are **delivered** — scrims are capturable now; see `ARCHITECTURE.md`
+   §7. What remains, per `specs/2026-08-12-scrim-mode-design.md`: opponent
+   identification and roster search (2); the stats read plus a workshop
+   hero-glyph reference set (3); the viewer (4); sync and sharing (5); auto map
+   detection (6).
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.
 4. **Statistical capture recommendations** — **delivered**. Iterate: the

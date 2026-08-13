@@ -20,6 +20,18 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-13
 
 ### Changed
+- **Scrim capture is un-paused.** The unconditional `#scrimpaused` overlay
+  added in `f2881cf` is gone from both `docs/capture/scrim.html` (blocked
+  capturing) and `docs/scrims.html` (blocked viewing) — removing only one
+  would have shipped scrims you could record but not read. Un-pausing was
+  gated on the league-code block: `docs/capture/scrim.html` now refuses to
+  start a scrim capture on a code it recognises as a live league match,
+  naming the division, via `classifyCode`/`buildCodeIndex` in
+  `docs/capture/engine/session.js` checked against `docs/capture/data.json`'s
+  codes. This finishes phases 0-1 of `specs/2026-08-12-scrim-mode-design.md`;
+  see `ARCHITECTURE.md` §7. This changes the operational procedure for
+  recording scrims — the capture and viewer pages are usable again instead of
+  redirecting to League capture.
 - **`docs/capture/index.html` and `docs/capture/scrim.html` now share a JS
   engine instead of being hand-maintained forks.** The two pages had drifted:
   104 top-level functions existed in both, 44 of them silently different.
