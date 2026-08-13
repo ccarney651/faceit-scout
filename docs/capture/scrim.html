@@ -380,7 +380,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -515,17 +515,125 @@ async function buildLearnedRosters(){
 // normName/simScore/affinity/confidentOrientation and the
 // AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/MIN_STRONG_NAMES constants live in
 // engine/names.js now (shared with index.html).
+// ---------- opponent identification (phase 2) ----------
+// OUR_TEAM: which league team is ours, so one side of the HUD can be recognised
+// as us. Asked once and remembered; without it the opponent is still
+// identified, only the side is left manual.
+const OUR_TEAM_KEY='owdb_our_team';
+function ourTeamName(){ return localStorage.getItem(OUR_TEAM_KEY)||''; }
+function setOurTeamName(n){ if(n) localStorage.setItem(OUR_TEAM_KEY,n); else localStorage.removeItem(OUR_TEAM_KEY); }
+// Aliases are smurf accounts learned per team. Local only, and deliberately
+// never included in a shared scout - that would leak the mapping between a
+// player's main and their alts.
+const ALIAS_KEY='owdb_team_aliases';
+function loadAliases(){ try{ return JSON.parse(localStorage.getItem(ALIAS_KEY)||'{}'); }catch(e){ return {}; } }
+function saveAliases(a){ try{ localStorage.setItem(ALIAS_KEY, JSON.stringify(a)); }catch(e){} }
+
+// The league index, aliases folded in, rebuilt from whatever feed we have.
+function teamIndex(){
+  return OWDBOpponents.indexWithAliases(
+    OWDBOpponents.buildTeamIndex(LEAGUE_DATA||{}), loadAliases()); }
+
+async function idbOpponents(){ return idbGetAll('opponents'); }
+function idbPutOpponent(o){ return idbPutIn('opponents',o); }
+
+// resolveScrimIdentity(names) — everything we can say about who is playing,
+// from the ten HUD names. Never throws and never blocks: an unidentified side
+// is simply "Opponent", which is a valid answer for a scrim against a mix.
+async function resolveScrimIdentity(names){
+  const idx=teamIndex();
+  const out={ left:null, right:null, ourSide:null, opponent:null, opponentSide:null };
+  if(!names) return out;
+  out.left=OWDBOpponents.identifyTeam(names.a, idx);
+  out.right=OWDBOpponents.identifyTeam(names.b, idx);
+
+  // Which side are we? Prefer our own roster; fall back to "one side resolved
+  // to the team we said is ours".
+  const ours=faceitRoster(ourTeamName()||(activeScrim&&activeScrim.team_us)||'');
+  out.ourSide=OWDBOpponents.ourSide(names.a, names.b, ours);
+  if(!out.ourSide){
+    const mine=(ourTeamName()||'').trim().toLowerCase();
+    if(mine){
+      if(out.left && !out.left.ambiguous && (out.left.name||'').toLowerCase()===mine) out.ourSide='left';
+      else if(out.right && !out.right.ambiguous && (out.right.name||'').toLowerCase()===mine) out.ourSide='right';
+    }
+  }
+  out.opponentSide = out.ourSide==='left' ? 'right' : out.ourSide==='right' ? 'left' : null;
+
+  // The opponent: a league team if one side resolved, otherwise a group we
+  // remember locally, otherwise a new one.
+  const oppNames = out.opponentSide==='right' ? names.b : out.opponentSide==='left' ? names.a : null;
+  const oppTeam  = out.opponentSide==='right' ? out.right : out.opponentSide==='left' ? out.left : null;
+  if(oppNames){
+    if(oppTeam && !oppTeam.ambiguous && oppTeam.team_id){
+      out.opponent={ kind:'league_team', team_id:oppTeam.team_id, label:oppTeam.name,
+                     matched:oppTeam.matched, unmatched:oppTeam.unmatched||[] };
+    } else {
+      const groups=await idbOpponents();
+      const hit=OWDBOpponents.findLocalGroup(oppNames, groups.filter(g=>g.kind==='local_group'));
+      if(hit){ out.opponent={ kind:'local_group', group:hit.group, matched:hit.matched,
+                              times_played:hit.group.times_played||1 }; }
+      else { out.opponent={ kind:'new_group', names:OWDBOpponents.normSet(oppNames) }; }
+    }
+  }
+  return out;
+}
+
+// commitScrimIdentity(res, names) — persist what we resolved. Learning the
+// aliases and counting the meeting only happen for an identification the
+// operator has NOT corrected; correctScrimOpponent() below is the undo.
+async function commitScrimIdentity(res, names){
+  if(!res || !res.opponent || !activeScrim) return null;
+  const o=res.opponent;
+  if(o.kind==='league_team'){
+    if(o.unmatched && o.unmatched.length){
+      saveAliases(OWDBOpponents.learnAliases(loadAliases(), o.team_id, o.unmatched)); }
+    activeScrim.opponent_team_id=o.team_id;
+    if(!activeScrim.opponent) activeScrim.opponent=o.label||'';
+  } else if(o.kind==='local_group'){
+    const oppNames = res.opponentSide==='right' ? names.b : names.a;
+    OWDBOpponents.mergeIntoGroup(o.group, oppNames);
+    o.group.updated_at=new Date().toISOString();
+    await idbPutOpponent(o.group);
+    activeScrim.opponent_id=o.group.id;
+    if(!activeScrim.opponent && o.group.label) activeScrim.opponent=o.group.label;
+  } else if(o.kind==='new_group'){
+    const oppNames = res.opponentSide==='right' ? names.b : names.a;
+    const g=OWDBOpponents.newLocalGroup(oppNames);
+    await idbPutOpponent(g);
+    activeScrim.opponent_id=g.id;
+    res.opponent={ kind:'local_group', group:g, matched:g.roster_names.length, times_played:1 };
+  }
+  activeScrim.updated_at=new Date().toISOString();
+  await idbPutScrim(activeScrim);
+  return res.opponent;
+}
+
+// The operator says "not them". Discards the aliases that identification
+// taught, so a wrong guess does not permanently widen a team's roster.
+async function correctScrimOpponent(teamId, unmatched){
+  if(!teamId) return;
+  const store=loadAliases();
+  const keep=(store[teamId]||[]).filter(n=>OWDBOpponents.normSet(unmatched).indexOf(n)===-1);
+  if(keep.length) store[teamId]=keep; else delete store[teamId];
+  saveAliases(store);
+  if(activeScrim){ delete activeScrim.opponent_team_id; await idbPutScrim(activeScrim); }
+}
+
 async function detectScrimSides(){
-  const c=selectedCode(); if(!c) return {left:null, source:null};
   const names=await readHudNames(); if(!names) return {left:null, source:null};
   if(session) session.players=names;
-  const learned=await buildLearnedRosters();
-  const usKey=(c.team_a||'').trim().toLowerCase(), themKey=(c.team_b||'').trim().toLowerCase();
-  let left=confidentOrientation(names.a,names.b,learned[usKey]||[],learned[themKey]||[]);
-  if(left) return {left, source:'learned'};
-  left=confidentOrientation(names.a,names.b,faceitRoster(c.team_a),faceitRoster(c.team_b));
-  if(left) return {left, source:'FACEIT'};
-  return {left:null, source:null}; }
+  const res=await resolveScrimIdentity(names);
+  if(res.ourSide){
+    await commitScrimIdentity(res, names);
+    LAST_IDENTITY=res;
+    return {left: res.ourSide==='left'?'a':'b', source:'roster', identity:res};
+  }
+  // No idea which side is us, but the opponent may still be identifiable -
+  // record nothing yet and let the operator set the side.
+  LAST_IDENTITY=res;
+  return {left:null, source:null, identity:res}; }
+let LAST_IDENTITY=null;
 async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
   if(s._detecting) return false;
   s._detecting=true;

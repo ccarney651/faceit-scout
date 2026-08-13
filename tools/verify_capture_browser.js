@@ -287,6 +287,84 @@ async function main() {
     await ctx.close();
   }
 
+  // --- 1e. Opponent identification, end to end -----------------------------
+  // Drives the phase-2 flow with injected names, since only READING names off
+  // a live HUD needs the game - everything downstream of that is testable here.
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', e => errs.push(e.message));
+    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.waitForTimeout(1500);
+
+    const r = await p.evaluate(async () => {
+      const FEED = { team_rosters: {
+        t1: { name: 'Them FC', players: ['Fairuz','Dazedreox','Tomavul','Mellun','Nenonxx'].map(n => ({ game_name: n })) },
+        t2: { name: 'Us FC',   players: ['Alpha','Bravo','Charlie','Delta','Echo'].map(n => ({ game_name: n })) },
+      } };
+      LEAGUE_DATA = FEED;
+      FACEIT_ROSTERS = {};
+      Object.keys(FEED.team_rosters).forEach(id => {
+        FACEIT_ROSTERS[FEED.team_rosters[id].name.toLowerCase()] = FEED.team_rosters[id]; });
+      setOurTeamName('Us FC');
+      localStorage.removeItem('owdb_team_aliases');
+      await ensureScrim();
+
+      const us = ['Alpha','Bravo','Charlie','Delta','Echo'];
+      const out = {};
+
+      const n1 = { a: us, b: ['Fairuz','Dazedreox','Tomavul','Mellun','Nenonxx'] };
+      const r1 = await resolveScrimIdentity(n1);
+      out.ourSide = r1.ourSide;
+      out.kind = r1.opponent && r1.opponent.kind;
+      out.label = r1.opponent && r1.opponent.label;
+
+      // Two smurfs: identified anyway, and the alts are learned.
+      const n2 = { a: us, b: ['Fairuz','Dazedreox','Tomavul','alt_one','alt_two'] };
+      const r2 = await resolveScrimIdentity(n2);
+      out.smurfMatched = r2.opponent && r2.opponent.matched;
+      await commitScrimIdentity(r2, n2);
+      out.aliases = (loadAliases()[r2.opponent.team_id] || []).length;
+
+      // With those learned, three smurfs clears the bar again.
+      const n3 = { a: us, b: ['Fairuz','Dazedreox','alt_one','alt_two','alt_three'] };
+      const r3 = await resolveScrimIdentity(n3);
+      out.afterLearningMatched = r3.opponent && r3.opponent.matched;
+
+      // A mix nobody knows is remembered, and recognised next time.
+      const mix = ['rand1','rand2','rand3','rand4','rand5'];
+      const r4 = await resolveScrimIdentity({ a: us, b: mix });
+      out.mixFirst = r4.opponent && r4.opponent.kind;
+      await commitScrimIdentity(r4, { a: us, b: mix });
+      const mix2 = ['rand1','rand2','rand3','rand4','standIn'];
+      const r5 = await resolveScrimIdentity({ a: us, b: mix2 });
+      out.mixAgain = r5.opponent && r5.opponent.kind;
+      await commitScrimIdentity(r5, { a: us, b: mix2 });
+      out.groups = (await idbOpponents()).length;
+
+      // "Not them" must undo what that identification taught.
+      await correctScrimOpponent(r2.opponent.team_id, ['alt_one','alt_two']);
+      out.aliasesAfterCorrection = (loadAliases()[r2.opponent.team_id] || []).length;
+      return out;
+    });
+
+    check('identity: our own side is recognised', r.ourSide === 'left', r.ourSide);
+    check('identity: a league opponent is named', r.kind === 'league_team' && r.label === 'Them FC',
+      r.kind + '/' + r.label);
+    check('identity: two smurfs still identify the team', r.smurfMatched === 3, String(r.smurfMatched));
+    check('identity: the smurf accounts are learned', r.aliases === 2, String(r.aliases));
+    check('identity: learned aliases lift a three-smurf lineup back over the bar',
+      r.afterLearningMatched >= 3, String(r.afterLearningMatched));
+    check('identity: an unknown mix is remembered', r.mixFirst === 'new_group', r.mixFirst);
+    check('identity: the same mix is recognised next time', r.mixAgain === 'local_group', r.mixAgain);
+    check('identity: a stand-in does not create a duplicate group', r.groups === 1, String(r.groups));
+    check('identity: "not them" discards what it taught', r.aliasesAfterCorrection === 0,
+      String(r.aliasesAfterCorrection));
+    check('identity: no page errors', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
   // --- 2. Either capture page may be opened first ---------------------------
   // onupgradeneeded fires once per version, so a page that declares only its
   // own stores leaves the other page's stores uncreated. This is the check that

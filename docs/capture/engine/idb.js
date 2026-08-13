@@ -61,6 +61,7 @@
     heroes: 'g',         // custom heroes          (both)
     scrims: 'id',        // scrim sessions         (scrim.html)
     scrim_maps: 'id',    // scrim maps             (scrim.html)
+    opponents: 'id',     // who we have scrimmed   (scrim.html, phase 2)
   };
 
   // Bumped 4 -> 5 to heal databases created before ALL_STORES: a browser that
@@ -68,6 +69,10 @@
   // without a version change onupgradeneeded would never fire to add the rest.
   // onupgradeneeded only ever ADDS stores, so no existing data is touched -
   // learned hero refs in particular are irreplaceable and must survive this.
+  //
+  // `opponents` joined the same bump rather than taking a sixth version of its
+  // own: v5 has not shipped yet, so nobody is sitting on it and a second bump
+  // would only mean two upgrade transactions for the same end state.
   var SCHEMA_VERSION = 5;
 
   // Set by the caller's open(version, stores) call; reused by
