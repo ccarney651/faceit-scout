@@ -116,6 +116,13 @@ tbody tr:hover{background:var(--surface2)}
 /* hero role colors */
 .role-Tank{color:var(--tank)}.role-Damage{color:var(--damage)}.role-Support{color:var(--support)}
 
+/* demo banner — must not be mistakable for real data */
+.demobar{border:1px solid var(--mid,#d3a02a);border-left-width:3px;border-radius:10px;
+  background:color-mix(in srgb,var(--mid,#d3a02a) 10%,transparent);
+  padding:9px 12px;margin:0 0 14px;font-size:13px;color:var(--fg)}
+.demobar a{color:var(--accent);font-weight:650;text-decoration:none;margin-left:8px;white-space:nowrap}
+.demobar a:hover{text-decoration:underline}
+
 /* empty state */
 .empty{text-align:center;padding:40px 20px;color:var(--muted)}
 .empty h2{font-size:18px;margin:0 0 8px;color:var(--fg)}
@@ -230,8 +237,45 @@ function heroRoleClass(guid){
 }
 
 // ---------- data processing ----------
+// ---------- demo mode ----------
+// ?demo=1 renders a sample block instead of this browser's scrims, so an empty
+// page can show what a filled-in one looks like. It reads through the SAME
+// rendering path as real data - a separate mock page would drift and prove
+// nothing about the real one.
+//
+// It never touches IndexedDB. Someone trying the demo must not end up with
+// invented scrims in their own database.
+const DEMO = new URLSearchParams(location.search).get('demo')==='1';
+let DEMO_NOTE = '';
+// Dates are stored as @@MINUSn@@ so the sample always looks recent rather than
+// ageing into "played 200 days ago" the moment it is committed.
+function demoDate(v){
+  const m = /^@@MINUS(\d+)@@/.exec(String(v||''));
+  if(!m) return v;
+  const d = new Date(Date.now() - (+m[1])*86400000).toISOString().slice(0,10);
+  return String(v).replace(/^@@MINUS\d+@@/, d);
+}
+async function loadDemo(){
+  const r = await fetch('scrims-demo.json', {cache:'no-store'});
+  const d = await r.json();
+  DEMO_NOTE = d.note||'';
+  const fix = o => { const c = {...o}; if(c.date) c.date = demoDate(c.date);
+                     if(c.created_at) c.created_at = demoDate(c.created_at); return c; };
+  OPPONENTS = {};
+  (d.opponents||[]).forEach(o=>{ OPPONENTS[o.id]=o; });
+  return { scrims:(d.scrims||[]).map(fix), maps:(d.scrim_maps||[]).map(fix) };
+}
+
 async function loadData(){
   await loadRefs();
+  if(DEMO){
+    const {scrims, maps} = await loadDemo();
+    scrims.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
+    const mapsByScrim = {};
+    for(const m of maps){ (mapsByScrim[m.scrim_id] = mapsByScrim[m.scrim_id]||[]).push(m); }
+    for(const id in mapsByScrim) mapsByScrim[id].sort((a,b)=>(a.map_no||0)-(b.map_no||0));
+    return {scrims, maps, mapsByScrim};
+  }
   await loadOpponents();
   const scrims = await idbGetAll('scrims');
   const maps = await idbGetAll('scrim_maps');
@@ -655,6 +699,18 @@ function emptyState(){
     <h2>No scrims yet</h2>
     <p>Capture your first scrim to see stats here. Everything stays private on this browser.</p>
     <a href="capture/scrim.html">+ Capture a scrim →</a>
+    <p class="mt14" style="font-size:13px">Not sure it's worth it?
+      <a href="?demo=1">See a filled-in example →</a></p>
+  </div>`;
+}
+
+// A banner that cannot be mistaken for real data. It names real teams and real
+// players, so saying plainly that the results are invented is not decoration -
+// someone could otherwise read it as a record of games those teams played.
+function demoBanner(){
+  return `<div class="demobar">
+    <b>Sample data.</b> ${esc(DEMO_NOTE || 'These scrims never happened.')}
+    <a href="scrims.html">Leave the demo →</a>
   </div>`;
 }
 
@@ -673,7 +729,7 @@ function show(id){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
   const c = document.getElementById('content');
   const tab = TABS.find(t=>t.id===id)||TABS[0];
-  c.innerHTML = tab.render(DATA);
+  c.innerHTML = (DEMO?demoBanner():'') + tab.render(DATA);
   try{window.scrollTo(0,0)}catch(e){}
   HANDLED_HASH = '#'+id;
   if(location.hash !== HANDLED_HASH) location.hash = id;

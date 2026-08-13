@@ -130,3 +130,73 @@ def test_viewer_resolves_opponents_through_the_registry() -> None:
     assert "esc(s.opponent||'opponent')" not in html, (
         "an opponent is still rendered without consulting the registry"
     )
+
+
+DEMO = APP.parent / "scrims-demo.json"
+
+
+def test_demo_fixture_uses_real_teams_and_real_hero_guids() -> None:
+    """A demo of "Team A / Player 1" teaches nothing about whether this is worth using.
+
+    Real FACEIT entrants and real hero GUIDs, so the sample looks like what the
+    operator would actually see.
+    """
+    d = json.loads(DEMO.read_text(encoding="utf-8"))
+    assert d["demo"] is True
+    assert d["scrims"] and d["scrim_maps"]
+    names = {s.get("team_us") for s in d["scrims"]} | {s.get("opponent") for s in d["scrims"]}
+    names.discard(None)
+    assert names, "no team names in the demo"
+    assert not any(n.lower().startswith(("team a", "team b", "example")) for n in names), (
+        f"placeholder team names in the demo: {names}"
+    )
+    guids = {g for m in d["scrim_maps"] for o in m["observations"] for g in o["heroes"]}
+    assert guids, "the demo has no hero observations"
+    assert all(g.startswith("0x") for g in guids), f"not real hero GUIDs: {sorted(guids)[:3]}"
+
+
+def test_demo_says_plainly_that_the_results_are_invented() -> None:
+    """It names real teams and real players, so the disclaimer is not decoration.
+
+    Without it, someone could read the page as a record of games those teams
+    actually played.
+    """
+    d = json.loads(DEMO.read_text(encoding="utf-8"))
+    note = d["note"].lower()
+    assert "never happened" in note or "invented" in note, d["note"]
+    assert "real" in note, "it should say the teams themselves are real"
+    html = APP.read_text(encoding="utf-8")
+    assert "function demoBanner()" in html
+    assert "DEMO?demoBanner():''" in html.replace(" ", ""), "the banner is never rendered"
+
+
+def test_demo_never_writes_to_the_real_database() -> None:
+    """Trying the demo must not leave invented scrims in someone's own data."""
+    html = APP.read_text(encoding="utf-8")
+    start = html.index("async function loadDemo()")
+    end = html.index("async function loadData()")
+    body = html[start:end]
+    for forbidden in ("idbPutIn", "objectStore(", "readwrite"):
+        assert forbidden not in body, f"loadDemo touches storage: {forbidden}"
+
+
+def test_demo_dates_stay_recent_rather_than_ageing() -> None:
+    """Committed absolute dates would read as "played 200 days ago" within a year."""
+    d = json.loads(DEMO.read_text(encoding="utf-8"))
+    assert any("@@MINUS" in str(s.get("date", "")) for s in d["scrims"]), (
+        "demo dates are absolute and will rot"
+    )
+    html = APP.read_text(encoding="utf-8")
+    assert "function demoDate(" in html, "nothing resolves the relative dates"
+
+
+def test_demo_covers_the_cases_the_viewer_is_meant_to_show() -> None:
+    """The sample has to exercise what makes the page worth looking at."""
+    d = json.loads(DEMO.read_text(encoding="utf-8"))
+    assert any(s.get("opponent_team_id") for s in d["scrims"]), "no league opponent"
+    assert any(s.get("opponent_id") for s in d["scrims"]), "no remembered group"
+    assert any(not s.get("opponent_team_id") and not s.get("opponent_id")
+               for s in d["scrims"]), "no unidentified opponent"
+    assert any(m.get("void") for m in d["scrim_maps"]), "no voided restart"
+    modes = {m["map_category"] for m in d["scrim_maps"]}
+    assert len(modes) >= 4, f"too few modes to make coverage meaningful: {modes}"
