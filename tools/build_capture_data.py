@@ -14,7 +14,10 @@ apart.
 data.json:
   { built_at, code_wipe_date, divisions:[...],
     codes: [{code,match_id,game_no,map,division,team_a,team_b,t1,t2,finished_at}],
-    rosters: { <match_id>: { <team_id>: {name, players:[{id,nick,game_name}]} } } }
+    rosters:      { <match_id>: { <team_id>: {name, players:[...]} } },
+    team_rosters: { <team_id>: {name, players:[{id,nick,game_name}]} } }
+`rosters` is per coded match (capture attribution); `team_rosters` is every
+team's accumulated squad (scrim opponent identification).
 Whether a code is already scouted is read from the sibling docs/captured.json,
 so it is not duplicated here.
 """
@@ -120,6 +123,33 @@ def main() -> None:
             slot["players"].append(
                 {"id": rp["pid"], "nick": rp["nick"], "game_name": rp["gname"]})
         rosters[mid] = by_team
+
+    # A roster per TEAM, across every match they have played — not just the
+    # handful with live replay codes. `rosters` above is keyed by match and only
+    # covers coded games, which is right for attributing a capture but useless
+    # for identifying a scrim opponent: it currently carries about 8 teams out
+    # of 159. Scrim opponent identification (phase 2 of
+    # specs/2026-08-12-scrim-mode-design.md) matches ten HUD names against every
+    # team in the league, so it needs the full set.
+    #
+    # Accumulated, not per-match: a season's subs and stand-ins are exactly the
+    # names that let a lineup still be recognised when two players are on smurf
+    # accounts. Measured collision rate at the 3-of-5 bar is zero across 8356
+    # real lineups — see tools/roster_match_eval.py.
+    team_rosters: dict[str, dict[str, object]] = {}
+    for rp in con.execute(
+        """SELECT rp.team_id tid, te.name tname, rp.player_id pid,
+                  COALESCE(p.nickname, rp.player_id) nick, p.game_name gname
+           FROM round_players rp
+           LEFT JOIN players p ON p.id = rp.player_id
+           LEFT JOIN teams te ON te.id = rp.team_id
+           WHERE rp.team_id IS NOT NULL
+           GROUP BY rp.team_id, rp.player_id"""
+    ):
+        slot = team_rosters.setdefault(rp["tid"], {"name": rp["tname"], "players": []})
+        slot["players"].append(
+            {"id": rp["pid"], "nick": rp["nick"], "game_name": rp["gname"]})
+
     con.close()
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -133,11 +163,13 @@ def main() -> None:
                       if f"{r} {t}" in seen_divs],
         "codes": codes,
         "rosters": rosters,
+        "team_rosters": team_rosters,
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh)
     print(f"wrote {OUT}  ({len(codes)} codes across {sorted(seen_divs)}, "
-          f"{len(rosters)} matches, {os.path.getsize(OUT)//1024} KB)")
+          f"{len(rosters)} matches, {len(team_rosters)} team rosters, "
+          f"{os.path.getsize(OUT)//1024} KB)")
 
 
 if __name__ == "__main__":
