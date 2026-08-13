@@ -5410,6 +5410,1018 @@
       ]
     },
     {
+      "match_id": "1-66691004-b1c5-4e45-9eb0-60d6035d3de4",
+      "game_no": 1,
+      "demo_code": "14PWMA",
+      "map_guid": "0x080000000000069E",
+      "map_name": "Oasis",
+      "map_category": "Control",
+      "side_a_team_id": "22718763-5255-4ff2-9d8f-4a2153a69216",
+      "side_a_team": "Sheffield TD",
+      "side_b_team_id": "fd72d305-65d8-4354-9a5a-a78b6ec2dcee",
+      "side_b_team": "The best in the west",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:26:06.285Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "University",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000052C",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              "679afd22-c2e2-4814-a76a-7d950205aae8"
+            ],
+            [
+              "0x02E0000000000079",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E000000000052C",
+              "bc9fd2cd-c0e3-4442-b6fc-d068a9502835"
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "BY",
+            "ZAK",
+            "GRANK",
+            "~KYLOREN",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "University",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000007A",
+            "0x02E000000000032A",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E000000000032A",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000002",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "FAsAL",
+            "FREAKYSHADOW",
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "University",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000052C",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              "679afd22-c2e2-4814-a76a-7d950205aae8"
+            ],
+            [
+              "0x02E0000000000079",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E000000000052C",
+              "bc9fd2cd-c0e3-4442-b6fc-d068a9502835"
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "BY",
+            "ZAK",
+            "GRANK",
+            "~KYLOREN",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "University",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000007A",
+            "0x02E0000000000003",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E0000000000003",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "FAsAL",
+            "FREAKYSHADOW",
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": "City Center",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000052C",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              "679afd22-c2e2-4814-a76a-7d950205aae8"
+            ],
+            [
+              "0x02E0000000000079",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E000000000052C",
+              "bc9fd2cd-c0e3-4442-b6fc-d068a9502835"
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "BY",
+            "ZAK",
+            "GRANK",
+            "~KYLOREN",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": "City Center",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000007A",
+            "0x02E000000000032A",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E000000000032A",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "FAsAL",
+            "FREAKYSHADOW",
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3000,
+          "sub_map": "Gardens",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000052C",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              "679afd22-c2e2-4814-a76a-7d950205aae8"
+            ],
+            [
+              "0x02E0000000000079",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E000000000052C",
+              "bc9fd2cd-c0e3-4442-b6fc-d068a9502835"
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "BY",
+            "ZAK",
+            "GRANK",
+            "~KYLOREN",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3000,
+          "sub_map": "Gardens",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000079",
+            "0x02E000000000007A",
+            "0x02E000000000032A",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E000000000032A",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E000000000052C",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "FAsAL",
+            "FREAKYSHADOW",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-66691004-b1c5-4e45-9eb0-60d6035d3de4",
+      "game_no": 2,
+      "demo_code": "SSNM1A",
+      "map_guid": "0x08000000000001D4",
+      "map_name": "Numbani",
+      "map_category": "Hybrid",
+      "side_a_team_id": "fd72d305-65d8-4354-9a5a-a78b6ec2dcee",
+      "side_a_team": "The best in the west",
+      "side_b_team_id": "22718763-5255-4ff2-9d8f-4a2153a69216",
+      "side_b_team": "Sheffield TD",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:26:39.916Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E000000000007A",
+            "0x02E0000000000200",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E0000000000200",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000002",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "oFASAL",
+            "FREAKYSHADOW",
+            "Rusdmi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000042",
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E0000000000003",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "LEA",
+            null,
+            "oranc_",
+            "JKvoren",
+            "_azo_"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E000000000007A",
+            "0x02E0000000000200",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E0000000000200",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000002",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "oFASAL",
+            "FREAKYSHADOW",
+            "Rusdmi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000012E",
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E0000000000003",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000012E",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "LEA",
+            null,
+            "oranc_",
+            "JKvoren",
+            "_azo_"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E000000000007A",
+            "0x02E0000000000042",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "a69b72e7-1362-4126-af47-754413801cda"
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              "3d4881e1-35c0-4326-9e45-2ac06e4bf895"
+            ],
+            [
+              "0x02E0000000000042",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000002",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "MINERABBIT",
+            null,
+            "oFASAL",
+            "FREAKYSHADOW",
+            "Rusdmi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000015",
+            "0x02E0000000000231",
+            "0x02E0000000000516",
+            "0x02E0000000000002",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E0000000000002",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "LEA",
+            null,
+            "oranc_",
+            "JKvoren",
+            "_azo_"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-66691004-b1c5-4e45-9eb0-60d6035d3de4",
+      "game_no": 3,
+      "demo_code": "SAK8XB",
+      "map_guid": "0x0800000000000827",
+      "map_name": "Circuit Royal",
+      "map_category": "Escort",
+      "side_a_team_id": "fd72d305-65d8-4354-9a5a-a78b6ec2dcee",
+      "side_a_team": "The best in the west",
+      "side_b_team_id": "22718763-5255-4ff2-9d8f-4a2153a69216",
+      "side_b_team": "Sheffield TD",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:27:30.045Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000013B",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E00000000004D8",
+            "0x02E0000000000065"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000004D8",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000065",
+              null
+            ]
+          ],
+          "ingame_names": [
+            null,
+            "__MI7w_ i",
+            "__fasaL_J",
+            "FREAKYSHADOW",
+            "Avemi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E0000000000365",
+            "0x02E0000000000516",
+            "0x02E0000000000015",
+            "0x02E000000000028D"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "gsi",
+            null,
+            "1_GRank",
+            null,
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000013B",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E00000000004D8",
+            "0x02E0000000000065"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000004D8",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000065",
+              null
+            ]
+          ],
+          "ingame_names": [
+            null,
+            "__MI7w_ i",
+            "__fasaL_J",
+            "FREAKYSHADOW",
+            "Avemi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000001EC",
+            "0x02E0000000000365",
+            "0x02E0000000000516",
+            "0x02E0000000000015",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "gsi",
+            null,
+            "1_GRank",
+            null,
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000013B",
+            "0x02E0000000000516",
+            "0x02E000000000028D",
+            "0x02E00000000004D8",
+            "0x02E0000000000015"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000004D8",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ]
+          ],
+          "ingame_names": [
+            null,
+            "__MI7w_ i",
+            "__fasaL_J",
+            "FREAKYSHADOW",
+            "Avemi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E000000000000A",
+            "0x02E0000000000365",
+            "0x02E0000000000516",
+            "0x02E0000000000015",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000000A",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "gsi",
+            null,
+            "1_GRank",
+            null,
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E000000000013B",
+            "0x02E0000000000516",
+            "0x02E000000000028D",
+            "0x02E00000000004D8",
+            "0x02E0000000000015"
+          ],
+          "pairs": [
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000004D8",
+              "b18f5c08-dc0a-4b3e-996f-c7e0d7f44e2b"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ]
+          ],
+          "ingame_names": [
+            null,
+            "__MI7w_ i",
+            "__fasaL_J",
+            "FREAKYSHADOW",
+            "Avemi"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000042",
+            "0x02E0000000000365",
+            "0x02E0000000000516",
+            "0x02E0000000000015",
+            "0x02E000000000007A"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E0000000000516",
+              "a46926ea-77c4-4d7d-9673-8ac388186fdc"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E000000000007A",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "gsi",
+            null,
+            "1_GRank",
+            null,
+            null
+          ]
+        }
+      ]
+    },
+    {
       "match_id": "1-82932bfd-9a70-4852-8a72-f9014b54f242",
       "game_no": 1,
       "demo_code": "QDD9P0",
@@ -6712,6 +7724,2288 @@
               "0x02E000000000028D",
               "df20e56f-6fb4-4268-827d-032d6786f85d"
             ]
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-9e6f6694-c66a-4687-93d4-95f816bd3724",
+      "game_no": 1,
+      "demo_code": "H5WNZP",
+      "map_guid": "0x0800000000000CF2",
+      "map_name": "Antarctica",
+      "map_category": "Control",
+      "side_a_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+      "side_a_team": "Telacy OhMan",
+      "side_b_team_id": "866c944c-b9a0-4c27-bc69-11a4a16310a5",
+      "side_b_team": "FXHND",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:30:09.897Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000023B",
+            "0x02E00000000001EC",
+            "0x02E0000000000008"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "dameyf",
+            "Yonewozu",
+            "_ROSAUN",
+            null,
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000079",
+              "0c5419bf-9d5d-47fc-bd74-7a1f5ab3eba9"
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBYJ",
+            "__HERMIT__",
+            null,
+            "100420M19991",
+            "fsamzf"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E0000000000008"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000008",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "dameyf",
+            "Yonewozu",
+            "_ROSAUN",
+            null,
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000079",
+              "0c5419bf-9d5d-47fc-bd74-7a1f5ab3eba9"
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBYJ",
+            "__HERMIT__",
+            null,
+            "100420M19991",
+            "fsamzf"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "dameyf",
+            "Yonewozu",
+            "_ROSAUN",
+            null,
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000079",
+              "0c5419bf-9d5d-47fc-bd74-7a1f5ab3eba9"
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBYJ",
+            "__HERMIT__",
+            null,
+            "100420M19991",
+            "fsamzf"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000030A",
+            "0x02E00000000001EC",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000030A",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E00000000000DD",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "dameyf",
+            "Yonewozu",
+            "_ROSAUN",
+            null,
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000079",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000079",
+              "0c5419bf-9d5d-47fc-bd74-7a1f5ab3eba9"
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBYJ",
+            "__HERMIT__",
+            null,
+            "100420M19991",
+            "fsamzf"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-9e6f6694-c66a-4687-93d4-95f816bd3724",
+      "game_no": 2,
+      "demo_code": "Y7366P",
+      "map_guid": "0x0800000000000827",
+      "map_name": "Circuit Royal",
+      "map_category": "Escort",
+      "side_a_team_id": "866c944c-b9a0-4c27-bc69-11a4a16310a5",
+      "side_a_team": "FXHND",
+      "side_b_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+      "side_b_team": "Telacy OhMan",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:30:42.954Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E00000000001EC",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBY",
+            "Iver",
+            null,
+            "Jco420m19991",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000013B",
+            "0x02E0000000000068",
+            "0x02E000000000032A",
+            "0x02E0000000000008"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              "e2821bf8-eb0f-4fbd-ace9-d63505ffd109"
+            ],
+            [
+              "0x02E0000000000008",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "nee",
+            "NewozuJ",
+            null,
+            "MATT",
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "defend",
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E0000000000042",
+            "0x02E0000000000221"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000221",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBY",
+            "Iver",
+            null,
+            "Jco420m19991",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000013B",
+            "0x02E0000000000068",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              "e2821bf8-eb0f-4fbd-ace9-d63505ffd109"
+            ],
+            [
+              "0x02E00000000000DD",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "nee",
+            "NewozuJ",
+            null,
+            "MATT",
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E0000000000016",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E0000000000015",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000016",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBY",
+            "Iver",
+            null,
+            "Jco420m19991",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000013B",
+            "0x02E0000000000068",
+            "0x02E000000000032A",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              "e2821bf8-eb0f-4fbd-ace9-d63505ffd109"
+            ],
+            [
+              "0x02E00000000000DD",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "nee",
+            "NewozuJ",
+            null,
+            "MATT",
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E0000000000042",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBY",
+            "Iver",
+            null,
+            "Jco420m19991",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000013B",
+            "0x02E0000000000068",
+            "0x02E000000000032A",
+            "0x02E0000000000008"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E000000000032A",
+              "e2821bf8-eb0f-4fbd-ace9-d63505ffd109"
+            ],
+            [
+              "0x02E0000000000008",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "nee",
+            "NewozuJ",
+            null,
+            "MATT",
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000365",
+            "0x02E000000000028D",
+            "0x02E0000000000042",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000028D",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBY",
+            "Iver",
+            null,
+            "Jco420m19991",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000013B",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "e2821bf8-eb0f-4fbd-ace9-d63505ffd109"
+            ],
+            [
+              "0x02E00000000000DD",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "nee",
+            "NewozuJ",
+            null,
+            "MATT",
+            "ASTRO"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "attack",
+          "heroes": [
+            "0x02E00000000000DD",
+            "0x02E0000000000365",
+            "0x02E000000000013E",
+            "0x02E0000000000042",
+            "0x02E0000000000231"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000000DD",
+              "0e0a0731-1e36-47ed-b088-e07e5524976a"
+            ],
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "REUBYDEUBY",
+            "Iver",
+            null,
+            "Jco420m19991",
+            null
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5000,
+          "sub_map": null,
+          "round_no": 2,
+          "phase": "defend",
+          "heroes": [
+            "0x02E0000000000365",
+            "0x02E000000000013B",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000365",
+              null
+            ],
+            [
+              "0x02E000000000013B",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "e2821bf8-eb0f-4fbd-ace9-d63505ffd109"
+            ],
+            [
+              "0x02E00000000000DD",
+              "e416bb71-9981-4ad1-9fa2-85494abc0bd0"
+            ]
+          ],
+          "ingame_names": [
+            "nee",
+            "NewozuJ",
+            null,
+            "MATT",
+            "ASTRO"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-9e6f6694-c66a-4687-93d4-95f816bd3724",
+      "game_no": 3,
+      "demo_code": "MGAQKC",
+      "map_guid": "0x0800000000000D3E",
+      "map_name": "Suravasa",
+      "map_category": "Flashpoint",
+      "side_a_team_id": "866c944c-b9a0-4c27-bc69-11a4a16310a5",
+      "side_a_team": "FXHND",
+      "side_b_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+      "side_b_team": "Telacy OhMan",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:31:16.036Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              "d50f9f46-2a44-42fc-8250-ffdfe59116cc"
+            ],
+            [
+              "0x02E000000000052C",
+              "e02d74f0-2674-42b2-96fd-c184bfd90596"
+            ]
+          ],
+          "ingame_names": [
+            ". HERMIT l-",
+            null,
+            "1C0420M19991",
+            "damz",
+            "ALLANBALLAN"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000023B",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+            ]
+          ],
+          "ingame_names": [
+            "NOS f",
+            "~Newozu",
+            null,
+            null,
+            "VicToR"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              "d50f9f46-2a44-42fc-8250-ffdfe59116cc"
+            ],
+            [
+              "0x02E000000000052C",
+              "e02d74f0-2674-42b2-96fd-c184bfd90596"
+            ]
+          ],
+          "ingame_names": [
+            ". HERMIT l-",
+            null,
+            "1C0420M19991",
+            "damz",
+            "ALLANBALLAN"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000023B",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+            ]
+          ],
+          "ingame_names": [
+            "NOS f",
+            "~Newozu",
+            null,
+            null,
+            "VicToR"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000009",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000009",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              "d50f9f46-2a44-42fc-8250-ffdfe59116cc"
+            ],
+            [
+              "0x02E000000000052C",
+              "e02d74f0-2674-42b2-96fd-c184bfd90596"
+            ]
+          ],
+          "ingame_names": [
+            ". HERMIT l-",
+            null,
+            "1C0420M19991",
+            "damz",
+            "ALLANBALLAN"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E0000000000362",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+            ]
+          ],
+          "ingame_names": [
+            "NOS f",
+            "~Newozu",
+            null,
+            null,
+            "VicToR"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000362",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              "d50f9f46-2a44-42fc-8250-ffdfe59116cc"
+            ],
+            [
+              "0x02E000000000052C",
+              "e02d74f0-2674-42b2-96fd-c184bfd90596"
+            ]
+          ],
+          "ingame_names": [
+            ". HERMIT l-",
+            null,
+            "1C0420M19991",
+            "damz",
+            "ALLANBALLAN"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 3000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+            ]
+          ],
+          "ingame_names": [
+            "NOS f",
+            "~Newozu",
+            null,
+            null,
+            "VicToR"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 4000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E0000000000009",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E0000000000009",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              "d50f9f46-2a44-42fc-8250-ffdfe59116cc"
+            ],
+            [
+              "0x02E000000000052C",
+              "e02d74f0-2674-42b2-96fd-c184bfd90596"
+            ]
+          ],
+          "ingame_names": [
+            ". HERMIT l-",
+            null,
+            "1C0420M19991",
+            "damz",
+            "ALLANBALLAN"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 4000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+            ]
+          ],
+          "ingame_names": [
+            "NOS f",
+            "~Newozu",
+            null,
+            null,
+            "VicToR"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 5000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E00000000004E3",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E0000000000231",
+            "0x02E000000000052C"
+          ],
+          "pairs": [
+            [
+              "0x02E00000000004E3",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "b60e75eb-eb22-4853-bed9-f10bc11ffce5"
+            ],
+            [
+              "0x02E0000000000231",
+              "d50f9f46-2a44-42fc-8250-ffdfe59116cc"
+            ],
+            [
+              "0x02E000000000052C",
+              "e02d74f0-2674-42b2-96fd-c184bfd90596"
+            ]
+          ],
+          "ingame_names": [
+            ". HERMIT l-",
+            null,
+            "1C0420M19991",
+            "damz",
+            "ALLANBALLAN"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 5000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E000000000013E",
+            "0x02E00000000001EC",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E000000000013E",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+            ]
+          ],
+          "ingame_names": [
+            "NOS f",
+            "~Newozu",
+            null,
+            null,
+            "VicToR"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-a09d136f-d625-4b5d-90b7-a665160e6ad6",
+      "game_no": 1,
+      "demo_code": "1XMN5W",
+      "map_guid": "0x0800000000000CF2",
+      "map_name": "Antarctica",
+      "map_category": "Control",
+      "side_a_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_a_team": "ELMT Thunder",
+      "side_b_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_b_team": "Qwiz Esports",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:28:24.209Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E0000000000472"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              "0337b5ce-5766-4b64-b7e4-c6b10834d6f1"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "d680342d-a383-4b9b-a179-25479a4c3048"
+            ],
+            [
+              "0x02E0000000000068",
+              "c8f35360-a5cc-4687-86a8-b1c2ebae142d"
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "NEOFRIED",
+            null,
+            "A BROPLAYER",
+            "Desi",
+            "_Maws"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": "Labs",
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000015",
+            "0x02E00000000004C4",
+            "0x02E0000000000079",
+            "0x02E0000000000016"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E00000000004C4",
+              "54f235ed-93a6-4c7e-8f53-5f44eb7a00a7"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_HEARTLIN",
+            null,
+            "J_SHOTGUN",
+            "Rg",
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E0000000000472"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              "0337b5ce-5766-4b64-b7e4-c6b10834d6f1"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "d680342d-a383-4b9b-a179-25479a4c3048"
+            ],
+            [
+              "0x02E0000000000068",
+              "c8f35360-a5cc-4687-86a8-b1c2ebae142d"
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "NEOFRIED",
+            null,
+            "A BROPLAYER",
+            "Desi",
+            "_Maws"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": "Sublevel",
+          "round_no": 2,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000015",
+            "0x02E00000000004C4",
+            "0x02E0000000000079",
+            "0x02E0000000000016"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E00000000004C4",
+              "54f235ed-93a6-4c7e-8f53-5f44eb7a00a7"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_HEARTLIN",
+            null,
+            "J_SHOTGUN",
+            "Rg",
+            null
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": "Icebreaker",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E0000000000472"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              "0337b5ce-5766-4b64-b7e4-c6b10834d6f1"
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              "d680342d-a383-4b9b-a179-25479a4c3048"
+            ],
+            [
+              "0x02E0000000000068",
+              "c8f35360-a5cc-4687-86a8-b1c2ebae142d"
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "NEOFRIED",
+            null,
+            "A BROPLAYER",
+            "Desi",
+            "_Maws"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": "Icebreaker",
+          "round_no": 3,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000015",
+            "0x02E00000000004C4",
+            "0x02E0000000000079",
+            "0x02E0000000000016"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000015",
+              null
+            ],
+            [
+              "0x02E00000000004C4",
+              "54f235ed-93a6-4c7e-8f53-5f44eb7a00a7"
+            ],
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_HEARTLIN",
+            null,
+            "J_SHOTGUN",
+            "Rg",
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-a09d136f-d625-4b5d-90b7-a665160e6ad6",
+      "game_no": 2,
+      "demo_code": "0X7PDT",
+      "map_guid": "0x0800000000000D3E",
+      "map_name": "Suravasa",
+      "map_category": "Flashpoint",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_b_team": "ELMT Thunder",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:28:56.226Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000003",
+            "0x02E000000000030A",
+            "0x02E0000000000079",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000003",
+              "fe225363-9119-4ad3-85b8-0a4bb27e48a9"
+            ],
+            [
+              "0x02E000000000030A",
+              "54f235ed-93a6-4c7e-8f53-5f44eb7a00a7"
+            ],
+            [
+              "0x02E0000000000079",
+              "b1d349fa-bc60-4404-ad5b-d7dc939db163"
+            ],
+            [
+              "0x02E0000000000002",
+              "3ecfe07c-3c35-4d71-8d1e-0d4b2c698ac9"
+            ]
+          ],
+          "ingame_names": [
+            "HEARTLYN.",
+            "MSSKN",
+            "SHOTGUN",
+            "~OUVERR",
+            "eEzY"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              "0337b5ce-5766-4b64-b7e4-c6b10834d6f1"
+            ],
+            [
+              "0x02E0000000000231",
+              "23cd85cb-ec78-4e11-875f-e87110a8a0ae"
+            ],
+            [
+              "0x02E00000000001EC",
+              "d680342d-a383-4b9b-a179-25479a4c3048"
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_NEOFRIED",
+            "Aum",
+            "BROPLAYER",
+            "_DEPSI gd",
+            "_Maws"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E000000000052C",
+            "0x02E000000000030A",
+            "0x02E0000000000079",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E000000000052C",
+              "fe225363-9119-4ad3-85b8-0a4bb27e48a9"
+            ],
+            [
+              "0x02E000000000030A",
+              "54f235ed-93a6-4c7e-8f53-5f44eb7a00a7"
+            ],
+            [
+              "0x02E0000000000079",
+              "b1d349fa-bc60-4404-ad5b-d7dc939db163"
+            ],
+            [
+              "0x02E0000000000002",
+              "3ecfe07c-3c35-4d71-8d1e-0d4b2c698ac9"
+            ]
+          ],
+          "ingame_names": [
+            "HEARTLYN.",
+            "MSSKN",
+            "SHOTGUN",
+            "~OUVERR",
+            "eEzY"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              "0337b5ce-5766-4b64-b7e4-c6b10834d6f1"
+            ],
+            [
+              "0x02E0000000000231",
+              "23cd85cb-ec78-4e11-875f-e87110a8a0ae"
+            ],
+            [
+              "0x02E00000000001EC",
+              "d680342d-a383-4b9b-a179-25479a4c3048"
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_NEOFRIED",
+            "Aum",
+            "BROPLAYER",
+            "_DEPSI gd",
+            "_Maws"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000042",
+            "0x02E000000000030A",
+            "0x02E0000000000079",
+            "0x02E00000000000DD"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000042",
+              "fe225363-9119-4ad3-85b8-0a4bb27e48a9"
+            ],
+            [
+              "0x02E000000000030A",
+              "54f235ed-93a6-4c7e-8f53-5f44eb7a00a7"
+            ],
+            [
+              "0x02E0000000000079",
+              "b1d349fa-bc60-4404-ad5b-d7dc939db163"
+            ],
+            [
+              "0x02E00000000000DD",
+              "3ecfe07c-3c35-4d71-8d1e-0d4b2c698ac9"
+            ]
+          ],
+          "ingame_names": [
+            "HEARTLYN.",
+            "MSSKN",
+            "SHOTGUN",
+            "~OUVERR",
+            "eEzY"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000362",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              "0337b5ce-5766-4b64-b7e4-c6b10834d6f1"
+            ],
+            [
+              "0x02E0000000000231",
+              "23cd85cb-ec78-4e11-875f-e87110a8a0ae"
+            ],
+            [
+              "0x02E00000000001EC",
+              "d680342d-a383-4b9b-a179-25479a4c3048"
+            ],
+            [
+              "0x02E0000000000362",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_NEOFRIED",
+            "Aum",
+            "BROPLAYER",
+            "_DEPSI gd",
+            "_Maws"
+          ]
+        }
+      ]
+    },
+    {
+      "match_id": "1-a09d136f-d625-4b5d-90b7-a665160e6ad6",
+      "game_no": 3,
+      "demo_code": "0K30FS",
+      "map_guid": "0x0800000000000EB2",
+      "map_name": "Runasapi",
+      "map_category": "Push",
+      "side_a_team_id": "8dbe908a-46fe-4324-8d01-e6d645d63052",
+      "side_a_team": "Qwiz Esports",
+      "side_b_team_id": "643b9816-f00f-4d1f-9daf-d6ada10e9e81",
+      "side_b_team": "ELMT Thunder",
+      "winner_side": null,
+      "captured_at": "2026-08-13T23:29:23.564Z",
+      "bans": [],
+      "profile": {
+        "w": 2560,
+        "h": 1440,
+        "hud_variant": "browser"
+      },
+      "observations": [
+        {
+          "side": "a",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000042",
+            "0x02E000000000023B",
+            "0x02E0000000000079",
+            "0x02E0000000000016"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              "b1d349fa-bc60-4404-ad5b-d7dc939db163"
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "HEARTLYN.",
+            null,
+            null,
+            "_OLVERR_",
+            "oeezvy"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 0,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E0000000000002"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E0000000000002",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_NeorRieD_J",
+            "avum_",
+            "J_sropaver_",
+            "oes",
+            "__Maws__"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000042",
+            "0x02E000000000023B",
+            "0x02E0000000000079",
+            "0x02E0000000000016"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              "b1d349fa-bc60-4404-ad5b-d7dc939db163"
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "HEARTLYN.",
+            null,
+            null,
+            "_OLVERR_",
+            "oeezvy"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 1000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E0000000000472"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E0000000000472",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_NeorRieD_J",
+            "avum_",
+            "J_sropaver_",
+            "oes",
+            "__Maws__"
+          ]
+        },
+        {
+          "side": "a",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000231",
+            "0x02E0000000000042",
+            "0x02E000000000023B",
+            "0x02E0000000000079",
+            "0x02E0000000000016"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000231",
+              "dc9d7062-2a5a-4271-a0e6-a16748aa7aa1"
+            ],
+            [
+              "0x02E0000000000042",
+              null
+            ],
+            [
+              "0x02E000000000023B",
+              null
+            ],
+            [
+              "0x02E0000000000079",
+              "b1d349fa-bc60-4404-ad5b-d7dc939db163"
+            ],
+            [
+              "0x02E0000000000016",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "HEARTLYN.",
+            null,
+            null,
+            "_OLVERR_",
+            "oeezvy"
+          ]
+        },
+        {
+          "side": "b",
+          "ts": 2000,
+          "sub_map": null,
+          "round_no": 1,
+          "phase": null,
+          "heroes": [
+            "0x02E0000000000079",
+            "0x02E0000000000231",
+            "0x02E00000000001EC",
+            "0x02E0000000000068",
+            "0x02E0000000000003"
+          ],
+          "pairs": [
+            [
+              "0x02E0000000000079",
+              null
+            ],
+            [
+              "0x02E0000000000231",
+              null
+            ],
+            [
+              "0x02E00000000001EC",
+              null
+            ],
+            [
+              "0x02E0000000000068",
+              null
+            ],
+            [
+              "0x02E0000000000003",
+              null
+            ]
+          ],
+          "ingame_names": [
+            "_NeorRieD_J",
+            "avum_",
+            "J_sropaver_",
+            "oes",
+            "__Maws__"
           ]
         }
       ]
