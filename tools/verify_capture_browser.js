@@ -39,7 +39,15 @@ const check = (name, pass, detail) =>
 const STORES = ['heroes', 'maps', 'refs', 'scrim_maps', 'scrims'];
 
 async function main() {
-  const browser = await chromium.launch({ executablePath: EXE });
+  const browser = await chromium.launch({
+    executablePath: EXE,
+    // A fake capture device lets getDisplayMedia succeed without a human
+    // picking a window, which is what makes the share -> calibrate -> stop
+    // plumbing testable here. The frame is synthetic, so recognition ACCURACY
+    // still needs real game pixels - but the wiring around it does not.
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
+           '--auto-select-desktop-capture-source=Entire screen', '--allow-http-screen-capture'],
+  });
 
   // --- 1. Pages load, modules resolve, no errors ----------------------------
   {
@@ -163,6 +171,76 @@ async function main() {
         await p.evaluate(k => !!localStorage.getItem(k), key));
     }
     check(`tour: no page errors (${label})`, errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
+  // --- 1c. Share -> auto-calibrate -> stop, on both pages -------------------
+  // Exercises the frames.js and calibration.js extractions against a real
+  // MediaStream. The frame is synthetic so nothing is recognised - that is
+  // expected and is itself the point: auto-calibrate must report low confidence
+  // and must NOT commit boxes without confirmation.
+  for (const [url, label] of [['/capture/index.html', 'league'], ['/capture/scrim.html', 'scrim']]) {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', e => errs.push(e.message));
+    await p.goto(BASE + url, { waitUntil: 'load' });
+    await p.waitForTimeout(1200);
+
+    // A dropped <script> request leaves the page's top-level destructure
+    // throwing ReferenceError, so `share` never gets wired and every check
+    // below fails as though the product were broken. Retry once and say
+    // plainly which it was, rather than reporting a server hiccup as a bug.
+    let ready = await p.evaluate(() => typeof window.OWDBUtil === 'object' && typeof window.OWDBFrames === 'object');
+    if (!ready) {
+      await p.reload({ waitUntil: 'load' });
+      await p.waitForTimeout(1500);
+      ready = await p.evaluate(() => typeof window.OWDBUtil === 'object' && typeof window.OWDBFrames === 'object');
+    }
+    check(`share: engine modules present before sharing (${label})`, ready,
+      ready ? '' : 'engine scripts did not load twice running - serve docs/ and re-run');
+    if (!ready) { await ctx.close(); continue; }
+
+    await p.evaluate(() => document.getElementById('share').click());
+    await p.waitForTimeout(3000);
+    const shared = await p.evaluate(() => {
+      const v = document.querySelector('video');
+      return { stream: !!(v && v.srcObject), w: v ? v.videoWidth : 0,
+               autocal: !document.getElementById('autocal').disabled };
+    });
+    check(`share: a stream attaches (${label})`, shared.stream && shared.w > 0, JSON.stringify(shared));
+    check(`share: auto-calibrate becomes available (${label})`, shared.autocal);
+
+    if (shared.stream) {
+      const before = await p.evaluate(() => JSON.stringify(boxes || {}));
+      await p.evaluate(() => document.getElementById('autocal').click());
+      await p.waitForTimeout(8000);
+      const cal = await p.evaluate((b) => {
+        const prev = document.getElementById('calpreview');
+        return {
+          preview: prev ? getComputedStyle(prev).display !== 'none' : false,
+          msg: ((document.getElementById('calhint') || {}).textContent || '').slice(0, 120),
+          unchanged: JSON.stringify(boxes || {}) === b,
+        };
+      }, before);
+      check(`calibrate: a confidence preview is shown (${label})`, cal.preview, cal.msg);
+      // The guarantee that matters: a bad read must not silently become the
+      // user's calibration. Only "Use these boxes" may commit.
+      check(`calibrate: boxes are NOT committed without confirmation (${label})`, cal.unchanged);
+      check(`calibrate: low confidence is reported honestly (${label})`,
+        /0\/10|not confident|likely off|misaligned/i.test(cal.msg), cal.msg);
+
+      await p.evaluate(() => document.getElementById('stopcap').click());
+      await p.waitForTimeout(1000);
+      const stopped = await p.evaluate(() => {
+        const v = document.querySelector('video');
+        return { stream: !!(v && v.srcObject),
+                 hint: ((document.getElementById('calhint') || {}).textContent || '') };
+      });
+      check(`stop: the stream is released (${label})`, stopped.stream === false);
+      check(`stop: the page says so (${label})`, /stopped/i.test(stopped.hint), stopped.hint.slice(0, 60));
+    }
+    check(`share/calibrate/stop: no page errors (${label})`, errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
 
