@@ -9,7 +9,14 @@ def test_report_finds_the_known_shared_surface() -> None:
     rep = report()
     # 104 shared names at the time of writing; the count only shrinks as
     # extraction proceeds, so assert the floor rather than an exact figure.
-    assert len(rep["shared"]) >= 40
+    # Lowered 40 -> 30 when the overlay (popout/renderPipControls/pipColors/
+    # pipPanelCss/setPopBtn/maybeAutoPop/gestureAutoPop/restylePipPanel) and
+    # tour (tourHighlight/tourRender/tourOpen/tourDone/tourNext/tourPrev/
+    # tourTick/maybeShowTour/isFirstVisit) clusters moved into
+    # docs/capture/engine/overlay.js and engine/tour.js - the last extraction
+    # in phase 0 (see tools/capture_divergence.py's own count: 34 shared
+    # after this move).
+    assert len(rep["shared"]) >= 30
     # simScore was the worked example of real drift (index.html normalised
     # through _normName(); scrim.html only lowercased and trimmed). The names
     # engine extraction (docs/capture/engine/names.js) resolved the drift by
@@ -33,6 +40,25 @@ def test_report_finds_the_known_shared_surface() -> None:
     # can no longer be "shared" or "diverged" by this name-matching tool.
     assert "bestMatch" not in rep["shared"], "bestMatch should have moved to engine/refs.js"
     assert "importRefs" not in rep["shared"], "importRefs should have moved to engine/refs.js"
+    # popout and renderPipControls were the worked example of real (not
+    # cosmetic) drift for this task: index.html's control panel carries
+    # controls scrim.html's doesn't, so the two pages differed by >1KB in
+    # each. Overlay extraction (docs/capture/engine/overlay.js) moved the
+    # whole cluster out of both pages, passing the control set in as data
+    # (ctx.controls) instead of reconciling it into one branching function.
+    assert "popout" not in rep["shared"], "popout should have moved to engine/overlay.js"
+    assert "renderPipControls" not in rep["shared"], "renderPipControls should have moved to engine/overlay.js"
+    # tourOpen/tourDone/maybeShowTour/isFirstVisit: tour extraction
+    # (docs/capture/engine/tour.js) moved the tour MECHANISM out of both
+    # pages; tourDefs (each page's own step copy) and updateGuide (a
+    # separate always-visible stepper card) deliberately stayed behind, so
+    # they still show up in this report.
+    assert "tourOpen" not in rep["shared"], "tourOpen should have moved to engine/tour.js"
+    assert "tourDone" not in rep["shared"], "tourDone should have moved to engine/tour.js"
+    assert "maybeShowTour" not in rep["shared"], "maybeShowTour should have moved to engine/tour.js"
+    assert "isFirstVisit" not in rep["shared"], "isFirstVisit should have moved to engine/tour.js"
+    assert "tourDefs" in rep["shared"], "tourDefs is page copy and should NOT have moved"
+    assert "updateGuide" in rep["shared"], "updateGuide is page copy and should NOT have moved"
 
 
 def test_bodies_are_extracted_with_balanced_braces() -> None:

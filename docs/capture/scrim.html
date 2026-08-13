@@ -374,7 +374,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -577,7 +577,6 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('finish').disabled=!(session&&session.snaps.length);
   maybeAutoPop(); updateGuide(); }
 let _firstVisit=null;
-function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit; return (_firstVisit=!(boxes.a&&boxes.b)); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> \u2014 open this on your PC (you scout while watching Overwatch).'; return; }
   const fv=isFirstVisit();
@@ -601,7 +600,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
 // scrim flow: no replay-code or publish step — set up a scrim map and save.
 // Separate dismissal key so completing the League tour doesn't suppress this one.
 const TOUR_KEY='owdb_tour_done_scrim';
-let tourSteps=[], tourIdx=-1;
+let tourIdx=-1;
 function tourDefs(){
   return [
     {t:"Let's capture your first scrim map", target:null, btn:'Start',
@@ -624,52 +623,15 @@ function tourDefs(){
       done:()=>false}
   ];
 }
-function tourHighlight(targetId){
-  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
-  if(!targetId) return;
-  const el=document.getElementById(targetId); if(!el) return;
-  el.classList.add('tour-highlight');
-  try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
-}
-function tourRender(){
-  const t=document.getElementById('tour'), s=tourSteps[tourIdx]; if(!t||!s) return;
-  t.querySelector('.tour-count').textContent=(tourIdx+1)+' / '+tourSteps.length;
-  t.querySelector('.tour-title').textContent=s.t;
-  t.querySelector('.tour-body').innerHTML=s.body;
-  const nxt=t.querySelector('#tourNext');
-  nxt.textContent=s.btn||'Next';
-  // Back arrow: only once there's a step behind you.
-  t.querySelector('#tourPrev').style.visibility=(tourIdx===0)?'hidden':'visible';
-  tourHighlight(s.target);
-}
-function tourOpen(){
-  tourSteps=tourDefs();
-  tourIdx=tourSteps.findIndex(s=>!s.done());   // resume at first incomplete step
-  if(tourIdx<0){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  const t=document.getElementById('tour'); t.classList.add('open'); t.style.display='block';
-  tourRender();
-}
-function tourDone(silent){
-  localStorage.setItem(TOUR_KEY,'1');
-  const t=document.getElementById('tour'); if(t){ t.classList.remove('open'); t.style.display='none'; }
-  tourHighlight(null);
-  if(!silent) toast('Tour closed \u2014 the <b>How it works</b> card above has the same steps any time.','info');
-}
-let tourManualAt=0;   // last manual prev/next click — pauses auto-advance briefly so a reviewed step doesn't bounce forward instantly
-function tourNext(){ if(tourIdx>=0&&tourIdx<tourSteps.length-1){ tourIdx++; tourManualAt=Date.now(); tourRender(); } else { tourDone(true); } }
-function tourPrev(){ if(tourIdx>0){ tourIdx--; tourManualAt=Date.now(); tourRender(); } }
-function tourTick(){
-  if(tourIdx<0) return;
-  if(Date.now()-tourManualAt<2500) return;   // grace period after a manual step
-  if(tourSteps[tourIdx].done()) tourNext();   // auto-advance as each action happens
-}
-function maybeShowTour(){
-  if(!HAS_CAPTURE) return;
-  if(localStorage.getItem(TOUR_KEY)==='1') return;
-  // A returning scrimmer who already saved maps is clearly not new — never tour.
-  if(activeScrim&&activeScrimMap){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  tourOpen();
-}
+// Mechanism now lives in engine/tour.js (shared with index.html). tourDefs
+// above stays page copy; skipIf is this page's policy (a returning scrimmer
+// who already saved a map is clearly not new - see that module's header for
+// why this isn't branched on inside it). No firstVisitExtra here - unlike
+// index.html, this page has no "name" concept.
+const tour=OWDBTour.make({doc:document, steps:tourDefs(), tourKey:TOUR_KEY,
+  skipIf:()=>!!(activeScrim&&activeScrimMap)});
+const {open:tourOpen, next:tourNext, prev:tourPrev, render:tourRender, tick:tourTick,
+       highlight:tourHighlight, done:tourDone, isFirstVisit, maybeShow:maybeShowTour}=tour;
 
 // bestMatch/heroSlug/heroPortrait now live in engine/refs.js (shared with
 // index.html) - see that file's header for the bestMatch/importRefs

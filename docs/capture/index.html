@@ -407,6 +407,7 @@ button:disabled{opacity:.45;cursor:default}
 <script src="engine/calibration.js"></script>
 <script src="engine/refs.js"></script>
 <script src="engine/overlay.js"></script>
+<script src="engine/tour.js"></script>
 <script>
 const {normName, simScore, affinity,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
@@ -682,8 +683,6 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   setd('finish',!(session&&session.snaps.length));
   maybeAutoPop(); warmOcr(); updateGuide(); }
 let _firstVisit=null;
-function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit;
-  const name=(localStorage.getItem('owdb_name')||'').trim(); return (_firstVisit=!name&&!(boxes.a&&boxes.b)); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
   const fv=isFirstVisit();
@@ -709,7 +708,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
 // ever hunting for a button. The panel sits at the bottom (toasts own the top
 // right); the highlighted element keeps working — it is a guide, not a lock.
 const TOUR_KEY='owdb_tour_done';
-let tourSteps=[], tourIdx=-1;
+let tourIdx=-1;
 function tourDefs(){
   return [
     {t:"Let's capture your first replay", target:null, btn:'Start',
@@ -732,52 +731,15 @@ function tourDefs(){
       done:()=>localStorage.getItem('owdb_first_publish')!=null}
   ];
 }
-function tourHighlight(targetId){
-  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
-  if(!targetId) return;
-  const el=document.getElementById(targetId); if(!el) return;
-  el.classList.add('tour-highlight');
-  try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
-}
-function tourRender(){
-  const t=document.getElementById('tour'), s=tourSteps[tourIdx]; if(!t||!s) return;
-  t.querySelector('.tour-count').textContent=(tourIdx+1)+' / '+tourSteps.length;
-  t.querySelector('.tour-title').textContent=s.t;
-  t.querySelector('.tour-body').innerHTML=s.body;
-  const nxt=t.querySelector('#tourNext');
-  nxt.textContent=s.btn||'Next';
-  // Back arrow: only once there's a step behind you.
-  t.querySelector('#tourPrev').style.visibility=(tourIdx===0)?'hidden':'visible';
-  tourHighlight(s.target);
-}
-function tourOpen(){
-  tourSteps=tourDefs();
-  tourIdx=tourSteps.findIndex(s=>!s.done());   // resume at first incomplete step
-  if(tourIdx<0){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  const t=document.getElementById('tour'); t.classList.add('open'); t.style.display='block';
-  tourRender();
-}
-function tourDone(silent){
-  localStorage.setItem(TOUR_KEY,'1');
-  const t=document.getElementById('tour'); if(t){ t.classList.remove('open'); t.style.display='none'; }
-  tourHighlight(null);
-  if(!silent) toast('Tour closed — the <b>How it works</b> card above has the same steps any time.','info');
-}
-let tourManualAt=0;   // last manual prev/next click — pauses auto-advance briefly so a reviewed step doesn't bounce forward instantly
-function tourNext(){ if(tourIdx>=0&&tourIdx<tourSteps.length-1){ tourIdx++; tourManualAt=Date.now(); tourRender(); } else { tourDone(true); } }
-function tourPrev(){ if(tourIdx>0){ tourIdx--; tourManualAt=Date.now(); tourRender(); } }
-function tourTick(){
-  if(tourIdx<0) return;
-  if(Date.now()-tourManualAt<2500) return;   // grace period after a manual step
-  if(tourSteps[tourIdx].done()) tourNext();   // auto-advance as each action happens
-}
-function maybeShowTour(){
-  if(!HAS_CAPTURE) return;
-  if(localStorage.getItem(TOUR_KEY)==='1') return;
-  // A returning scout who already published has a name — never tour them again.
-  if((localStorage.getItem('owdb_name')||'').trim()){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  tourOpen();
-}
+// Mechanism now lives in engine/tour.js (shared with scrim.html). tourDefs
+// above stays page copy; firstVisitExtra/skipIf are this page's policy (a
+// saved name means a returning, already-published scout - see that
+// module's header for why this isn't branched on inside it).
+const tour=OWDBTour.make({doc:document, steps:tourDefs(), tourKey:TOUR_KEY,
+  firstVisitExtra:()=>!(localStorage.getItem('owdb_name')||'').trim(),
+  skipIf:()=>!!(localStorage.getItem('owdb_name')||'').trim()});
+const {open:tourOpen, next:tourNext, prev:tourPrev, render:tourRender, tick:tourTick,
+       highlight:tourHighlight, done:tourDone, isFirstVisit, maybeShow:maybeShowTour}=tour;
 
 // bestMatch/heroSlug/heroPortrait now live in engine/refs.js (shared with
 // scrim.html) - see that file's header for the bestMatch/importRefs
