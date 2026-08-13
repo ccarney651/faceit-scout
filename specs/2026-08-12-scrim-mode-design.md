@@ -474,6 +474,16 @@ the HUD nameplate read is purely a fallback.
 - **Auto map detection** (phase 6) — deliberately last, so the reactive flow is
   proven in real scrims before anything automates on top of it.
 
+- **The scrim capture page's UI lags the league capture app.** Noted by the
+  operator during phase 1 verification: it is functional but visibly rougher
+  than `docs/capture/index.html`, which has had far more iteration. The
+  structural defect it exposed — the setup card implying one replay code per
+  scrim, when a scrim is a series of maps each with its own code — has been
+  fixed; what remains is presentation. Deliberately deferred: the structure is
+  right and the records were always per-map, so this is polish that can follow
+  real use rather than precede it. Worth doing before scrim mode is offered
+  beyond the operator's own team.
+
 - **Promoting a scrim capture to a league capture.** Today the league-code block
   refuses a league code outright. The better outcome, when someone has *already*
   captured a map and only then realises it was a league match, is to promote the
