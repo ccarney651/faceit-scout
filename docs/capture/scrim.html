@@ -374,11 +374,21 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
        toast, uiModal, uiConfirm} = OWDBUtil;
+// LEAGUE_DATA/CODE_INDEX: data.json's parsed body, kept by loadTeamNames()
+// (rather than re-fetched) so the league-code block (engine/session.js) can
+// classify a replay code against the real feed. CODE_INDEX starts as the
+// empty-feed index so classifyCode() is always safe to call before load
+// completes. Declared up here, not next to loadTeamNames() below, because
+// tests/test_capture_scrim.py extracts a slice of this script that runs
+// under plain Node without engine/session.js loaded — this line must not
+// fall inside that slice (it did once; see git history) or the extraction
+// throws on the top-level OWDBSession reference before any test runs.
+let LEAGUE_DATA=null, CODE_INDEX=OWDBSession.buildCodeIndex({});
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45;
 let HERO_ICON={};
@@ -428,6 +438,8 @@ let LEAGUE_TEAMS=[], FACEIT_ROSTERS={};
 async function loadTeamNames(){
   try{
     const d=await (await fetch('data.json',{cache:'no-store'})).json();
+    LEAGUE_DATA=d;
+    CODE_INDEX=OWDBSession.buildCodeIndex(d);
     const seen=new Set();
     FACEIT_ROSTERS={};
     for(const mid in (d.rosters||{})){
@@ -995,18 +1007,41 @@ async function saveScrim(){
   await renderScrimPanel(); updateBtns();
   toast('scrim saved \u2014 pick a map to start capturing','ok');
 }
+// scrimDate(): the session date used to judge whether a replay code has
+// been wiped by a patch. Falls back to today when the operator hasn't set
+// the scrim's date field yet (a code entered before the field is filled in
+// still needs a sane classification).
+function scrimDate(){ return (document.getElementById('scdate').value||'').trim() || new Date().toISOString().slice(0,10); }
+// refuseIfLeagueCode(): the league-code block. A league match's replay code
+// must never be recorded as a scrim - see engine/session.js's header. Used
+// at every point a code can start a scrim capture; returns true (and shows
+// the redirect modal) when the save was refused.
+async function refuseIfLeagueCode(code){
+  if(!code) return false;
+  const cls=OWDBSession.classifyCode(code, CODE_INDEX, scrimDate());
+  if(!cls.league) return false;
+  const act=await uiModal({title:'That is a league match',
+    bodyHtml:`Code <b>${esc(code)}</b> is a ${esc(cls.division||'league')} match. `
+      + `League maps belong in League capture so they get published \u2014 `
+      + `recording it here would keep it private in this browser only.`,
+    actions:[{label:'Open League capture', value:'nav'},{label:'Cancel', value:null, ghost:true}]});
+  if(act==='nav') location.href='index.html';
+  return true;
+}
 async function startScrimMap(){
   if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
   const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
   const code=(document.getElementById('scrimcode').value||'').trim();
+  if(await refuseIfLeagueCode(code)) return;
   activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1, queued:false};
   document.getElementById('scrimcode').value=code;
   startScrimSession(scrimPseudoCode());
   toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
 }
-function startQueuedMap(m){
+async function startQueuedMap(m){
   if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
   if(session){ toast('finish the current map first','warn'); return; }
+  if(await refuseIfLeagueCode(m.code)) return;
   activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
   document.getElementById('scrimcode').value=m.code||'';
   startScrimSession(scrimPseudoCode());
