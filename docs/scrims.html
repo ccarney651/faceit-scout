@@ -92,6 +92,27 @@ tbody tr:hover{background:var(--surface2)}
 .map-row .mr-meta{font-size:12px;color:var(--muted)}
 .map-row .hero-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 
+/* practice coverage — what we have and haven't been playing */
+.covgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.covcell{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 10px;
+  border-left-width:3px}
+.covcell .covmode{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.covcell .covn{font-size:21px;font-weight:680;letter-spacing:-.02em;margin-top:2px}
+.covcell .covwhen{font-size:11.5px;color:var(--faint);margin-top:1px}
+/* Colour carries the same message as the text, never on its own: "never
+   played" and "N days ago" already say it for anyone who cannot see the hue. */
+.cov-ok{border-left-color:var(--support,#4ac28a)}
+.cov-stale{border-left-color:var(--mid,#d3a02a)}
+.cov-never{border-left-color:var(--line)}
+.cov-never .covn{color:var(--faint)}
+.covnote{margin:8px 2px 0;font-size:12.5px;color:var(--muted)}
+
+/* opponent identity */
+.oppout{font-size:11px;font-weight:650;color:var(--accent);text-decoration:none;
+  border:1px solid var(--line);border-radius:6px;padding:0 5px;vertical-align:1px}
+.oppout:hover{text-decoration:underline}
+.oppmeta{color:var(--faint);font-weight:400;font-size:12px}
+
 /* hero role colors */
 .role-Tank{color:var(--tank)}.role-Damage{color:var(--damage)}.role-Support{color:var(--support)}
 
@@ -211,6 +232,7 @@ function heroRoleClass(guid){
 // ---------- data processing ----------
 async function loadData(){
   await loadRefs();
+  await loadOpponents();
   const scrims = await idbGetAll('scrims');
   const maps = await idbGetAll('scrim_maps');
   // Sort scrims newest first
@@ -272,6 +294,101 @@ function allObservations(maps){
   return [].concat(...maps.map(m=>m.observations||[]));
 }
 
+// Every mode a scrim can be played on. Listed rather than derived from the
+// captured maps, because the whole point is showing the mode you HAVEN'T
+// touched - deriving it from what exists would hide exactly that.
+const SCRIM_MODES = ['Control','Escort','Hybrid','Push','Flashpoint','Clash'];
+
+// mapCoverage(scrims, maps, today) — what have we actually been practising?
+// Per mode: how many maps, when last, and how long ago. Answers "we haven't
+// played Push in three weeks", which is the practice-log question the design
+// names and the reason this page is more than a capture archive.
+//
+// Voided maps are excluded: a restarted map was not practice, and counting it
+// would say you covered a mode you actually abandoned.
+function mapCoverage(scrims, maps, today){
+  const dateOf = {};
+  (scrims||[]).forEach(s=>{ dateOf[s.id] = s.date || (s.created_at||'').slice(0,10); });
+  const acc = {};
+  SCRIM_MODES.forEach(m=>{ acc[m] = {mode:m, games:0, last:null}; });
+  (maps||[]).forEach(m=>{
+    if(m.void) return;
+    const cat = m.map_category;
+    if(!acc[cat]) acc[cat] = {mode:cat, games:0, last:null};   // an unexpected mode still shows
+    acc[cat].games++;
+    const d = dateOf[m.scrim_id] || '';
+    if(d && (!acc[cat].last || d > acc[cat].last)) acc[cat].last = d;
+  });
+  const now = today || new Date().toISOString().slice(0,10);
+  const out = Object.values(acc);
+  out.forEach(c=>{
+    c.days = c.last ? Math.max(0, Math.round((Date.parse(now)-Date.parse(c.last))/86400000)) : null;
+  });
+  // Least-practised first: never-played at the top, then longest since.
+  out.sort((a,b)=>{
+    if(a.games===0 && b.games!==0) return -1;
+    if(b.games===0 && a.games!==0) return 1;
+    return (b.days==null?-1:b.days)-(a.days==null?-1:a.days);
+  });
+  return out;
+}
+
+// A mode untouched for this long is worth pointing at. Three weeks is a guess,
+// not a measurement - it is a nudge, so it only has to be roughly right.
+const STALE_DAYS = 21;
+
+function coverageStrip(scrims, maps){
+  const cov = mapCoverage(scrims, maps);
+  if(!cov.some(c=>c.games)) return '';
+  const cell = c => {
+    const state = c.games===0 ? 'never' : (c.days>=STALE_DAYS ? 'stale' : 'ok');
+    const when = c.games===0 ? 'never played'
+      : c.days===0 ? 'today' : c.days===1 ? 'yesterday' : c.days+' days ago';
+    return `<div class="covcell cov-${state}">
+      <div class="covmode">${esc(c.mode)}</div>
+      <div class="covn">${c.games||'—'}</div>
+      <div class="covwhen">${esc(when)}</div>
+    </div>`;
+  };
+  const gaps = cov.filter(c=>c.games===0 || c.days>=STALE_DAYS);
+  const note = gaps.length
+    ? `<div class="covnote">Least practised: <b>${gaps.slice(0,3).map(c=>esc(c.mode)).join(', ')}</b></div>`
+    : `<div class="covnote">Every mode practised in the last ${STALE_DAYS} days.</div>`;
+  return `<div class="section-h"><h2>Practice coverage</h2></div>
+    <div class="covgrid">${cov.map(cell).join('')}</div>${note}`;
+}
+
+// ---------- opponent registry ----------
+// Scrim records point at an opponent by id: opponent_team_id for a league team,
+// opponent_id for a group we only know locally. Resolving through the registry
+// means renaming a group once relabels every scrim against them.
+let OPPONENTS = {};
+async function loadOpponents(){
+  OPPONENTS = {};
+  try{ (await idbGetAll('opponents')).forEach(o=>{ OPPONENTS[o.id]=o; }); }catch(e){}
+}
+function opponentOf(s){
+  if(!s) return {label:'Opponent', kind:'unknown', team_id:null};
+  if(s.opponent_team_id) return {label:s.opponent||'league team', kind:'league_team', team_id:s.opponent_team_id};
+  const g = s.opponent_id && OPPONENTS[s.opponent_id];
+  if(g) return {label:g.label||s.opponent||'Opponent', kind:'local_group', team_id:null,
+                times_played:g.times_played||1};
+  return {label:s.opponent||'Opponent', kind:s.opponent?'named':'unknown', team_id:null};
+}
+// A league opponent links out to their public profile rather than duplicating
+// league analysis here - deliberately deferred in the design until there is
+// enough scrim data to make a side-by-side worth reading.
+function opponentLabelHtml(s){
+  const o = opponentOf(s);
+  if(o.kind==='league_team'){
+    return `${esc(o.label)} <a class="oppout" href="index.html#scout" title="League team — open their profile on the dashboard">league ↗</a>`;
+  }
+  if(o.kind==='local_group' && o.times_played>1){
+    return `${esc(o.label)} <span class="oppmeta">· ${o.times_played}×</span>`;
+  }
+  return esc(o.label);
+}
+
 // ---------- render helpers ----------
 function heroBar(guid, count, total, maxCount){
   const pct = maxCount ? Math.round(100*count/maxCount) : 0;
@@ -314,6 +431,8 @@ function renderOverview(data){
   html += statTile(dateRange||'—', 'Date range');
   html += '</div>';
 
+  html += coverageStrip(scrims, maps);
+
   // Recent activity
   html += '<div class="section-h"><h2>Recent activity</h2></div>';
   const recent = scrims.slice(0, 5);
@@ -323,7 +442,7 @@ function renderOverview(data){
     const topH = heroFrequency(sObs).slice(0, 6);
     html += `<div class="card mt10">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <span style="font-weight:650;font-size:14px">${esc(s.team_us||'us')} <span style="color:var(--faint);font-weight:400">vs</span> ${esc(s.opponent||'opponent')}</span>
+        <span style="font-weight:650;font-size:14px">${esc(s.team_us||'us')} <span style="color:var(--faint);font-weight:400">vs</span> ${opponentLabelHtml(s)}</span>
         <span style="font-size:12px;color:var(--faint)">${esc(s.date||'')} · ${sMaps.length} map${sMaps.length===1?'':'s'}</span>
       </div>`;
     if(topH.length){
@@ -348,7 +467,7 @@ function renderTeams(data){
   // Build opponent stats
   const teamStats = {};
   for(const s of scrims){
-    const opp = s.opponent||'Unknown';
+    const opp = opponentOf(s).label||'Unknown';
     if(!teamStats[opp]) teamStats[opp] = {scrims:[], maps:[], observations:[]};
     teamStats[opp].scrims.push(s);
     const sMaps = mapsByScrim[s.id]||[];
@@ -464,7 +583,7 @@ function renderScrims(data){
 
     html += `<div class="scrim-card" id="${scrimId}">
       <div class="scrim-hd" onclick="toggleScrim('${scrimId}')" aria-expanded="false">
-        <div class="sh-teams">${esc(s.team_us||'us')} <span class="sh-vs">vs</span> ${esc(s.opponent||'opponent')}</div>
+        <div class="sh-teams">${esc(s.team_us||'us')} <span class="sh-vs">vs</span> ${opponentLabelHtml(s)}</div>
         <div class="sh-meta">
           <span class="sh-date">${esc(s.date||'')}</span>
           <span class="chip" style="background:transparent;border-color:var(--line)">${sMaps.length} map${sMaps.length===1?'':'s'}</span>

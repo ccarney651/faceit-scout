@@ -404,6 +404,75 @@ async function main() {
     await ctx.close();
   }
 
+  // --- 1f. The scrims viewer, against seeded data --------------------------
+  // Practice coverage and opponent resolution are what make this page a
+  // practice log rather than a capture archive, and neither is visible without
+  // data - so seed some.
+  {
+    const ctx = await browser.newContext();
+    const seed = await ctx.newPage();
+    await seed.goto(BASE + '/theme.css', { waitUntil: 'load' });   // holds no DB handle
+    await seed.evaluate(async () => {
+      await new Promise(r => { const d = indexedDB.deleteDatabase('owscout-capture'); d.onsuccess = d.onerror = d.onblocked = r; });
+      const db = await new Promise(res => {
+        const q = indexedDB.open('owscout-capture', 5);
+        q.onupgradeneeded = () => { const d = q.result;
+          ['maps','refs','scrims','scrim_maps','opponents'].forEach(s => d.createObjectStore(s, { keyPath: 'id' }));
+          d.createObjectStore('heroes', { keyPath: 'g' }); };
+        q.onsuccess = () => res(q.result);
+      });
+      const put = (s, r) => new Promise(done => { const tx = db.transaction(s, 'readwrite'); tx.objectStore(s).put(r); tx.oncomplete = done; });
+      const old = new Date(Date.now() - 24 * 86400000).toISOString().slice(0, 10);
+      const today = new Date().toISOString().slice(0, 10);
+      await put('opponents', { id: 'opp-1', kind: 'local_group', label: 'Korean team',
+                               roster_names: ['k1','k2','k3','k4','k5'], times_played: 3 });
+      // Identified by id only: the label must come from the registry.
+      await put('scrims', { id: 's2', team_us: 'Us FC', opponent_id: 'opp-1', date: old, created_at: old + 'T19:00:00Z' });
+      await put('scrims', { id: 's1', team_us: 'Us FC', opponent_team_id: 't-league',
+                            opponent: 'IGNIS CRIMSON', date: today, created_at: today + 'T19:00:00Z' });
+      const obs = [{ side: 'a', heroes: ['h1', 'h2'] }];
+      await put('scrim_maps', { id: 's1:1', scrim_id: 's1', map_no: 1, map_name: 'Ilios', map_category: 'Control', observations: obs });
+      await put('scrim_maps', { id: 's2:1', scrim_id: 's2', map_no: 1, map_name: 'Runasapi', map_category: 'Push', observations: obs });
+      // Voided: a restarted map was not practice and must not claim coverage.
+      await put('scrim_maps', { id: 's2:2', scrim_id: 's2', map_no: 2, map_name: 'Dorado', map_category: 'Escort', observations: obs, void: true });
+      db.close();
+    });
+
+    const v = await ctx.newPage();
+    const verrs = [];
+    v.on('pageerror', e => verrs.push(e.message));
+    await v.goto(BASE + '/scrims.html', { waitUntil: 'load' });
+    await v.waitForTimeout(2500);
+    const vr = await v.evaluate(() => {
+      const cells = [...document.querySelectorAll('.covcell')].map(c => ({
+        mode: c.querySelector('.covmode').textContent,
+        when: c.querySelector('.covwhen').textContent,
+        state: c.className.replace('covcell ', ''),
+      }));
+      const by = {}; cells.forEach(c => { by[c.mode] = c; });
+      const txt = document.body.textContent;
+      return { count: cells.length, by,
+               note: (document.querySelector('.covnote') || {}).textContent || '',
+               leagueLink: !!document.querySelector('.oppout'),
+               registryLabel: /Korean team/.test(txt), leagueLabel: /IGNIS CRIMSON/.test(txt) };
+    });
+
+    check('viewer: practice coverage renders every mode', vr.count >= 6, String(vr.count));
+    check('viewer: an unplayed mode says so', vr.by.Flashpoint && vr.by.Flashpoint.state === 'cov-never',
+      JSON.stringify(vr.by.Flashpoint));
+    check('viewer: a stale mode is flagged', vr.by.Push && vr.by.Push.state === 'cov-stale',
+      JSON.stringify(vr.by.Push));
+    check('viewer: a fresh mode is not flagged', vr.by.Control && vr.by.Control.state === 'cov-ok',
+      JSON.stringify(vr.by.Control));
+    check('viewer: a voided map does not claim coverage',
+      vr.by.Escort && vr.by.Escort.state === 'cov-never', JSON.stringify(vr.by.Escort));
+    check('viewer: it names the least-practised modes', /Least practised/.test(vr.note), vr.note);
+    check('viewer: a group is labelled from the registry, not a frozen string', vr.registryLabel);
+    check('viewer: a league opponent links out', vr.leagueLink && vr.leagueLabel);
+    check('viewer: no page errors', verrs.length === 0, verrs.join(' | '));
+    await ctx.close();
+  }
+
   // --- 2. Either capture page may be opened first ---------------------------
   // onupgradeneeded fires once per version, so a page that declares only its
   // own stores leaves the other page's stores uncreated. This is the check that
