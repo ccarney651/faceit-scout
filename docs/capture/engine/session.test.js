@@ -89,3 +89,52 @@ test('buildScaffold marks every row dead when the session predates the wipe', ()
   const out = Session.buildScaffold(rows, idx, '2026-08-01');
   assert.equal(out[0].dead, true);
 });
+
+// --- score/result disagreement -------------------------------------------
+// From a real OCR run: tesseract read "2 - 0" as "2 - ©", the parser emitted
+// score 0-0, and the row still claimed VICTORY. A confidently wrong 0-0 is
+// worse than an admitted unknown, so rows like that are flagged.
+
+test('a win with no surviving score is flagged suspect', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const out = Session.buildScaffold(
+    [{ map_name: 'Busan', map_category: 'Control', code: 'IJKL56',
+       score: { us: 0, them: 0 }, result: 'win' }], idx, '2026-08-13');
+  assert.equal(out[0].score_suspect, true);
+});
+
+test('a win whose score says otherwise is flagged suspect', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const out = Session.buildScaffold(
+    [{ map_name: 'Ilios', map_category: 'Control', code: 'ABCD12',
+       score: { us: 1, them: 3 }, result: 'win' }], idx, '2026-08-13');
+  assert.equal(out[0].score_suspect, true);
+});
+
+test('a draw that is not level is flagged suspect', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const out = Session.buildScaffold(
+    [{ map_name: 'Nepal', map_category: 'Control', code: 'ZZZZ99',
+       score: { us: 2, them: 1 }, result: 'draw' }], idx, '2026-08-13');
+  assert.equal(out[0].score_suspect, true);
+});
+
+test('a consistent row is not flagged', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const out = Session.buildScaffold(
+    [{ map_name: 'Ilios', map_category: 'Control', code: 'ABCD12',
+       score: { us: 3, them: 1 }, result: 'win' },
+     { map_name: 'Nepal', map_category: 'Control', code: 'ZZZZ99',
+       score: { us: 2, them: 2 }, result: 'draw' }], idx, '2026-08-13');
+  assert.equal(out[0].score_suspect, false);
+  assert.equal(out[1].score_suspect, false);
+});
+
+test('a row with no result at all is not flagged', () => {
+  // Nothing to contradict - the code and map are still the point of the row.
+  const idx = Session.buildCodeIndex(DATA);
+  const out = Session.buildScaffold(
+    [{ map_name: 'Oasis', map_category: 'Control', code: 'E39856',
+       score: { us: 0, them: 0 }, result: null }], idx, '2026-08-13');
+  assert.equal(out[0].score_suspect, false);
+});

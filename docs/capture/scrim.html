@@ -1336,8 +1336,14 @@ function renderScaffold(rows){
              \u2014 <a href="index.html">capture in League scout</a></span>`
           : r.dead
             ? `<span class="warn">code expired \u2014 replay unavailable</span>`
-            : '';
-        const sc=r.score?`${r.score.us}-${r.score.them}`:'';
+            : r.score_suspect
+              ? `<span class="warn">score unreadable \u2014 set it after capturing</span>`
+              : '';
+        // A score OCR could not read reliably is shown as unknown, not as a
+        // confident 0-0: tesseract turns "2 - 0" into "2 - \u00a9" often enough
+        // that trusting the digits silently records the wrong result.
+        const sc=r.score_suspect ? '? \u2013 ?'
+               : (r.score?`${r.score.us}-${r.score.them}`:'');
         return `<label class="row" style="gap:8px">
           <input type="checkbox" data-i="${i}" ${on} ${dis}>
           <b>${esc(r.map_name)}</b>

@@ -46,16 +46,34 @@
     };
   }
 
+  // Does the parsed score contradict the parsed result? OCR reads the result
+  // word far more reliably than the digits - "VICTORY" survives damage that
+  // turns "2 - 0" into "2 - ©", which the parser then reports as a confident
+  // 0-0. Observed in a real run against a rendered replay history. The row is
+  // still worth keeping (its map and code are the point), but the score must
+  // be shown as suspect rather than as fact.
+  function scoreDisagreesWithResult(result, score) {
+    if (!result || !score) return false;
+    var us = score.us, them = score.them;
+    if (us === 0 && them === 0) return true;          // no score survived at all
+    if (result === 'win') return !(us > them);
+    if (result === 'loss') return !(us < them);
+    if (result === 'draw') return us !== them;
+    return false;
+  }
+
   function buildScaffold(rows, index, played) {
     return (rows || []).map(function (r) {
       var cls = r.code ? classifyCode(r.code, index, played)
                        : { league: false, dead: false, division: null };
+      var score = r.score || { us: 0, them: 0 };
       return {
         map_name: r.map_name,
         map_category: r.map_category,
         code: r.code || null,
-        score: r.score || { us: 0, them: 0 },
+        score: score,
         result: r.result || null,
+        score_suspect: scoreDisagreesWithResult(r.result || null, score),
         league: cls.league,
         dead: cls.dead,
         division: cls.division,
