@@ -406,6 +406,7 @@ button:disabled{opacity:.45;cursor:default}
 <script src="engine/frames.js"></script>
 <script src="engine/calibration.js"></script>
 <script src="engine/refs.js"></script>
+<script src="engine/overlay.js"></script>
 <script>
 const {normName, simScore, affinity,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
@@ -1202,7 +1203,6 @@ async function saveReviewRec(rec){ await idbPut(rec); }
 
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
-let pipAutoShown=false, pipAutoPending=false;   // auto-open the control panel once the tool is capture-ready (see maybeAutoPop)
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   // sideResolved: whether the LEFT team is known (auto-detected or manually
@@ -1456,61 +1456,22 @@ async function renderCaptured(){ const rows=await idbAll(); document.getElementB
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 
 // ---------- pop-out control panel (Document PiP): full scouting console over OW ----------
-// Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
-// always match the current map — the whole loop runs with no alt-tab.
-function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; const d=pipWin.document;
-  const main=d.getElementById('prow-main'), side=d.getElementById('prow-side'),
-    sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'),
-    fin=d.getElementById('prow-finish'); if(!main) return;
-  const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
-  main.className='prow'; main.innerHTML='';
-  mk(main,'◉ Snapshot',()=>snapshot(false),'go');
-  mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo);
-  mk(main,'⧉ Copy code',()=>{ const c=selectedCode(); if(c){ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); } });
-  // side row — always available while a map is live: flip the LEFT team or force
-  // a fresh side read. Sides auto-detect on the first Snapshot press; this is the
-  // no-alt-tab ESCAPE HATCH for when that read fails or gets it backwards, so a
-  // scout glued to the game doesn't have to leave this window to fix it.
-  side.innerHTML='';
-  if(session){ side.className='prow'+(session.sideResolved?'':' warn');
-    if(!session.sideResolved){ const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l); }
-    mk(side,'⇄ Swap L/R',swapSides); mk(side,'⟳ Re-detect',autoDetect); }
-  else side.className='prow';
-  // sub-map row (control maps) — warn colour until one is picked; active highlighted
-  sub.innerHTML='';
-  if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
-    const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
-    const spent=usedSubmaps(session.snaps, session.round);
-    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
-  else sub.className='prow';
-  // attack row (escort/hybrid) — click the team that's attacking this round;
-  // warn colour from round 3 while unconfirmed (time-bank, not parity — see
-  // setAttacker), same treatment as the sub-map row above.
-  atk.innerHTML='';
-  if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
-    atk.className='prow'+(needsConfirm?' warn':'');
-    const l=d.createElement('span'); l.className='lbl';
-    l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
-    const {leftName,rightName}=sideNames();
-    const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
-      if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
-      else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
-      b.onclick=()=>setAttacker(side); atk.appendChild(b); };
-    mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
-  else atk.className='prow';
-  // finish row — pinned to the bottom so it's always the last thing you reach;
-  // finishing is the one "commit" action, deliberately separated from the live buttons.
-  fin.className='prow'; fin.innerHTML='';
-  mk(fin,'✓ Finish + save this map',()=>finishMap(),'fin go');
-}
-// Reads the palette currently active on this page (via getComputedStyle, not
-// a guessed token table) so the control panel always matches — including
-// palettes added after this code was written.
-function pipColors(){ const cs=getComputedStyle(document.documentElement); const v=n=>cs.getPropertyValue(n).trim();
-  return {bg:v('--bg'),surface2:v('--surface2'),fg:v('--fg'),muted:v('--muted'),line:v('--line'),line2:v('--line2'),
-    accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
-function pipPanelCss(c){
-  return `#pinfo{padding:5px 8px 1px;color:${c.muted};font-size:11px}`+
+// Mechanism now lives in engine/overlay.js (shared with scrim.html). This
+// page's controls/CSS/HTML are genuinely different from scrim.html's (a
+// Re-detect-sides button, "spent" sub-map dimming, an auto-fetch checkbox,
+// a dedicated Finish row) so they're passed in as ctx data, not merged -
+// see that module's header for why.
+const overlay=OWDBOverlay.make({doc:document, width:360, height:500,
+  labels:{off:'⇱ Control panel', on:'⇱ Panel open'},
+  toasts:{noDPIP:'Control panel needs Chrome/Edge 116+ or Firefox 151+ (Document Picture-in-Picture).',
+    autoPop:'Control panel opens on your next click or keypress — capture without alt-tab'},
+  // overflow-y:auto is a safety net, not just sizing - if the operator (or a
+  // future palette/content change) ever makes this taller than the window,
+  // everything scrolls into reach instead of the Finish button clipping off
+  // the bottom silently.
+  bodyStyle:c=>`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif;height:100vh;overflow-y:auto;box-sizing:border-box`,
+  panelCss:c=>
+    `#pinfo{padding:5px 8px 1px;color:${c.muted};font-size:11px}`+
     `#pinfo .pmap{color:${c.fg};font-weight:600;font-size:12.5px;margin-top:1px}`+
     `#pinfo .pteams{font-size:11px;margin-top:1px}#pinfo .tl{color:#5a9bd8}#pinfo .tr{color:#e9694f}`+
     `#pmsg{padding:0 8px;min-height:14px;font-size:11px}`+
@@ -1529,60 +1490,79 @@ function pipPanelCss(c){
     `.prow input{margin:0}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:1px 0;border-top:1px solid ${c.line};font-size:11px}.slot:first-of-type{border-top:0}`+
     `.hp{width:16px;height:16px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
-    `.sc{font-size:10.5px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
-// Re-applies the current palette to an already-open control panel, so a
-// mid-session palette change doesn't require closing and reopening it.
-function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors();
-  pipWin.document.body.style.background=c.bg; pipWin.document.body.style.color=c.fg;
-  const st=pipWin.document.getElementById('pipstyle'); if(st) st.textContent=pipPanelCss(c); }
-async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Control panel needs Chrome/Edge 116+ or Firefox 151+ (Document Picture-in-Picture).','warn'); return; }
-  if(pipWin&&!pipWin.closed) return;   // already open — keep the one window
-  try{ const w=await documentPictureInPicture.requestWindow({width:360,height:500}); pipWin=w; pipAutoShown=true; setPopBtn();
-    const c=pipColors();
-    // overflow-y:auto is a safety net, not just sizing - if the operator (or a
-    // future palette/content change) ever makes this taller than the window,
-    // everything scrolls into reach instead of the Finish button clipping off
-    // the bottom silently.
-    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif;height:100vh;overflow-y:auto;box-sizing:border-box`;
-    const st=w.document.createElement('style'); st.id='pipstyle'; st.textContent=pipPanelCss(c);
-    w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="prow" id="prow-opts"><label><input type="checkbox" id="pautofetch"> auto-fetch next map</label></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div><div id="prow-finish"></div>';
-    target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
-    const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
-      pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
-        localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; }
-    renderPipControls();
-    w.document.addEventListener('keydown',handleKey);          // shortcuts work from the control panel too
-    // Map + teams: the operator is watching the game, not the browser tab, so
-    // the one place they DO see (this floating panel) should say what's being
-    // scouted without needing to alt-tab back to the main page to check.
-    const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
-      if(!el) return;
-      if(!session){ el.textContent=c?'':'pick a replay'; return; }
-      const {leftName,rightName}=sideNames();
-      el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
-        `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
-        `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; };
-    w._tick=setInterval(tick,600); tick();
-    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; setPopBtn(); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
-  }catch(err){ toast('Pop-out failed: '+esc(err&&err.message?err.message:String(err)),'bad'); } }
-// Reflect the control panel's open/closed state on the (now prominent) button.
-function setPopBtn(){ const b=document.getElementById('pop'); if(!b) return;
-  const on=!!(pipWin&&!pipWin.closed);
-  b.classList.toggle('on',on);
-  b.textContent=on?'⇱ Panel open':'⇱ Control panel'; }
-// Auto-open the control panel: the tool is "ready for capture" when the screen is
-// shared, both boxes are set, and a replay code is picked. Browsers only allow
-// requestWindow() inside a user gesture, so we can't open it the moment `ready`
-// flips by itself — instead we ARM it then, and fire it on the next click or
-// capture keypress. Only ever auto-opens once per page load; after the scout
-// closes it themselves we don't fight them, the button reopens it.
-function maybeAutoPop(){
-  if(pipAutoShown||!('documentPictureInPicture' in window)) return;
-  if(!readyForCapture()){ pipAutoPending=false; return; }
-  if(!pipAutoPending){ pipAutoPending=true; toast('Control panel opens on your next click or keypress — capture without alt-tab','info',4500); }
-}
-function gestureAutoPop(){ if(!pipAutoPending||drawMode) return; pipAutoPending=false; popout(); }
+    `.sc{font-size:10.5px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
+  middleHtml:'<div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="prow" id="prow-opts"><label><input type="checkbox" id="pautofetch"> auto-fetch next map</label></div>',
+  finishHtml:'<div id="prow-finish"></div>',
+  afterOpen:w=>{ const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
+    pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
+      localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; } },
+  // Map + teams: the operator is watching the game, not the browser tab, so
+  // the one place they DO see (this floating panel) should say what's being
+  // scouted without needing to alt-tab back to the main page to check.
+  tick:el=>{ const c=selectedCode();
+    if(!session){ el.textContent=c?'':'pick a replay'; return; }
+    const {leftName,rightName}=sideNames();
+    el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
+      `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
+      `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; },
+  // Controls are rebuilt per map (startMap calls renderPipControls) so
+  // sub-map / flip buttons always match the current map — no alt-tab.
+  controls:[
+    {id:'prow-main', render:(main,d,mk)=>{
+      main.className='prow'; main.innerHTML='';
+      mk(main,'◉ Snapshot',()=>snapshot(false),'go');
+      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo);
+      mk(main,'⧉ Copy code',()=>{ const c=selectedCode(); if(c){ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); } });
+    }},
+    // side row — always available while a map is live: flip the LEFT team or
+    // force a fresh side read. Sides auto-detect on the first Snapshot press;
+    // this is the no-alt-tab ESCAPE HATCH for when that read fails or gets it
+    // backwards, so a scout glued to the game doesn't have to leave this
+    // window to fix it.
+    {id:'prow-side', render:(side,d,mk)=>{
+      side.innerHTML='';
+      if(session){ side.className='prow'+(session.sideResolved?'':' warn');
+        if(!session.sideResolved){ const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l); }
+        mk(side,'⇄ Swap L/R',swapSides); mk(side,'⟳ Re-detect',autoDetect); }
+      else side.className='prow';
+    }},
+    // sub-map row (control maps) — warn colour until one is picked; active
+    // highlighted; spent (already captured) sub-maps dimmed.
+    {id:'prow-sub', render:(sub,d,mk)=>{
+      sub.innerHTML='';
+      if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
+        const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
+        const spent=usedSubmaps(session.snaps, session.round);
+        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
+      else sub.className='prow';
+    }},
+    // attack row (escort/hybrid) — click the team that's attacking this
+    // round; warn colour from round 3 while unconfirmed (time-bank, not
+    // parity — see setAttacker).
+    {id:'prow-atk', render:(atk,d,mk)=>{
+      atk.innerHTML='';
+      if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
+        atk.className='prow'+(needsConfirm?' warn':'');
+        const l=d.createElement('span'); l.className='lbl';
+        l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
+        const {leftName,rightName}=sideNames();
+        const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
+          if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
+          else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
+          b.onclick=()=>setAttacker(side); atk.appendChild(b); };
+        mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
+      else atk.className='prow';
+    }},
+    // finish row — pinned to the bottom so it's always the last thing you
+    // reach; finishing is the one "commit" action, deliberately separated
+    // from the live buttons.
+    {id:'prow-finish', render:(fin,d,mk)=>{
+      fin.className='prow'; fin.innerHTML='';
+      mk(fin,'✓ Finish + save this map',()=>finishMap(),'fin go');
+    }},
+  ],
+});
+const {popout, maybeAutoPop, gestureAutoPop, setPopBtn, pipColors, pipPanelCss, renderPipControls, restylePipPanel}=overlay;
 document.addEventListener('pointerdown',gestureAutoPop);
 
 // ---------- publish: build contribution + upload to the worker ----------

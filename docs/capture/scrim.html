@@ -374,7 +374,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -1290,42 +1290,18 @@ async function importSessionFromScreenshot(file){
 }
 
 // ---------- pop-out overlay ----------
-function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; const d=pipWin.document;
-  const main=d.getElementById('prow-main'), side=d.getElementById('prow-side'),
-    sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'); if(!main) return;
-  const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
-  main.className='prow'; main.innerHTML='';
-  mk(main,'\u25C9 Snapshot',()=>snapshot(false),'go');
-  mk(main,'Round \u25B8',nextRound); mk(main,'\u21B6 Undo',undo); mk(main,'\u2713 Finish',()=>finishMap(),'fin');
-  side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
-  const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
-  mk(side,'\u21C4 Swap L/R',swapSides);
-  sub.innerHTML='';
-  if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
-    const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map \u2014 pick one \u25B8'; sub.appendChild(l);
-    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
-  else sub.className='prow';
-  atk.innerHTML='';
-  if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
-    atk.className='prow'+(needsConfirm?' warn':'');
-    const l=d.createElement('span'); l.className='lbl';
-    l.textContent='Attack R'+session.round+(needsConfirm?' \u2014 confirm \u25B8':''); atk.appendChild(l);
-    const {leftName,rightName}=sideNames();
-    const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
-      if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
-      else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
-      b.onclick=()=>setAttacker(side); atk.appendChild(b); };
-    mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
-  else atk.className='prow';
-}
-// Reads the palette currently active on this page (via getComputedStyle, not
-// a guessed token table) so the floating overlay always matches — including
-// palettes added after this code was written.
-function pipColors(){ const cs=getComputedStyle(document.documentElement); const v=n=>cs.getPropertyValue(n).trim();
-  return {bg:v('--bg'),surface2:v('--surface2'),fg:v('--fg'),muted:v('--muted'),line:v('--line'),line2:v('--line2'),
-    accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
-function pipPanelCss(c){
-  return `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
+// Mechanism now lives in engine/overlay.js (shared with index.html). This
+// page's controls/CSS/HTML are genuinely simpler than index.html's (no
+// re-detect button, no sub-map dimming, no auto-fetch checkbox, Finish is
+// inline instead of a dedicated row) so they're passed in as ctx data, not
+// merged - see that module's header for why.
+const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
+  labels:{off:'⇱ Floating overlay', on:'⇱ Overlay open'},
+  toasts:{noDPIP:'Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).',
+    autoPop:'Floating overlay opens on your next click or keypress — capture without alt-tab'},
+  bodyStyle:c=>`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`,
+  panelCss:c=>
+    `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
     `#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}`+
     `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
     `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
@@ -1336,39 +1312,46 @@ function pipPanelCss(c){
     `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
-    `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
-// Re-applies the current palette to an already-open floating overlay, so a
-// mid-session palette change doesn't require closing and reopening it.
-function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors();
-  pipWin.document.body.style.background=c.bg; pipWin.document.body.style.color=c.fg;
-  const st=pipWin.document.getElementById('pipstyle'); if(st) st.textContent=pipPanelCss(c); }
-async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).','warn'); return; }
-  if(pipWin&&!pipWin.closed) return;
-  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w; setPopBtn();
-    const c=pipColors();
-    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`;
-    const st=w.document.createElement('style'); st.id='pipstyle'; st.textContent=pipPanelCss(c);
-    w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
-    target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
-    renderPipControls();
-    w.document.addEventListener('keydown',handleKey);
-    const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
-      if(el) el.textContent=session?`${c?c.code:''} \u00B7 R${session.round} \u00B7 ${session.snaps.length} snaps`:''; };
-    w._tick=setInterval(tick,600); tick();
-    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; setPopBtn(); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
-  }catch(err){ toast('Pop-out failed: '+esc(err&&err.message?err.message:String(err)),'bad'); } }
-function setPopBtn(){ const b=document.getElementById('pop'); if(!b) return;
-  const on=!!(pipWin&&!pipWin.closed);
-  b.classList.toggle('on',on);
-  b.textContent=on?'\u21F1 Overlay open':'\u21F1 Floating overlay'; }
-let _pipAuto=false, _pipPending=false;
-function maybeAutoPop(){
-  if(_pipAuto||!('documentPictureInPicture' in window)) return;
-  if(!readyForCapture()){ _pipPending=false; return; }
-  if(!_pipPending){ _pipPending=true; toast('Floating overlay opens on your next click or keypress \u2014 capture without alt-tab','info',4500); }
-}
-function gestureAutoPop(){ if(!_pipPending||drawMode) return; _pipPending=false; popout(); }
+    `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
+  middleHtml:'<div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div>',
+  finishHtml:'',
+  tick:el=>{ const c=selectedCode();
+    el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; },
+  controls:[
+    {id:'prow-main', render:(main,d,mk)=>{
+      main.className='prow'; main.innerHTML='';
+      mk(main,'◉ Snapshot',()=>snapshot(false),'go');
+      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
+    }},
+    {id:'prow-side', render:(side,d,mk)=>{
+      side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
+      const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
+      mk(side,'⇄ Swap L/R',swapSides);
+    }},
+    {id:'prow-sub', render:(sub,d,mk)=>{
+      sub.innerHTML='';
+      if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
+        const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
+        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
+      else sub.className='prow';
+    }},
+    {id:'prow-atk', render:(atk,d,mk)=>{
+      atk.innerHTML='';
+      if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
+        atk.className='prow'+(needsConfirm?' warn':'');
+        const l=d.createElement('span'); l.className='lbl';
+        l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
+        const {leftName,rightName}=sideNames();
+        const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
+          if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
+          else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
+          b.onclick=()=>setAttacker(side); atk.appendChild(b); };
+        mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
+      else atk.className='prow';
+    }},
+  ],
+});
+const {popout, maybeAutoPop, gestureAutoPop, setPopBtn, pipColors, pipPanelCss, renderPipControls, restylePipPanel}=overlay;
 document.addEventListener('pointerdown',gestureAutoPop);
 
 // ---------- auto-snapshot ----------
