@@ -150,6 +150,33 @@ to scrims on smurf accounts.** A team fielding two smurfs is still that team, an
 demanding five would push the common case back into manual typing — the exact
 friction this design exists to remove.
 
+**Measured against real data before building on it** (2026-08-13, 8 356 real
+five-player lineups across 159 teams in `faceit.sqlite3`). Note rosters are not
+five players — accumulated across a season the median is **8** and the max 12,
+and 72 of 1 173 players have appeared for more than one team, so a loose bar had
+real scope to collide:
+
+| Bar | Uniquely correct | Ambiguous | Wrong |
+| --- | --- | --- | --- |
+| 3 of 5 | 99.9% | 0.1% | **0** |
+| 4 of 5 | 100% | 0 | **0** |
+
+Applying the tie-break below (highest overlap wins) resolves every one of the
+ambiguous cases: **8 356 of 8 356 to the correct team, no ties, none wrong.**
+
+With smurfs substituted in, which is the case the bar exists for:
+
+| Smurfs among the five | Correct | Wrong | Unidentified |
+| --- | --- | --- | --- |
+| 1 | 100% | 0 | 0 |
+| 2 | 100% | 0 | 0 |
+| 3 | 0% | **0** | 100% |
+
+Three smurfs leaves only two known names, so falling below the bar is
+arithmetic, not a defect — and it fails to "Opponent" rather than to a wrong
+team. This is the quantified case for §4.3's alias learning: once a team's alts
+are learned they count as known names, so the same lineup identifies next time.
+
 The label is applied without a confirmation dialog, but the session header shows
 how many of five matched and offers a one-click "not them", so a low-confidence
 identification is visible and cheap to correct rather than blocking.
