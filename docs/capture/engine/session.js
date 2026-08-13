@@ -46,10 +46,28 @@
     };
   }
 
+  function buildScaffold(rows, index, played) {
+    return (rows || []).map(function (r) {
+      var cls = r.code ? classifyCode(r.code, index, played)
+                       : { league: false, dead: false, division: null };
+      return {
+        map_name: r.map_name,
+        map_category: r.map_category,
+        code: r.code || null,
+        score: r.score || { us: 0, them: 0 },
+        result: r.result || null,
+        league: cls.league,
+        dead: cls.dead,
+        division: cls.division,
+      };
+    });
+  }
+
   var Session = {
     norm: norm,
     buildCodeIndex: buildCodeIndex,
     classifyCode: classifyCode,
+    buildScaffold: buildScaffold,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Session;

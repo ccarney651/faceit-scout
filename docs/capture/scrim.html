@@ -261,6 +261,10 @@
       <div id="scrimqueue" style="display:none;margin-bottom:8px">
         <h3 style="margin-bottom:6px">Session queue</h3>
         <div id="scrimqueuelist"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="scrimaddhand" class="ghost">+ add a map by hand</button>
+          <button id="scrimstartsession">Start session</button>
+        </div>
       </div>
       <div id="scrimmaplist" class="status">Pick or create a scrim — its maps will appear here.</div>
       <div class="row" style="margin-top:10px">
@@ -399,6 +403,12 @@ const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
 function submapsFor(m){ if(!m) return []; let k=m.trim().toLowerCase(); k=MAP_ALIASES[k]||k; return CONTROL_SUBMAPS[k]||[]; }
 
 let activeScrim=null, activeScrimMap=null;
+// SCAFFOLD: rows read from the replay-history screenshot (or added by hand),
+// annotated by engine/session.js's buildScaffold, pending review in
+// #scrimqueuelist. Nothing here is saved until "Start session" - see
+// startScaffoldSession(). Safe as a plain [] literal at top level (no
+// external reference), unlike LEAGUE_DATA/CODE_INDEX above.
+let SCAFFOLD=[];
 const SCRIM_MAPS=[
   {name:"Ilios",cat:"Control"},{name:"Lijiang Tower",cat:"Control"},{name:"Nepal",cat:"Control"},
   {name:"Oasis",cat:"Control"},{name:"Antarctic Peninsula",cat:"Control"},{name:"Samoa",cat:"Control"},{name:"Busan",cat:"Control"},
@@ -1249,24 +1259,76 @@ async function importSessionFromScreenshot(file){
     rows=parseScrimSessionText(debug.fields.rawocr||'');
     if(!rows.length){ toast('still no map rows found after editing','warn'); return; }
   }
-  const bodyHtml=`<div class="status" style="margin-bottom:10px">Found ${rows.length} map row${rows.length===1?'':'s'}.</div>`+rows.map((r,i)=>`
-    <div class="row" style="align-items:flex-start;margin-bottom:8px">
-      <label class="f">Map<input type="text" id="map_${i}" value="${esc(r.map_name)}"></label>
-      <label class="f">Code<input type="text" id="code_${i}" value="${esc(r.code||'')}"></label>
-      <label class="f">Us<input type="number" id="us_${i}" value="${r.score.us}" style="width:60px"></label>
-      <label class="f">Them<input type="number" id="them_${i}" value="${r.score.them}" style="width:60px"></label>
-      <label class="f">Result<select id="res_${i}"><option value=""></option><option value="win"${r.result==='win'?' selected':''}>Win</option><option value="loss"${r.result==='loss'?' selected':''}>Loss</option><option value="draw"${r.result==='draw'?' selected':''}>Draw</option></select></label>
-    </div>`).join('')+`<details style="margin-top:12px"><summary class="cardsum">Debug OCR text</summary><textarea rows="6" readonly style="width:100%;margin-top:8px;background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px;font:12px/1.45 monospace">${esc(ocrText)}</textarea></details>`;
-  const review=await uiModal({title:'Review imported session', bodyHtml, collect:true, escapeValue:null,
-    actions:[{label:'Cancel',value:null,ghost:true},{label:'Import',value:true}]});
-  if(!review||!review.value) return;
-  rows.forEach((r,i)=>{
-    const editedMap=review.fields[`map_${i}`]||r.map_name;
-    const map=SCRIM_MAPS.find(m=>m.name.toLowerCase()===(editedMap||'').trim().toLowerCase())||bestMapMatch(editedMap);
-    r.map_name=map?map.name:editedMap; r.map_category=map?map.cat:r.map_category;
-    r.code=(review.fields[`code_${i}`]||r.code||'').toUpperCase();
-    r.score.us=+review.fields[`us_${i}`] || r.score.us; r.score.them=+review.fields[`them_${i}`] || r.score.them;
-    r.result=review.fields[`res_${i}`] || r.result; });
+  // Annotate with the league-code block (engine/session.js) and hand off to
+  // the review list - nothing is saved until "Start session".
+  SCAFFOLD=OWDBSession.buildScaffold(rows, CODE_INDEX, scrimDate());
+  renderScaffold(SCAFFOLD);
+  toast('found '+rows.length+' map row'+(rows.length===1?'':'s')+' \u2014 review below, then Start session','ok');
+}
+// Render the scaffolded session for review. League rows are refused outright;
+// dead-code rows are kept (the map was still played) but flagged as
+// uncapturable, since the replay they would be captured from no longer exists.
+function renderScaffold(rows){
+  const wrap=document.getElementById('scrimqueue');
+  const list=document.getElementById('scrimqueuelist');
+  if(!rows.length){ wrap.style.display='none'; return; }
+  wrap.style.display='';
+  const wipe=CODE_INDEX.wipeDate;
+  list.innerHTML=`<p class="status">${rows.length} map${rows.length===1?'':'s'} read`
+    + (wipe?` \u2014 codes valid until the next patch (last wipe ${esc(wipe)})`:'')
+    + `</p>`
+    + rows.map((r,i)=>{
+        const dis=r.league?'disabled':'';
+        const on=r.league?'':'checked';
+        const note=r.league
+          ? `<span class="warn">league match${r.division?` (${esc(r.division)})`:''}
+             \u2014 <a href="index.html">capture in League scout</a></span>`
+          : r.dead
+            ? `<span class="warn">code expired \u2014 replay unavailable</span>`
+            : '';
+        const sc=r.score?`${r.score.us}-${r.score.them}`:'';
+        return `<label class="row" style="gap:8px">
+          <input type="checkbox" data-i="${i}" ${on} ${dis}>
+          <b>${esc(r.map_name)}</b>
+          <span class="status">${esc(r.map_category||'')}</span>
+          <code>${esc(r.code||'\u2014')}</code>
+          <span class="status">${esc(sc)}</span>
+          <span class="status">${esc(r.result||'')}</span>
+          ${note}
+        </label>`;
+      }).join('');
+}
+// "+ add a map by hand": scrims are not restricted to a league map pool, so
+// every SCRIM_MAPS entry is offered (unlike the league-code block, which
+// only ever fires when a code is entered).
+async function addScaffoldMapByHand(){
+  const options=SCRIM_MAPS.map(m=>`<option value="${esc(m.name)}">${esc(m.name)} (${esc(m.cat)})</option>`).join('');
+  const r=await uiModal({title:'Add a map by hand', collect:true, escapeValue:null,
+    bodyHtml:`<label class="f">Map<select id="handmap">${options}</select></label>`
+      +`<label class="f">Code <span class="status">(optional)</span><input type="text" id="handcode" placeholder="optional"></label>`,
+    actions:[{label:'Cancel',value:null,ghost:true},{label:'Add',value:true}]});
+  if(!r||!r.value) return;
+  const map=SCRIM_MAPS.find(m=>m.name===r.fields.handmap); if(!map) return;
+  const code=(r.fields.handcode||'').trim().toUpperCase()||null;
+  const scaffolded=OWDBSession.buildScaffold(
+    [{map_name:map.name, map_category:map.cat, code, score:{us:0,them:0}, result:null}],
+    CODE_INDEX, scrimDate())[0];
+  SCAFFOLD.push(scaffolded);
+  renderScaffold(SCAFFOLD);
+}
+// "Start session": creates a scrim_map record (queued:true, same shape
+// startQueuedMap()/finishScrimMap() already expect) per checked row. League
+// rows are filtered out here too, not just left to the disabled checkbox -
+// the league-code block is a correctness guarantee (see engine/session.js's
+// header), not a UI nicety a user could route around by hand.
+async function startScaffoldSession(){
+  if(!SCAFFOLD.length){ toast('nothing to start \u2014 import a screenshot or add a map first','warn'); return; }
+  const team_us=(document.getElementById('scus').value||'').trim();
+  const opponent=(document.getElementById('scopp').value||'').trim();
+  if(!team_us||!opponent){ toast('enter Our team and Opponent first','warn'); return; }
+  const checks=[...document.querySelectorAll('#scrimqueuelist input[type=checkbox]')];
+  const rows=checks.filter(cb=>cb.checked).map(cb=>SCAFFOLD[+cb.dataset.i]).filter(r=>r&&!r.league);
+  if(!rows.length){ toast('nothing checked to start','warn'); return; }
   if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
   Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
     date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
@@ -1282,8 +1344,9 @@ async function importSessionFromScreenshot(file){
       profile:null, captured_at:null, bans:[], observations:[], crops:null, scoreboard:null,
       scrim:true, queued:true }); }
   activeScrim.map_no=startNo+rows.length; await idbPutScrim(activeScrim);
+  SCAFFOLD=[];
   await renderScrimPanel();
-  toast('imported '+rows.length+' maps \u2014 click Scout on the first one','ok');
+  toast('started session \u2014 '+rows.length+' map'+(rows.length===1?'':'s')+' queued (private) \u2014 click Scout on the first one','ok');
 }
 
 // ---------- pop-out overlay ----------
@@ -1420,6 +1483,8 @@ document.getElementById('scimportbtn').onclick=()=>document.getElementById('scim
 document.getElementById('scimport').onchange=e=>{ const f=e.target.files[0]; if(f) importScrims(f); e.target.value=''; };
 document.getElementById('scrimpscrbtn').onclick=()=>document.getElementById('scrimpscr').click();
 document.getElementById('scrimpscr').onchange=e=>{ const f=e.target.files[0]; if(f) importSessionFromScreenshot(f); e.target.value=''; };
+document.getElementById('scrimaddhand').onclick=addScaffoldMapByHand;
+document.getElementById('scrimstartsession').onclick=startScaffoldSession;
 document.addEventListener('paste', e=>{
   const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
   for(const item of items){ if(item.type.startsWith('image/')){ const f=item.getAsFile(); if(f){ e.preventDefault(); importSessionFromScreenshot(f); } break; } }

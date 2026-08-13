@@ -55,3 +55,37 @@ test('with no known wipe date nothing is called dead', () => {
   const idx = Session.buildCodeIndex({});
   assert.equal(Session.classifyCode('7DNNF1', idx, '2026-08-09').dead, false);
 });
+
+test('buildScaffold annotates parsed rows with league and wipe status', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const rows = [
+    { map_name: 'Suravasa', map_category: 'Flashpoint', code: 'AKS2A9',
+      score: {us: 11, them: 2}, result: 'win' },
+    { map_name: 'Oasis', map_category: 'Control', code: 'E39856',
+      score: {us: 1, them: 2}, result: 'loss' },
+  ];
+  const out = Session.buildScaffold(rows, idx, '2026-08-12');
+  assert.equal(out.length, 2);
+  assert.equal(out[0].league, false);
+  assert.equal(out[0].dead, false);
+  assert.equal(out[1].league, true, 'the Oasis row is a league match');
+  assert.equal(out[1].division, 'EMEA Master');
+});
+
+test('buildScaffold keeps rows that have no code at all', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const rows = [{ map_name: "King's Row", map_category: 'Hybrid', code: null,
+                  score: {us: 3, them: 1}, result: 'win' }];
+  const out = Session.buildScaffold(rows, idx, '2026-08-12');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].code, null);
+  assert.equal(out[0].league, false);
+});
+
+test('buildScaffold marks every row dead when the session predates the wipe', () => {
+  const idx = Session.buildCodeIndex(DATA);
+  const rows = [{ map_name: 'Suravasa', map_category: 'Flashpoint',
+                  code: 'AKS2A9', score: {us: 11, them: 2}, result: 'win' }];
+  const out = Session.buildScaffold(rows, idx, '2026-08-01');
+  assert.equal(out[0].dead, true);
+});
