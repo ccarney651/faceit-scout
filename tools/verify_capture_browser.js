@@ -121,6 +121,51 @@ async function main() {
     await ctx.close();
   }
 
+  // --- 1b. The guided tour, on both pages ----------------------------------
+  // Each page keeps its own first-visit key, so finishing one tour must not
+  // suppress the other's. tour.js was extracted from both pages; this exercises
+  // the extracted mechanism rather than trusting that the move was clean.
+  for (const [url, key, label] of [['/capture/index.html', 'owdb_tour_done', 'league'],
+                                   ['/capture/scrim.html', 'owdb_tour_done_scrim', 'scrim']]) {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', e => errs.push(e.message));
+    await p.goto(BASE + url, { waitUntil: 'load' });
+    await p.evaluate(k => localStorage.removeItem(k), key);   // force first visit
+    await p.reload({ waitUntil: 'load' });
+    await p.waitForTimeout(2000);
+
+    // NB: #tour is position:fixed, so offsetParent is always null - visibility
+    // has to be read from computed display and a non-zero box, not offsetParent.
+    const shown = await p.evaluate(() => {
+      const t = document.getElementById('tour');
+      if (!t) return false;
+      return getComputedStyle(t).display !== 'none' && t.getBoundingClientRect().height > 0;
+    });
+    check(`tour: opens on a first visit (${label})`, shown);
+
+    if (shown) {
+      const before = await p.evaluate(() => document.getElementById('tour').textContent);
+      await p.evaluate(() => document.getElementById('tourNext').click());
+      await p.waitForTimeout(400);
+      const after = await p.evaluate(() => document.getElementById('tour').textContent);
+      check(`tour: Next advances a step (${label})`, before !== after);
+
+      await p.evaluate(() => document.getElementById('tourSkip').click());
+      await p.waitForTimeout(400);
+      const closed = await p.evaluate(() => {
+        const t = document.getElementById('tour');
+        return !t || getComputedStyle(t).display === 'none';
+      });
+      check(`tour: Skip closes it (${label})`, closed);
+      check(`tour: completion is remembered (${label})`,
+        await p.evaluate(k => !!localStorage.getItem(k), key));
+    }
+    check(`tour: no page errors (${label})`, errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
   // --- 2. Either capture page may be opened first ---------------------------
   // onupgradeneeded fires once per version, so a page that declares only its
   // own stores leaves the other page's stores uncreated. This is the check that

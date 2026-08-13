@@ -19,6 +19,28 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-08-13
 
+### Fixed
+- **The two capture pages no longer fight over the IndexedDB schema, and the
+  database moves to version 5.** Each page opened `owscout-capture` at version
+  4 declaring only the stores it used, but `onupgradeneeded` fires once per
+  version — so whichever page a browser opened *first* created its own stores
+  and fixed the version, leaving the other page's stores uncreated and every
+  transaction on them throwing *"One of the specified object stores was not
+  found"*. Opening the league page first killed scrim capture; opening the
+  scrim page first killed league capture. Both pages now pass the single
+  `ALL_STORES` map in `docs/capture/engine/idb.js`.
+
+  **Version 5 is what repairs existing browsers.** One stuck at v4 with half
+  the stores would never fire `onupgradeneeded` again without a version change.
+  The upgrade only ever *adds* stores, so learned hero references, custom
+  heroes and captured maps are untouched — verified in a real browser.
+
+  The bug predates this work (`main` at `7e7bde2` fails identically) and only
+  became reachable when scrim capture was un-paused, since a paused scrim page
+  never touched its stores. Contributors with an established database were
+  unaffected, having accumulated every store over time; a fresh install hit it
+  immediately.
+
 ### Changed
 - **Scrim capture is un-paused.** The unconditional `#scrimpaused` overlay
   added in `f2881cf` is gone from both `docs/capture/scrim.html` (blocked
