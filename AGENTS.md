@@ -117,6 +117,15 @@ canonical and this copy is the bug.
 - **The capture pages' Content-Security-Policy lives in a `<meta>` tag**, so
   `curl -I` shows nothing. It has silently broken browser APIs before — check it
   first when something fails quietly in `docs/capture/`.
+- **pytest cannot see through a real browser.** It checks syntax and shape, not
+  behaviour against a live DOM, IndexedDB or CSP — a gap that has hidden live
+  bugs more than once. `tools/verify_capture_browser.js` closes most of it
+  (serve `docs/`, `npm install playwright-core`, then run it). Everything left
+  after that needs a human with Overwatch open: screen share, calibration,
+  portrait recognition, and the overlay over the game.
+- **Both capture pages must open IndexedDB with the same store list**
+  (`ALL_STORES` in `docs/capture/engine/idb.js`). Declaring only the stores a
+  page uses looks right and breaks the other page — see `ARCHITECTURE.md` §7.
 - **The capture pages share an engine under `docs/capture/engine/`.** A fix to
   calibration, hero recognition, the overlay or name matching belongs in the
   module, not in a page. The snapshot/review/finish cluster is still forked

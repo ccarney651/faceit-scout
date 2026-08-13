@@ -1322,10 +1322,14 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 // scrim.html); this page owns the store list (maps/refs/heroes - it never
 // touches scrims/scrim_maps, those are scrim.html's) and schema version (4,
 // unchanged - see engine/idb.js for why touching it is dangerous).
-const IDB_STORES={maps:'id', refs:'id', heroes:'g'};
+// ALL_STORES, not this page's subset: onupgradeneeded fires once per version,
+// so whichever page opens the DB first would otherwise fix the version with
+// only its own stores and leave the other page throwing on every transaction.
+// See engine/idb.js's header.
+const IDB_STORES=OWDBIdb.ALL_STORES;
 const {getAll:idbGetAll, putIn:idbPutIn, clear:idbClear}=OWDBIdb;
-OWDBIdb.open(4, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadFeeds() runs later, at the bottom of this script)
-function idb(){ return OWDBIdb.open(4, IDB_STORES); }
+OWDBIdb.open(OWDBIdb.SCHEMA_VERSION, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadFeeds() runs later, at the bottom of this script)
+function idb(){ return OWDBIdb.open(OWDBIdb.SCHEMA_VERSION, IDB_STORES); }
 async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('maps','readonly').objectStore('maps').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
 async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }

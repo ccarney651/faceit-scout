@@ -720,10 +720,28 @@ is readable only by the person who recorded it.
 
 ### How it works
 
-**Storage is one IndexedDB database, `owscout-capture`, at schema version 4.**
-Both capture pages open it with an explicit version and create the stores they
-need: `docs/capture/index.html` owns `maps`, `refs`, and `heroes`;
-`docs/capture/scrim.html` adds `scrims` and `scrim_maps`.
+**Storage is one IndexedDB database, `owscout-capture`, at schema version 5.**
+Both capture pages open it with an explicit version and **both create every
+store**, from the single `ALL_STORES` map in `docs/capture/engine/idb.js`:
+`maps` (league captures), `refs` (learned hero portraits), `heroes` (custom
+heroes), `scrims` and `scrim_maps`.
+
+**Each page must not declare only the stores it uses**, however natural that
+looks. `onupgradeneeded` fires once per version, so whichever page opens the
+database first would create its own stores and fix the version, leaving the
+other page's stores uncreated and every transaction on them throwing
+*"One of the specified object stores was not found"*. It is symmetric: league
+page first kills scrim capture, scrim page first kills league capture. The bug
+predates the engine extraction — `main` at `7e7bde2` fails identically — and was
+survivable only while scrim capture was paused, since nobody reached the scrim
+stores. Un-pausing scrims made the normal path (a new contributor opening the
+league page first) a broken one.
+
+Version 5 exists to heal databases created before that fix: a browser that only
+ever opened one capture page sits at v4 with half the stores, and without a
+version change `onupgradeneeded` would never fire again to add the rest. The
+upgrade only ever **adds** stores, so existing records — learned hero refs above
+all, which are hand-taught and irreplaceable — are untouched.
 
 **`docs/scrims.html` is the one scrims viewer**, reached from the League/Scrims
 toggle in the top bar. It works because `docs/capture/` and `docs/` are the same
