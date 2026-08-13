@@ -343,8 +343,30 @@ async function main() {
       await commitScrimIdentity(r5, { a: us, b: mix2 });
       out.groups = (await idbOpponents()).length;
 
-      // "Not them" must undo what that identification taught.
-      await correctScrimOpponent(r2.opponent.team_id, ['alt_one','alt_two']);
+      // The panel must say who it decided on, and offer the right correction.
+      const panel = () => ({
+        shown: getComputedStyle(document.getElementById('oppbox')).display !== 'none',
+        label: document.getElementById('opplabel').textContent,
+        detail: document.getElementById('oppdetail').textContent,
+        wrong: getComputedStyle(document.getElementById('oppwrong')).display !== 'none',
+        name: getComputedStyle(document.getElementById('oppname')).display !== 'none',
+      });
+      const rl = await resolveScrimIdentity(n1); rl._names = n1; LAST_IDENTITY = rl; renderOpponent(rl);
+      out.panelLeague = panel();
+      const rg = await resolveScrimIdentity({ a: us, b: mix2 }); rg._names = { a: us, b: mix2 };
+      LAST_IDENTITY = rg; renderOpponent(rg);
+      out.panelGroup = panel();
+
+      // "Not them" on a league identification: undoes the aliases AND keeps the
+      // opponent as a separate group rather than throwing the read away.
+      const rw = await resolveScrimIdentity(n2); rw._names = n2; LAST_IDENTITY = rw; renderOpponent(rw);
+      await commitScrimIdentity(rw, n2);
+      const groupsBeforeWrong = (await idbOpponents()).length;
+      await onOpponentWrong();
+      out.afterWrongKind = LAST_IDENTITY.opponent && LAST_IDENTITY.opponent.kind;
+      out.groupsGainedByWrong = (await idbOpponents()).length - groupsBeforeWrong;
+      out.scrimTeamIdCleared = !(activeScrim && activeScrim.opponent_team_id);
+
       out.aliasesAfterCorrection = (loadAliases()[r2.opponent.team_id] || []).length;
       return out;
     });
@@ -361,6 +383,23 @@ async function main() {
     check('identity: a stand-in does not create a duplicate group', r.groups === 1, String(r.groups));
     check('identity: "not them" discards what it taught', r.aliasesAfterCorrection === 0,
       String(r.aliasesAfterCorrection));
+
+    check('panel: names the league team it identified',
+      r.panelLeague.shown && /Them FC/.test(r.panelLeague.label), JSON.stringify(r.panelLeague));
+    check('panel: offers "not them" for a team, not "name them"',
+      r.panelLeague.wrong && !r.panelLeague.name, JSON.stringify(r.panelLeague));
+    check('panel: offers "name them" for a remembered group',
+      r.panelGroup.name && !r.panelGroup.wrong, JSON.stringify(r.panelGroup));
+    check('panel: says a group is not a league team',
+      /not a league team/i.test(r.panelGroup.detail), r.panelGroup.detail);
+
+    // Rejecting an identification must not throw the read away - those five
+    // players are still an opponent, just not that one.
+    check('correction: "not them" keeps them as a separate group',
+      r.afterWrongKind === 'local_group' && r.groupsGainedByWrong === 1,
+      r.afterWrongKind + ' / +' + r.groupsGainedByWrong);
+    check('correction: "not them" unpins the team from the scrim', r.scrimTeamIdCleared);
+
     check('identity: no page errors', errs.length === 0, errs.join(' | '));
     await ctx.close();
   }

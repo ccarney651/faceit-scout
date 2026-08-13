@@ -178,3 +178,24 @@ test('sides stay unknown when both sides look like us', () => {
 test('sides stay unknown when we have no roster to compare', () => {
   assert.equal(O.ourSide(QWIZ, ['a'], []), null);
 });
+
+// --- discarding a wrong identification -----------------------------------
+// Regression: once an alt has been learned it MATCHES, so a later "not them"
+// reports nothing unmatched. Correcting on unmatched-only therefore discarded
+// nothing and left the bad alias attached to that team forever. The claim being
+// made is "these five are not that team", so all five are what must be removed.
+
+test('a learned alias is removed when the whole side is rejected', () => {
+  const store = O.learnAliases({}, 't1', ['alt_one', 'alt_two']);
+  assert.equal(store.t1.length, 2);
+  const said = O.normSet(['Fairuz', 'Dazedreox', 'Tomavul', 'alt_one', 'alt_two']);
+  store.t1 = store.t1.filter(n => said.indexOf(n) === -1);
+  assert.equal(store.t1.length, 0, 'rejecting the side must clear its aliases');
+});
+
+test('rejecting a different side leaves an unrelated team alone', () => {
+  const store = O.learnAliases({}, 't1', ['alt_one']);
+  const said = O.normSet(['someone', 'else', 'entirely']);
+  const keep = store.t1.filter(n => said.indexOf(n) === -1);
+  assert.deepEqual(keep, ['alt_one']);
+});

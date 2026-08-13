@@ -253,6 +253,14 @@
       <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
       <button id="detectsides" class="ghost">Detect sides</button><span class="wip" title="Experimental — reads player names off the HUD with OCR and matches them against known rosters. May fail on custom UI colors or unfamiliar rosters.">WIP</span>
     </div>
+    <!-- Who we are playing, worked out from the HUD names. Hidden until there
+         is something to say; never blocks capture. -->
+    <div id="oppbox" class="row" style="display:none;margin-bottom:6px;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="opplabel"></span>
+      <span id="oppdetail" class="status"></span>
+      <button id="oppwrong" class="ghost" type="button" style="display:none">Not them</button>
+      <button id="oppname" class="ghost" type="button" style="display:none">Name them</button>
+    </div>
     <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
       <h2>Scrim maps (saved in this browser)</h2>
       <div class="row" style="margin-bottom:8px">
@@ -609,12 +617,19 @@ async function commitScrimIdentity(res, names){
   return res.opponent;
 }
 
-// The operator says "not them". Discards the aliases that identification
-// taught, so a wrong guess does not permanently widen a team's roster.
-async function correctScrimOpponent(teamId, unmatched){
+// The operator says "not them". Discards any alias this team holds for a player
+// in THIS read, so a wrong guess cannot permanently widen its roster.
+//
+// It takes the whole side's names, not just the ones that failed to match. Once
+// an alt has been learned it matches, so a later "not them" would report
+// nothing unmatched and quietly discard nothing — leaving the bad alias
+// attached forever. "These five are not that team" is the claim, so all five
+// are what gets removed.
+async function correctScrimOpponent(teamId, sideNames){
   if(!teamId) return;
   const store=loadAliases();
-  const keep=(store[teamId]||[]).filter(n=>OWDBOpponents.normSet(unmatched).indexOf(n)===-1);
+  const said=OWDBOpponents.normSet(sideNames);
+  const keep=(store[teamId]||[]).filter(n=>said.indexOf(n)===-1);
   if(keep.length) store[teamId]=keep; else delete store[teamId];
   saveAliases(store);
   if(activeScrim){ delete activeScrim.opponent_team_id; await idbPutScrim(activeScrim); }
@@ -624,16 +639,89 @@ async function detectScrimSides(){
   const names=await readHudNames(); if(!names) return {left:null, source:null};
   if(session) session.players=names;
   const res=await resolveScrimIdentity(names);
+  res._names=names;                      // kept so "Not them" can re-group them
   if(res.ourSide){
     await commitScrimIdentity(res, names);
-    LAST_IDENTITY=res;
+    LAST_IDENTITY=res; renderOpponent(res);
     return {left: res.ourSide==='left'?'a':'b', source:'roster', identity:res};
   }
   // No idea which side is us, but the opponent may still be identifiable -
   // record nothing yet and let the operator set the side.
-  LAST_IDENTITY=res;
+  LAST_IDENTITY=res; renderOpponent(res);
   return {left:null, source:null, identity:res}; }
 let LAST_IDENTITY=null;
+
+// renderOpponent(res) — say who we worked out we are playing, and offer the two
+// corrections that matter: "not them" for a wrong team, and naming a group we
+// only know by its players. Silent when there is nothing to report, because an
+// unidentified opponent is a normal outcome, not an error to nag about.
+function renderOpponent(res){
+  const box=document.getElementById('oppbox'); if(!box) return;
+  const label=document.getElementById('opplabel'), detail=document.getElementById('oppdetail');
+  const wrong=document.getElementById('oppwrong'), name=document.getElementById('oppname');
+  const o=res&&res.opponent;
+  if(!o){ box.style.display='none'; return; }
+  box.style.display='';
+  wrong.style.display='none'; name.style.display='none';
+  if(o.kind==='league_team'){
+    label.innerHTML='vs <b>'+esc(o.label||'league team')+'</b>';
+    // Say how sure we are. Below five, the rest are very likely smurfs - which
+    // the tool has just learned, so next time reads as a full match.
+    detail.textContent = o.matched>=5 ? 'all 5 players matched'
+      : o.matched+' of 5 matched'+(o.unmatched&&o.unmatched.length?' · learned '+o.unmatched.length+' alt account'+(o.unmatched.length===1?'':'s'):'');
+    wrong.style.display='';
+  } else if(o.kind==='local_group'){
+    const g=o.group||{}; const n=g.times_played||1;
+    label.innerHTML='vs <b>'+esc(g.label||'Opponent')+'</b>';
+    detail.textContent = g.label ? (n>1?'played them '+n+' times':'first time')
+      : 'not a league team — '+(n>1?'you have played them '+n+' times':'first time');
+    name.style.display='';
+  } else if(o.kind==='new_group'){
+    label.innerHTML='vs <b>Opponent</b>';
+    detail.textContent='not a league team — remembered, so they are recognised next time';
+    name.style.display='';
+  }
+}
+
+// The operator says the identified team is wrong. Undo everything that
+// identification wrote, then fall back to remembering them as a group so the
+// work is not simply lost.
+async function onOpponentWrong(){
+  const res=LAST_IDENTITY; if(!res||!res.opponent) return;
+  const o=res.opponent;
+  const names=res.opponentSide==='left' ? (res._names&&res._names.a) : (res._names&&res._names.b);
+  // Pass the whole side, not o.unmatched: an alias already learned matches, so
+  // unmatched would be empty and the bad alias would survive the correction.
+  if(o.kind==='league_team'){ await correctScrimOpponent(o.team_id, names||[]); }
+  if(names&&names.length){
+    const g=OWDBOpponents.newLocalGroup(names);
+    await idbPutOpponent(g);
+    if(activeScrim){ activeScrim.opponent_id=g.id; delete activeScrim.opponent_team_id;
+      activeScrim.updated_at=new Date().toISOString(); await idbPutScrim(activeScrim); }
+    LAST_IDENTITY={...res, opponent:{kind:'local_group', group:g, times_played:1}};
+  } else { LAST_IDENTITY={...res, opponent:null}; }
+  renderOpponent(LAST_IDENTITY);
+  toast('opponent cleared — remembered as a separate group','ok');
+}
+
+// Name a group we only know by its five players. The name sticks to the group,
+// so every past and future scrim against them shows it.
+async function onOpponentName(){
+  const res=LAST_IDENTITY; if(!res||!res.opponent) return;
+  const g=res.opponent.group; if(!g) return;
+  const v=await uiModal({title:'Name this opponent', collect:true, escapeValue:null,
+    bodyHtml:'<p class="status">They are not a league team, so they are remembered by their players. A name is optional — it just makes them easier to find.</p>'
+      +'<label class="f">Name<input type="text" id="oppnameinput" placeholder="e.g. Korean team, Talon academy"></label>',
+    actions:[{label:'Save', value:'save'},{label:'Cancel', value:null, ghost:true}]});
+  const label=v&&v.fields&&(v.fields.oppnameinput||'').trim();
+  if(!label) return;
+  g.label=label; g.updated_at=new Date().toISOString();
+  await idbPutOpponent(g);
+  if(activeScrim && !activeScrim.opponent){ activeScrim.opponent=label; await idbPutScrim(activeScrim); }
+  await renderScrimPanel();
+  renderOpponent(LAST_IDENTITY);
+  toast('saved — every scrim against them shows this name','ok');
+}
 async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
   if(s._detecting) return false;
   s._detecting=true;
@@ -1677,6 +1765,8 @@ document.getElementById('detectsides').onclick=async()=>{
   if(!session){ snapMsg('start a map first',true); return; }
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ snapMsg('share your screen and calibrate first',true); return; }
   session.sideResolved=false; await ensureSideResolved(); };
+document.getElementById('oppwrong').onclick=onOpponentWrong;
+document.getElementById('oppname').onclick=onOpponentName;
 document.getElementById('screxport').onclick=exportScrims;
 document.getElementById('scimportbtn').onclick=()=>document.getElementById('scimport').click();
 document.getElementById('scimport').onchange=e=>{ const f=e.target.files[0]; if(f) importScrims(f); e.target.value=''; };
