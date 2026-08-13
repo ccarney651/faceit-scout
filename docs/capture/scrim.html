@@ -700,6 +700,10 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
 // (shared with index.html).
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
+  // #refpanel lives inside the collapsed <details id="herocard">, so filling it
+  // without opening the section looks exactly like the button doing nothing -
+  // which is how "teach it a miss" was reported as broken.
+  const card=document.getElementById('herocard'); if(card) card.open=true;
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
   const frame=grabFrame(), cat=heroCatalog();
   const opts='<option value="">\u2014 correct hero\u2026 \u2014</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">\uff0b add a new hero\u2026</option>';

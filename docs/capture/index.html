@@ -1019,6 +1019,10 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
 // this section used to carry.
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
+  // #refpanel lives inside the collapsed <details id="herocard">, so filling it
+  // without opening the section looks exactly like the button doing nothing -
+  // which is how "teach it a miss" was reported as broken.
+  const card=document.getElementById('herocard'); if(card) card.open=true;
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
   const frame=grabFrame(), cat=heroCatalog();
   const opts='<option value="">— correct hero… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ add a new hero…</option>';

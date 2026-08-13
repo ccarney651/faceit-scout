@@ -73,6 +73,21 @@ Shipped and verified live since the 2026-08-01 audit (all six carry tests; the
 
 ### P1 — Known gaps (FEATURES.md §5)
 
+- **"Teach it a miss" appeared broken — root cause found and fixed
+  (2026-08-13).** Reported by the operator during the phase-1 in-game
+  verification of `scrim-mode`. `#refpanel` sits inside
+  `<details id="herocard">`, which starts collapsed; `fixReads()` populated it
+  correctly but never opened the section, so clicking "Fix current reads" looked
+  like a dead button. Pre-existing — no version of either page had ever opened
+  it. Both pages now do, guarded by
+  `test_fix_reads_opens_the_panel_it_fills`.
+
+  Still unconfirmed against a live frame: that a correction actually *improves*
+  the next read. The storage path is verified (a taught ref lands in IndexedDB
+  and the counter increments), but whether a learned template beats the built-in
+  one on real portraits needs the operator, since a synthetic frame teaches
+  nothing meaningful.
+
 - **Map-name verification is stubbed.** The OCR hook returns `None`, so map
   mismatch reads "not checked". Open question: is the map name reliably on the
   observer HUD at all? If not, close as impossible rather than fake it. Not a

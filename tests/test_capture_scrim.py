@@ -412,3 +412,21 @@ def test_an_unnamed_scrim_block_is_not_labelled_as_a_team() -> None:
     html = APP.read_text(encoding="utf-8")
     assert "function scrimLabel(s)" in html
     assert "esc(scrimLabel(s))" in html, "the picker no longer uses scrimLabel"
+
+
+def test_fix_reads_opens_the_panel_it_fills() -> None:
+    """Filling a collapsed <details> looks identical to a dead button.
+
+    #refpanel sits inside <details id="herocard">, which starts closed.
+    fixReads() populated it correctly but never opened the section, so
+    clicking "Fix current reads" appeared to do nothing - which is how the
+    operator reported "teach it a miss" as broken on 2026-08-13. Pre-existing:
+    no version of either page ever opened it.
+    """
+    for page in (APP, APP.parent / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        assert 'id="herocard"' in html, f"{page.name}: the hero card moved"
+        body = html[html.index("function fixReads("):][:600]
+        assert "herocard" in body and ".open=true" in body.replace(" ", ""), (
+            f"{page.name}: fixReads no longer opens the panel it fills"
+        )
