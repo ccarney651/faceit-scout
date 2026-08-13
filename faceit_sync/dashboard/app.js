@@ -143,7 +143,7 @@ const capSince=()=>{
 };
 // Map lists everywhere read as a mode block at a time (all Control together, etc),
 // and within a mode the maps the league actually plays come first.
-const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push','Clash'];
+const MODE_ORDER=['Control','Escort','Hybrid','Flashpoint','Push'];
 const MAP_POP={};
 Object.values(DIVS).forEach(d=>d.matches.forEach(m=>m.games.forEach(g=>{
   if(g.map) MAP_POP[g.map]=(MAP_POP[g.map]||0)+1; })));
@@ -2949,7 +2949,7 @@ function renderMeta(){
   }
 
   // Current map pool, grouped by mode the way FACEIT lays out the veto pool.
-  const MODE_ORDER=['Control','Escort','Flashpoint','Hybrid','Push','Clash'];
+  const MODE_ORDER=['Control','Escort','Flashpoint','Hybrid','Push'];
   const pool={};
   D().matches.forEach(m=>m.games.forEach(g=>{
     if(!g.map) return;

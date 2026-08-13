@@ -79,10 +79,14 @@ def _run(body: str) -> object:
 
 
 def test_scrim_maps_include_all_request_modes() -> None:
-    """The mode dropdown must expose Control, Escort, Hybrid, Push, Flashpoint, Clash."""
+    """The mode dropdown must expose every competitively-played mode.
+
+    Clash is deliberately absent - it is no longer played competitively, so it
+    is noise in a scrim picker.
+    """
     maps = _run("return SCRIM_MAPS;")
     modes = {m["cat"] for m in maps}
-    assert modes == {"Control", "Escort", "Hybrid", "Push", "Flashpoint", "Clash"}
+    assert modes == {"Control", "Escort", "Hybrid", "Push", "Flashpoint"}
 
 
 def test_picking_a_mode_filters_to_its_maps() -> None:

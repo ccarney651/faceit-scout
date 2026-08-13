@@ -468,7 +468,9 @@ function capturableTeams(matches, captured, wipe){
 // ESTIMATE of league playtime — the panel labels it as such; the logic only
 // needs the proportion right. Control is a BO3 (~14), escort/hybrid run a full
 // game (~20), the push-style modes are short (~11).
-const MODE_MINUTES={Control:14,Escort:20,Hybrid:20,Push:11,Flashpoint:11,Clash:10};
+// Clash is absent: it is no longer played competitively, so it never appears
+// in league data and would only pad the mode lists.
+const MODE_MINUTES={Control:14,Escort:20,Hybrid:20,Push:11,Flashpoint:11};
 // A map is "under-covered" until half its league play is captured, and maps
 // played fewer than this many times sit below the noise floor (one game on a
 // map is not a coverage gap).

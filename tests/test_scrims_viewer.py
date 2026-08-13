@@ -58,7 +58,8 @@ def test_coverage_reports_every_mode_including_unplayed_ones() -> None:
     scrims, maps = _scrims_and_maps()
     cov = _run(f"return mapCoverage({scrims}, {maps}, '2026-08-14');")
     modes = {c["mode"] for c in cov}
-    assert {"Control", "Escort", "Hybrid", "Push", "Flashpoint", "Clash"} <= modes
+    assert {"Control", "Escort", "Hybrid", "Push", "Flashpoint"} <= modes
+    assert "Clash" not in modes, "Clash is no longer played competitively"
     by = {c["mode"]: c for c in cov}
     assert by["Escort"]["games"] == 0 and by["Escort"]["last"] is None
     assert by["Escort"]["days"] is None
@@ -200,3 +201,60 @@ def test_demo_covers_the_cases_the_viewer_is_meant_to_show() -> None:
     assert any(m.get("void") for m in d["scrim_maps"]), "no voided restart"
     modes = {m["map_category"] for m in d["scrim_maps"]}
     assert len(modes) >= 4, f"too few modes to make coverage meaningful: {modes}"
+
+
+def test_coverage_breaks_a_mode_down_by_map() -> None:
+    """A mode total hides that you have played Ilios twice and Nepal never.
+
+    The per-map breakdown is the actionable half: "play Control more" is not a
+    plan, "you have never scrimmed Nepal" is.
+    """
+    scrims = json.dumps([{"id": "s1", "date": "2026-08-13"}])
+    maps = json.dumps([
+        {"scrim_id": "s1", "map_category": "Control", "map_name": "Ilios"},
+        {"scrim_id": "s1", "map_category": "Control", "map_name": "Ilios"},
+        {"scrim_id": "s1", "map_category": "Control", "map_name": "Busan"},
+    ])
+    by = {c["mode"]: c for c in _run(f"return mapCoverage({scrims}, {maps}, '2026-08-14');")}
+    ctrl = by["Control"]["maps"]
+    assert ctrl["Ilios"] == 2
+    assert ctrl["Busan"] == 1
+    assert ctrl["Nepal"] == 0, "an unplayed map in the pool must still be listed"
+    assert set(ctrl) >= {"Antarctic Peninsula", "Lijiang Tower", "Oasis", "Samoa"}
+
+
+def test_clash_is_gone_from_the_pool() -> None:
+    """No longer played competitively, so it is noise in every list."""
+    html = APP.read_text(encoding="utf-8")
+    start = html.index("const POOL = {")
+    pool = html[start:html.index("};", start)]
+    assert "Clash" not in pool
+    assert "Anubis" not in pool and "Hanaoka" not in pool
+
+
+def test_the_view_can_be_scoped_to_a_period() -> None:
+    """A year of scrims can span two or three teams.
+
+    Mixing them produces hero pools that belong to nobody, so the range is a
+    first-class control rather than a nicety.
+    """
+    html = APP.read_text(encoding="utf-8")
+    assert "function applyRange(data)" in html
+    assert "function renderRangeBar()" in html
+    assert "function wireRangeBar(" in html
+    assert "Custom…" in html or "Custom" in html, "no custom range option"
+    # It must filter the loaded data rather than re-read storage, or switching
+    # range would be a round-trip to IndexedDB on every change.
+    start = html.index("function applyRange(data)")
+    body = html[start:start + 800]
+    assert "idbGetAll" not in body, "applyRange re-reads storage instead of filtering"
+
+
+def test_an_undated_scrim_is_never_hidden_by_a_range() -> None:
+    """An auto-created block has no date until it is saved; losing it would look
+    like data loss rather than filtering."""
+    html = APP.read_text(encoding="utf-8")
+    start = html.index("function applyRange(data)")
+    body = html[start:start + 800]
+    assert "if(!d) return true" in body.replace(" ", "").replace("if(!d)returntrue", "if(!d) return true") \
+        or "if(!d) return true" in body, "undated scrims are not explicitly kept"

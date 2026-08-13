@@ -107,6 +107,21 @@ tbody tr:hover{background:var(--surface2)}
 .cov-never .covn{color:var(--faint)}
 .covnote{margin:8px 2px 0;font-size:12.5px;color:var(--muted)}
 
+/* per-map coverage inside a mode */
+.covmaps{margin-top:7px;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.covmap{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:1px 0}
+.covmap .cmn{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.covmap .cmv{color:var(--fg);font-weight:650;font-variant-numeric:tabular-nums}
+.covmap0 .cmn,.covmap0 .cmv{color:var(--faint);font-weight:400}
+
+/* date range */
+.rangebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px}
+.rangebar .rglab{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
+.rangebar select,.rangebar input[type=date]{background:var(--surface);color:var(--fg);
+  border:1px solid var(--line);border-radius:8px;padding:4px 8px;font:inherit;font-size:12.5px}
+.rangebar .rgdash{color:var(--faint);font-size:12px}
+.rangebar .rgcount{color:var(--muted);font-size:12px;margin-left:2px}
+
 /* opponent identity */
 .oppout{font-size:11px;font-weight:650;color:var(--accent);text-decoration:none;
   border:1px solid var(--line);border-radius:6px;padding:0 5px;vertical-align:1px}
@@ -341,7 +356,7 @@ function allObservations(maps){
 // Every mode a scrim can be played on. Listed rather than derived from the
 // captured maps, because the whole point is showing the mode you HAVEN'T
 // touched - deriving it from what exists would hide exactly that.
-const SCRIM_MODES = ['Control','Escort','Hybrid','Push','Flashpoint','Clash'];
+const SCRIM_MODES = ['Control','Escort','Hybrid','Push','Flashpoint'];
 
 // mapCoverage(scrims, maps, today) — what have we actually been practising?
 // Per mode: how many maps, when last, and how long ago. Answers "we haven't
@@ -350,16 +365,31 @@ const SCRIM_MODES = ['Control','Escort','Hybrid','Push','Flashpoint','Clash'];
 //
 // Voided maps are excluded: a restarted map was not practice, and counting it
 // would say you covered a mode you actually abandoned.
+// Every map in the competitive pool, by mode. Listed for the same reason the
+// modes are: showing that you have played Ilios four times and Nepal never is
+// the point, and deriving the list from captured maps would hide Nepal.
+const POOL = {
+  Control: ['Antarctic Peninsula','Busan','Ilios','Lijiang Tower','Nepal','Oasis','Samoa'],
+  Escort: ['Circuit Royal','Dorado','Havana','Junkertown','Rialto','Route 66','Shambali Monastery','Watchpoint: Gibraltar'],
+  Hybrid: ['Blizzard World','Eichenwalde','Hollywood',"King's Row",'Midtown','Numbani','Paraiso'],
+  Push: ['Colosseo','Esperanca','New Queen Street','Runasapi'],
+  Flashpoint: ['New Junk City','Suravasa'],
+};
+
 function mapCoverage(scrims, maps, today){
   const dateOf = {};
   (scrims||[]).forEach(s=>{ dateOf[s.id] = s.date || (s.created_at||'').slice(0,10); });
   const acc = {};
-  SCRIM_MODES.forEach(m=>{ acc[m] = {mode:m, games:0, last:null}; });
+  SCRIM_MODES.forEach(m=>{
+    acc[m] = {mode:m, games:0, last:null, maps:{}};
+    (POOL[m]||[]).forEach(name=>{ acc[m].maps[name] = 0; });
+  });
   (maps||[]).forEach(m=>{
     if(m.void) return;
     const cat = m.map_category;
-    if(!acc[cat]) acc[cat] = {mode:cat, games:0, last:null};   // an unexpected mode still shows
+    if(!acc[cat]) acc[cat] = {mode:cat, games:0, last:null, maps:{}};   // an unexpected mode still shows
     acc[cat].games++;
+    if(m.map_name) acc[cat].maps[m.map_name] = (acc[cat].maps[m.map_name]||0)+1;
     const d = dateOf[m.scrim_id] || '';
     if(d && (!acc[cat].last || d > acc[cat].last)) acc[cat].last = d;
   });
@@ -388,10 +418,17 @@ function coverageStrip(scrims, maps){
     const state = c.games===0 ? 'never' : (c.days>=STALE_DAYS ? 'stale' : 'ok');
     const when = c.games===0 ? 'never played'
       : c.days===0 ? 'today' : c.days===1 ? 'yesterday' : c.days+' days ago';
+    // Per-map counts inside the mode: the mode total hides that you have played
+    // Ilios four times and never touched Nepal, which is the gap worth seeing.
+    const names = Object.keys(c.maps||{}).sort((a,b)=>
+      (c.maps[b]-c.maps[a]) || a.localeCompare(b));
+    const rows = names.map(n=>`<div class="covmap${c.maps[n]?'':' covmap0'}">
+        <span class="cmn">${esc(n)}</span><span class="cmv">${c.maps[n]||'·'}</span></div>`).join('');
     return `<div class="covcell cov-${state}">
       <div class="covmode">${esc(c.mode)}</div>
       <div class="covn">${c.games||'—'}</div>
       <div class="covwhen">${esc(when)}</div>
+      ${rows?`<div class="covmaps">${rows}</div>`:''}
     </div>`;
   };
   const gaps = cov.filter(c=>c.games===0 || c.days>=STALE_DAYS);
@@ -570,7 +607,7 @@ function renderMaps(data){
   const {maps} = data;
   if(!maps.length) return emptyState();
 
-  const categories = ['Control','Escort','Hybrid','Push','Flashpoint','Clash'];
+  const categories = ['Control','Escort','Hybrid','Push','Flashpoint'];
   const byCategory = {};
   for(const cat of categories) byCategory[cat] = [];
   for(const m of maps){
@@ -722,14 +759,93 @@ const TABS = [
   {id:'scrims', label:'Scrims', render:d=>renderScrims(d)},
 ];
 
-let DATA = null;
+let DATA = null;        // range-filtered, what the tabs render
+let DATA_ALL = null;    // everything loaded, so switching range needs no reload
 let HANDLED_HASH = '';
+
+// ---------- date range ----------
+// Everything on the page is scoped to a period. A year of scrims can span two
+// or three different teams, and mixing them produces hero pools that belong to
+// nobody - so the range is a first-class control, not a nicety.
+const RANGE_KEY = 'owdb_scrim_range';
+const RANGES = [
+  {id:'30', label:'Last 30 days', days:30},
+  {id:'90', label:'Last 90 days', days:90},
+  {id:'season', label:'Last 6 months', days:182},
+  {id:'all', label:'All time', days:null},
+  {id:'custom', label:'Custom…', days:null},
+];
+let RANGE = {id:'all', from:'', to:''};
+function loadRange(){
+  try{ const r = JSON.parse(localStorage.getItem(RANGE_KEY)||'null'); if(r&&r.id) RANGE = r; }catch(e){}
+}
+function saveRange(){ try{ localStorage.setItem(RANGE_KEY, JSON.stringify(RANGE)); }catch(e){} }
+function rangeBounds(){
+  if(RANGE.id==='custom') return {from:RANGE.from||'', to:RANGE.to||''};
+  const def = RANGES.find(r=>r.id===RANGE.id);
+  if(!def || def.days==null) return {from:'', to:''};
+  return {from:new Date(Date.now()-def.days*86400000).toISOString().slice(0,10), to:''};
+}
+function scrimDateOf(s){ return s.date || (s.created_at||'').slice(0,10); }
+// Filters the loaded data rather than re-reading storage, so switching range is
+// instant and the underlying records are never mutated.
+function applyRange(data){
+  const {from, to} = rangeBounds();
+  if(!from && !to) return data;
+  const scrims = data.scrims.filter(s=>{
+    const d = scrimDateOf(s); if(!d) return true;      // undated: never hide it
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  });
+  const keep = new Set(scrims.map(s=>s.id));
+  const maps = data.maps.filter(m=>keep.has(m.scrim_id));
+  const mapsByScrim = {};
+  maps.forEach(m=>{ (mapsByScrim[m.scrim_id] = mapsByScrim[m.scrim_id]||[]).push(m); });
+  Object.keys(mapsByScrim).forEach(id=>mapsByScrim[id].sort((a,b)=>(a.map_no||0)-(b.map_no||0)));
+  return {scrims, maps, mapsByScrim};
+}
+// Re-render the current tab after a range change. Cheap: the data is already
+// in memory, so this filters rather than re-reads storage.
+function wireRangeBar(tabId){
+  const sel = document.getElementById('rgsel');
+  if(sel) sel.onchange = () => {
+    RANGE = {id:sel.value, from:RANGE.from, to:RANGE.to};
+    saveRange(); show(tabId);
+  };
+  ['rgfrom','rgto'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.onchange = () => {
+      RANGE = {id:'custom', from:(document.getElementById('rgfrom')||{}).value||'',
+                             to:(document.getElementById('rgto')||{}).value||''};
+      saveRange(); show(tabId);
+    };
+  });
+}
+
+function renderRangeBar(){
+  const b = rangeBounds();
+  const opts = RANGES.map(r=>`<option value="${r.id}"${RANGE.id===r.id?' selected':''}>${esc(r.label)}</option>`).join('');
+  const custom = RANGE.id==='custom'
+    ? `<input type="date" id="rgfrom" value="${esc(RANGE.from||'')}" aria-label="From">
+       <span class="rgdash">to</span>
+       <input type="date" id="rgto" value="${esc(RANGE.to||'')}" aria-label="To">`
+    : '';
+  const total = DATA_ALL ? DATA_ALL.scrims.length : 0;
+  const shown = DATA ? DATA.scrims.length : 0;
+  const count = (total && shown!==total) ? `<span class="rgcount">${shown} of ${total} scrims</span>` : '';
+  return `<div class="rangebar">
+    <label class="rglab" for="rgsel">Period</label>
+    <select id="rgsel">${opts}</select>${custom}${count}</div>`;
+}
 
 function show(id){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
   const c = document.getElementById('content');
   const tab = TABS.find(t=>t.id===id)||TABS[0];
-  c.innerHTML = (DEMO?demoBanner():'') + tab.render(DATA);
+  DATA = applyRange(DATA_ALL);
+  c.innerHTML = (DEMO?demoBanner():'') + renderRangeBar() + tab.render(DATA);
+  wireRangeBar(id);
   try{window.scrollTo(0,0)}catch(e){}
   HANDLED_HASH = '#'+id;
   if(location.hash !== HANDLED_HASH) location.hash = id;
@@ -752,7 +868,8 @@ async function boot(){
     nav.appendChild(b);
   });
 
-  DATA = await loadData();
+  DATA_ALL = await loadData();
+  DATA = DATA_ALL;
   hashDispatch();
 }
 

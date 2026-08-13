@@ -428,8 +428,10 @@ const SCRIM_MAPS=[
   {name:"Blizzard World",cat:"Hybrid"},{name:"Eichenwalde",cat:"Hybrid"},{name:"Hollywood",cat:"Hybrid"},
   {name:"King's Row",cat:"Hybrid"},{name:"Midtown",cat:"Hybrid"},{name:"Numbani",cat:"Hybrid"},{name:"Paraiso",cat:"Hybrid"},
   {name:"Colosseo",cat:"Push"},{name:"Esperanca",cat:"Push"},{name:"New Queen Street",cat:"Push"},{name:"Runasapi",cat:"Push"},
-  {name:"New Junk City",cat:"Flashpoint"},{name:"Suravasa",cat:"Flashpoint"},
-  {name:"Anubis",cat:"Clash"},{name:"Hanaoka",cat:"Clash"}];
+  {name:"New Junk City",cat:"Flashpoint"},{name:"Suravasa",cat:"Flashpoint"}];
+// Clash (Anubis, Hanaoka) is deliberately absent: it is no longer played
+// competitively, so offering it in a scrim picker is noise. Re-add the two
+// entries here if it returns to the pool.
 
 const HAS_CAPTURE = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 if(!HAS_CAPTURE){
