@@ -270,6 +270,21 @@ def test_league_code_block_treats_an_unloaded_feed_as_unverifiable() -> None:
     )
 
 
+def test_a_feed_that_loads_with_no_codes_is_also_unverifiable() -> None:
+    """Zero codes must not read as 'this code is not a league match'.
+
+    A feed that loads cleanly but carries no codes looks identical to one with
+    no match for this code, and the consequences are opposite. CI publishes a
+    populated feed; a local checkout ships an empty one. During verification a
+    real league code was waved straight through for exactly this reason, so
+    'loaded' is not sufficient - it has to carry codes to be trusted.
+    """
+    html = APP.read_text(encoding="utf-8").replace(" ", "")
+    assert "CODE_INDEX.codes.size?'ready':'empty'" in html, (
+        "an empty codes feed is being treated as authoritative again"
+    )
+
+
 def test_scrim_html_inline_script_is_syntactically_valid() -> None:
     """The entire scrim.html inline script must pass node --check."""
     node = shutil.which("node")
