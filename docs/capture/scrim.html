@@ -228,16 +228,26 @@
     <div class="row" style="margin-bottom:8px">
       <button id="scsave">Save scrim</button>
     </div>
-    <div class="row" style="margin-bottom:8px">
-      <label class="f">Mode<select id="scrimmode"></select></label>
-      <label class="f">Replay code <span class="status">(optional)</span><input type="text" id="scrimcode" placeholder="paste code or leave blank"></label>
-    </div>
-    <div class="row" style="margin-bottom:8px;align-items:flex-start">
-      <label class="f" style="display:block;width:100%">Map<div id="scrimmapbtns" class="row" style="margin-top:6px"></div></label>
-      <input type="hidden" id="scrimmapidx">
-    </div>
-    <div class="row" style="margin-bottom:8px">
-      <button id="scstart">Start map</button>
+
+    <!-- Everything below belongs to ONE MAP, not to the scrim. A scrim is a
+         series of maps and each map has its own replay code; grouping the code
+         with the scrim's own fields above read as "one code per scrim", which
+         is wrong. The records have always been per-map (scrim_maps.code) - this
+         boundary makes the markup say what the data already does. -->
+    <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+      <h3 style="margin:0 0 2px;font-size:13px">Add a map to this scrim</h3>
+      <p class="status" style="margin:0 0 8px">Each map has its own replay code — add them one at a time, or import a whole session from your replay-history screenshot below.</p>
+      <div class="row" style="margin-bottom:8px">
+        <label class="f">Mode<select id="scrimmode"></select></label>
+        <label class="f">Replay code for this map <span class="status">(optional)</span><input type="text" id="scrimcode" placeholder="paste this map's code or leave blank"></label>
+      </div>
+      <div class="row" style="margin-bottom:8px;align-items:flex-start">
+        <label class="f" style="display:block;width:100%">Map<div id="scrimmapbtns" class="row" style="margin-top:6px"></div></label>
+        <input type="hidden" id="scrimmapidx">
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <button id="scstart">Start map</button>
+      </div>
     </div>
     <div class="row" style="margin-bottom:6px">
       <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
