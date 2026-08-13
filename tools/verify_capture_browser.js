@@ -244,6 +244,49 @@ async function main() {
     await ctx.close();
   }
 
+  // --- 1d. The OCR pipeline, end to end ------------------------------------
+  // Screenshot import depends entirely on tesseract, loaded from a CDN through
+  // a strict CSP that has silently killed browser APIs twice in this project.
+  // Renders a replay-history-shaped image and runs it through the page's own
+  // ocrTextFromImage() - the real path, which sets the multi-line page-seg
+  // mode. (Calling recognize() directly inherits PSM 7, single line, and
+  // returns nothing; that is a harness mistake, not a bug.)
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    const netFail = [];
+    p.on('requestfailed', r => netFail.push(r.url().slice(0, 80)));
+    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.waitForTimeout(1500);
+
+    const ocr = await p.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 900; c.height = 260;
+      const g = c.getContext('2d');
+      g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
+      g.fillStyle = '#fff'; g.font = '30px monospace';
+      ['ILIOS ABCD12 VICTORY 3 - 1', 'DORADO EFGH34 DEFEAT 2 - 3',
+       'BUSAN IJKL56 VICTORY 2 - 0'].forEach((t, i) => g.fillText(t, 20, 60 + i * 60));
+      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      try {
+        const text = await ocrTextFromImage(blob);
+        return { ok: true, rows: parseScrimSessionText(text || ''), text: (text || '').slice(0, 200) };
+      } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+    });
+
+    check('ocr: the worker loads and reads an image', ocr.ok, ocr.error);
+    check('ocr: no network request was blocked (CSP)', netFail.length === 0, netFail.join(' | '));
+    if (ocr.ok) {
+      check('ocr: every map line is recovered', ocr.rows.length === 3,
+        ocr.rows.length + ' rows from: ' + JSON.stringify(ocr.text));
+      const names = ocr.rows.map(r => r.map_name);
+      check('ocr: map names resolve', ['Ilios', 'Dorado', 'Busan'].every(n => names.includes(n)), names.join(','));
+      const codes = ocr.rows.map(r => r.code).filter(Boolean);
+      check('ocr: replay codes are recovered', codes.length >= 2, codes.join(','));
+    }
+    await ctx.close();
+  }
+
   // --- 2. Either capture page may be opened first ---------------------------
   // onupgradeneeded fires once per version, so a page that declares only its
   // own stores leaves the other page's stores uncreated. This is the check that
