@@ -437,11 +437,23 @@ async function loadRefs(){
 
 // ---------- load FACEIT team names for autocomplete ----------
 let LEAGUE_TEAMS=[], FACEIT_ROSTERS={};
+// CODE_FEED: 'loading' | 'ready' | 'failed'. The league-code block is only
+// meaningful once data.json is parsed - an empty CODE_INDEX classifies every
+// code as "not a league match", which is exactly the wrong answer. Anything
+// other than 'ready' means UNVERIFIABLE, never "safe"; see refuseIfLeagueCode.
+let CODE_FEED='loading';
+function codeFeedWarn(){
+  const el=document.getElementById('ctxwarn'); if(!el) return;
+  if(CODE_FEED==='failed'){
+    el.textContent='League-code check unavailable — data.json did not load, so league matches cannot be detected.';
+  }
+}
 async function loadTeamNames(){
   try{
     const d=await (await fetch('data.json',{cache:'no-store'})).json();
     LEAGUE_DATA=d;
     CODE_INDEX=OWDBSession.buildCodeIndex(d);
+    CODE_FEED='ready';
     const seen=new Set();
     FACEIT_ROSTERS={};
     for(const mid in (d.rosters||{})){
@@ -460,7 +472,12 @@ async function loadTeamNames(){
     }
     LEAGUE_TEAMS=[...seen].sort();
     const dl=document.getElementById('teamnames'); if(dl) dl.innerHTML=LEAGUE_TEAMS.map(t=>`<option value="${esc(t)}">`).join('');
-  }catch(e){ FACEIT_ROSTERS={}; }
+  }catch(e){
+    // Loud, not silent: index.html surfaces the same failure via feedError, and
+    // the scrim page must not be quieter about it - here the cost of a silent
+    // failure is a league match saved as a private scrim.
+    FACEIT_ROSTERS={}; CODE_FEED='failed'; codeFeedWarn();
+  }
 }
 function faceitRoster(teamName){
   const key=(teamName||'').trim().toLowerCase();
@@ -1020,6 +1037,20 @@ function scrimDate(){ return (document.getElementById('scdate').value||'').trim(
 // the redirect modal) when the save was refused.
 async function refuseIfLeagueCode(code){
   if(!code) return false;
+  // Feed not ready => the answer is UNVERIFIABLE, not "not a league match".
+  // Returning false here would fail open: with an empty CODE_INDEX every code
+  // looks like a scrim, and a league map would be recorded privately instead
+  // of being published. The user may still proceed, but never unknowingly.
+  if(CODE_FEED!=='ready'){
+    const go=await uiModal({title:'League codes cannot be checked right now',
+      bodyHtml:CODE_FEED==='loading'
+        ? `The league match feed is still loading, so <b>${esc(code)}</b> cannot be checked yet. `
+          + `Wait a moment and try again, or start anyway if you are sure this is a scrim.`
+        : `The league match feed failed to load, so <b>${esc(code)}</b> cannot be checked. `
+          + `If this is a league match, capture it in League capture instead so it gets published.`,
+      actions:[{label:'Start anyway', value:'go'},{label:'Cancel', value:null, ghost:true}]});
+    return go!=='go';
+  }
   const cls=OWDBSession.classifyCode(code, CODE_INDEX, scrimDate());
   if(!cls.league) return false;
   const act=await uiModal({title:'That is a league match',

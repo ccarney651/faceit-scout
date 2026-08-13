@@ -35,7 +35,7 @@ Entries before 2026-08-11 were reconstructed from git history.
 - **`docs/capture/index.html` and `docs/capture/scrim.html` now share a JS
   engine instead of being hand-maintained forks.** The two pages had drifted:
   104 top-level functions existed in both, 44 of them silently different.
-  Seven modules — `names.js`, `util.js`, `idb.js`, `frames.js`,
+  Nine modules — `names.js`, `util.js`, `idb.js`, `frames.js`,
   `calibration.js`, `refs.js`, `overlay.js`, `tour.js` — moved to
   `docs/capture/engine/`, cutting the shared-but-forked count to 34. No
   user-visible behaviour changed; where the code lives did. The

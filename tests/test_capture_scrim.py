@@ -237,6 +237,39 @@ def test_scrim_page_loads_the_session_engine_module() -> None:
     assert 'src="engine/session.js"' in html
 
 
+def test_league_code_block_is_wired_into_every_code_entry_point() -> None:
+    """The block is only real if it is CALLED. Loading the module is not enough.
+
+    engine/session.js is unit-tested in isolation, and the test above only proves
+    the <script> tag exists. Neither notices if the call sites are deleted - and
+    without them a league match saves as a private scrim, invisibly, which is the
+    exact failure the block exists to prevent. These assertions are anchored to
+    the calls themselves for that reason.
+    """
+    html = APP.read_text(encoding="utf-8").replace(" ", "")
+    # Both entry points that can start a capture from a replay code.
+    assert html.count("if(awaitrefuseIfLeagueCode(") >= 2, (
+        "a code entry point no longer calls refuseIfLeagueCode"
+    )
+    # The scaffold must not queue league rows in the first place.
+    assert "!r.league" in html, "scaffolded league rows are no longer filtered out"
+
+
+def test_league_code_block_treats_an_unloaded_feed_as_unverifiable() -> None:
+    """A failed data.json load must not read as 'this is not a league match'.
+
+    CODE_INDEX starts empty, and an empty index classifies every code as a
+    non-league one. So swallowing the fetch error fails OPEN: the block silently
+    stops blocking. refuseIfLeagueCode must gate on feed readiness before it
+    trusts a classification.
+    """
+    html = APP.read_text(encoding="utf-8").replace(" ", "")
+    assert "CODE_FEED='failed'" in html, "the feed failure path no longer records state"
+    assert "if(CODE_FEED!=='ready')" in html, (
+        "refuseIfLeagueCode no longer checks feed readiness before classifying"
+    )
+
+
 def test_scrim_html_inline_script_is_syntactically_valid() -> None:
     """The entire scrim.html inline script must pass node --check."""
     node = shutil.which("node")

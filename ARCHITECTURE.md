@@ -646,7 +646,7 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 | --- | --- |
 | `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, each with a co-located `*.test.js` |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`. `names.js` and `session.js` have a co-located `*.test.js`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
 | `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |
@@ -681,7 +681,7 @@ silently blocked every same-origin script.** `style-src`, `img-src`, and
 src="scoreboard.js">` never loaded in production — `window.Scoreboard` was
 undefined on both pages the whole time, with no console error pointing at the
 CSP. Adding `'self'` was a prerequisite for the engine extraction below, since
-every `engine/*.js` file is loaded the same same-origin way.
+every `engine/*.js` file is loaded the same-origin way.
 
 **The page is not an artifact and may use a CDN.** Unlike `docs/index.html`,
 which must stay self-contained, this page links `docs/theme.css` directly and
