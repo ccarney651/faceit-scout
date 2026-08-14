@@ -503,6 +503,83 @@ def test_the_demo_shows_a_recurring_swap_with_a_trigger() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Robustness against what a real capture actually produces. Every one of these
+# is a shape the OCR can emit on a bad frame; the analysis has to degrade rather
+# than either throw or quietly invent a comp nobody played.
+# ---------------------------------------------------------------------------
+
+
+def _one_map(heroes: list) -> str:
+    return json.dumps([{"id": "m1", "map_category": "Push", "observations": [
+        {"side": "a", "round_no": 1, "ts": 1, "heroes": heroes}]}])
+
+
+def test_a_hero_read_into_two_slots_is_counted_once() -> None:
+    """The hero limit is always on in 5v5, so the same hero twice is one portrait
+    matching two slots. Left in, it lets sameComp count a shared hero twice and
+    clear the four-hero bar on three real ones."""
+    maps = _one_map(["T", "T", "D1", "S1", "S2"])
+    pool = _run(f"return heroPool({maps}, 'a');")
+    assert pool["counts"]["T"] == 1
+    inst = _run(f"return compInstances({maps}, 'a');")[0]
+    assert inst["heroes"] == ["D1", "S1", "S2", "T"], inst["heroes"]
+
+
+def test_a_duplicate_cannot_fake_a_shared_hero_into_a_comp_family() -> None:
+    # D1 read into two slots. Three heroes are genuinely shared (D1, S1, S2) and
+    # the tanks differ, so this is NOT the same comp — but counting D1 twice
+    # clears the four-hero bar and folds them together. The duplicate has to be a
+    # non-tank for the test to isolate this: with a repeated TANK the three-shared
+    # rule would return true legitimately and hide the bug.
+    a = json.dumps(["D1", "D1", "S1", "S2", "T"])
+    b = json.dumps(["D1", "S1", "S2", "D2", "T2"])
+    got = _run(f"return sameComp({a}, {b}, {ROLES});")
+    assert got is False, "a repeated hero was counted twice toward the >=4 bar"
+
+
+def test_a_six_hero_read_is_dropped_rather_than_treated_as_a_comp() -> None:
+    """A side is five players. Six distinct portraits cannot be true, and there
+    is no way to tell which one is spurious — so the snapshot is unusable, not
+    evidence of a sixth pick."""
+    maps = _one_map(["T", "D1", "D2", "D3", "S1", "S2"])
+    assert _run(f"return heroPool({maps}, 'a');")["total"] == 0
+    assert _run(f"return compInstances({maps}, 'a');") == []
+
+
+def test_a_partial_read_still_counts_toward_the_hero_pool() -> None:
+    """Dropping short reads too would throw away most of a noisy capture. Three
+    heroes read is three heroes that were genuinely on the field."""
+    maps = _one_map(["T", None, "D1", None, "S1"])
+    pool = _run(f"return heroPool({maps}, 'a');")
+    assert pool["total"] == 1
+    assert sorted(pool["counts"]) == ["D1", "S1", "T"]
+
+
+def test_observations_are_analysed_in_played_order_not_stored_order() -> None:
+    """IndexedDB gives no ordering guarantee, and a swap read backwards inverts
+    which hero came in and which went out."""
+    m = json.dumps({"id": "m1", "map_category": "Push", "observations": [
+        {"side": "a", "round_no": 1, "ts": 9, "heroes": ["T", "D1", "D3", "S1", "S2"]},
+        {"side": "a", "round_no": 1, "ts": 1, "heroes": ["T", "D1", "D2", "S1", "S2"]},
+    ]})
+    ev = _run(f"return swapEvents({m}, 'a', {ROLES});")
+    assert len(ev) == 1
+    assert ev[0]["out"] == ["D2"] and ev[0]["in"] == ["D3"], ev[0]
+
+
+def test_malformed_ban_rows_do_not_break_the_ban_analysis() -> None:
+    """A record written by an older build, or a half-filled row, must not take
+    the page down — bans are hand-entered."""
+    maps = json.dumps([{"id": "m1", "map_category": "Push", "result": "win",
+                        "bans": [None, {"n": "no guid"}, {"g": "D1", "n": "D1"}],
+                        "observations": [{"side": "a", "round_no": 1,
+                                          "heroes": ["T", "D2", "D3", "S1", "S2"]}]}])
+    prefs = _run(f"return banPreferences({maps}, null);")
+    assert [r["guid"] for r in prefs["rows"]] == ["D1"]
+    assert prefs["maps"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Bans. Optional in scrims — some teams use them, some do not — so every one of
 # these has to degrade to nothing rather than inventing a ban profile.
 # ---------------------------------------------------------------------------

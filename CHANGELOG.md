@@ -45,6 +45,14 @@ Entries before 2026-08-11 were reconstructed from git history.
   and two of its four blocks use bans so both kinds of scrim are shown.
 
 ### Fixed
+- **A misread portrait could invent a comp nobody played.** Two shapes the OCR
+  emits on a bad frame were being analysed as real lineups: the same hero read
+  into two slots (impossible with the hero limit always on) and a six-hero side
+  (impossible in 5v5). The duplicate was worse than cosmetic — it let one shared
+  hero count twice toward the four-hero comp-family bar, folding two different
+  comps into one. Lineups are now deduplicated, a read of more than five is
+  dropped as unusable, and a short read still counts, since three heroes read is
+  three heroes that were genuinely on the field.
 - **Ten heroes had no role in the scrims viewer, and three more were misspelled
   out of existence.** Its hand-kept hero→role table used display spellings —
   `D.Va`, `Soldier: 76`, `Lifeweaver` — that `refs.json` never writes, so those

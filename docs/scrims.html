@@ -515,13 +515,33 @@ function segmentOf(map, o){
   return 'Map';
 }
 
-function lineupOf(o){ return (o.heroes||[]).filter(Boolean).slice().sort(); }
+// A lineup, deduplicated. The hero limit is always on in 5v5, so the same hero
+// appearing twice is a misread (one portrait matched two slots), never a real
+// lineup — and left in, it would let sameComp count one shared hero twice and
+// fold unrelated comps together.
+function lineupOf(o){
+  const seen = {}, out = [];
+  for(const g of (o.heroes||[])){
+    if(!g || seen[g]) continue;
+    seen[g] = 1; out.push(g);
+  }
+  return out.sort();
+}
+
+// A side is five players. More than that after dedup is a read that cannot be
+// true, and there is no way to tell which portrait is the spurious one — so the
+// snapshot is dropped rather than allowed to invent a sixth pick.
+const MAX_LINEUP = 5;
+function usableObs(o){
+  const n = lineupOf(o).length;
+  return n > 0 && n <= MAX_LINEUP;
+}
 
 // One side's observations on one map, in the order they were played. Empty
 // snapshots are dropped: a frame where nothing read is not a lineup change.
 function sideObs(map, side){
   return (map.observations||[])
-    .filter(o=> o.side===side && (o.heroes||[]).filter(Boolean).length)
+    .filter(o=> o.side===side && usableObs(o))
     .map((o,i)=> ({o, i}))
     .sort((x,y)=> (obsRound(x.o)-obsRound(y.o)) || ((x.o.ts||0)-(y.o.ts||0)) || (x.i-y.i))
     .map(x=> x.o);
@@ -537,7 +557,9 @@ function tankOf(lineup, roles){
 // deliberately not transitive, which is why clustering below is greedy.
 function sameComp(a, b, roles){
   const sb = new Set(b);
-  const shared = a.filter(h=> sb.has(h));
+  // Distinct shared heroes. Counting a repeat twice would clear the >=4 bar on
+  // three real heroes and fold two different comps into one family.
+  const shared = [...new Set(a)].filter(h=> sb.has(h));
   if(shared.length>=4) return true;
   if(shared.length===3){
     const ta = tankOf(a, roles);
