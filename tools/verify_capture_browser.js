@@ -473,6 +473,116 @@ async function main() {
     await ctx.close();
   }
 
+  // --- 1g. The comp analysis, through the real rendering path --------------
+  // The pytest suite runs these functions under Node; it cannot check that the
+  // page actually calls them, or that what they return survives into the DOM.
+  // The demo fixture is the only dataset rich enough to exercise segments,
+  // recurring swaps and a hero pool with a real denominator, so it doubles as
+  // the fixture here - if it renders, a real capture of the same shape will.
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    const perrs = [];
+    p.on('pageerror', e => perrs.push(e.message));
+    p.on('console', m => m.type() === 'error' && perrs.push('CONSOLE: ' + m.text()));
+    await p.goto(BASE + '/scrims.html?demo=1', { waitUntil: 'load' });
+    await p.waitForTimeout(2000);
+
+    const ov = await p.evaluate(() => {
+      const pool = [...document.querySelectorAll('.poolcard')].map(c => ({
+        role: c.querySelector('.ph').textContent,
+        rows: [...c.querySelectorAll('.barrow')].map(r => ({
+          hero: r.querySelector('.lab').textContent.trim(),
+          val: r.querySelector('.barval').textContent.trim(),
+          staple: r.classList.contains('staple'),
+        })),
+      }));
+      return {
+        comps: [...document.querySelectorAll('.comprow')].map(r => ({
+          heroes: [...r.querySelectorAll('.chip')].map(c => c.textContent.trim()),
+          meta: r.querySelector('.cmeta').textContent.replace(/\s+/g, ' ').trim(),
+        })),
+        pool,
+        swaps: [...document.querySelectorAll('.swaprow')].map(r => ({
+          trig: r.querySelector('.trig').textContent.replace(/\s+/g, ' ').trim(),
+          chg: r.querySelector('.chg').textContent.replace(/\s+/g, ' ').trim(),
+          cnt: r.querySelector('.cnt').textContent.replace(/\s+/g, ' ').trim(),
+        })),
+        caveat: /not player identity/.test(document.body.textContent.replace(/\s+/g, ' ')),
+      };
+    });
+
+    check('analysis: comp families render on the overview', ov.comps.length >= 2,
+      JSON.stringify(ov.comps.slice(0, 2)));
+    check('analysis: a comp names five heroes, not a hero count',
+      ov.comps.length > 0 && ov.comps[0].heroes.length === 5,
+      JSON.stringify(ov.comps[0] || null));
+    check('analysis: a comp carries a W-L record', /\d+W|no result/.test((ov.comps[0] || {}).meta || ''),
+      (ov.comps[0] || {}).meta);
+    check('analysis: the hero pool is split by role',
+      ov.pool.map(c => c.role).join(',').includes('Tank') &&
+      ov.pool.map(c => c.role).join(',').includes('Support'),
+      ov.pool.map(c => c.role).join(','));
+    // The denominator is the whole point: "9/16" is a staple, "1/16" is not,
+    // and both would read as "1 map" if this were counted in maps.
+    const vals = ov.pool.flatMap(c => c.rows.map(r => r.val));
+    check('analysis: hero pool counts rounds, with the denominator shown',
+      vals.length > 0 && vals.every(v => /^\d+\/\d+$/.test(v)), vals.slice(0, 4).join(' '));
+    check('analysis: a staple is marked apart from a one-off',
+      ov.pool.some(c => c.rows.some(r => r.staple)) &&
+      ov.pool.some(c => c.rows.some(r => !r.staple)),
+      vals.join(' '));
+    // The trigger LEADS the row - it is the actionable half. A swap whose
+    // candidates were all baseline-subtracted correctly says so instead of
+    // naming the enemy's ever-present staple, so not every row names one.
+    check('analysis: swaps render led by their trigger',
+      ov.swaps.length > 0 && ov.swaps.some(s => /^vs /.test(s.trig)) &&
+      ov.swaps.every(s => /^vs |no consistent trigger/.test(s.trig)),
+      JSON.stringify(ov.swaps.map(s => s.trig)));
+    check('analysis: a swap shows only what changed',
+      ov.swaps.length > 0 && ov.swaps.every(s => (s.chg.match(/→/g) || []).length === 1),
+      JSON.stringify(ov.swaps.map(s => s.chg).slice(0, 3)));
+    check('analysis: the swap-detection caveat is stated', ov.caveat);
+
+    // Teams tab: the same analysis, per opponent.
+    await p.evaluate(() => show('teams'));
+    await p.waitForTimeout(300);
+    const tm = await p.evaluate(() => ({
+      headings: [...document.querySelectorAll('.eyebrow')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
+      comps: document.querySelectorAll('.comprow').length,
+      pools: document.querySelectorAll('.poolcard').length,
+    }));
+    check('analysis: the teams tab shows their comps, pool and swaps',
+      tm.headings.some(h => /Their comps/.test(h)) &&
+      tm.headings.some(h => /Their hero pool/.test(h)) &&
+      tm.headings.some(h => /Their swaps/.test(h)),
+      tm.headings.join(' | '));
+    check('analysis: the teams tab labels the pool as rounds not maps',
+      tm.headings.some(h => /rounds played, not maps/.test(h)), tm.headings.join(' | '));
+    check('analysis: teams tab renders comps and pools', tm.comps > 0 && tm.pools >= 3,
+      tm.comps + ' comps, ' + tm.pools + ' pool cards');
+
+    // Maps tab: openers by segment, swaps on that map.
+    await p.evaluate(() => show('maps'));
+    await p.waitForTimeout(300);
+    const mp = await p.evaluate(() => ({
+      segs: [...document.querySelectorAll('.segh')].map(s => s.textContent.trim()),
+      cards: document.querySelectorAll('.card .section-h h2').length,
+      modes: [...document.querySelectorAll('.modeh')].map(m => m.textContent.trim()),
+    }));
+    check('analysis: map cards are grouped by mode', mp.modes.length >= 3, mp.modes.join(','));
+    check('analysis: Escort and Hybrid openers are split attack/defend',
+      mp.segs.includes('Attack') && mp.segs.includes('Defend'), [...new Set(mp.segs)].join(','));
+    check('analysis: Control openers are split by sub-map',
+      mp.segs.some(s => ['Lighthouse', 'Ruins', 'Well', 'Downtown', 'Sanctuary',
+                         'MEKA Base', 'Icebreaker', 'Labs', 'Sublevel'].includes(s)),
+      [...new Set(mp.segs)].join(','));
+    check('analysis: a mirrored mode is not split into phases it does not have',
+      mp.segs.includes('Map'), [...new Set(mp.segs)].join(','));
+    check('analysis: no page errors anywhere in the viewer', perrs.length === 0, perrs.join(' | '));
+    await ctx.close();
+  }
+
   // --- 2. Either capture page may be opened first ---------------------------
   // onupgradeneeded fires once per version, so a page that declares only its
   // own stores leaves the other page's stores uncreated. This is the check that

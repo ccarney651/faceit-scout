@@ -17,6 +17,39 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-14
+
+### Added
+- **The scrims viewer does the analysis the league Scout pages do.** Until now
+  it counted hero appearances and stopped, which is a capture archive rather
+  than a scouting tool. It now shows **comp families** (two lineups are the same
+  comp if they share ≥4 heroes, or exactly 3 including the same tank) with a
+  W-L record counted over distinct maps; a **hero pool counted in rounds, not
+  maps**, split Tank/Damage/Support, because "played every round" and "played
+  for one point" are the same "1 map" and completely different reads; **per-map
+  openers broken down by segment** — sub-map on Control, attack/defend on Escort
+  and Hybrid, whole map on the mirrored modes; and **recurring swaps led by
+  their trigger**, with baseline subtraction so an enemy hero who is always on
+  the field is not reported as having caused anything. Same semantics as
+  `owdb/analysis.py`, reimplemented inline because this page has no build step.
+- **The demo (`scrims.html?demo=1`) exercises all of it.** Its observations now
+  carry the fields the capture page actually writes, so segments, swaps and
+  round denominators appear in the sample rather than reading as empty panels.
+
+### Fixed
+- **Ten heroes had no role in the scrims viewer, and three more were misspelled
+  out of existence.** Its hand-kept hero→role table used display spellings —
+  `D.Va`, `Soldier: 76`, `Lifeweaver` — that `refs.json` never writes, so those
+  heroes matched nothing; the 2026 additions (Anran, Domina, Emre, Freja,
+  Jetpack Cat, Mizuki, Shion, Sierra, Vendetta, Wuyang) were absent outright.
+  Every one of them fell into an "Other" bucket in any role split. The table is
+  now derived from `faceit_sync/subroles.py`, and a test fails if the copy ever
+  disagrees with it again.
+- **Section headings inside viewer cards rendered as plain body text** — the
+  `.eyebrow` class was used throughout but never defined.
+
+---
+
 ## 2026-08-13
 
 ### Fixed

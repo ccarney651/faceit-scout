@@ -131,6 +131,41 @@ tbody tr:hover{background:var(--surface2)}
 /* hero role colors */
 .role-Tank{color:var(--tank)}.role-Damage{color:var(--damage)}.role-Support{color:var(--support)}
 
+  /* Section label inside a card. Was used before it was ever defined, so these
+     headings have been rendering as unstyled body text. */
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:5px}
+
+  /* comps, pools and swaps — the analysis the league Scout pages show */
+  .comprow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    padding:7px 2px}
+  .comprow+.comprow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+  .comprow .cchips{display:flex;gap:4px;flex-wrap:wrap;min-width:0}
+  .comprow .cmeta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--faint);
+    white-space:nowrap;font-variant-numeric:tabular-nums}
+  .wl{font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .wl .w{color:var(--good,#4ac28a)}.wl .l{color:var(--bad,#e56a6a)}.wl .d{color:var(--muted)}
+  .poolgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+  .poolcard .ph{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    margin-bottom:4px}
+  .poolcard .barval{color:var(--fg)}
+  .staple{border-left:2px solid var(--accent);padding-left:5px;margin-left:-7px}
+  .swaprow{display:grid;grid-template-columns:minmax(120px,1fr) minmax(150px,1.3fr) auto;
+    gap:10px;align-items:center;padding:7px 2px;font-size:13px}
+  .swaprow+.swaprow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+  .swaprow .trig{font-size:12px;color:var(--muted);min-width:0}
+  .swaprow .trig b{color:var(--fg);font-weight:650}
+  .swaprow .chg{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .swaprow .arw{color:var(--faint)}
+  .swaprow .cnt{font-size:11.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .kind{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    padding:1px 5px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+  .kind.core{border-color:var(--mid,#d3a02a);color:var(--mid,#d3a02a)}
+  .segh{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--faint);margin:9px 0 2px}
+  .segh:first-child{margin-top:0}
+  @media(max-width:640px){.swaprow{grid-template-columns:1fr}}
+
 /* demo banner — must not be mistakable for real data */
 .demobar{border:1px solid var(--mid,#d3a02a);border-left-width:3px;border-radius:10px;
   background:color-mix(in srgb,var(--mid,#d3a02a) 10%,transparent);
@@ -187,10 +222,19 @@ let GUID_TO_NAME = {};
 let HERO_ROLE = {};
 
 // ---------- hero role inference (refs.json gives name only, not role) ----------
+// Names must match refs.json EXACTLY — it is what captures write. This table had
+// drifted to display spellings ("D.Va", "Soldier: 76", "Lifeweaver") that refs
+// never uses, so those heroes silently fell out of every role split, and ten
+// 2026 heroes were missing outright.
+//
+// The authoritative seats live in faceit_sync/subroles.py; the three roles here
+// are its seats collapsed (Hitscan + Flex DPS = Damage, Main + Flex Support =
+// Support). This page has no build step, so the copy is unavoidable — but
+// tests/test_scrims_viewer.py fails if it ever disagrees with that table again.
 const ROLE_MAP = {
-  tank: ['D.Mon','D.Va','Doomfist','Hazard','Junker Queen','Mauga','Orisa','Ramattra','Reinhardt','Roadhog','Sigma','Winston','Wrecking Ball','Zarya'],
-  damage: ['Ashe','Bastion','Cassidy','Echo','Genji','Hanzo','Junkrat','Mei','Pharah','Reaper','Sojourn','Soldier: 76','Sombra','Symmetra','Torbjorn','Tracer','Venture','Widowmaker'],
-  support: ['Ana','Baptiste','Brigitte','Illari','Juno','Kiriko','Lifeweaver','Lucio','Mercy','Moira','Zenyatta']
+  tank: ['D.Mon','DVa','Domina','Doomfist','Hazard','Junker Queen','Mauga','Orisa','Ramattra','Reinhardt','Roadhog','Sigma','Winston','Wrecking Ball','Zarya'],
+  damage: ['Anran','Ashe','Bastion','Cassidy','Echo','Emre','Freja','Genji','Hanzo','Junkrat','Mei','Pharah','Reaper','Shion','Sierra','Sojourn','Soldier 76','Sombra','Symmetra','Torbjorn','Tracer','Vendetta','Venture','Widowmaker'],
+  support: ['Ana','Baptiste','Brigitte','Illari','Jetpack Cat','Juno','Kiriko','LifeWeaver','Lucio','Mercy','Mizuki','Moira','Wuyang','Zenyatta']
 };
 function inferRole(name){
   if(!name) return null;
@@ -439,6 +483,284 @@ function coverageStrip(scrims, maps){
     <div class="covgrid">${cov.map(cell).join('')}</div>${note}`;
 }
 
+// ---------- comp analysis ----------
+// The same semantics the league Scout pages use (owdb/analysis.py), reimplemented
+// here because this page has no build step and no server: a comp is a FAMILY, not
+// an exact five, and a hero pool is counted in ROUNDS, not maps. Counting maps
+// flattens "played every round" and "played for one point" to the same "1 map",
+// which is the difference between a staple and a one-off.
+//
+// `roles` is guid -> 'Tank'|'Damage'|'Support' (matched case-insensitively), passed
+// in rather than read from the page global so these stay pure and testable.
+
+// An observation's round. The capture page writes `round_no`; older records and
+// hand-built fixtures may carry `round`. Missing means the map was never
+// segmented, which is one round, not zero.
+function obsRound(o){
+  if(o.round_no!=null) return o.round_no;
+  if(o.round!=null) return o.round;
+  return 1;
+}
+
+// A segment is the unit a comp is actually chosen for: the sub-map on Control,
+// the attack/defend phase on Escort and Hybrid, and the whole map otherwise.
+// Push and Flashpoint are mirrored, so both teams play the same thing.
+function segmentOf(map, o){
+  const cat = map.map_category||'';
+  if(cat==='Control') return o.sub_map || ('Point '+obsRound(o));
+  if(cat==='Escort'||cat==='Hybrid'){
+    if(o.phase==='attack') return 'Attack';
+    if(o.phase==='defend') return 'Defend';
+  }
+  return 'Map';
+}
+
+function lineupOf(o){ return (o.heroes||[]).filter(Boolean).slice().sort(); }
+
+// One side's observations on one map, in the order they were played. Empty
+// snapshots are dropped: a frame where nothing read is not a lineup change.
+function sideObs(map, side){
+  return (map.observations||[])
+    .filter(o=> o.side===side && (o.heroes||[]).filter(Boolean).length)
+    .map((o,i)=> ({o, i}))
+    .sort((x,y)=> (obsRound(x.o)-obsRound(y.o)) || ((x.o.ts||0)-(y.o.ts||0)) || (x.i-y.i))
+    .map(x=> x.o);
+}
+
+function tankOf(lineup, roles){
+  for(const h of lineup){ if(String(roles[h]||'').toLowerCase()==='tank') return h; }
+  return null;
+}
+
+// Two lineups are the same comp family if they share >=4 heroes, or exactly 3
+// including the same tank — the tank anchors identity in 5v5. This relation is
+// deliberately not transitive, which is why clustering below is greedy.
+function sameComp(a, b, roles){
+  const sb = new Set(b);
+  const shared = a.filter(h=> sb.has(h));
+  if(shared.length>=4) return true;
+  if(shared.length===3){
+    const ta = tankOf(a, roles);
+    return !!ta && shared.indexOf(ta)>=0 && tankOf(b, roles)===ta;
+  }
+  return false;
+}
+
+// instances: [{heroes:[guid], mapKey, result:'win'|'loss'|'draw'|null}]
+// The most-frequent lineup anchors a family and absorbs the lineups matching it.
+// W-L is counted over distinct MAPS, not instances: a three-segment map that a
+// team opened the same way each time is one win, not three.
+function clusterComps(instances, roles){
+  const freq = {};
+  instances.forEach(i=>{
+    const k = i.heroes.join(',');
+    if(!freq[k]) freq[k] = {heroes:i.heroes, n:0};
+    freq[k].n++;
+  });
+  const order = Object.keys(freq).sort((a,b)=> freq[b].n-freq[a].n || a.localeCompare(b));
+  const assigned = new Set();
+  const fams = [];
+  for(const anchor of order){
+    if(assigned.has(anchor)) continue;
+    const members = new Set([anchor]);
+    assigned.add(anchor);
+    for(const other of order){
+      if(assigned.has(other)) continue;
+      if(sameComp(freq[anchor].heroes, freq[other].heroes, roles)){
+        members.add(other); assigned.add(other);
+      }
+    }
+    const insts = instances.filter(i=> members.has(i.heroes.join(',')));
+    const resultByMap = {};
+    insts.forEach(i=>{ resultByMap[i.mapKey] = i.result; });
+    let wins=0, losses=0, draws=0;
+    Object.keys(resultByMap).forEach(k=>{
+      const r = resultByMap[k];
+      if(r==='win') wins++; else if(r==='loss') losses++; else if(r==='draw') draws++;
+    });
+    fams.push({
+      heroes: freq[anchor].heroes,
+      samples: insts.length,
+      maps: Object.keys(resultByMap).length,
+      wins, losses, draws,
+      variants: [...members].map(k=> freq[k].heroes),
+    });
+  }
+  fams.sort((a,b)=> (b.maps-a.maps) || (b.samples-a.samples));
+  return fams;
+}
+
+// One instance per segment: the lineup they OPENED that segment on. Openers are
+// what a scout can act on — the settled comp is a response to what happened.
+function compInstances(maps, side){
+  const out = [];
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    const seen = new Set();
+    for(const o of sideObs(m, side)){
+      const seg = segmentOf(m, o);
+      if(seen.has(seg)) continue;
+      seen.add(seg);
+      const heroes = lineupOf(o);
+      if(heroes.length < 2) continue;   // a partial read is not a comp
+      out.push({heroes, mapKey:m.id||(m.scrim_id+':'+m.map_no), segment:seg,
+                map_name:m.map_name||'?', map_category:m.map_category||'',
+                result: resultFor(m, side)});
+    }
+  }
+  return out;
+}
+
+// Map results are recorded from OUR point of view, so the opponent's record is
+// the mirror of ours. A draw stays a draw.
+function resultFor(map, side){
+  const r = map.result||null;
+  if(side!=='b') return r;
+  if(r==='win') return 'loss';
+  if(r==='loss') return 'win';
+  return r;
+}
+
+// Hero pool counted in rounds. Returns {total, counts} where total is the number
+// of captured rounds for that side and counts[guid] is how many of them the hero
+// appeared in — so "9 of 11 rounds" reads as a staple and "1 of 11" does not.
+function heroPool(maps, side){
+  const rounds = {};
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    for(const o of sideObs(m, side)){
+      const k = (m.id||(m.scrim_id+':'+m.map_no))+':'+obsRound(o);
+      if(!rounds[k]) rounds[k] = new Set();
+      lineupOf(o).forEach(g=> rounds[k].add(g));
+    }
+  }
+  const counts = {};
+  const keys = Object.keys(rounds);
+  keys.forEach(k=> rounds[k].forEach(g=>{ counts[g] = (counts[g]||0)+1; }));
+  return {total: keys.length, counts};
+}
+
+// The enemy lineup at the moment of an observation: their most recent snapshot
+// at or before it. That is the state the swap was made against.
+function enemyAt(oppObs, o){
+  const r = obsRound(o), t = o.ts||0;
+  let best = null;
+  for(const e of oppObs){
+    const er = obsRound(e), et = e.ts||0;
+    if(er > r) break;
+    if(er === r && et > t) break;
+    best = e;
+  }
+  return best ? lineupOf(best) : [];
+}
+
+// Mid-map changes for one side of one map, classified flex (same comp) vs core
+// (different comp), with the enemy lineup they were made against.
+//
+// CAVEAT: the league pipeline confirms a swap through player identity, so a
+// substitution is never misread as a tactical swap. Scrim capture cannot do that
+// yet — HUD name reading is unreliable (design phase 2b) — so this is a pure
+// hero-set difference. In a scrim block, where the five players rarely change
+// mid-map, that is usually the same thing; it is not guaranteed to be.
+function swapEvents(map, side, roles){
+  const own = sideObs(map, side);
+  const opp = sideObs(map, side==='a'?'b':'a');
+  const evs = [];
+  for(let i=1;i<own.length;i++){
+    // Within a segment only. Across a segment boundary a different lineup is a
+    // new OPENER — chosen for the next point, or for the other half of an
+    // attack/defend map — not a mid-map answer to what the enemy was doing.
+    // Counting those inflates "core swaps" with every ordinary comp choice.
+    if(segmentOf(map, own[i]) !== segmentOf(map, own[i-1])) continue;
+    const prev = lineupOf(own[i-1]), curr = lineupOf(own[i]);
+    if(prev.join(',')===curr.join(',')) continue;
+    // A partial read looks like four heroes leaving at once. Comparing unequal
+    // lineup sizes would manufacture swaps out of missed portraits.
+    if(prev.length!==curr.length) continue;
+    const ps = new Set(prev), cs = new Set(curr);
+    const gone = prev.filter(h=> !cs.has(h));
+    const came = curr.filter(h=> !ps.has(h));
+    if(!gone.length || !came.length) continue;
+    evs.push({out:gone, in:came, kind: sameComp(prev,curr,roles)?'flex':'core',
+              vs: enemyAt(opp, own[i])});
+  }
+  return evs;
+}
+
+// Recurring swaps across every map, led by their trigger.
+//
+// Baseline subtraction: an enemy hero fielded in nearly every snapshot is not a
+// trigger, it is just always there. A candidate is only reported when its
+// presence rate AT the swap beats its rate across all of this side's snapshots.
+function aggregateSwaps(maps, side, roles){
+  const agg = {};
+  const base = {};
+  let baseTotal = 0;
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    const own = sideObs(m, side);
+    const opp = sideObs(m, side==='a'?'b':'a');
+    own.forEach(o=>{
+      new Set(enemyAt(opp, o)).forEach(g=>{ base[g] = (base[g]||0)+1; });
+      baseTotal++;
+    });
+    swapEvents(m, side, roles).forEach(ev=>{
+      const key = ev.out.join('+')+'>'+ev.in.join('+')+':'+ev.kind;
+      if(!agg[key]) agg[key] = {out:ev.out, in:ev.in, kind:ev.kind, count:0, vs:{}, maps:new Set()};
+      const slot = agg[key];
+      slot.count++;
+      slot.maps.add(m.map_name||m.id);
+      new Set(ev.vs).forEach(g=>{ slot.vs[g] = (slot.vs[g]||0)+1; });
+    });
+  }
+  return Object.keys(agg).map(k=>{
+    const s = agg[k], n = s.count;
+    const ranked = Object.keys(s.vs).sort((a,b)=> s.vs[b]-s.vs[a] || a.localeCompare(b));
+    let vs;
+    if(n===1){
+      // A one-off has an exact enemy lineup — showing it beats losing the cause
+      // to a majority threshold that needs two occurrences to clear.
+      vs = ranked;
+    }else{
+      const thresh = Math.max(2, Math.floor((n+1)/2));
+      vs = ranked.filter(g=> s.vs[g]>=thresh &&
+        (!baseTotal || (s.vs[g]/n) > ((base[g]||0)/baseTotal)));
+    }
+    return {out:s.out, in:s.in, kind:s.kind, count:n, maps:[...s.maps], vs:vs.slice(0,5)};
+  }).sort((a,b)=> (b.count-a.count) || (b.in.length-a.in.length));
+}
+
+// Per map: what they opened each segment on, and the swaps seen on that map.
+function mapBreakdown(maps, side, roles){
+  const by = {};
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    const name = m.map_name||'?';
+    if(!by[name]) by[name] = {name, category:m.map_category||'', plays:0, segments:{}, swaps:[], maps:[]};
+    by[name].plays++;
+    by[name].maps.push(m);
+  }
+  Object.keys(by).forEach(name=>{
+    const b = by[name];
+    compInstances(b.maps, side).forEach(i=>{
+      if(!b.segments[i.segment]) b.segments[i.segment] = [];
+      b.segments[i.segment].push(i);
+    });
+    Object.keys(b.segments).forEach(seg=>{
+      b.segments[seg] = clusterComps(b.segments[seg], roles);
+    });
+    b.swaps = aggregateSwaps(b.maps, side, roles);
+  });
+  return Object.values(by).sort((a,b)=> b.plays-a.plays || a.name.localeCompare(b.name));
+}
+
+// Only the heroes that actually changed. Repeating four unchanged portraits
+// buries the one that matters — the same reason the Scout map cards do it.
+function compDelta(from, to){
+  const f = new Set(from), t = new Set(to);
+  return {out: from.filter(h=>!t.has(h)), in: to.filter(h=>!f.has(h))};
+}
+
 // ---------- opponent registry ----------
 // Scrim records point at an opponent by id: opponent_team_id for a league team,
 // opponent_id for a group we only know locally. Resolving through the registry
@@ -493,6 +815,100 @@ function statTile(n, label, sub){
   return `<div class="card tile"><div class="n">${esc(String(n))}</div><div class="l">${esc(label)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
 }
 
+// ---------- comp / pool / swap rendering ----------
+const ROLE_ORDER = {Tank:0, Damage:1, Support:2};
+function byRole(heroes){
+  return heroes.slice().sort((a,b)=>
+    ((ROLE_ORDER[HERO_ROLE[a]] ?? 3) - (ROLE_ORDER[HERO_ROLE[b]] ?? 3)) ||
+    heroName(a).localeCompare(heroName(b)));
+}
+function heroChip(g){
+  return `<span class="chip ${heroRoleClass(g)}">${esc(heroName(g))}</span>`;
+}
+function compChips(heroes){ return byRole(heroes).map(heroChip).join(''); }
+
+function wlHtml(f){
+  const parts = [];
+  if(f.wins) parts.push(`<span class="w">${f.wins}W</span>`);
+  if(f.losses) parts.push(`<span class="l">${f.losses}L</span>`);
+  if(f.draws) parts.push(`<span class="d">${f.draws}D</span>`);
+  // No result recorded is not 0-0: saying so would read as "they lost nothing".
+  return parts.length ? `<span class="wl">${parts.join(' ')}</span>`
+                      : `<span class="cnt">no result</span>`;
+}
+
+// Comp families, most-played first. `samples` counts segments, `maps` counts
+// distinct maps — a comp run on both halves of one map is one map, two segments.
+function compTable(fams, limit){
+  if(!fams.length) return '<div class="note">Not enough captured comps yet.</div>';
+  return fams.slice(0, limit||6).map(f=>{
+    const variants = f.variants.length>1
+      ? ` · ${f.variants.length} variations` : '';
+    return `<div class="comprow">
+      <div class="cchips">${compChips(f.heroes)}</div>
+      <div class="cmeta">
+        <span>${f.maps} map${f.maps===1?'':'s'}${variants}</span>${wlHtml(f)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Hero pool in rounds, split by role. The denominator is what makes it readable:
+// "9 of 11 rounds" is a staple, "1 of 11" is a one-off, and both are "1 map".
+const STAPLE_SHARE = 0.6;
+function poolCards(pool){
+  if(!pool.total) return '<div class="note">No rounds captured yet.</div>';
+  const groups = {Tank:[], Damage:[], Support:[], Other:[]};
+  Object.keys(pool.counts).forEach(g=>{
+    (groups[HERO_ROLE[g]] || groups.Other).push([g, pool.counts[g]]);
+  });
+  const card = (role)=>{
+    const rows = groups[role].sort((a,b)=> b[1]-a[1] || heroName(a[0]).localeCompare(heroName(b[0])));
+    if(!rows.length) return `<div class="card poolcard"><div class="ph role-${role}">${role}</div>
+      <div class="note" style="margin-top:0">None seen</div></div>`;
+    const body = rows.map(([g,c])=>{
+      const pct = Math.round(100*c/pool.total);
+      const staple = c/pool.total >= STAPLE_SHARE ? ' staple' : '';
+      return `<div class="barrow${staple}">
+        <span class="lab ${heroRoleClass(g)}">${esc(heroName(g))}</span>
+        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+        <span class="barval">${c}/${pool.total}</span>
+      </div>`;
+    }).join('');
+    return `<div class="card poolcard"><div class="ph role-${role}">${role}</div>${body}</div>`;
+  };
+  const extra = groups.Other.length ? card('Other') : '';
+  return `<div class="poolgrid">${card('Tank')}${card('Damage')}${card('Support')}${extra}</div>`;
+}
+
+// Recurring swaps, led by the trigger — that is the actionable half ("they
+// answer a D.Va with this"), so it reads first rather than last.
+function swapList(swaps, limit, opts){
+  opts = opts||{};
+  if(!swaps.length) return '<div class="note">No mid-map swaps captured yet.</div>';
+  return swaps.slice(0, limit||8).map(s=>{
+    const trig = s.vs.length
+      ? `vs <b>${s.vs.map(g=>esc(heroName(g))).join(', ')}</b>`
+      : '<span style="color:var(--faint)">no consistent trigger</span>';
+    const where = opts.showMaps && s.maps.length
+      ? ` · ${esc(s.maps.slice(0,3).join(', '))}` : '';
+    return `<div class="swaprow">
+      <div class="trig">${trig}</div>
+      <div class="chg">${s.out.map(heroChip).join('')}<span class="arw">→</span>${s.in.map(heroChip).join('')}</div>
+      <div class="cnt"><span class="kind ${s.kind}">${s.kind}</span> ${s.count}×${where}</div>
+    </div>`;
+  }).join('');
+}
+
+// Swap detection is a hero-set difference, not a player-identity match like the
+// league pipeline. Saying so once beats letting someone read a substitution as a
+// read on the enemy comp.
+function swapCaveat(){
+  return `<div class="note">Swaps are detected from hero changes, not player
+    identity — a player subbing in on a different hero looks the same as a
+    tactical swap.</div>`;
+}
+
 // ---------- TABS ----------
 
 // Overview
@@ -513,6 +929,27 @@ function renderOverview(data){
   html += '</div>';
 
   html += coverageStrip(scrims, maps);
+
+  // Our own side, analysed exactly as an opponent would be. A scrim log is a
+  // mirror before it is a scouting tool: what you keep running, and how wide
+  // your pool actually is, is the first thing a block is meant to tell you.
+  const played = maps.filter(m=>!m.void);
+  const ourPool = heroPool(played, 'a');
+  const ourFams = clusterComps(compInstances(played, 'a'), HERO_ROLE);
+  const ourSwaps = aggregateSwaps(played, 'a', HERO_ROLE);
+  if(ourPool.total){
+    html += '<div class="section-h"><h2>Our comps</h2>'
+         +  `<span class="note">over ${ourPool.total} captured round${ourPool.total===1?'':'s'}</span></div>`;
+    html += `<div class="card">${compTable(ourFams, 5)}</div>`;
+    html += '<div class="section-h"><h2>Our hero pool</h2>'
+         +  '<span class="note">rounds played, not maps</span></div>';
+    html += poolCards(ourPool);
+    if(ourSwaps.length){
+      html += '<div class="section-h"><h2>Our swaps</h2></div>';
+      html += `<div class="card">${swapList(ourSwaps, 5, {showMaps:true})}</div>`;
+      html += swapCaveat();
+    }
+  }
 
   // Recent activity
   html += '<div class="section-h"><h2>Recent activity</h2></div>';
@@ -564,86 +1001,99 @@ function renderTeams(data){
     return bLast.localeCompare(aLast);
   });
 
-  let html = '';
+  let html = '', anySwaps = false;
   for(const [opp, ts] of entries){
-    const oppObs = allObservations(ts.maps);
-    const ourObs = ts.observations;
+    const played = ts.maps.filter(m=>!m.void);
+    const fams = clusterComps(compInstances(played, 'b'), HERO_ROLE);
+    const pool = heroPool(played, 'b');
+    const swaps = aggregateSwaps(played, 'b', HERO_ROLE);
+    const oursVs = clusterComps(compInstances(played, 'a'), HERO_ROLE);
+
     html += `<div class="card mt10">
       <div class="section-h" style="margin-top:0;border-bottom:0">
         <h2>${esc(opp)}</h2>
-        <span class="note">${ts.maps.length} map${ts.maps.length===1?'':'s'} · ${ts.scrims.length} scrim${ts.scrims.length===1?'':'s'}</span>
+        <span class="note">${played.length} map${played.length===1?'':'s'} · ${ts.scrims.length} scrim${ts.scrims.length===1?'':'s'} · ${pool.total} round${pool.total===1?'':'s'}</span>
       </div>`;
 
-    // Their heroes
-    const theirFreq = heroFrequency(ts.observations, 'b');
-    const ourFreq = heroFrequency(ts.observations, 'a');
-    const maxTheir = theirFreq.length ? theirFreq[0][1] : 1;
-    const maxOur = ourFreq.length ? ourFreq[0][1] : 1;
+    html += '<div class="eyebrow mt10">Their comps</div>';
+    html += compTable(fams);
 
-    html += '<div class="grid cols-2" style="margin-top:0">';
-    html += '<div>';
-    html += '<div class="eyebrow">Their heroes</div>';
-    if(theirFreq.length){
-      html += theirFreq.slice(0,8).map(([g,c])=> heroBar(g, c, null, maxTheir)).join('');
-    } else {
-      html += '<div class="note">No observations</div>';
-    }
+    html += '<div class="eyebrow mt14">Their hero pool <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint)">— rounds played, not maps</span></div>';
+    html += poolCards(pool);
+
+    html += '<div class="eyebrow mt14">Their swaps</div>';
+    html += swapList(swaps, 6, {showMaps:true});
+    anySwaps = anySwaps || swaps.length > 0;
+
+    html += '<div class="eyebrow mt14">What we ran against them</div>';
+    html += compTable(oursVs, 4);
+
     html += '</div>';
-    html += '<div>';
-    html += '<div class="eyebrow">Our heroes</div>';
-    if(ourFreq.length){
-      html += ourFreq.slice(0,8).map(([g,c])=> heroBar(g, c, null, maxOur)).join('');
-    } else {
-      html += '<div class="note">No observations</div>';
-    }
-    html += '</div>';
-    html += '</div></div>';
   }
+  // Once at the end, not under every team card — the caveat is about how swaps
+  // are detected, which does not change from one opponent to the next.
+  if(anySwaps) html += swapCaveat();
   return html;
 }
 
-// Maps
+// Maps — one card per map, mode-grouped. Openers by segment on the left, the
+// swaps seen on that map on the right, mirroring the league Scout map cards.
+// Segments matter here: a Hybrid attack comp and a Hybrid defend comp are
+// different decisions, and averaging them over the map hides both.
 function renderMaps(data){
   const {maps} = data;
   if(!maps.length) return emptyState();
 
   const categories = ['Control','Escort','Hybrid','Push','Flashpoint'];
-  const byCategory = {};
-  for(const cat of categories) byCategory[cat] = [];
-  for(const m of maps){
-    const cat = m.map_category||'Other';
-    if(!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(m);
-  }
+  const theirs = mapBreakdown(maps, 'b', HERO_ROLE);
+  const ours = {};
+  mapBreakdown(maps, 'a', HERO_ROLE).forEach(b=>{ ours[b.name] = b; });
 
-  // Build map stats
-  const mapStats = {};
-  for(const m of maps){
-    const name = m.map_name||'Unknown';
-    if(!mapStats[name]) mapStats[name] = {category:m.map_category||'', observations:[], count:0};
-    mapStats[name].count++;
-    mapStats[name].observations.push(...(m.observations||[]));
-  }
+  // Segments read best in the order they are played, not alphabetically.
+  const SEG_ORDER = {Attack:0, Defend:1, Map:0};
+  const segSort = (a,b)=> ((SEG_ORDER[a] ?? 9)-(SEG_ORDER[b] ?? 9)) || a.localeCompare(b);
 
   let html = '';
-  for(const cat of categories){
-    const catMaps = Object.entries(mapStats).filter(([n,s])=> s.category===cat);
+  for(const cat of categories.concat(['Other'])){
+    const catMaps = theirs.filter(b=> (cat==='Other' ? !categories.includes(b.category) : b.category===cat));
     if(!catMaps.length) continue;
     html += `<div class="modeh">${esc(cat)}</div>`;
-    for(const [name, stats] of catMaps.sort((a,b)=>b[1].count-a[1].count)){
-      const ourHeroes = topHeroes(stats.observations, 'a', 5);
-      const theirHeroes = topHeroes(stats.observations, 'b', 5);
-      const totalObs = totalObservations(stats.observations);
+    for(const b of catMaps){
+      const mine = ours[b.name] || {segments:{}, swaps:[]};
+      const wins = b.maps.filter(m=>m.result==='loss').length;   // their win = our loss
+      const losses = b.maps.filter(m=>m.result==='win').length;
+      const draws = b.maps.filter(m=>m.result==='draw').length;
+      const record = (wins||losses||draws)
+        ? ` · <b>${wins}W ${losses}L${draws?' '+draws+'D':''}</b> for them` : '';
       html += `<div class="card mt10">
         <div class="section-h" style="margin-top:0;border-bottom:0">
-          <h2>${esc(name)}</h2>
-          <span class="note">${stats.count} time${stats.count===1?'':'s'} · ${totalObs} hero obs</span>
+          <h2>${esc(b.name)}</h2>
+          <span class="note">${b.plays} time${b.plays===1?'':'s'}${record}</span>
         </div>
         <div class="grid cols-2" style="margin-top:0">`;
-      html += '<div><div class="eyebrow">Our picks</div>';
-      html += ourHeroes || '<div class="note">No observations</div>';
-      html += '</div><div><div class="eyebrow">Their picks</div>';
-      html += theirHeroes || '<div class="note">No observations</div>';
+
+      html += '<div><div class="eyebrow">Their openers</div>';
+      const segs = Object.keys(b.segments).sort(segSort);
+      if(segs.length){
+        for(const seg of segs){
+          html += `<div class="segh">${esc(seg)}</div>`;
+          html += compTable(b.segments[seg], 3);
+        }
+      }else{
+        html += '<div class="note">No comps captured.</div>';
+      }
+      html += '</div>';
+
+      html += '<div><div class="eyebrow">Their swaps here</div>';
+      html += swapList(b.swaps, 5);
+      const mySegs = Object.keys(mine.segments).sort(segSort);
+      if(mySegs.length){
+        html += '<div class="eyebrow mt14">Our openers</div>';
+        for(const seg of mySegs){
+          html += `<div class="segh">${esc(seg)}</div>`;
+          html += compTable(mine.segments[seg], 2);
+        }
+      }
       html += '</div></div></div>';
     }
   }

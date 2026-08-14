@@ -49,16 +49,38 @@ SESSIONS = [
     ]),
 ]
 
-# Comps that actually get run, by mode, so the hero pools look like a real
-# team's rather than a random draw. 1-2-2 throughout.
-COMPS = [
-    ["Winston", "Tracer", "Sojourn", "Kiriko", "Lucio"],        # dive
-    ["Ramattra", "Cassidy", "Ashe", "Ana", "Baptiste"],         # poke
-    ["Reinhardt", "Mei", "Reaper", "Lucio", "Ana"],             # rush
-    ["Sigma", "Ashe", "Sojourn", "Ana", "Illari"],              # poke 2
-    ["DVa", "Genji", "Tracer", "Kiriko", "Juno"],              # dive 2
-    ["Orisa", "Junkrat", "Bastion", "Baptiste", "Brigitte"],    # bunker
-]
+# Comps that actually get run, so the hero pools look like a real team's rather
+# than a random draw. 1-2-2 throughout.
+#
+# Each side gets a SMALL set with one staple, because that is what makes the
+# analysis readable: a hero pool counted in rounds only says something when some
+# heroes are played nearly every round and others are not.
+DIVE = ["Winston", "Tracer", "Sojourn", "Kiriko", "Lucio"]
+POKE = ["Ramattra", "Cassidy", "Ashe", "Ana", "Baptiste"]
+RUSH = ["Reinhardt", "Mei", "Reaper", "Lucio", "Ana"]
+POKE2 = ["Sigma", "Ashe", "Sojourn", "Ana", "Illari"]
+DIVE2 = ["DVa", "Genji", "Tracer", "Kiriko", "Juno"]
+BUNKER = ["Orisa", "Junkrat", "Bastion", "Baptiste", "Brigitte"]
+
+# (comp, weight) — the first is the staple, so it shows up as one.
+PLAYBOOK = {
+    "a": [(DIVE, 5), (POKE2, 2), (RUSH, 1)],
+    "b": [(POKE, 4), (BUNKER, 2), (DIVE2, 2)],
+}
+
+# A habitual mid-map answer: when the enemy fields the trigger, this side swaps.
+# Recurring with a consistent trigger is exactly what the swap analysis reports,
+# so the demo has to contain some or the panel reads empty.
+SWAPS = {
+    "a": [("Winston", "Sigma", "Bastion"), ("Tracer", "Cassidy", "Brigitte")],
+    "b": [("Orisa", "DVa", "Tracer"), ("Ashe", "Sombra", "Winston")],
+}
+
+CONTROL_SUBMAPS = {
+    "Ilios": ["Lighthouse", "Ruins", "Well"],
+    "Busan": ["Downtown", "Sanctuary", "MEKA Base"],
+    "Antarctic Peninsula": ["Icebreaker", "Labs", "Sublevel"],
+}
 
 
 def hero_guids() -> dict[str, str]:
@@ -97,10 +119,49 @@ def real_lineups(limit: int) -> list[dict[str, object]]:
     return list(picked.values())
 
 
+def rounds_for(map_name: str, mode: str, rnd: random.Random) -> list[dict[str, object]]:
+    """The segments of one map, as the capture page records them.
+
+    Control is played to sub-maps, Escort and Hybrid alternate attack and defend,
+    and Push and Flashpoint are mirrored so neither side attacks. Getting this
+    right in the demo matters: every per-segment breakdown on the page reads
+    these fields, and a fixture that puts everything in "round 1" would make the
+    analysis look broken rather than empty.
+    """
+    if mode == "Control":
+        subs = CONTROL_SUBMAPS.get(map_name, ["Point A", "Point B", "Point C"])
+        n = rnd.choice([2, 3])
+        return [{"round_no": i + 1, "sub_map": subs[i], "phase_a": None}
+                for i in range(n)]
+    if mode in ("Escort", "Hybrid"):
+        # Two halves: we attack first, then defend. Round 3+ would be time-bank
+        # overtime, which is rarer and not worth complicating the sample with.
+        return [{"round_no": 1, "sub_map": None, "phase_a": "attack"},
+                {"round_no": 2, "sub_map": None, "phase_a": "defend"}]
+    return [{"round_no": 1, "sub_map": None, "phase_a": None}]
+
+
+def pick_comp(side: str, rnd: random.Random) -> list[str]:
+    pool = [c for c, w in PLAYBOOK[side] for _ in range(w)]
+    return list(rnd.choice(pool))
+
+
+def apply_swap(side: str, comp: list[str], enemy: list[str],
+               rnd: random.Random) -> list[str] | None:
+    """This side's habitual answer to what the enemy is fielding, if it applies."""
+    for out_h, in_h, trigger in SWAPS[side]:
+        if trigger in enemy and out_h in comp and in_h not in comp:
+            if rnd.random() < 0.8:      # habitual, not mechanical
+                return [in_h if h == out_h else h for h in comp]
+    return None
+
+
 def main() -> None:
     rnd = random.Random(20260814)          # stable output across rebuilds
     guids = hero_guids()
-    missing = [h for c in COMPS for h in c if h not in guids]
+    all_heroes = {h for c in PLAYBOOK.values() for comp, _ in c for h in comp}
+    all_heroes |= {h for rows in SWAPS.values() for r in rows for h in r}
+    missing = [h for h in all_heroes if h not in guids]
     assert not missing, f"no GUID for {sorted(set(missing))} — refs.json changed?"
 
     teams = real_lineups(6)
@@ -137,12 +198,31 @@ def main() -> None:
             voided = result is None
             obs = []
             if not voided:
-                # Two comps per side per map, so swaps and pools have something
-                # to show without pretending to a full round-by-round capture.
-                for side in ("a", "b"):
-                    for comp in rnd.sample(COMPS, 2):
-                        obs.append({"side": side, "round": 1,
-                                    "heroes": [guids[h] for h in comp]})
+                ts = 0
+                for seg in rounds_for(mp, mode, rnd):
+                    ts += 1000
+                    # A snapshot captures BOTH teams in the same frame, so every
+                    # frame emits both sides. Emitting one side's whole sequence
+                    # first would leave a swap with no enemy lineup recorded at
+                    # or before it, and the trigger analysis would find nothing.
+                    now = {s: pick_comp(s, rnd) for s in ("a", "b")}
+                    frames = [dict(now)]
+                    after = {s: apply_swap(s, now[s], now["b" if s == "a" else "a"], rnd)
+                             for s in ("a", "b")}
+                    if any(after.values()):
+                        frames.append({s: after[s] or now[s] for s in ("a", "b")})
+                    for k, frame in enumerate(frames):
+                        for side in ("a", "b"):
+                            phase = None
+                            if seg["phase_a"]:
+                                phase = seg["phase_a"] if side == "a" else (
+                                    "defend" if seg["phase_a"] == "attack" else "attack")
+                            obs.append({
+                                "side": side, "ts": ts + k * 400,
+                                "round_no": seg["round_no"],
+                                "sub_map": seg["sub_map"], "phase": phase,
+                                "heroes": [guids[h] for h in frame[side]],
+                            })
             maps.append({
                 "id": f"{sid}:{j+1}", "scrim_id": sid, "map_no": j + 1,
                 "map_name": mp, "map_category": mode, "code": None,
