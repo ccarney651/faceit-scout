@@ -32,9 +32,17 @@ Entries before 2026-08-11 were reconstructed from git history.
   their trigger**, with baseline subtraction so an enemy hero who is always on
   the field is not reported as having caused anything. Same semantics as
   `owdb/analysis.py`, reimplemented inline because this page has no build step.
+- **A Bans tab, for the teams that scrim with them.** Preferred bans split by
+  who made them, the record on maps with a given hero banned out, and how each
+  side's opening comp shifts under a ban. The tab only appears once some map has
+  actually recorded bans — a team that scrims without them is not shown an empty
+  page asking why they have no ban profile. Scrim capture does not record draft
+  *order*, so these are preferred bans and the page says so; there is no "first
+  ban" section, because that would be inventing something never captured.
 - **The demo (`scrims.html?demo=1`) exercises all of it.** Its observations now
   carry the fields the capture page actually writes, so segments, swaps and
-  round denominators appear in the sample rather than reading as empty panels.
+  round denominators appear in the sample rather than reading as empty panels,
+  and two of its four blocks use bans so both kinds of scrim are shown.
 
 ### Fixed
 - **Ten heroes had no role in the scrims viewer, and three more were misspelled

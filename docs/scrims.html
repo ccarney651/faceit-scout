@@ -754,6 +754,79 @@ function mapBreakdown(maps, side, roles){
   return Object.values(by).sort((a,b)=> b.plays-a.plays || a.name.localeCompare(b.name));
 }
 
+// ---------- bans ----------
+// A map's bans: [{g, n, by:'us'|'them'|null}]. Some teams scrim with hero bans
+// and some do not, so every one of these degrades to nothing rather than
+// pretending a team that never bans has a ban profile.
+//
+// Scrim capture does NOT record draft ORDER — the operator adds bans as they
+// notice them — so there is no "first ban" here, only preferred bans. Claiming
+// an order the capture never recorded would be the more useful-looking lie.
+function mapBans(map){
+  return (map.bans||[]).filter(b=> b && b.g);
+}
+
+function bannedMaps(maps){
+  return (maps||[]).filter(m=> !m.void && mapBans(m).length);
+}
+
+// Heroes banned most often, optionally by one side only. The denominator is
+// maps where bans were recorded at all — a map captured without them is not
+// evidence that nothing was banned.
+function banPreferences(maps, by){
+  const pool = bannedMaps(maps);
+  const counts = {};
+  pool.forEach(m=>{
+    const gs = new Set(mapBans(m).filter(b=> !by || b.by===by).map(b=>b.g));
+    gs.forEach(g=>{ counts[g] = (counts[g]||0)+1; });
+  });
+  return {
+    maps: pool.length,
+    rows: Object.keys(counts).sort((a,b)=> counts[b]-counts[a] || a.localeCompare(b))
+      .map(g=> ({guid:g, count:counts[g]})),
+  };
+}
+
+// The record on maps where a hero was banned out, from `side`'s point of view.
+// Reads as "with Sojourn gone we are 4-1", which is the decision the operator
+// is actually making when they choose what to ban.
+function banRecord(maps, side){
+  const acc = {};
+  bannedMaps(maps).forEach(m=>{
+    const r = resultFor(m, side);
+    new Set(mapBans(m).map(b=>b.g)).forEach(g=>{
+      if(!acc[g]) acc[g] = {guid:g, maps:0, wins:0, losses:0, draws:0};
+      acc[g].maps++;
+      if(r==='win') acc[g].wins++; else if(r==='loss') acc[g].losses++;
+      else if(r==='draw') acc[g].draws++;
+    });
+  });
+  return Object.values(acc).sort((a,b)=> b.maps-a.maps ||
+    a.guid.localeCompare(b.guid));
+}
+
+// How a side opens when a given hero is banned. Only heroes banned on at least
+// `minMaps` maps: one map is an anecdote, and presenting it as a read on their
+// draft would be worse than saying nothing.
+const BAN_RESPONSE_MIN_MAPS = 2;
+function banResponse(maps, side, roles, minMaps){
+  const need = minMaps || BAN_RESPONSE_MIN_MAPS;
+  const byBan = {};
+  bannedMaps(maps).forEach(m=>{
+    const insts = compInstances([m], side);
+    if(!insts.length) return;
+    new Set(mapBans(m).map(b=>b.g)).forEach(g=>{
+      (byBan[g] = byBan[g] || []).push(...insts);
+    });
+  });
+  return Object.keys(byBan).map(g=>{
+    const insts = byBan[g];
+    const n = new Set(insts.map(i=> i.mapKey)).size;
+    return {guid:g, maps:n, opens: clusterComps(insts, roles).slice(0,3)};
+  }).filter(r=> r.maps >= need)
+    .sort((a,b)=> b.maps-a.maps || a.guid.localeCompare(b.guid));
+}
+
 // Only the heroes that actually changed. Repeating four unchanged portraits
 // buries the one that matters — the same reason the Scout map cards do it.
 function compDelta(from, to){
@@ -1100,6 +1173,86 @@ function renderMaps(data){
   return html;
 }
 
+// Bans — only reachable when some map actually recorded them.
+function renderBans(data){
+  const maps = data.maps.filter(m=>!m.void);
+  const pool = bannedMaps(maps);
+  if(!pool.length){
+    return `<div class="empty"><h2>No bans recorded</h2>
+      <p>Some teams scrim with hero bans and some do not. Turn bans on for a
+      scrim in the capture page and the heroes you record here will drive this
+      page.</p><a href="capture/scrim.html">Open scrim capture →</a></div>`;
+  }
+
+  const barRows = (rows, total)=>{
+    if(!rows.length) return '<div class="note">None recorded.</div>';
+    const max = rows[0].count;
+    return rows.slice(0,10).map(r=>{
+      const pct = max ? Math.round(100*r.count/max) : 0;
+      return `<div class="barrow">
+        <span class="lab ${heroRoleClass(r.guid)}">${esc(heroName(r.guid))}</span>
+        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+        <span class="barval">${r.count}/${total}</span>
+      </div>`;
+    }).join('');
+  };
+
+  const theirs = banPreferences(maps, 'them');
+  const ourown = banPreferences(maps, 'us');
+  const either = banPreferences(maps, null);
+
+  let html = `<div class="note" style="margin-top:0">Across
+    <b>${pool.length}</b> map${pool.length===1?'':'s'} where bans were recorded.
+    Scrim capture does not record draft order, so these are preferred bans, not
+    first bans.</div>`;
+
+  html += '<div class="section-h"><h2>Preferred bans</h2></div>';
+  html += '<div class="grid cols-2">';
+  html += `<div class="card"><div class="eyebrow">They banned</div>${barRows(theirs.rows, theirs.maps)}</div>`;
+  html += `<div class="card"><div class="eyebrow">We banned</div>${barRows(ourown.rows, ourown.maps)}</div>`;
+  html += '</div>';
+  if(!theirs.rows.length && !ourown.rows.length && either.rows.length){
+    html += `<div class="card mt10"><div class="eyebrow">Banned, side not noted</div>
+      ${barRows(either.rows, either.maps)}</div>`;
+  }
+
+  // Win rate with a hero gone. This is the decision the operator is making when
+  // they pick what to ban, so it is stated from our side.
+  html += '<div class="section-h"><h2>Our record with a hero banned out</h2>'
+       +  '<span class="note">every ban on the map, whoever made it</span></div>';
+  const rec = banRecord(maps, 'a');
+  if(rec.length){
+    html += '<div class="card">' + rec.map(r=>`<div class="comprow">
+      <div class="cchips">${heroChip(r.guid)}</div>
+      <div class="cmeta"><span>${r.maps} map${r.maps===1?'':'s'}</span>${wlHtml(r)}</div>
+    </div>`).join('') + '</div>';
+  }else{
+    html += '<div class="note">No results recorded on the banned maps yet.</div>';
+  }
+
+  // How each side opens once a hero is gone.
+  const theirResp = banResponse(maps, 'b', HERO_ROLE);
+  const ourResp = banResponse(maps, 'a', HERO_ROLE);
+  const respBlock = (rows, who)=>{
+    if(!rows.length){
+      return `<div class="note">Not enough repeated bans yet — a hero has to be
+        banned on ${BAN_RESPONSE_MIN_MAPS} maps before ${who} opening under it
+        means anything.</div>`;
+    }
+    return rows.map(r=>`<div class="card mt10">
+      <div class="section-h" style="margin-top:0;border-bottom:0">
+        <h2>${esc(heroName(r.guid))} banned</h2>
+        <span class="note">${r.maps} map${r.maps===1?'':'s'}</span>
+      </div>${compTable(r.opens, 3)}</div>`).join('');
+  };
+  html += '<div class="section-h"><h2>How they open under a ban</h2></div>';
+  html += respBlock(theirResp, 'their');
+  html += '<div class="section-h"><h2>How we open under a ban</h2></div>';
+  html += respBlock(ourResp, 'our');
+
+  return html;
+}
+
 // Scrims
 function renderScrims(data){
   const {scrims, mapsByScrim} = data;
@@ -1206,8 +1359,17 @@ const TABS = [
   {id:'overview', label:'Overview', render:d=>renderOverview(d)},
   {id:'teams', label:'Teams', render:d=>renderTeams(d)},
   {id:'maps', label:'Maps', render:d=>renderMaps(d)},
+  // Bans are optional in scrims, so this tab appears only once some map has
+  // recorded them - a team that never bans should not be shown an empty tab
+  // asking why they have no ban profile.
+  {id:'bans', label:'Bans', render:d=>renderBans(d), when:d=> bannedMaps(d.maps).length>0},
   {id:'scrims', label:'Scrims', render:d=>renderScrims(d)},
 ];
+// Which tabs this dataset earns. Computed against everything loaded, not the
+// current range, so narrowing the period does not make a tab vanish mid-session.
+function visibleTabs(){
+  return TABS.filter(t=> !t.when || (DATA_ALL && t.when(DATA_ALL)));
+}
 
 let DATA = null;        // range-filtered, what the tabs render
 let DATA_ALL = null;    // everything loaded, so switching range needs no reload
@@ -1292,7 +1454,8 @@ function renderRangeBar(){
 function show(id){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
   const c = document.getElementById('content');
-  const tab = TABS.find(t=>t.id===id)||TABS[0];
+  const vis = visibleTabs();
+  const tab = vis.find(t=>t.id===id)||vis[0];
   DATA = applyRange(DATA_ALL);
   c.innerHTML = (DEMO?demoBanner():'') + renderRangeBar() + tab.render(DATA);
   wireRangeBar(id);
@@ -1305,21 +1468,23 @@ function hashDispatch(){
   const h = location.hash||'#overview';
   if(h === HANDLED_HASH) return;
   const id = h.slice(1);
-  const valid = TABS.some(t=>t.id===id);
+  const valid = visibleTabs().some(t=>t.id===id);
   show(valid?id:'overview');
 }
 
 // ---------- boot ----------
 async function boot(){
+  // Data first: which tabs exist depends on what was captured.
+  DATA_ALL = await loadData();
+  DATA = DATA_ALL;
+
   const nav = document.getElementById('nav');
-  TABS.forEach(t=>{
+  visibleTabs().forEach(t=>{
     const b = el(`<button data-id="${t.id}">${esc(t.label)}</button>`);
     b.onclick = ()=>show(t.id);
     nav.appendChild(b);
   });
 
-  DATA_ALL = await loadData();
-  DATA = DATA_ALL;
   hashDispatch();
 }
 

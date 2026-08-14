@@ -502,6 +502,101 @@ def test_the_demo_shows_a_recurring_swap_with_a_trigger() -> None:
     assert any(s["vs"] for s in recurring), "no recurring swap has a trigger"
 
 
+# ---------------------------------------------------------------------------
+# Bans. Optional in scrims — some teams use them, some do not — so every one of
+# these has to degrade to nothing rather than inventing a ban profile.
+# ---------------------------------------------------------------------------
+
+
+def _banned_maps() -> str:
+    return json.dumps([
+        {"id": "m1", "map_category": "Push", "result": "win",
+         "bans": [{"g": "D1", "n": "D1", "by": "them"},
+                  {"g": "T2", "n": "T2", "by": "us"}],
+         "observations": [{"side": "a", "round_no": 1,
+                           "heroes": ["T", "D3", "D2", "S1", "S2"]}]},
+        {"id": "m2", "map_category": "Push", "result": "loss",
+         "bans": [{"g": "D1", "n": "D1", "by": "them"}],
+         "observations": [{"side": "a", "round_no": 1,
+                           "heroes": ["T", "D3", "D2", "S1", "S2"]}]},
+        {"id": "m3", "map_category": "Push", "result": "win",
+         "observations": [{"side": "a", "round_no": 1,
+                           "heroes": ["T", "D1", "D2", "S1", "S2"]}]},
+    ])
+
+
+def test_a_map_captured_without_bans_is_not_evidence_that_none_were_banned() -> None:
+    """Bans are optional, so the denominator is maps where bans were RECORDED.
+    Counting every map would report a hero as rarely banned when the truth is
+    that the operator was not noting bans that night."""
+    prefs = _run(f"return banPreferences({_banned_maps()}, null);")
+    assert prefs["maps"] == 2, "an unbanned map was counted in the denominator"
+    by = {r["guid"]: r["count"] for r in prefs["rows"]}
+    assert by["D1"] == 2 and by["T2"] == 1
+
+
+def test_bans_can_be_read_by_who_made_them() -> None:
+    theirs = _run(f"return banPreferences({_banned_maps()}, 'them');")
+    ours = _run(f"return banPreferences({_banned_maps()}, 'us');")
+    assert [r["guid"] for r in theirs["rows"]] == ["D1"]
+    assert [r["guid"] for r in ours["rows"]] == ["T2"]
+
+
+def test_the_record_with_a_hero_banned_out_is_counted_per_map() -> None:
+    rec = {r["guid"]: r for r in _run(f"return banRecord({_banned_maps()}, 'a');")}
+    assert rec["D1"]["maps"] == 2
+    assert (rec["D1"]["wins"], rec["D1"]["losses"]) == (1, 1)
+    assert rec["T2"]["maps"] == 1 and rec["T2"]["wins"] == 1
+
+
+def test_a_hero_banned_once_is_not_presented_as_a_read_on_their_draft() -> None:
+    """One map is an anecdote. Showing it as "how they open under this ban"
+    would be more misleading than showing nothing."""
+    rows = _run(f"return banResponse({_banned_maps()}, 'a', {ROLES});")
+    guids = {r["guid"] for r in rows}
+    assert "D1" in guids, "a hero banned on two maps should be reported"
+    assert "T2" not in guids, "a hero banned once was reported as a pattern"
+
+
+def test_ban_response_shows_what_they_opened_with_the_hero_gone() -> None:
+    row = [r for r in _run(f"return banResponse({_banned_maps()}, 'a', {ROLES});")
+           if r["guid"] == "D1"][0]
+    assert row["maps"] == 2
+    opened = {h for f in row["opens"] for h in f["heroes"]}
+    assert "D1" not in opened, "the banned hero appears in the comp run under its own ban"
+    assert "D3" in opened
+
+
+def test_a_scrim_log_with_no_bans_hides_the_bans_tab() -> None:
+    """Some teams scrim without bans. Showing them an empty tab asking why they
+    have no ban profile is a worse answer than not showing the tab."""
+    html = APP.read_text(encoding="utf-8")
+    assert "function visibleTabs()" in html
+    assert "bannedMaps(d.maps).length>0" in html.replace(" ", ""), (
+        "the bans tab is not conditional on there being bans"
+    )
+    # And the nav must be built from the filtered list, not the full one.
+    start = html.index("async function boot()")
+    body = html[start:start + 700]
+    assert "visibleTabs().forEach" in body, "nav still renders every tab unconditionally"
+
+
+def test_the_demo_exercises_both_scrims_with_bans_and_without() -> None:
+    d = json.loads(DEMO.read_text(encoding="utf-8"))
+    uses = {bool(s.get("uses_bans")) for s in d["scrims"]}
+    assert uses == {True, False}, "the demo does not show both kinds of scrim"
+    banned = [m for m in d["scrim_maps"] if m.get("bans")]
+    assert banned, "no map in the demo records a ban"
+    attrib = {b.get("by") for m in banned for b in m["bans"]}
+    assert "us" in attrib and "them" in attrib, f"bans are not attributed: {attrib}"
+    # A banned hero must never appear in a lineup on that map, or the demo is
+    # showing something the game does not allow.
+    for m in banned:
+        gone = {b["g"] for b in m["bans"]}
+        played = {g for o in m["observations"] for g in o["heroes"]}
+        assert not (gone & played), f"{m['id']} fields a banned hero"
+
+
 def test_the_viewers_role_table_agrees_with_the_authoritative_seats() -> None:
     """This page has no build step, so its hero->role table is a hand-kept copy of
     faceit_sync/subroles.py. It had already drifted: "D.Va", "Soldier: 76" and

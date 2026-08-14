@@ -76,6 +76,20 @@ SWAPS = {
     "b": [("Orisa", "DVa", "Tracer"), ("Ashe", "Sombra", "Winston")],
 }
 
+# Some teams scrim with hero bans and some do not, so the sample shows both:
+# the two most recent blocks use them, the older ones do not. Each side has
+# heroes it habitually bans, which is what makes "preferred bans" and "how they
+# open under a ban" say anything at all.
+BANS = {"a": ["Ashe", "Ramattra"], "b": ["Winston", "Sojourn"]}
+
+# What a side falls back to when its staple hero is banned out. Without this the
+# ban-response panel would show the same opener under every ban and prove
+# nothing about whether the analysis works.
+BAN_FALLBACK = {
+    "Winston": "Sigma", "Sojourn": "Cassidy", "Tracer": "Genji",
+    "Ashe": "Sombra", "Ramattra": "Orisa", "Kiriko": "Baptiste",
+}
+
 CONTROL_SUBMAPS = {
     "Ilios": ["Lighthouse", "Ruins", "Well"],
     "Busan": ["Downtown", "Sanctuary", "MEKA Base"],
@@ -141,15 +155,40 @@ def rounds_for(map_name: str, mode: str, rnd: random.Random) -> list[dict[str, o
     return [{"round_no": 1, "sub_map": None, "phase_a": None}]
 
 
-def pick_comp(side: str, rnd: random.Random) -> list[str]:
+def pick_comp(side: str, rnd: random.Random,
+              banned: frozenset[str] = frozenset()) -> list[str]:
     pool = [c for c, w in PLAYBOOK[side] for _ in range(w)]
-    return list(rnd.choice(pool))
+    comp = list(rnd.choice(pool))
+    # A banned hero cannot be fielded. Substituting rather than re-rolling keeps
+    # the rest of the comp intact, which is how a team actually responds.
+    for i, h in enumerate(comp):
+        if h in banned:
+            alt = BAN_FALLBACK.get(h)
+            comp[i] = alt if alt and alt not in comp else h
+    return comp
 
 
-def apply_swap(side: str, comp: list[str], enemy: list[str],
-               rnd: random.Random) -> list[str] | None:
+def bans_for(scrim_index: int, rnd: random.Random) -> list[dict[str, object]]:
+    """The bans on one map, as the capture page records them.
+
+    `by` is who MADE the ban; the capture page allows leaving it unset, so one
+    is left unattributed to prove the analysis handles it.
+    """
+    rows = []
+    for side in ("a", "b"):
+        hero = rnd.choice(BANS[side])
+        rows.append({"hero": hero, "by": "us" if side == "a" else "them"})
+    if rnd.random() < 0.3:
+        rows[-1]["by"] = None
+    return rows
+
+
+def apply_swap(side: str, comp: list[str], enemy: list[str], rnd: random.Random,
+               banned: frozenset[str] = frozenset()) -> list[str] | None:
     """This side's habitual answer to what the enemy is fielding, if it applies."""
     for out_h, in_h, trigger in SWAPS[side]:
+        if in_h in banned:
+            continue
         if trigger in enemy and out_h in comp and in_h not in comp:
             if rnd.random() < 0.8:      # habitual, not mechanical
                 return [in_h if h == out_h else h for h in comp]
@@ -192,10 +231,16 @@ def main() -> None:
         elif kind == "group":
             s["opponent_id"] = "demo-opp-mix"
         # kind == "unknown": no opponent at all, which is a normal outcome
+        # The two most recent blocks scrim with bans, the older ones without -
+        # both are normal, and the viewer has to read correctly either way.
+        uses_bans = i < 2
+        s["uses_bans"] = uses_bans
         scrims.append(s)
 
         for j, (mp, mode, a, b, result) in enumerate(rows):
             voided = result is None
+            bans = bans_for(i, rnd) if uses_bans and not voided else []
+            banned = frozenset(b["hero"] for b in bans)
             obs = []
             if not voided:
                 ts = 0
@@ -205,9 +250,9 @@ def main() -> None:
                     # frame emits both sides. Emitting one side's whole sequence
                     # first would leave a swap with no enemy lineup recorded at
                     # or before it, and the trigger analysis would find nothing.
-                    now = {s: pick_comp(s, rnd) for s in ("a", "b")}
+                    now = {s: pick_comp(s, rnd, banned) for s in ("a", "b")}
                     frames = [dict(now)]
-                    after = {s: apply_swap(s, now[s], now["b" if s == "a" else "a"], rnd)
+                    after = {s: apply_swap(s, now[s], now["b" if s == "a" else "a"], rnd, banned)
                              for s in ("a", "b")}
                     if any(after.values()):
                         frames.append({s: after[s] or now[s] for s in ("a", "b")})
@@ -228,6 +273,8 @@ def main() -> None:
                 "map_name": mp, "map_category": mode, "code": None,
                 "score": {"us": a, "them": b}, "result": result,
                 "void": voided, "observations": obs, "scrim": True,
+                "bans": [{"g": guids[b["hero"]], "n": b["hero"], "by": b["by"]}
+                         for b in bans],
             })
 
     OUT.write_text(json.dumps({

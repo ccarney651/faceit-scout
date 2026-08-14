@@ -579,6 +579,51 @@ async function main() {
       [...new Set(mp.segs)].join(','));
     check('analysis: a mirrored mode is not split into phases it does not have',
       mp.segs.includes('Map'), [...new Set(mp.segs)].join(','));
+    // Bans tab: present because the demo records them, and gone when nothing does.
+    const nav = await p.evaluate(() =>
+      [...document.querySelectorAll('nav button')].map(b => b.dataset.id));
+    check('analysis: the bans tab appears when bans were captured',
+      nav.includes('bans'), nav.join(','));
+
+    await p.evaluate(() => show('bans'));
+    await p.waitForTimeout(300);
+    const bn = await p.evaluate(() => ({
+      heads: [...document.querySelectorAll('.section-h h2, .eyebrow')]
+        .map(h => h.textContent.replace(/\s+/g, ' ').trim()),
+      bars: [...document.querySelectorAll('.barrow')].map(r => r.querySelector('.barval').textContent.trim()),
+      rows: document.querySelectorAll('.comprow').length,
+      text: document.body.textContent.replace(/\s+/g, ' '),
+    }));
+    check('analysis: preferred bans are split by who made them',
+      bn.heads.some(h => /They banned/.test(h)) && bn.heads.some(h => /We banned/.test(h)),
+      bn.heads.join(' | '));
+    check('analysis: ban counts carry a denominator',
+      bn.bars.length > 0 && bn.bars.every(v => /^\d+\/\d+$/.test(v)), bn.bars.slice(0, 4).join(' '));
+    check('analysis: a record with a hero banned out is shown', bn.rows > 0, String(bn.rows));
+    check('analysis: ban response renders openers under a ban',
+      bn.heads.some(h => /How they open under a ban/.test(h)) &&
+      /banned/.test(bn.text), bn.heads.join(' | '));
+    // Draft order is not captured, so a "first bans" SECTION would be inventing
+    // it. The disclaimer naming the limitation is the point, not a violation.
+    check('analysis: it does not claim a first ban it never captured',
+      /does not record draft order/.test(bn.text) &&
+      !bn.heads.some(h => /first ban/i.test(h)),
+      bn.heads.filter(h => /ban/i.test(h)).join(' | '));
+
+    // With no bans anywhere, the tab must not exist at all.
+    const p2 = await ctx.newPage();
+    await p2.goto(BASE + '/scrims.html?demo=1', { waitUntil: 'load' });
+    await p2.waitForTimeout(1500);
+    const nav2 = await p2.evaluate(() => {
+      DATA_ALL.maps.forEach(m => { m.bans = []; });
+      document.getElementById('nav').innerHTML = '';
+      visibleTabs().forEach(t => {
+        const b = document.createElement('button'); b.dataset.id = t.id; document.getElementById('nav').appendChild(b);
+      });
+      return [...document.querySelectorAll('nav button')].map(b => b.dataset.id);
+    });
+    check('analysis: a log with no bans has no bans tab', !nav2.includes('bans'), nav2.join(','));
+
     check('analysis: no page errors anywhere in the viewer', perrs.length === 0, perrs.join(' | '));
     await ctx.close();
   }
