@@ -628,6 +628,103 @@ async function main() {
     await ctx.close();
   }
 
+  // --- 1h. The floating control panel (Document PiP) -----------------------
+  // The operator captures with Overwatch in front, so this panel is the ONLY
+  // UI they see during a scrim. It shipped without saying which team was on
+  // which side, and with no way to start the next map — both of which forced
+  // an alt-tab back to the page between every map. Document PiP works in this
+  // headless Chromium, so the whole loop is checkable here.
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    const perrs = [];
+    p.on('pageerror', e => perrs.push(e.message));
+    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.waitForTimeout(900);
+
+    // requestWindow() needs a user gesture, so drive the real button.
+    await p.click('#pop');
+    await p.waitForTimeout(700);
+
+    const idle = await p.evaluate(() => {
+      const w = documentPictureInPicture.window;
+      if (!w) return { open: false };
+      const d = w.document;
+      return {
+        open: true,
+        info: (d.getElementById('pinfo') || {}).textContent || '',
+        selects: [...d.querySelectorAll('#prow-next select')].map(s => s.options.length),
+        start: [...d.querySelectorAll('#prow-next button')].map(b => b.textContent).join(','),
+        main: (d.getElementById('prow-main') || {}).textContent || '',
+        finish: (d.getElementById('prow-finish') || {}).textContent || '',
+      };
+    });
+    check('panel: the floating control panel opens', idle.open);
+    check('panel: with no map running it offers the next one',
+      idle.selects.length === 2 && idle.selects[0] >= 4 && idle.selects[1] >= 2 &&
+      /Start/.test(idle.start), JSON.stringify(idle.selects) + ' ' + idle.start);
+    check('panel: it says no map is running rather than showing blank state',
+      /no map running/.test(idle.info), idle.info);
+    check('panel: live controls are absent until a map is running',
+      !idle.main && !idle.finish, idle.main + ' | ' + idle.finish);
+
+    // Start a map FROM the panel — the whole point of the change.
+    const live = await p.evaluate(async () => {
+      const w = documentPictureInPicture.window, d = w.document;
+      const sels = d.querySelectorAll('#prow-next select');
+      sels[0].value = 'Control'; sels[0].dispatchEvent(new w.Event('change'));
+      sels[1].value = 'Ilios';
+      [...d.querySelectorAll('#prow-next button')].pop().click();
+      await new Promise(r => setTimeout(r, 700));
+      return {
+        session: !!session,
+        info: (d.getElementById('pinfo') || {}).textContent || '',
+        headers: [(d.getElementById('phA') || {}).textContent, (d.getElementById('phB') || {}).textContent],
+        main: (d.getElementById('prow-main') || {}).textContent || '',
+        sub: (d.getElementById('prow-sub') || {}).textContent || '',
+        side: (d.getElementById('prow-side') || {}).textContent || '',
+        finish: (d.getElementById('prow-finish') || {}).textContent || '',
+        next: (d.getElementById('prow-next') || {}).textContent || '',
+      };
+    });
+    check('panel: a map can be started without leaving the panel', live.session, live.info);
+    check('panel: the running map is named', /Ilios/.test(live.info), live.info);
+    // The reported bug: the panel never said which team was on the left.
+    check('panel: the read-out columns name the teams, not "Left"/"Right"',
+      live.headers[0] && live.headers[0] !== 'Left' &&
+      live.headers[1] && live.headers[1] !== 'Right', JSON.stringify(live.headers));
+    check('panel: unconfirmed sides are flagged rather than shown as fact',
+      /unconfirmed/.test(live.info), live.info);
+    check('panel: a Control map offers its sub-maps', /Lighthouse/.test(live.sub), live.sub);
+    check('panel: sides can be swapped and re-detected from the panel',
+      /Swap L\/R/.test(live.side) && /Re-detect/.test(live.side), live.side);
+    check('panel: finish is its own pinned row, away from the per-round buttons',
+      /Finish/.test(live.finish) && !/Finish/.test(live.main), live.main + ' | ' + live.finish);
+    check('panel: the next-map picker hides while a map is running', !/Start/.test(live.next), live.next);
+
+    // Finishing must hand the panel back to the next-map state, or the loop
+    // dead-ends on stale buttons for a map that is already saved.
+    const done = await p.evaluate(async () => {
+      const d = documentPictureInPicture.window.document;
+      session.snaps.push({ ts: Date.now(), sub: 'Lighthouse', round: 1, attacker: null,
+        a: ['0x1', '0x2', '0x3', '0x4', '0x5'], b: ['0x6', '0x7', '0x8', '0x9', '0xa'],
+        aPlayers: [], bPlayers: [] });
+      await finishMap();
+      await new Promise(r => setTimeout(r, 700));
+      return {
+        session: !!session,
+        next: (d.getElementById('prow-next') || {}).textContent || '',
+        main: (d.getElementById('prow-main') || {}).textContent || '',
+        finish: (d.getElementById('prow-finish') || {}).textContent || '',
+      };
+    });
+    check('panel: finishing a map returns it to the next-map picker',
+      !done.session && /Start/.test(done.next) && !done.main && !done.finish,
+      JSON.stringify(done));
+    check('panel: no page errors', perrs.length === 0, perrs.join(' | '));
+    await ctx.close();
+  }
+
   // --- 2. Either capture page may be opened first ---------------------------
   // onupgradeneeded fires once per version, so a page that declares only its
   // own stores leaves the other page's stores uncreated. This is the check that

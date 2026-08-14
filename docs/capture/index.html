@@ -1466,6 +1466,10 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:500,
   afterOpen:w=>{ const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
     pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
       localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; } },
+  // Name the two read-out columns after the teams on those sides, so the reads
+  // are labelled where they are read rather than only in the line above.
+  slotLabels:()=>{ if(!session) return {left:'Left', right:'Right'};
+    const {leftName,rightName}=sideNames(); return {left:leftName, right:rightName}; },
   // Map + teams: the operator is watching the game, not the browser tab, so
   // the one place they DO see (this floating panel) should say what's being
   // scouted without needing to alt-tab back to the main page to check.

@@ -1215,6 +1215,10 @@ async function finishScrimMap(c){
   await renderScrimMaps();
   toast('<b>'+esc(c.map||'map')+'</b> saved to scrim \u2014 '+done+' snapshot'+(done===1?'':'s')+' captured (private)','ok');
   updateBtns();
+  // The session is gone, so the floating panel's rows are stale: rebuild it so
+  // it drops the live controls and offers the next map. Without this the panel
+  // keeps showing Snapshot for a map that has already been saved.
+  renderPipControls();
   if(wasQueued){ const maps=await idbScrimMaps(); const next=maps.filter(m=>m.scrim_id===activeScrim.id&&m.queued&&m.map_no>rec.map_no).sort((a,b)=>a.map_no-b.map_no)[0]; if(next) startQueuedMap(next); }
 }
 
@@ -1376,6 +1380,35 @@ async function startScrimMap(){
   renderBans();   // after the session exists - the row keys off it
   toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
 }
+// Start a map by NAME rather than by the page's dropdown index, so the floating
+// panel can start one without reaching into the main page's form. The panel's
+// selects are kept in step with the page below.
+async function startMapNamed(name){
+  const m=SCRIM_MAPS.find(x=>x.name===name);
+  if(!m){ toast('pick a map','warn'); return; }
+  if(session){ toast('finish the current map first','warn'); return; }
+  await ensureScrim();
+  MAP_BANS=[];
+  activeScrimMap={map_name:m.name, map_category:m.cat, code:'', map_no:activeScrim.map_no||1, queued:false};
+  // Mirror onto the page so the two views never disagree about what is running.
+  const pm=document.getElementById('scrimmode'); if(pm&&pm.value!==m.cat){ pm.value=m.cat; onScrimModeChange(); }
+  const idx=SCRIM_MAPS.indexOf(m);
+  const pi=document.getElementById('scrimmapidx'); if(pi) pi.value=String(idx);
+  const pc=document.getElementById('scrimcode'); if(pc) pc.value='';
+  startScrimSession(scrimPseudoCode());
+  renderBans();
+  snapMsg(m.name+' started — Snapshot each comp');
+  toast('<b>'+esc(m.name)+'</b> started — capture, then Finish + save','ok');
+}
+
+// A sub-map captured in an EARLIER round is spent; the panel dims it so the
+// operator picks the right one by sight. Same rule as index.html.
+function usedSubmaps(snaps, currentRound){
+  const used=new Set();
+  for(const s of (snaps||[])){ if(s&&s.sub&&s.round!==currentRound) used.add(s.sub); }
+  return used;
+}
+
 async function startQueuedMap(m){
   await ensureScrim();
   if(session){ toast('finish the current map first','warn'); return; }
@@ -1699,14 +1732,25 @@ async function startScaffoldSession(){
 // re-detect button, no sub-map dimming, no auto-fetch checkbox, Finish is
 // inline instead of a dedicated row) so they're passed in as ctx data, not
 // merged - see that module's header for why.
-const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
+// Sized to match index.html now that this panel carries the same rows plus a
+// next-map picker; the old 340x460 clipped the finish row once a Control map
+// added its sub-map buttons.
+const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
   labels:{off:'⇱ Floating overlay', on:'⇱ Overlay open'},
   toasts:{noDPIP:'Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).',
     autoPop:'Floating overlay opens on your next click or keypress — capture without alt-tab'},
   bodyStyle:c=>`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`,
   panelCss:c=>
     `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
+    `#pinfo .pmap{color:${c.fg};font-size:12.5px;font-weight:650}`+
+    `#pinfo .pteams{font-size:11.5px;margin-top:1px}`+
+    `#pinfo .pteams .tl{color:#5a9bd8;font-weight:650}#pinfo .pteams .tr{color:#e9694f;font-weight:650}`+
+    `#pinfo .pteams .q{color:${c.bad}}`+
     `#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}`+
+    // Spent sub-map (captured in an earlier round) — dimmed so it is eliminated
+    // by sight, still clickable so a mis-pick stays fixable. Same as index.html.
+    `button.used{opacity:.4;text-decoration:line-through}`+
+    `select{padding:5px 6px;border:1px solid ${c.line2};background:${c.surface2};color:${c.fg};border-radius:6px;font-size:12px;max-width:130px}`+
     `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
     `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
     `.prow.warn .lbl{color:${c.bad}}`+
@@ -1717,26 +1761,72 @@ const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
     `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
-  middleHtml:'<div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div>',
-  finishHtml:'',
+  middleHtml:'<div id="prow-next"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div>',
+  finishHtml:'<div id="prow-finish"></div>',
+  // Which team is on which side is the one thing this panel exists to tell the
+  // operator, and it was the one thing it did not say. Named columns (below)
+  // plus this line, matching index.html.
+  slotLabels:()=>{ if(!session) return {left:'Left', right:'Right'};
+    const {leftName,rightName}=sideNames(); return {left:leftName, right:rightName}; },
   tick:el=>{ const c=selectedCode();
-    el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; },
+    if(!session){ el.innerHTML='<div class="pmap">no map running — pick one below ▾</div>'; return; }
+    const {leftName,rightName}=sideNames();
+    const unsure=!session.sideResolved;
+    el.innerHTML=`<div>${c&&c.code&&c.code!=='SCRIM'?esc(c.code)+' · ':''}R${session.round} · ${session.snaps.length} snaps</div>`+
+      `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
+      `<div class="pteams${unsure?' unsure':''}"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span>`+
+      `${unsure?' <span class="q">— unconfirmed</span>':''}</div>`; },
   controls:[
+    // Next map, entered from the panel. A scrim is a series of maps, and
+    // having to alt-tab back to the page between every one of them was the
+    // single most jarring thing about the flow: the panel is where the
+    // operator already is, so the whole loop (pick map -> capture -> finish ->
+    // pick next map) now closes here. Only shown when no map is running.
+    {id:'prow-next', render:(row,d,mk)=>{
+      row.innerHTML='';
+      if(session){ row.className='prow'; return; }
+      row.className='prow';
+      const l=d.createElement('span'); l.className='lbl'; l.textContent='Next map'; row.appendChild(l);
+      const mode=d.createElement('select'), map=d.createElement('select');
+      const modes=[...new Set(SCRIM_MAPS.map(m=>m.cat))];
+      mode.innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+      const fillMaps=()=>{ map.innerHTML=SCRIM_MAPS.filter(m=>m.cat===mode.value)
+        .map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''); };
+      // Carry the main page's current selection over, so the panel opens on
+      // whatever the operator last had in mind rather than resetting to Control.
+      const pageMode=document.getElementById('scrimmode');
+      mode.value=(pageMode&&pageMode.value)||modes[0]; fillMaps();
+      mode.onchange=fillMaps;
+      row.appendChild(mode); row.appendChild(map);
+      mk(row,'▶ Start',()=>startMapNamed(map.value),'go');
+    }},
     {id:'prow-main', render:(main,d,mk)=>{
       main.className='prow'; main.innerHTML='';
+      if(!session) return;                       // nothing to press without a live map
       mk(main,'◉ Snapshot',()=>snapshot(false),'go');
-      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
+      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo);
+      const c=selectedCode();
+      if(c&&c.code&&c.code!=='SCRIM'){
+        mk(main,'⧉ Copy code',()=>{ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); });
+      }
     }},
+    // Side row — the no-alt-tab escape hatch when the read gets it backwards.
+    // Naming the swap target ("⇄ Winston's left") would be ambiguous, so the
+    // team names live in the info line and the column headers instead.
     {id:'prow-side', render:(side,d,mk)=>{
-      side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
-      const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
+      side.innerHTML='';
+      if(!session){ side.className='prow'; return; }
+      side.className='prow'+(session.sideResolved?'':' warn');
+      if(!session.sideResolved){ const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l); }
       mk(side,'⇄ Swap L/R',swapSides);
+      mk(side,'⟳ Re-detect',()=>{ if(session) session.sideResolved=false; ensureSideResolved(); });
     }},
     {id:'prow-sub', render:(sub,d,mk)=>{
       sub.innerHTML='';
       if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
         const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
-        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
+        const spent=usedSubmaps(session.snaps, session.round);
+        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
       else sub.className='prow';
     }},
     {id:'prow-atk', render:(atk,d,mk)=>{
@@ -1752,6 +1842,12 @@ const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
           b.onclick=()=>setAttacker(side); atk.appendChild(b); };
         mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
       else atk.className='prow';
+    }},
+    // Finish pinned to the bottom, as on index.html: it is the one commit
+    // action, so it is deliberately away from the buttons pressed every round.
+    {id:'prow-finish', render:(fin,d,mk)=>{
+      fin.className='prow'; fin.innerHTML='';
+      if(session) mk(fin,'✓ Finish + save this map',()=>finishMap(),'fin go');
     }},
   ],
 });

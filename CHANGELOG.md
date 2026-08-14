@@ -17,6 +17,29 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-14 (later)
+
+### Fixed
+- **The floating capture panel never said which team was on which side.** It is
+  the only UI visible while Overwatch is in front, and its two read-out columns
+  were labelled "Left" and "Right" — true, and useless, since which team is on
+  the left is the one thing the operator needs from it. Both capture pages now
+  name those columns after the teams actually on those sides, and the scrim
+  panel gained the map-and-teams info line the league panel already had, with
+  unconfirmed sides flagged rather than shown as fact.
+
+### Added
+- **The next map can be started from the floating panel.** A scrim is a series
+  of maps, and having to alt-tab back to the page between every one of them was
+  the most jarring part of the flow. The panel now carries a mode and map
+  picker whenever no map is running, so the whole loop — pick, capture, finish,
+  pick the next — closes without leaving it.
+- **Scrim panel parity with the league one:** re-detect sides, copy the workshop
+  code, spent sub-maps dimmed out, and Finish moved to its own pinned row away
+  from the buttons pressed every round.
+
+---
+
 ## 2026-08-14
 
 ### Added

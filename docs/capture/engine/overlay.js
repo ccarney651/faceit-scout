@@ -124,7 +124,8 @@
         var st = w.document.createElement('style'); st.id = 'pipstyle'; st.textContent = pipPanelCss(c);
         w.document.head.appendChild(st);
         w.document.body.innerHTML = '<div id="pinfo"></div><div id="pmsg"></div>' + ctx.middleHtml +
-          '<div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>' + ctx.finishHtml;
+          '<div class="pt"><h3 id="phA">Left</h3><div id="poutA"></div></div>' +
+          '<div class="pt"><h3 id="phB">Right</h3><div id="poutB"></div></div>' + ctx.finishHtml;
         target = { A: w.document.getElementById('poutA'), B: w.document.getElementById('poutB') };
         if (ctx.afterOpen) ctx.afterOpen(w);
         renderPipControls();
@@ -136,6 +137,17 @@
           if (w.closed) return;
           var el = w.document.getElementById('pinfo');
           if (el) ctx.tick(el);
+          // Name the two read-out columns after the teams actually on those
+          // sides. "Left" and "Right" are true but useless: the one thing the
+          // operator needs from this panel is WHICH team is on the left, and
+          // reading it off a header sitting directly above that team's heroes
+          // beats holding it in your head from a line further up.
+          if (ctx.slotLabels) {
+            var n = ctx.slotLabels() || {};
+            var hA = w.document.getElementById('phA'), hB = w.document.getElementById('phB');
+            if (hA) hA.textContent = n.left || 'Left';
+            if (hB) hB.textContent = n.right || 'Right';
+          }
         };
         w._tick = setInterval(tick, 600); tick();
         w.addEventListener('pagehide', function () {
