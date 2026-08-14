@@ -457,7 +457,7 @@ async function main() {
                registryLabel: /Korean team/.test(txt), leagueLabel: /IGNIS CRIMSON/.test(txt) };
     });
 
-    check('viewer: practice coverage renders every mode', vr.count >= 6, String(vr.count));
+    check('viewer: practice coverage renders every mode', vr.count >= 5, String(vr.count));   // 5 since Clash left the pool
     check('viewer: an unplayed mode says so', vr.by.Flashpoint && vr.by.Flashpoint.state === 'cov-never',
       JSON.stringify(vr.by.Flashpoint));
     check('viewer: a stale mode is flagged', vr.by.Push && vr.by.Push.state === 'cov-stale',

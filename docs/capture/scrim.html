@@ -224,6 +224,8 @@
       <datalist id="teamnames"></datalist>
       <label class="f">Date<input type="date" id="scdate"></label>
       <label class="f">Notes<input type="text" id="scnotes" placeholder="optional"></label>
+      <label class="f" style="flex:0 0 auto;align-self:flex-end" title="Some teams scrim with hero bans and some do not. Turn this on and a ban control appears while capturing each map.">
+        <input type="checkbox" id="scbans"> this scrim uses hero bans</label>
     </div>
     <div class="row" style="margin-bottom:8px">
       <button id="scsave">Save scrim</button>
@@ -312,6 +314,19 @@
       <span class="status" id="atklbl">Attacking now</span>
       <span id="atkbtns" class="row"></span>
       <span class="status faint" id="atkhint">— click the team on attack (as the HUD shows)</span>
+    </div>
+    <!-- Bans, shown only when this scrim uses them. Some teams scrim with hero
+         bans and some do not, so this is off by default and never nags. -->
+    <div id="banrow" style="display:none;margin-top:8px">
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="status">Hero bans</span>
+        <select id="banhero" style="width:auto"><option value="">＋ add a ban…</option></select>
+        <select id="banby" style="width:auto" title="Who banned it — leave as 'either' if you did not note it">
+          <option value="">by either</option><option value="us">by us</option><option value="them">by them</option>
+        </select>
+        <span class="status faint">— bans apply to this map</span>
+      </div>
+      <div id="banchips" class="row" style="margin-top:6px;gap:4px;flex-wrap:wrap"></div>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
       <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Swap teams</button>
@@ -452,7 +467,8 @@ async function loadRefs(){
   try{ HERO_ICON=await (await fetch('hero_icons.json',{cache:'no-store'})).json(); }catch(e){ HERO_ICON={}; }
   try{ LOCAL_REFS=await idbGetAll('refs'); for(const rec of LOCAL_REFS){ const t=refTemplate(rec); if(t) REFS.push(t); }
     for(const h of await idbGetAll('heroes')) CUSTOM_HEROES[h.g]={name:h.name, role:h.role};
-    const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; }catch(e){}
+    const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned';
+    fillBanPicker(); }catch(e){}
 }
 
 // ---------- load FACEIT team names for autocomplete ----------
@@ -1188,7 +1204,7 @@ async function finishScrimMap(c){
     code:activeScrimMap.code||null, map_name:c.map, map_category:c.map_category, map_guid:null,
     side_a_team:leftLabel, side_b_team:rightLabel, winner_side, score, result,
     profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
-    captured_at:new Date().toISOString(), bans:[], observations, crops:session.crops||null,
+    captured_at:new Date().toISOString(), bans:MAP_BANS.slice(), observations, crops:session.crops||null,
     scoreboard: sb, scrim:true };
   await idbPutScrimMap(rec);
   const wasQueued=activeScrimMap.queued;
@@ -1226,10 +1242,12 @@ async function renderScrimPanel(){
   if(saved && scrims.some(s=>s.id===saved)){ sel.value=saved; activeScrim=scrims.find(s=>s.id===saved); }
   else activeScrim=null;
   fillScrimForm();
+  renderBans();
   renderScrimMaps();
 }
 function fillScrimForm(){ const s=activeScrim||{};
   document.getElementById('scus').value=s.team_us||''; document.getElementById('scopp').value=s.opponent||'';
+  document.getElementById('scbans').checked=!!s.uses_bans;
   document.getElementById('scdate').value=s.date||''; document.getElementById('scnotes').value=s.notes||''; }
 async function onScrimPick(){
   const id=document.getElementById('scrimpick').value;
@@ -1254,6 +1272,38 @@ async function ensureScrim(){
   await renderScrimPanel();
   return activeScrim;
 }
+// ---------- hero bans ----------
+// Bans are optional per scrim: some teams play them, some do not, and a ban
+// control on a scrim that never bans is just noise. Stored per MAP rather than
+// per scrim, because a block can change its mind partway through and because
+// "what shifted when Sombra was banned" is a per-map question.
+let MAP_BANS = [];
+function usesBans(){ return !!(activeScrim && activeScrim.uses_bans); }
+function fillBanPicker(){
+  const sel=document.getElementById('banhero'); if(!sel) return;
+  const cat=heroCatalog().slice().sort((a,b)=>(a.n||'').localeCompare(b.n||''));
+  sel.innerHTML='<option value="">＋ add a ban…</option>'
+    + cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('');
+}
+function renderBans(){
+  const row=document.getElementById('banrow'); if(!row) return;
+  row.style.display = (usesBans() && session) ? '' : 'none';
+  const box=document.getElementById('banchips'); if(!box) return;
+  box.innerHTML = MAP_BANS.map((b,i)=>
+    `<span class="chip">${esc(b.n||heroName(b.g)||b.g)}${b.by?` <span class="faint">${esc(b.by)}</span>`:''}
+      <button class="ghost banx" data-i="${i}" title="Remove" style="padding:0 5px;line-height:1">×</button></span>`).join('')
+    || '<span class="status faint">none recorded</span>';
+  box.querySelectorAll('.banx').forEach(btn=>{ btn.onclick=()=>{ MAP_BANS.splice(+btn.dataset.i,1); renderBans(); }; });
+}
+function addBan(){
+  const sel=document.getElementById('banhero'), by=document.getElementById('banby');
+  const g=sel.value; if(!g) return;
+  if(!MAP_BANS.some(b=>b.g===g)){
+    MAP_BANS.push({g, n:heroName(g)||g, by:(by&&by.value)||null});
+  }
+  sel.value=''; renderBans();
+}
+
 // scrimLabel(): what an unnamed block is called in the picker, so it does not
 // read as a scrim against a team literally called "opponent".
 function scrimLabel(s){
@@ -1267,6 +1317,7 @@ async function saveScrim(){
   if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
   Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
     date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
+    uses_bans:!!document.getElementById('scbans').checked,
     updated_at:new Date().toISOString()});
   await idbPutScrim(activeScrim);
   localStorage.setItem('owdb_cap_scrim', activeScrim.id);
@@ -1318,18 +1369,22 @@ async function startScrimMap(){
   const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
   const code=(document.getElementById('scrimcode').value||'').trim();
   if(await refuseIfLeagueCode(code)) return;
+  MAP_BANS=[];
   activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1, queued:false};
   document.getElementById('scrimcode').value=code;
   startScrimSession(scrimPseudoCode());
+  renderBans();   // after the session exists - the row keys off it
   toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
 }
 async function startQueuedMap(m){
   await ensureScrim();
   if(session){ toast('finish the current map first','warn'); return; }
   if(await refuseIfLeagueCode(m.code)) return;
+  MAP_BANS=[];
   activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
   document.getElementById('scrimcode').value=m.code||'';
   startScrimSession(scrimPseudoCode());
+  renderBans();   // after the session exists - the row keys off it
   toast('<b>'+esc(m.map_name)+'</b> started from queue'+(m.code?' \u00B7 '+esc(m.code):'')+' \u2014 capture, then Finish + save','ok');
 }
 function buildScrimMapOptions(){
@@ -1767,6 +1822,12 @@ document.getElementById('detectsides').onclick=async()=>{
   if(!session){ snapMsg('start a map first',true); return; }
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ snapMsg('share your screen and calibrate first',true); return; }
   session.sideResolved=false; await ensureSideResolved(); };
+document.getElementById('banhero').onchange=addBan;
+document.getElementById('scbans').onchange=async()=>{
+  if(activeScrim){ activeScrim.uses_bans=document.getElementById('scbans').checked;
+    await idbPutScrim(activeScrim); }
+  renderBans();
+};
 document.getElementById('oppwrong').onclick=onOpponentWrong;
 document.getElementById('oppname').onclick=onOpponentName;
 document.getElementById('screxport').onclick=exportScrims;

@@ -434,3 +434,34 @@ def test_fix_reads_opens_the_panel_it_fills() -> None:
         assert "herocard" in body and ".open=true" in body.replace(" ", ""), (
             f"{page.name}: fixReads no longer opens the panel it fills"
         )
+
+
+def test_hero_bans_are_optional_per_scrim() -> None:
+    """Some teams scrim with hero bans and some do not.
+
+    A ban control on a scrim that never bans is noise, so it is off by default
+    and the setting lives on the scrim record rather than being global.
+    """
+    html = APP.read_text(encoding="utf-8")
+    assert 'id="scbans"' in html, "no per-scrim bans toggle"
+    assert 'id="banrow"' in html, "no ban control"
+    assert "uses_bans" in html, "the toggle is not persisted on the scrim"
+    assert "function usesBans()" in html
+
+
+def test_bans_are_recorded_per_map_not_per_scrim() -> None:
+    """A block can start banning partway through, and "what shifted when this
+    hero was banned" is a per-map question."""
+    html = APP.read_text(encoding="utf-8").replace(" ", "")
+    assert "bans:MAP_BANS.slice()" in html, "bans are not saved onto the map record"
+    # Reset per map, or the second map inherits the first map's bans.
+    assert html.count("MAP_BANS=[];") >= 2, "MAP_BANS is not reset when a map starts"
+
+
+def test_a_ban_can_record_who_banned_it() -> None:
+    """'They banned it' and 'it was banned on them' are different situations -
+    averaging them hides both, which is why the league Scout page splits them."""
+    html = APP.read_text(encoding="utf-8")
+    assert 'id="banby"' in html
+    for who in ('value="us"', 'value="them"'):
+        assert who in html, f"ban attribution is missing {who}"
