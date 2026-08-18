@@ -174,18 +174,38 @@ canonical and this copy is the bug.
    everywhere except FACEIT Masters, and the tool takes about a minute per map,
    so time is not the problem. The named friction fixes are **delivered**: the
    guided first-capture tour, auto-calibrate confidence preview, and contributor
-   impact card (2026-08-04); the capture-funnel callout (2026-08-09); and
-   league-wide click-to-codes (2026-08-09). The priority remains to **iterate on
-   adoption** — watch where new scouts stall and remove the next friction.
-   Remaining P2 items: NA Advanced seeding (one line in `matches.txt`), and
+   impact card (2026-08-04); the capture-funnel callout (2026-08-09);
+   league-wide click-to-codes (2026-08-09); and **player attribution**
+   (2026-08-18) — captures now say which FACEIT player is in which HUD slot,
+   which had never worked. The priority remains to **iterate on adoption** —
+   watch where new scouts stall and remove the next friction. Remaining P2
+   items: NA Advanced seeding (one line in `matches.txt`), and
    `--external-data` page splitting only if page weight grows.
-2. **Scrim mode, phases 2–6.** Phases 0 (shared capture engine extraction) and
-   1 (un-pause, session scaffold, league-code block, wipe-date check, manual
-   add) are **delivered** — scrims are capturable now; see `ARCHITECTURE.md`
-   §7. What remains, per `specs/2026-08-12-scrim-mode-design.md`: opponent
-   identification and roster search (2); the stats read plus a workshop
-   hero-glyph reference set (3); the viewer (4); sync and sharing (5); auto map
-   detection (6).
+
+   Shipped WITHOUT scrim mode, deliberately: the release branched at the last
+   commit of the shared-engine extraction (scrim mode phase 0), so the engine
+   and the attribution work went live while everything scrim-facing stayed on
+   `scrim-mode`. That seam is reusable — phase 0 is a pure refactor plus fixes,
+   and nothing above it is.
+
+2. **Scrim mode, phases 2–6.** Mind the split between what is BUILT and what is
+   IN PRODUCTION, because they differ:
+
+   - **Phase 0** (shared capture engine extraction) is built *and shipped* —
+     merged to `main` on 2026-08-18 with the player-attribution work.
+   - **Phase 1** (un-pause, session scaffold, league-code block, wipe-date
+     check, manual add) is built on `scrim-mode` and **not shipped**. In
+     production `docs/capture/scrim.html` still renders the unconditional
+     `#scrimpaused` overlay that no script removes (commit `f2881cf`), so
+     scrims remain switched off for everyone but this branch.
+   - Also built here, unshipped: phase 2a (opponent identification) and phase
+     4's analysis half (the scrims viewer at parity with league Scout).
+
+   What remains, per `specs/2026-08-12-scrim-mode-design.md`: the rest of
+   opponent identification and roster search (2); the stats read plus a
+   workshop hero-glyph reference set (3); the viewer's Players tab (4); sync
+   and sharing (5); auto map detection (6). See `ARCHITECTURE.md` §7.
+
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.
 4. **Statistical capture recommendations** — **delivered**. Iterate: the

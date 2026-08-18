@@ -17,8 +17,7 @@ rn/m, whole-name failures). These curves rank the thresholds and validate the
 logic; they do not predict field accuracy. Replace them with measured reads once
 capture sessions have populated playersRaw (design doc 7).
 
-Re-run it when the season turns over or the rosters grow, exactly as with the
-3-of-5 bar in tools/roster_match_eval.py.
+Re-run it when the season turns over or the rosters grow.
 
     .venv/Scripts/python.exe tools/assign_eval.py
 

@@ -16,8 +16,13 @@ When OCR cannot read the names, it returns nothing. Stylised Battle.net names
 make this common — `The best in the west` fields `ÄL7ÖTĦÌ` and `Mź7w`, which
 `tessedit_char_whitelist` (plain ASCII) can only ever render approximately.
 
-The result is that hero observations are captured with no player attached, which
-is why `comp_slots.player_id` is **0 of 1620 rows**.
+The result is that hero observations are captured with no player attached.
+
+(An earlier draft of this document cited `comp_slots.player_id` being 0 of 1620
+rows as evidence. That figure is from the local `owscout.sqlite3`, whose captures
+**predate the attribution feature entirely** — see the field-notes on the desktop
+app's `read_hud_names`, which reads the same HUD correctly. It is not evidence
+for anything here, and the case below does not need it.)
 
 ## 2. The insight
 
@@ -111,8 +116,7 @@ geometry against a located row:
   located row           77/90              90/90        0
 ```
 
-That is very likely why `comp_slots.player_id` was 0 of 1620 historically, and it
-means the 2026-08-16 live session's 6/10 was measuring the crop, not the
+It means the 2026-08-16 live session's 6/10 was measuring the crop, not the
 resolver.
 
 The fix is `engine/frames.js nameRow()`: find the name row once **per side**
@@ -184,8 +188,8 @@ lineups: { "<match_id>:<game_no>": { <team_id>: {
              name, players: [{id, nick, game_name, role}] } } }
 ```
 
-Additive because `rosters` is consumed by `engine/opponents.js`
-(`buildTeamIndex`) for scrim opponent identification, which wants the
+Additive because `rosters` is consumed by scrim opponent
+identification, which wants the
 *accumulated* squad. Both shapes are correct for their own consumer; neither
 should be bent to serve the other. `lineups` is emitted only for coded games, so
 the size cost is bounded by the code list.
@@ -306,8 +310,7 @@ pool discriminates a pair with no name signal at all. It is cold-start today
 - `names.test.js`: transliteration cases from §4.4.
 - pytest: the feed emits `lineups` with roles; per-game keying holds; the
   existing capture-attribution suite still passes.
-- `tools/assign_eval.py` re-runnable, in the shape of `tools/roster_match_eval.py`
-  — re-run it when rosters change, exactly as with the 3-of-5 bar.
+- `tools/assign_eval.py` re-runnable — re-run it when rosters change.
 - `frames.test.js`: the locator prefers the name row over the brighter health
   bars below it and the busier portrait art above it, survives a bright scene
   behind the HUD, and returns null on a featureless band rather than inventing a

@@ -590,8 +590,7 @@ load, capture continues without name attribution rather than breaking.
 fitted to the *portraits*, and the fixed band underneath it that the crop used
 to assume (48-90% of cell height) straddles the portrait bottom, the name and
 the health bar on a real frame - so the brightest thing in the crop was the
-health bar and the reads came back as letter-soup. That is the likeliest reason
-`comp_slots.player_id` was 0 of 1620 historically. `engine/frames.js nameRow()`
+health bar and the reads came back as letter-soup. `engine/frames.js nameRow()`
 now locates the name row **once per side, across the whole five-slot strip**,
 and all five crops use it. Per slot it cannot be done: the hero portrait sits
 inside the cell *above* the name and its art is transition-dense, and a long
@@ -626,7 +625,7 @@ Without it the identical resolver produced 33.6% *wrong* attributions once the
 reads degraded to noise, because uniform noise reliably manufactures a score
 lead between two candidates. `tools/assign_eval.py` measures all of this against
 every real lineup with ground truth known by construction; re-run it when the
-rosters grow, the way `tools/roster_match_eval.py` backs the 3-of-5 bar.
+rosters grow.
 
 **Its corruption model understates the win, and `tools/real_frame_eval/` shows
 why.** Run against real tesseract output on real HUD frames — ground truth taken
@@ -1073,7 +1072,7 @@ substitution inflates it — 610 of 2260 real match-teams (27%) carry more than
 five players. Player assignment needs an *exact cover* of five over five slots;
 hand it six and the damage group has three candidates for two slots, so the role
 constraint stops constraining and a substitute who never played that game becomes
-a candidate for it. Scrim opponent identification (`engine/opponents.js`) wants
+a candidate for it. Scrim opponent identification wants
 the opposite — the accumulated squad, because a season's stand-ins are what still
 identify a lineup when two players are on smurfs. Two consumers, two correct
 shapes; neither should be bent to serve the other.
