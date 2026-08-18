@@ -69,6 +69,32 @@ Confirmed live the same day: code `3DQNHD` on Oasis tagged 10/10 with none wrong
 and none abstained, where the same code managed 6/10 with four abstentions before
 the fix.
 
+## Cropping to the glyphs, and what it costs (2026-08-19)
+
+The crop padded each portrait cell by 5% of its width per side, which on a
+tight HUD reaches into the NEIGHBOURING name plate and drags its border in.
+Tesseract reads those bars as `|`, `i`, `§` or `}` - a legible `ASHBORN`
+arriving as `§ ASHBORN |}`. Cropping to the glyph run instead, over twelve
+frames with known truth (`tightcrop_eval.py`, scored by `tightcrop_score.js`):
+
+```
+  pad     75/120 exact   92/120 resolve   57 stray characters
+  tight  110/120 exact  111/120 resolve    2 stray characters
+```
+
+**It is not free, and the exception is worth knowing.** `PROXY` - already the
+harness's pathological slot - reads correctly in 5 of 8 frames when the crop is
+wide and only 2 of 8 when it is tight. A margin sweep says the margin is not
+the cause: 4px through 16px all give 2/8, and 20px gives 3/8. Tesseract simply
+does better on that particular glyph sequence with more surrounding context,
+which is the opposite of what the other ten names want.
+
+Tight still wins by a wide margin overall, and `PROXY` is exactly the slot
+`assign.js` recovers by elimination anyway - that recovery is why the resolver
+exists. But "no frame got worse" is a frame-level statement, not a slot-level
+one, and a future change here should re-run the sweep rather than assume the
+trade-off has stayed the same shape.
+
 ## The locator, and the two attempts that failed first
 
 All five of a team's names share one row, so the row is found **once per side
