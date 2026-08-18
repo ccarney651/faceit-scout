@@ -16,7 +16,7 @@
 <meta name="description" content="Private scrim scouting: share your screen, calibrate once, and capture team comps round-by-round. Stays on your browser — never published.">
 <meta name="theme-color" content="#0d1015">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self' data: https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src blob: https://cdn.jsdelivr.net; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self' data: https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src blob: https://cdn.jsdelivr.net; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="stylesheet" href="../theme.css">
 <style>
   :root{--blue:#5a9bd8;--red:#e9694f}
@@ -374,7 +374,11 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script>
+const {normName, simScore, affinity, confidentOrientation,
+       AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
+const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
+       toast, uiModal, uiConfirm} = OWDBUtil;
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45;
 let HERO_ICON={};
@@ -405,51 +409,7 @@ if(!HAS_CAPTURE){
     : "This page isn't a secure context, so screen capture is blocked \u2014 open it from the site (https) or a localhost server.";
   const sb=document.getElementById('share'); if(sb) sb.disabled=true;
 }
-function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-
-const ICONS={
-  info:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.9" r="1.1" fill="currentColor"/></svg>',
-  ok:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 8.2l2 2 3.6-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  warn:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.3l6 10.4H2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.6v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.1" r="1" fill="currentColor"/></svg>',
-  bad:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
-  sparkle:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
-  overlay:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg>',
-  swap:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  nophone:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="4" y="2" width="8" height="12" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 11.5h3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 2l12 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'};
-function ico(n){ return ICONS[n]||''; }
-function toast(msg,kind,ms){ kind=kind||'info'; ms=ms||5200;
-  let host=document.getElementById('toasts'); if(!host){ host=document.createElement('div'); host.id='toasts'; document.body.appendChild(host); }
-  const t=document.createElement('div'); t.className='toast '+kind;
-  t.innerHTML='<span class="ti">'+(ICONS[kind]||ICONS.info)+'</span><span>'+msg+'</span>';
-  host.appendChild(t);
-  const kill=()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),280); };
-  const timer=setTimeout(kill,ms);
-  t.onclick=()=>{ clearTimeout(timer); kill(); };
-  return t; }
-function uiModal(opts){ return new Promise(res=>{
-  const back=document.getElementById('mback'); back.innerHTML='';
-  const m=document.createElement('div'); m.className='modal';
-  if(opts.title){ const h=document.createElement('h3'); h.textContent=opts.title; m.appendChild(h); }
-  const body=document.createElement('div'); body.className='mbody';
-  if(opts.bodyHtml) body.innerHTML=opts.bodyHtml; else if(opts.body) body.textContent=opts.body;
-  m.appendChild(body);
-  const row=document.createElement('div'); row.className='mrow';
-  const done=v=>{ back.classList.remove('open'); back.innerHTML=''; document.removeEventListener('keydown',onkey,true);
-    if(!opts.collect){ res(v); return; }
-    const fields={}; m.querySelectorAll('input,select,textarea').forEach(el=>{ fields[el.id]=el.value; }); res({value:v, fields}); };
-  const acts=opts.actions||[{label:'OK',value:true}];
-  acts.forEach(a=>{ const b=document.createElement('button'); b.type='button'; b.textContent=a.label; if(a.ghost) b.className='ghost'; b.onclick=()=>done(a.value); row.appendChild(b); });
-  m.appendChild(row); back.appendChild(m); back.classList.add('open');
-  const onkey=e=>{ if(e.key==='Escape'){ e.stopPropagation(); done(opts.escapeValue!==undefined?opts.escapeValue:null); } };
-  document.addEventListener('keydown',onkey,true);
-  const primary=row.lastChild;
-  m.querySelectorAll('input').forEach(inp=>inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); primary.click(); } }));
-  const first=m.querySelector('input,select'); if(first) first.focus(); }); }
-function uiConfirm(msg,title){ return uiModal({title:title||'Are you sure?', body:msg, escapeValue:false,
-  actions:[{label:'Cancel',value:false,ghost:true},{label:'Confirm',value:true}] }); }
-
-// ---------- load refs ----------
+// ---------- load refs (esc/css/scl/ico/evp/b64bytes/bytesToB64/isTyping/toast/uiModal/uiConfirm now in engine/util.js) ----------
 async function loadRefs(){
   try{ const rj=await (await fetch('refs.json',{cache:'no-store'})).json();
     REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction;
@@ -502,30 +462,9 @@ async function buildLearnedRosters(){
     }
   }
   const out={}; for(const k in rosters) out[k]=[...rosters[k]]; return out; }
-const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=2;
-function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
-  for(let i=ai;i<aj;i++){ const nj={};
-    for(let j=bi;j<bj;j++){ if(a[i]===b[j]){ const k=(j2[j-1]||0)+1; nj[j]=k;
-      if(k>best){besti=i-k+1;bestj=j-k+1;best=k;} } } j2=nj; }
-  let tot=best;
-  if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
-  return tot; }
-function simScore(a,b){ a=(a||'').toLowerCase().trim(); b=(b||'').toLowerCase().trim();
-  const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }
-function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
-  let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
-function confidentOrientation(leftNames,rightNames,aRoster,bRoster){
-  const direct=affinity(leftNames,aRoster)+affinity(rightNames,bRoster);
-  const swap=affinity(leftNames,bRoster)+affinity(rightNames,aRoster);
-  let got,lead,rosters;
-  if(direct>=swap){ got='a'; lead=direct-swap; rosters=[aRoster,bRoster]; }
-  else { got='b'; lead=swap-direct; rosters=[bRoster,aRoster]; }
-  if(lead<AUTO_SIDE_MARGIN) return null;
-  let strong=0; const sides=[leftNames,rightNames];
-  for(let k=0;k<2;k++) for(const n of sides[k]){ if(!n) continue;
-    let best=0; for(const r of rosters[k]) best=Math.max(best,simScore(n,r));
-    if(best>=STRONG_NAME_SCORE) strong++; }
-  return strong>=MIN_STRONG_NAMES ? got : null; }
+// normName/simScore/affinity/confidentOrientation and the
+// AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/MIN_STRONG_NAMES constants live in
+// engine/names.js now (shared with index.html).
 async function detectScrimSides(){
   const c=selectedCode(); if(!c) return {left:null, source:null};
   const names=await readHudNames(); if(!names) return {left:null, source:null};
@@ -560,23 +499,34 @@ function scrimPseudoCode(){ return activeScrim&&activeScrimMap ? {
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
+// ensureWork/grabFrame/grayCanvas/cellGrayPadded/nameCanvas/detectContentRect/
+// stopCapture/togglePreview/readyForCapture now live in engine/frames.js
+// (shared with index.html). stopCapture's teardown is page-specific -
+// index.html releases its live-scouting claim (a system scrims don't have),
+// so onStop is null here and releaseClaim on index.html.
+const frames=OWDBFrames.make({doc:document, video:vid, onStop:null});
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
-function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
-function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
-function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
+// autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
+// clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
+// live in engine/calibration.js (shared with index.html), including this
+// page's scoreboard/score_readout box handling in drawOverlay/pickBox.
+// boxKeys lists every box key this page owns/shows UI for.
+const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx, boxKeys:['a','b','scoreboard','score_readout']});
+const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
+       clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
+// addRef/bestMatch/matchCrop/learnCrop/refTemplate/exportRefs/importRefs/
+// clearLearnedRefs/heroCatalog/heroName/heroSlug/heroPortrait/onlyLostKnown/
+// ocrWorker now live in engine/refs.js (shared with index.html). REF_W/REF_H/
+// PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON and
+// _ocrWorker/_ocrLoading stay page-level globals - see engine/refs.js's
+// header for why, and for why this page's own readScoreboard()/
+// ocrTextFromImage() (further down) still reconfigure the shared worker's
+// pageseg_mode per call instead of that living in the shared module.
+const refs=OWDBRefs.make({doc:document});
+const {addRef, bestMatch, matchCrop, learnCrop, refTemplate, exportRefs, importRefs,
+       clearLearnedRefs, heroCatalog, heroName, heroSlug, heroPortrait, onlyLostKnown, ocrWorker}=refs;
 addEventListener('resize', fitOverlay);
-function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scl();
-  // During a calibration preview, draw the PROPOSED boxes (accent, dashed)
-  // instead of the committed ones — the scout reviews the candidate placement
-  // before committing it.
-  const src=pendingCal?pendingCal.boxes:boxes;
-  for(const side of ['a','b']){ const b=src[side]; if(!b) continue;
-    octx.strokeStyle=pendingCal?css('--accent'):(side==='a'?css('--blue'):css('--red')); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
-    octx.setLineDash(pendingCal?[4,3]:[3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
-  for(const side of ['scoreboard','score_readout']){ const b=boxes[side]; if(!b) continue;
-    octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s); }
-  if(dragS&&dragC){ octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); } }
-function evp(e){ const r=ov.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
@@ -589,76 +539,13 @@ ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s
   document.getElementById('calhint').textContent=t; setStageHint(t);
   drawOverlay(); updateBtns(); if(done) selfTest(); });
 function setStageHint(html){ const e=document.getElementById('stagehint'); if(e) e.innerHTML=html; }
-function calOk(bx){ const comp=readComp(bx); if(!comp) return null; return [...comp.a,...comp.b].filter(s=>s.score>=0.55).length; }
-function calMsg(ok){ return ok>=8?`<span class="ok">calibration looks good \u2014 ${ok}/10 portraits recognised.</span>`
-    : ok>=5?`calibration: ${ok}/10 recognised \u2014 usable; nudge the boxes if some read ??.`
-    : `<span class="warn">only ${ok}/10 recognised \u2014 boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`; }
 function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const ok=calOk(boxes); if(ok==null) return;
   const msg=calMsg(ok); document.getElementById('calhint').innerHTML=msg; setStageHint(msg); }
-const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
-function detectContentRect(){ const W=vid.videoWidth,H=vid.videoHeight; if(!W) return {x:0,y:0,w:W,h:H};
-  const sw=Math.min(320,W), sh=Math.max(1,Math.round(H*sw/W));
-  const cv=document.createElement('canvas'); cv.width=sw; cv.height=sh; const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(vid,0,0,sw,sh);
-  const d=cx.getImageData(0,0,sw,sh).data, BLACK=24;
-  const rowMax=y=>{let m=0;for(let x=0;x<sw;x++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
-  const colMax=x=>{let m=0;for(let y=0;y<sh;y++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
-  const cY=Math.floor(sh*0.2), cX=Math.floor(sw*0.2);
-  let t=0; while(t<cY&&rowMax(t)<BLACK)t++; let b=sh-1; while(b>sh-1-cY&&rowMax(b)<BLACK)b--;
-  let l=0; while(l<cX&&colMax(l)<BLACK)l++; let r=sw-1; while(r>sw-1-cX&&colMax(r)<BLACK)r--;
-  const sx=W/sw, sy=H/sh; return {x:l*sx,y:t*sy,w:(r-l+1)*sx,h:(b-t+1)*sy};
-}
-function boxesFromStrips(R,dx,dy){ const o={}; for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s];
-  o[s]={x:R.x+(fx+dx)*R.w, y:R.y+(fy+dy)*R.h, w:fw*R.w, h:fh*R.h}; } return o; }
-function scoreBoxes(frame, bxs){ ensureWork(); let sum=0;
-  for(const side of ['a','b']){ const b=bxs[side];
-    for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      sum += bestMatch(cellGrayPadded(frame,cell), side, true).score; } }
-  return sum; }
-let pendingCal=null;   // {boxes, ok} — candidate placement awaiting the scout's confirmation
-function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share your screen first.</span>';
-    document.getElementById('calhint').innerHTML=w; setStageHint(w); return; }
-  const R=detectContentRect();
-  let best=boxesFromStrips(R,0,0);
-  if(REFS.length){ const frame=grabFrame(); let bestScore=scoreBoxes(frame,best);
-    for(let dyi=-8;dyi<=8;dyi++) for(let dxi=-2;dxi<=2;dxi++){ if(!dyi&&!dxi) continue;
-      const cand=boxesFromStrips(R, dxi*0.01, dyi*0.01), sc=scoreBoxes(frame,cand);
-      if(sc>bestScore){ bestScore=sc; best=cand; } } }
-  for(const extra of ['scoreboard','score_readout']) if(boxes[extra]) best[extra]=boxes[extra];
-  // Preview BEFORE commit: show where the boxes WOULD go and how confident the
-  // read is, so a bad placement is rejected instead of silently saved. Nothing
-  // is written until the scout clicks "Use these boxes".
-  pendingCal={boxes:best, ok:calOk(best)};
-  renderCalPreview(); drawOverlay(); }
-function renderCalPreview(){ const p=document.getElementById('calpreview'); if(!p||!pendingCal) return;
-  const ok=pendingCal.ok, head=ok==null?`Auto-calibrate found the boxes \u2014 review the placement below.`
-    : ok>=8?`<span class="ok">${ok}/10 portraits confident \u2014 this looks right.</span>`
-    : ok>=5?`${ok}/10 portraits confident \u2014 usable, but check the boxes below.`
-    : `<span class="warn">only ${ok}/10 portraits confident \u2014 the placement is likely off.</span>`;
-  p.querySelector('.calprev-msg').innerHTML=head;
-  p.style.display='block';
-  document.getElementById('calhint').innerHTML=head; setStageHint(head); }
-function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal=null;
-  localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes));
-  const p=document.getElementById('calpreview'); if(p) p.style.display='none';
-  drawOverlay(); updateBtns(); selfTest(); }
-function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
-function clearCalPreview(){ pendingCal=null; const p=document.getElementById('calpreview'); if(p) p.style.display='none'; drawOverlay(); }
-function stopCapture(){ clearCalPreview(); if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
-  drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
-function pickBox(side){ clearCalPreview(); drawMode=side;
-  const t = side==='a' ? 'Drag a box over the 5 BLUE (left) portraits.'
-    : side==='b' ? 'Drag a box over the 5 RED (right) portraits.'
-    : side==='scoreboard' ? 'Drag a box over the scrim scoreboard panel (top-left, below the portraits).'
-    : 'Drag a box over the top-centre score readout (e.g. 2 - 3).';
-  document.getElementById('calhint').textContent=t; setStageHint(t); }
-function enterFsCal(){ const s=document.getElementById('stage'); if(s.requestFullscreen) s.requestFullscreen().catch(()=>{}); }
 document.addEventListener('fullscreenchange',()=>{ setTimeout(()=>{ fitOverlay(); drawOverlay(); }, 60);
   // The tour panel is outside the fullscreen node, so it would vanish during
   // fullscreen calibration — hide it there, bring it back on exit.
   const t=document.getElementById('tour'), fs=!!(document.fullscreenElement);
   if(t){ t.style.display = (fs||tourIdx<0) ? 'none' : 'block'; } });
-function togglePreview(){ const L=document.getElementById('layout'); L.classList.toggle('nopreview');
-  document.getElementById('hidep').textContent=L.classList.contains('nopreview')?'Show preview':'Hide preview'; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     clearCalPreview();
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
@@ -690,7 +577,6 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   document.getElementById('finish').disabled=!(session&&session.snaps.length);
   maybeAutoPop(); updateGuide(); }
 let _firstVisit=null;
-function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit; return (_firstVisit=!(boxes.a&&boxes.b)); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> \u2014 open this on your PC (you scout while watching Overwatch).'; return; }
   const fv=isFirstVisit();
@@ -714,7 +600,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
 // scrim flow: no replay-code or publish step — set up a scrim map and save.
 // Separate dismissal key so completing the League tour doesn't suppress this one.
 const TOUR_KEY='owdb_tour_done_scrim';
-let tourSteps=[], tourIdx=-1;
+let tourIdx=-1;
 function tourDefs(){
   return [
     {t:"Let's capture your first scrim map", target:null, btn:'Start',
@@ -737,70 +623,19 @@ function tourDefs(){
       done:()=>false}
   ];
 }
-function tourHighlight(targetId){
-  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
-  if(!targetId) return;
-  const el=document.getElementById(targetId); if(!el) return;
-  el.classList.add('tour-highlight');
-  try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
-}
-function tourRender(){
-  const t=document.getElementById('tour'), s=tourSteps[tourIdx]; if(!t||!s) return;
-  t.querySelector('.tour-count').textContent=(tourIdx+1)+' / '+tourSteps.length;
-  t.querySelector('.tour-title').textContent=s.t;
-  t.querySelector('.tour-body').innerHTML=s.body;
-  const nxt=t.querySelector('#tourNext');
-  nxt.textContent=s.btn||'Next';
-  // Back arrow: only once there's a step behind you.
-  t.querySelector('#tourPrev').style.visibility=(tourIdx===0)?'hidden':'visible';
-  tourHighlight(s.target);
-}
-function tourOpen(){
-  tourSteps=tourDefs();
-  tourIdx=tourSteps.findIndex(s=>!s.done());   // resume at first incomplete step
-  if(tourIdx<0){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  const t=document.getElementById('tour'); t.classList.add('open'); t.style.display='block';
-  tourRender();
-}
-function tourDone(silent){
-  localStorage.setItem(TOUR_KEY,'1');
-  const t=document.getElementById('tour'); if(t){ t.classList.remove('open'); t.style.display='none'; }
-  tourHighlight(null);
-  if(!silent) toast('Tour closed \u2014 the <b>How it works</b> card above has the same steps any time.','info');
-}
-let tourManualAt=0;   // last manual prev/next click — pauses auto-advance briefly so a reviewed step doesn't bounce forward instantly
-function tourNext(){ if(tourIdx>=0&&tourIdx<tourSteps.length-1){ tourIdx++; tourManualAt=Date.now(); tourRender(); } else { tourDone(true); } }
-function tourPrev(){ if(tourIdx>0){ tourIdx--; tourManualAt=Date.now(); tourRender(); } }
-function tourTick(){
-  if(tourIdx<0) return;
-  if(Date.now()-tourManualAt<2500) return;   // grace period after a manual step
-  if(tourSteps[tourIdx].done()) tourNext();   // auto-advance as each action happens
-}
-function maybeShowTour(){
-  if(!HAS_CAPTURE) return;
-  if(localStorage.getItem(TOUR_KEY)==='1') return;
-  // A returning scrimmer who already saved maps is clearly not new — never tour.
-  if(activeScrim&&activeScrimMap){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  tourOpen();
-}
+// Mechanism now lives in engine/tour.js (shared with index.html). tourDefs
+// above stays page copy; skipIf is this page's policy (a returning scrimmer
+// who already saved a map is clearly not new - see that module's header for
+// why this isn't branched on inside it). No firstVisitExtra here - unlike
+// index.html, this page has no "name" concept.
+const tour=OWDBTour.make({doc:document, steps:tourDefs(), tourKey:TOUR_KEY,
+  skipIf:()=>!!(activeScrim&&activeScrimMap)});
+const {open:tourOpen, next:tourNext, prev:tourPrev, render:tourRender, tick:tourTick,
+       highlight:tourHighlight, done:tourDone, isFirstVisit, maybeShow:maybeShowTour}=tour;
 
-// ---------- matcher ----------
-const work=document.createElement('canvas'); let wctx;
-function ensureWork(){ work.width=REF_W+2*PAD; work.height=REF_H+2*PAD; wctx=work.getContext('2d',{willReadFrequently:true}); }
-function cellGrayPadded(frame, cell){ const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  wctx.drawImage(frame,fx,fy,fw,fh,0,0,work.width,work.height);
-  const d=wctx.getImageData(0,0,work.width,work.height).data, g=new Float32Array(work.width*work.height);
-  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; return g; }
-function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
-  const offs = fast ? [PAD] : [0,PAD,2*PAD];
-  for(const dy of offs) for(const dx of offs){ const cand=new Float32Array(REF_W*REF_H); let m=0;
-    for(let y=0;y<REF_H;y++){ const s=(y+dy)*W+dx; for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
-    m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
-    for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
-  return best; }
-function grabFrame(){ const c=document.createElement('canvas'); c.width=vid.videoWidth; c.height=vid.videoHeight; c.getContext('2d').drawImage(vid,0,0); return c; }
-function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
-function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
+// bestMatch/heroSlug/heroPortrait now live in engine/refs.js (shared with
+// index.html) - see that file's header for the bestMatch/importRefs
+// cosmetic-only-divergence finding and the ocrWorker real one.
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
 function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
@@ -811,27 +646,8 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
       if(host){ const row=document.createElement('div'); row.className='slot';
         row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">\u2014</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
-// ---------- hero recognition ----------
-function bytesToB64(u8){ let s=''; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s); }
-function refTemplate(rec){ const px=b64bytes(rec.d); if(px.length!==REF_W*REF_H) return null;
-  let m=0; for(let i=0;i<px.length;i++) m+=px[i]; m/=px.length;
-  const c=new Float32Array(px.length); let ss=0; for(let i=0;i<px.length;i++){ c[i]=px[i]-m; ss+=c[i]*c[i]; }
-  return {n:rec.n, g:rec.g, v:rec.v, c, norm:Math.sqrt(ss)||1, local:true}; }
-async function addRef(rec){ if(!rec.id) rec.id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
-  const t=refTemplate(rec); if(!t) return false;
-  LOCAL_REFS.push(rec); REFS.push(t); try{ await idbPutIn('refs',rec); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; return true; }
-function learnCrop(side,i){ const b=boxes[side]; const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-  const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  const cv=document.createElement('canvas'); cv.width=REF_W; cv.height=REF_H;
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(grabFrame(), fx,fy,fw,fh, 0,0,REF_W,REF_H);
-  const d=cx.getImageData(0,0,REF_W,REF_H).data, px=new Uint8Array(REF_W*REF_H);
-  for(let j=0,k=0;j<d.length;j+=4,k++) px[k]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
-  return bytesToB64(px); }
-function heroCatalog(){ const m={}; for(const r of REFS) if(r.g) m[r.g]=r.n;
-  for(const g in CUSTOM_HEROES) m[g]=CUSTOM_HEROES[g].name;
-  return Object.keys(m).map(g=>({g, n:m[g]})).sort((a,b)=>a.n.localeCompare(b.n)); }
+// refTemplate/addRef/learnCrop/heroCatalog now live in engine/refs.js
+// (shared with index.html).
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
@@ -877,17 +693,7 @@ async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i, wr
 }
 
 // ---------- review & correct a captured map ----------
-function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
-function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
-  for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
-  return bestMatch(gp, side); }
-function grayCanvas(b64, scale){ scale=scale||2; const px=b64bytes(b64);
-  const tmp=document.createElement('canvas'); tmp.width=REF_W; tmp.height=REF_H;
-  const im=tmp.getContext('2d').createImageData(REF_W,REF_H);
-  for(let i=0,j=0;i<px.length;i++,j+=4){ im.data[j]=im.data[j+1]=im.data[j+2]=px[i]; im.data[j+3]=255; }
-  tmp.getContext('2d').putImageData(im,0,0);
-  const cv=document.createElement('canvas'); cv.width=REF_W*scale; cv.height=REF_H*scale;
-  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false; cx.drawImage(tmp,0,0,cv.width,cv.height); return cv; }
+// heroName/matchCrop now live in engine/refs.js (shared with index.html).
 function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
   const opts='<option value="">\u2014 fix to\u2026 \u2014</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">\uff0b new hero\u2026</option>';
   for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
@@ -935,20 +741,8 @@ async function remapHero(rec, side, fromG, toG, host){ if(!toG) return;
   await saveReviewRec(rec);
   renderReview(rec, host); }
 async function saveReviewRec(rec){ await idbPutScrimMap(rec); }
-function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-  const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
-    refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
-  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }
-async function importRefs(file){ try{ const j=JSON.parse(await file.text());
-  if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size \u2014 skipped.','warn'); return; }
-  for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
-  let n=0; for(const r of (j.refs||[])){ if(r.d && r.g && r.v){ await addRef({n:r.n, g:r.g, v:r.v, d:r.d, added_at:Date.now()}); n++; } }
-  refMsg('imported '+n+' refs.','ok');
- }catch(e){ refMsg('import failed: '+(e.message||e),'warn'); } }
-async function clearLearnedRefs(){ if(!(await uiConfirm('Remove all learned refs? The built-in library stays; operator-added heroes are kept.','Clear learned refs'))) return;
-  REFS=REFS.filter(t=>!t.local); LOCAL_REFS=[]; try{ await idbClear('refs'); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent='0 learned'; refMsg('cleared learned refs.','ok'); }
+// exportRefs/importRefs/clearLearnedRefs now live in engine/refs.js (shared
+// with index.html).
 
 // ---------- capture session ----------
 let session=null, pipWin=null;
@@ -980,8 +774,7 @@ function refreshSession(){ if(!session) return;
     el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames,s.aPlayers)}  vs  ${fmt(s.bNames,s.bPlayers)}`; ol.appendChild(el); });
   updateBtns(); renderPipControls();
 }
-function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
-  for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
+// onlyLostKnown now lives in engine/refs.js (shared with index.html).
 function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:'';
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
@@ -1052,16 +845,15 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 }
 
 // ---------- IndexedDB ----------
-function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',4);
-  r.onupgradeneeded=()=>{ const db=r.result;
-    if(!db.objectStoreNames.contains('refs')) db.createObjectStore('refs',{keyPath:'id'});
-    if(!db.objectStoreNames.contains('heroes')) db.createObjectStore('heroes',{keyPath:'g'});
-    if(!db.objectStoreNames.contains('scrims')) db.createObjectStore('scrims',{keyPath:'id'});
-    if(!db.objectStoreNames.contains('scrim_maps')) db.createObjectStore('scrim_maps',{keyPath:'id'}); };
-  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-function idbGetAll(store){ return idb().then(db=>new Promise(res=>{ const rq=db.transaction(store,'readonly').objectStore(store).getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); })); }
-function idbPutIn(store,rec){ return idb().then(db=>new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); })); }
-function idbClear(store){ return idb().then(db=>new Promise(res=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).clear(); tx.oncomplete=res; })); }
+// idb/idbGetAll/idbPutIn/idbClear now live in engine/idb.js (shared with
+// index.html); this page owns the store list (refs/heroes/scrims/
+// scrim_maps - it never touches 'maps', that store is index.html's) and
+// schema version (4, unchanged - see engine/idb.js for why touching it is
+// dangerous).
+const IDB_STORES={refs:'id', heroes:'g', scrims:'id', scrim_maps:'id'};
+const {getAll:idbGetAll, putIn:idbPutIn, clear:idbClear}=OWDBIdb;
+OWDBIdb.open(4, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadRefs() runs later, at the bottom of this script)
+function idb(){ return OWDBIdb.open(4, IDB_STORES); }
 function idbPutScrim(rec){ return idbPutIn('scrims',rec); }
 function idbPutScrimMap(rec){ return idbPutIn('scrim_maps',rec); }
 async function idbDelScrimMap(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('scrim_maps','readwrite'); tx.objectStore('scrim_maps').delete(id); tx.oncomplete=res; }); }
@@ -1095,35 +887,27 @@ async function readScoreboard(frame){
       out.readout=Scoreboard.parseScoreReadout((data.text||'')); }
     return out;
   }catch(e){ console.warn('scoreboard read skipped:',e); return null; } }
-let _ocrWorker=null, _ocrLoading=null;
-function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
-  if(_ocrLoading) return _ocrLoading;
-  _ocrLoading=(async()=>{
-    if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
-      s.crossOrigin='anonymous';
-      s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
-    const w=await Tesseract.createWorker('eng');
-    await w.setParameters({ tessedit_pageseg_mode:'7' });
-    _ocrWorker=w; return w; })();
-  return _ocrLoading; }
-// Name bar sits at ~48-90% of each portrait cell's height; grayscale + 6x upscale +
-// a light contrast stretch lift the ~10px text enough for OCR.
-function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
-  const sx=Math.max(0,cell.x-padX), sy=cell.y+cell.h*0.48, sw=cell.w+2*padX, sh=cell.h*0.42, sc=6;
-  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(sw*sc)); cv.height=Math.max(1,Math.round(sh*sc));
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(frame, sx,sy,sw,sh, 0,0,cv.width,cv.height);
-  const im=cx.getImageData(0,0,cv.width,cv.height), d=im.data;
-  for(let i=0;i<d.length;i+=4){ let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-    g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
-  cx.putImageData(im,0,0); return cv; }
+// ocrWorker now lives in engine/refs.js (shared with index.html) - it now
+// races a load timeout and clears its own cache on failure (index.html's
+// existing fix for a real hang bug: a stalled Tesseract.createWorker() used
+// to hang this page's OCR forever with no escape but a reload). It does NOT
+// set tessedit_char_whitelist - this page reuses the shared worker for
+// readScoreboard()/ocrTextFromImage() below (full sentences, spaces,
+// dashes), which a HUD-gamertag-only whitelist would break; see
+// engine/refs.js's header for the full reasoning. _ocrLoadFailed/
+// _ocrLoadError are new here (index.html already had them) - purely so the
+// shared ocrWorker() has somewhere to write; nothing on this page reads them
+// yet, same as this page carrying calibration.js's boxKeys entries for boxes
+// index.html doesn't set.
+let _ocrWorker=null, _ocrLoading=null, _ocrLoadFailed=false, _ocrLoadError=null;
 async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return null;
   const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
+    // Found once per side, not per slot - see the same call in index.html
+    // ocrNames() and engine/frames.js nameRow() for why.
+    const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      const {data}=await w.recognize(nameCanvas(frame,cell));
+      const {data}=await w.recognize(nameCanvas(frame,cell,row));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       snapMsg('reading HUD names… '+(++done)+'/10'); } }
   return out; }
@@ -1471,42 +1255,18 @@ async function importSessionFromScreenshot(file){
 }
 
 // ---------- pop-out overlay ----------
-function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; const d=pipWin.document;
-  const main=d.getElementById('prow-main'), side=d.getElementById('prow-side'),
-    sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'); if(!main) return;
-  const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
-  main.className='prow'; main.innerHTML='';
-  mk(main,'\u25C9 Snapshot',()=>snapshot(false),'go');
-  mk(main,'Round \u25B8',nextRound); mk(main,'\u21B6 Undo',undo); mk(main,'\u2713 Finish',()=>finishMap(),'fin');
-  side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
-  const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
-  mk(side,'\u21C4 Swap L/R',swapSides);
-  sub.innerHTML='';
-  if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
-    const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map \u2014 pick one \u25B8'; sub.appendChild(l);
-    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
-  else sub.className='prow';
-  atk.innerHTML='';
-  if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
-    atk.className='prow'+(needsConfirm?' warn':'');
-    const l=d.createElement('span'); l.className='lbl';
-    l.textContent='Attack R'+session.round+(needsConfirm?' \u2014 confirm \u25B8':''); atk.appendChild(l);
-    const {leftName,rightName}=sideNames();
-    const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
-      if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
-      else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
-      b.onclick=()=>setAttacker(side); atk.appendChild(b); };
-    mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
-  else atk.className='prow';
-}
-// Reads the palette currently active on this page (via getComputedStyle, not
-// a guessed token table) so the floating overlay always matches — including
-// palettes added after this code was written.
-function pipColors(){ const cs=getComputedStyle(document.documentElement); const v=n=>cs.getPropertyValue(n).trim();
-  return {bg:v('--bg'),surface2:v('--surface2'),fg:v('--fg'),muted:v('--muted'),line:v('--line'),line2:v('--line2'),
-    accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
-function pipPanelCss(c){
-  return `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
+// Mechanism now lives in engine/overlay.js (shared with index.html). This
+// page's controls/CSS/HTML are genuinely simpler than index.html's (no
+// re-detect button, no sub-map dimming, no auto-fetch checkbox, Finish is
+// inline instead of a dedicated row) so they're passed in as ctx data, not
+// merged - see that module's header for why.
+const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
+  labels:{off:'⇱ Floating overlay', on:'⇱ Overlay open'},
+  toasts:{noDPIP:'Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).',
+    autoPop:'Floating overlay opens on your next click or keypress — capture without alt-tab'},
+  bodyStyle:c=>`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`,
+  panelCss:c=>
+    `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
     `#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}`+
     `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
     `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
@@ -1517,40 +1277,46 @@ function pipPanelCss(c){
     `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
-    `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
-// Re-applies the current palette to an already-open floating overlay, so a
-// mid-session palette change doesn't require closing and reopening it.
-function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors();
-  pipWin.document.body.style.background=c.bg; pipWin.document.body.style.color=c.fg;
-  const st=pipWin.document.getElementById('pipstyle'); if(st) st.textContent=pipPanelCss(c); }
-async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).','warn'); return; }
-  if(pipWin&&!pipWin.closed) return;
-  try{ const w=await documentPictureInPicture.requestWindow({width:340,height:460}); pipWin=w; setPopBtn();
-    const c=pipColors();
-    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`;
-    const st=w.document.createElement('style'); st.id='pipstyle'; st.textContent=pipPanelCss(c);
-    w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div>';
-    target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
-    renderPipControls();
-    w.document.addEventListener('keydown',handleKey);
-    const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
-      if(el) el.textContent=session?`${c?c.code:''} \u00B7 R${session.round} \u00B7 ${session.snaps.length} snaps`:''; };
-    w._tick=setInterval(tick,600); tick();
-    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; setPopBtn(); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
-  }catch(err){ toast('Pop-out failed: '+esc(err&&err.message?err.message:String(err)),'bad'); } }
-function setPopBtn(){ const b=document.getElementById('pop'); if(!b) return;
-  const on=!!(pipWin&&!pipWin.closed);
-  b.classList.toggle('on',on);
-  b.textContent=on?'\u21F1 Overlay open':'\u21F1 Floating overlay'; }
-function readyForCapture(){ return !!(vid.srcObject&&boxes.a&&boxes.b&&selectedCode()); }
-let _pipAuto=false, _pipPending=false;
-function maybeAutoPop(){
-  if(_pipAuto||!('documentPictureInPicture' in window)) return;
-  if(!readyForCapture()){ _pipPending=false; return; }
-  if(!_pipPending){ _pipPending=true; toast('Floating overlay opens on your next click or keypress \u2014 capture without alt-tab','info',4500); }
-}
-function gestureAutoPop(){ if(!_pipPending||drawMode) return; _pipPending=false; popout(); }
+    `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
+  middleHtml:'<div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div>',
+  finishHtml:'',
+  tick:el=>{ const c=selectedCode();
+    el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; },
+  controls:[
+    {id:'prow-main', render:(main,d,mk)=>{
+      main.className='prow'; main.innerHTML='';
+      mk(main,'◉ Snapshot',()=>snapshot(false),'go');
+      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
+    }},
+    {id:'prow-side', render:(side,d,mk)=>{
+      side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
+      const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
+      mk(side,'⇄ Swap L/R',swapSides);
+    }},
+    {id:'prow-sub', render:(sub,d,mk)=>{
+      sub.innerHTML='';
+      if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
+        const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
+        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
+      else sub.className='prow';
+    }},
+    {id:'prow-atk', render:(atk,d,mk)=>{
+      atk.innerHTML='';
+      if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
+        atk.className='prow'+(needsConfirm?' warn':'');
+        const l=d.createElement('span'); l.className='lbl';
+        l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
+        const {leftName,rightName}=sideNames();
+        const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
+          if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
+          else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
+          b.onclick=()=>setAttacker(side); atk.appendChild(b); };
+        mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
+      else atk.className='prow';
+    }},
+  ],
+});
+const {popout, maybeAutoPop, gestureAutoPop, setPopBtn, pipColors, pipPanelCss, renderPipControls, restylePipPanel}=overlay;
 document.addEventListener('pointerdown',gestureAutoPop);
 
 // ---------- auto-snapshot ----------
@@ -1565,7 +1331,6 @@ document.getElementById('autosnapint').onchange=()=>{ localStorage.setItem('owdb
   document.getElementById('autosnap').checked=localStorage.getItem('owdb_pref_autosnap')==='1'; setAutoSnap(); })();
 
 // ---------- keyboard shortcuts ----------
-function isTyping(el){ return el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable); }
 function handleKey(e){ if(e.ctrlKey||e.metaKey||e.altKey||isTyping(e.target)) return; const k=e.key.toLowerCase(); let hit=true;
   if(hit) gestureAutoPop();
   if(k==='s'||k===' ') snapshot(false); else if(k==='r') nextRound(); else if(k==='z') undo();

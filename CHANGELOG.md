@@ -17,6 +17,234 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-18
+
+### Fixed
+- **The HUD name crop was pointed at the wrong part of the screen.** Calibration
+  fits its box to the hero *portraits*, and the name crop assumed the name sat at
+  a fixed 48-90% of that box's height. On a real frame that band straddles the
+  portrait bottom, the name and the health bar - and the bar, being a solid
+  bright block, is the brightest thing in it. Reads came back as letter-soup or
+  empty, which is the likeliest reason `comp_slots.player_id` was 0 of 1620
+  historically.
+
+  The name row is now *located* in the frame, once per side across the whole
+  five-slot strip, and all five crops use it. It cannot be done per slot: the
+  hero portrait sits inside the cell above the name and its art is dense enough
+  to look like text, and a long name can out-score the health bar. Across the
+  strip the five names reinforce each other while portrait noise averages out.
+
+  Measured with real tesseract on nine real HUD frames, ground truth taken from
+  the replay code burnt into each frame (`tools/real_frame_eval/`):
+
+  | | reads correct on their own | slots attributed | wrong |
+  | --- | --- | --- | --- |
+  | before | 15/90 | 36/90 | 2 |
+  | after | 77/90 | **90/90** | 0 |
+
+  The thirteen reads that are still wrong on their own are recovered by the role
+  constraint, including three frames where tesseract returns `404f` for a clean,
+  legible `PROXY`.
+
+- **Player attribution could tag the wrong team.** The role constraint is only
+  meaningful once it is known which team is on which side; with the sides
+  unconfirmed the capture page could confidently attribute a slot to the other
+  team's player. Attribution now reaches the role constraint only when the sides
+  are known - from the read itself or from the operator locking them - and falls
+  back to name-only matching otherwise, which cannot invent a tag.
+
+### Confirmed live
+- **2026-08-18, code `3DQNHD`, Oasis, Sheffield TD vs The best in the west: 10/10
+  players tagged, none wrong, none abstained.** The same code read 6/10 with four
+  abstentions before the crop fix. This is the roster the design was written
+  against — `ÄL7ÖTĦÌ` and `Mź7w` were previously unmatchable by name — and both
+  resolved. Sides were locked by the operator, so the role constraint was active.
+
+  Eight slots matched on name evidence and two were forced by role, and between
+  them the raw reads exercised every part of the design:
+
+  - `"AYZO"` and `"FAISAL"` came back **forced** — Hazard and Mauga are tanks, one
+    candidate each, settled with no name evidence. Both reads were independently
+    clean, so the constraint's answer can be checked against them, and agrees.
+  - One read was destroyed: `"1.7-1'4"` for `GRank`, on a crop legible by eye. It
+    still resolved, because its support partner read `"ZAK"` decisively and the
+    pair is an exact cover — the single-decisive-read clause, in the field.
+  - `"MZ7W"` and `"AL7OTHI"` matched `Mź7w` and `ÄL7ÖTĦÌ`, which is the stroked-
+    Latin transliteration doing exactly what it was added for.
+
+### Notes
+- One map, one snapshot. It does not tell us where the abstention floor bites,
+  because nothing came close to it.
+- The locator was swept over nine frames at four capture resolutions with the
+  calibration box shifted by up to +/-25px and stretched 0.8-1.25x: 1800 of 1800
+  variants land on the name row. A parity check runs the shipped JS over those
+  same real pixels, so the Python prototype used for sweeping cannot drift away
+  from what ships.
+
+---
+
+## 2026-08-16
+
+### Added
+- **League capture now assigns players by role, not by reading their name.**
+  Overwatch tournament play is role-locked and FACEIT records each player's role
+  per game, so the hero recognised in a slot says which players can possibly be
+  standing in it. A correctly-read comp goes from 120 possible assignments to
+  four, and the tank is settled with no name evidence at all. Measured against
+  every real lineup with ground truth known by construction
+  (`tools/assign_eval.py`): at 30% character error, slots tagged goes from 63.5%
+  to 98.9%; at 50%, from 23.5% to 86.0%. With the names contributing *nothing* it
+  still tags the tank correctly on every map.
+
+  This matters most for the teams it used to fail on completely — a roster like
+  `ÄL7ÖTĦÌ` / `Mź7w` was close to unattributable before, and is now resolved from
+  one or two usable reads.
+
+  Checked against real frames, not just the model: across eight real HUD frames
+  with ground truth taken from the replay code in the frame, the old matcher
+  resolved 68 of 80 slots and the new one 80 of 80, neither ever wrong
+  (`tools/real_frame_eval/`). Two of those recoveries are worth naming — tesseract
+  returned `4.04` for a perfectly legible `PROXY` in six frames of eight, and one
+  slot that reads `JODAN` flawlessly can never be name-matched at all, because
+  FACEIT's stored battletag for that player says `Arclite`.
+
+  It abstains rather than guesses. A contested pair must clear a lead over the
+  runner-up, and then either an absolute score floor or one slot matching
+  decisively; slots that fail are left for the operator. The floor is
+  load-bearing: without it the same resolver invented 33.6% wrong attributions
+  once the reads went to noise.
+
+- **`data.json` carries `lineups` (per game, with roles) and `hero_roles`.**
+  `rosters` stays as it is — it is per *match*, and 27% of match-teams field more
+  than five players once substitutes are counted, which is exactly what breaks the
+  five-over-five cover the assignment depends on. Scrim opponent identification
+  still reads `rosters`, where the accumulated squad is the right answer.
+
+- **Captures publish `player_conf` per slot** (`forced` / `matched` / `null`)
+  beside the raw HUD read, so a role-determined tag can be told apart from a
+  name-matched one, and a future matcher can re-resolve old captures offline.
+
+### Fixed
+- **Names using stroked Latin letters could never match, even with a flawless
+  OCR read.** The fold decomposed accents but left `ø ł đ ħ ŧ ŋ …` untouched,
+  because those have no canonical decomposition — so the roster held a glyph an
+  ASCII-restricted OCR is incapable of emitting. `ŚŁØŴ` scored 50 against a bar
+  of 75 while the OCR was reading a perfectly correct `slow`. Affects 10 of 1304
+  league players.
+
+### Notes
+- Scrims are deliberately unchanged: the per-game role data this relies on exists
+  only for a coded league match. See `specs/2026-08-16-player-assignment-design.md`.
+- The percentage curves come from a synthetic OCR-corruption model, which ranks
+  the thresholds but does not predict field accuracy — real tesseract errors are
+  systematic, not uniform noise. The real-frame check in `tools/real_frame_eval/`
+  is the stronger evidence, but it is one match and one lineup, and it assumes
+  hero recognition is correct. The thresholds stay provisional until more real
+  capture sessions have been measured.
+
+---
+
+## 2026-08-14 (later)
+
+### Fixed
+- **The floating capture panel never said which team was on which side.** It is
+  the only UI visible while Overwatch is in front, and its two read-out columns
+  were labelled "Left" and "Right" — true, and useless, since which team is on
+  the left is the one thing the operator needs from it. Both capture pages now
+  name those columns after the teams actually on those sides, and the scrim
+  panel gained the map-and-teams info line the league panel already had, with
+  unconfirmed sides flagged rather than shown as fact.
+
+### Added
+- **The next map can be started from the floating panel.** A scrim is a series
+  of maps, and having to alt-tab back to the page between every one of them was
+  the most jarring part of the flow. The panel now carries a mode and map
+  picker whenever no map is running, so the whole loop — pick, capture, finish,
+  pick the next — closes without leaving it.
+- **Scrim panel parity with the league one:** re-detect sides, copy the workshop
+  code, spent sub-maps dimmed out, and Finish moved to its own pinned row away
+  from the buttons pressed every round.
+
+---
+
+## 2026-08-14
+
+### Added
+- **The scrims viewer does the analysis the league Scout pages do.** Until now
+  it counted hero appearances and stopped, which is a capture archive rather
+  than a scouting tool. It now shows **comp families** (two lineups are the same
+  comp if they share ≥4 heroes, or exactly 3 including the same tank) with a
+  W-L record counted over distinct maps; a **hero pool counted in rounds, not
+  maps**, split Tank/Damage/Support, because "played every round" and "played
+  for one point" are the same "1 map" and completely different reads; **per-map
+  openers broken down by segment** — sub-map on Control, attack/defend on Escort
+  and Hybrid, whole map on the mirrored modes; and **recurring swaps led by
+  their trigger**, with baseline subtraction so an enemy hero who is always on
+  the field is not reported as having caused anything. Same semantics as
+  `owdb/analysis.py`, reimplemented inline because this page has no build step.
+- **A Bans tab, for the teams that scrim with them.** Preferred bans split by
+  who made them, the record on maps with a given hero banned out, and how each
+  side's opening comp shifts under a ban. The tab only appears once some map has
+  actually recorded bans — a team that scrims without them is not shown an empty
+  page asking why they have no ban profile. Scrim capture does not record draft
+  *order*, so these are preferred bans and the page says so; there is no "first
+  ban" section, because that would be inventing something never captured.
+- **The demo (`scrims.html?demo=1`) exercises all of it.** Its observations now
+  carry the fields the capture page actually writes, so segments, swaps and
+  round denominators appear in the sample rather than reading as empty panels,
+  and two of its four blocks use bans so both kinds of scrim are shown.
+
+### Fixed
+- **A misread portrait could invent a comp nobody played.** Two shapes the OCR
+  emits on a bad frame were being analysed as real lineups: the same hero read
+  into two slots (impossible with the hero limit always on) and a six-hero side
+  (impossible in 5v5). The duplicate was worse than cosmetic — it let one shared
+  hero count twice toward the four-hero comp-family bar, folding two different
+  comps into one. Lineups are now deduplicated, a read of more than five is
+  dropped as unusable, and a short read still counts, since three heroes read is
+  three heroes that were genuinely on the field.
+- **Ten heroes had no role in the scrims viewer, and three more were misspelled
+  out of existence.** Its hand-kept hero→role table used display spellings —
+  `D.Va`, `Soldier: 76`, `Lifeweaver` — that `refs.json` never writes, so those
+  heroes matched nothing; the 2026 additions (Anran, Domina, Emre, Freja,
+  Jetpack Cat, Mizuki, Shion, Sierra, Vendetta, Wuyang) were absent outright.
+  Every one of them fell into an "Other" bucket in any role split. The table is
+  now derived from `faceit_sync/subroles.py`, and a test fails if the copy ever
+  disagrees with it again.
+- **Section headings inside viewer cards rendered as plain body text** — the
+  `.eyebrow` class was used throughout but never defined.
+
+---
+
+## 2026-08-13
+
+### Changed
+- **`docs/capture/index.html` and `docs/capture/scrim.html` now share a JS
+  engine instead of being hand-maintained forks.** The two pages had drifted:
+  104 top-level functions existed in both, 44 of them silently different.
+  Seven modules — `names.js`, `util.js`, `idb.js`, `frames.js`,
+  `calibration.js`, `refs.js`, `overlay.js`, `tour.js` — moved to
+  `docs/capture/engine/`, cutting the shared-but-forked count to 34. No
+  user-visible behaviour changed; where the code lives did. The
+  snapshot/review/finish cluster (`finishMap` and neighbours) stays forked
+  until phase 3 rewrites the scrim finish flow. See `ARCHITECTURE.md` §6.
+- `tools/capture_divergence.py` reports which functions still differ between
+  the two pages, and `tests/test_capture_js_units.py` now runs every
+  `docs/capture/**/*.test.js` under `node --test` via pytest —
+  `scoreboard.test.js`'s 9 tests were previously never executed by anything.
+
+### Fixed
+- **The capture pages' CSP was silently blocking every same-origin script.**
+  `script-src` lacked `'self'` while `style-src`/`img-src`/`font-src` all had
+  it, so `<script src="scoreboard.js">` had never loaded in production.
+  Commit `bc91c1f` adds `'self'`, which is also a prerequisite for the shared
+  engine above.
+- Real drift caught during the extraction: `simScore` (the scrim page had a
+  weaker name normaliser), `uiModal` (the scrim copy had dropped the
+  `textarea` case, breaking OCR edit-and-reparse on that page), and
+  `ocrWorker` (the scrim page lacked the league page's OCR load timeout, so
+  its OCR could hang forever).
+
 ## 2026-08-11
 
 ### Changed

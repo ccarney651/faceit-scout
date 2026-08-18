@@ -29,7 +29,7 @@
 <meta name="twitter:title" content="owdb — Capture comps in your browser">
 <meta name="twitter:description" content="Zero-install scouting: share your Overwatch screen, calibrate once, and every capture sharpens the FACEIT League data.">
 <meta name="twitter:image" content="https://owdb.io/og.png">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self' data: https://upload.owdb.io wss://upload.owdb.io https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src blob: https://cdn.jsdelivr.net; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self' data: https://upload.owdb.io wss://upload.owdb.io https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src blob: https://cdn.jsdelivr.net; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="stylesheet" href="../theme.css">
 <style>
   :root{--blue:#5a9bd8;--red:#e9694f}
@@ -400,7 +400,20 @@ button:disabled{opacity:.45;cursor:default}
     </div>
   </div>
 </div>
+<script src="engine/names.js"></script>
+<script src="engine/assign.js"></script>
+<script src="engine/util.js"></script>
+<script src="engine/idb.js"></script>
+<script src="engine/frames.js"></script>
+<script src="engine/calibration.js"></script>
+<script src="engine/refs.js"></script>
+<script src="engine/overlay.js"></script>
+<script src="engine/tour.js"></script>
 <script>
+const {normName, simScore, affinity,
+       AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
+const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
+       toast, uiModal, uiConfirm} = OWDBUtil;
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
 let HERO_ICON={};   // {heroSlug: colored portrait data-URI} — optional, from sibling hero_icons.json
@@ -423,64 +436,9 @@ if(!HAS_CAPTURE){
     : "This page isn't a secure context, so screen capture is blocked — open it from the site (https) or a localhost server.";
   const sb=document.getElementById('share'); if(sb) sb.disabled=true;
 }
-function b64bytes(s){const b=atob(s);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const nf=(n)=>(n==null?'—':Number(n).toLocaleString('en-US'));
 
-// ---------- feedback: SVG icons, toasts, modal, progress ----------
-const ICONS={
-  info:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.9" r="1.1" fill="currentColor"/></svg>',
-  ok:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 8.2l2 2 3.6-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  warn:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.3l6 10.4H2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.6v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.1" r="1" fill="currentColor"/></svg>',
-  bad:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
-  // functional affordances (buttons + inline status) — same 16px stroke style
-  sparkle:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M8 2.2l1.5 4.3 4.3 1.5-4.3 1.5L8 13.8l-1.5-4.3-4.3-1.5 4.3-1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
-  fullscreen:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  refresh:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.5 2.4v2.4H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  skip:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
-  overlay:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg>',
-  swap:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  lock:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="3.4" y="7.3" width="9.2" height="5.9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.4 7.3V5.7a2.6 2.6 0 0 1 5.2 0v1.6" stroke="currentColor" stroke-width="1.5"/></svg>',
-  fixreads:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
-  nophone:'<svg class="ticon" viewBox="0 0 16 16" fill="none"><rect x="4" y="2" width="8" height="12" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 11.5h3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 2l12 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'};
-function ico(n){ return ICONS[n]||''; }
-// Transient top-right notification for one-off events (saved / published /
-// failures). Persistent state stays in the inline status spans next to its
-// controls.
-function toast(msg,kind,ms){ kind=kind||'info'; ms=ms||5200;
-  let host=document.getElementById('toasts'); if(!host){ host=document.createElement('div'); host.id='toasts'; document.body.appendChild(host); }
-  const t=document.createElement('div'); t.className='toast '+kind;
-  t.innerHTML='<span class="ti">'+(ICONS[kind]||ICONS.info)+'</span><span>'+msg+'</span>';
-  host.appendChild(t);
-  const kill=()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),280); };
-  const timer=setTimeout(kill,ms);
-  t.onclick=()=>{ clearTimeout(timer); kill(); };
-  return t; }
-// Promise-based modal — replaces native prompt/confirm/alert so dialogs match
-// the page. opts: {title, body|bodyHtml, actions:[{label,value,ghost}], escapeValue,
-// collect} — with collect, resolves {value, fields:{id:text}} reading the
-// modal's inputs/selects. Enter in a field triggers the last (primary) action.
-function uiModal(opts){ return new Promise(res=>{
-  const back=document.getElementById('mback'); back.innerHTML='';
-  const m=document.createElement('div'); m.className='modal';
-  if(opts.title){ const h=document.createElement('h3'); h.textContent=opts.title; m.appendChild(h); }
-  const body=document.createElement('div'); body.className='mbody';
-  if(opts.bodyHtml) body.innerHTML=opts.bodyHtml; else if(opts.body) body.textContent=opts.body;
-  m.appendChild(body);
-  const row=document.createElement('div'); row.className='mrow';
-  const done=v=>{ back.classList.remove('open'); back.innerHTML=''; document.removeEventListener('keydown',onkey,true);
-    if(!opts.collect){ res(v); return; }
-    const fields={}; m.querySelectorAll('input,select').forEach(el=>{ fields[el.id]=el.value; }); res({value:v, fields}); };
-  const acts=opts.actions||[{label:'OK',value:true}];
-  acts.forEach(a=>{ const b=document.createElement('button'); b.type='button'; b.textContent=a.label; if(a.ghost) b.className='ghost'; b.onclick=()=>done(a.value); row.appendChild(b); });
-  m.appendChild(row); back.appendChild(m); back.classList.add('open');
-  const onkey=e=>{ if(e.key==='Escape'){ e.stopPropagation(); done(opts.escapeValue!==undefined?opts.escapeValue:null); } };
-  document.addEventListener('keydown',onkey,true);
-  const primary=row.lastChild;
-  m.querySelectorAll('input').forEach(inp=>inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); primary.click(); } }));
-  const first=m.querySelector('input,select'); if(first) first.focus(); }); }
-function uiConfirm(msg,title){ return uiModal({title:title||'Are you sure?', body:msg, escapeValue:false,
-  actions:[{label:'Cancel',value:false,ghost:true},{label:'Confirm',value:true}] }); }
+// ---------- feedback: toasts, modal, progress (icons/toast/modal in engine/util.js) ----------
 // OCR name-read progress: show/fill (frac 0..1) or hide (null).
 function ocrProgress(frac){ const b=document.getElementById('ocrbar'); if(!b) return;
   if(frac==null){ b.style.display='none'; return; }
@@ -650,21 +608,35 @@ document.getElementById('skip').onclick=nextCode;
 
 // ---------- screen share + calibrate ----------
 const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx=ov.getContext('2d');
+// ensureWork/grabFrame/grayCanvas/cellGrayPadded/nameCanvas/detectContentRect/
+// stopCapture/togglePreview/readyForCapture now live in engine/frames.js
+// (shared with scrim.html). stopCapture's teardown is page-specific -
+// index.html releases its live-scouting claim (a system scrims don't have),
+// so onStop is releaseClaim here and null on scrim.html.
+const frames=OWDBFrames.make({doc:document, video:vid, onStop:releaseClaim});
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
-function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#8087ff'; }
-function scl(){ return vid.videoWidth? vid.clientWidth/vid.videoWidth : 1; }
-function fitOverlay(){ ov.width=vid.clientWidth; ov.height=vid.clientHeight; drawOverlay(); }
+// autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
+// clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
+// live in engine/calibration.js (shared with scrim.html). drawOverlay and
+// pickBox carry scrim.html's scoreboard/score_readout handling too, but
+// boxKeys:['a','b'] (this page only owns the two portrait boxes) keeps that
+// handling from rendering/carrying-forward a scoreboard/score_readout box
+// left in the shared 'owdb_cap_boxes' localStorage key by scrim.html.
+const cal=OWDBCalibration.make({doc:document, video:vid, ov:ov, octx:octx, boxKeys:['a','b']});
+const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCalPreview,
+       clearCalPreview, retryCal, enterFsCal, calMsg, calOk, drawOverlay, fitOverlay}=cal;
+// addRef/bestMatch/matchCrop/learnCrop/refTemplate/exportRefs/importRefs/
+// clearLearnedRefs/heroCatalog/heroName/heroSlug/heroPortrait/onlyLostKnown/
+// ocrWorker now live in engine/refs.js (shared with scrim.html). REF_W/REF_H/
+// PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON and
+// _ocrWorker/_ocrLoading/_ocrLoadFailed/_ocrLoadError stay page-level globals
+// (this page's own ensureSideResolved/warmOcr/ocrNames read and clear the
+// _ocr* ones directly) - see engine/refs.js's header for why.
+const refs=OWDBRefs.make({doc:document});
+const {addRef, bestMatch, matchCrop, learnCrop, refTemplate, exportRefs, importRefs,
+       clearLearnedRefs, heroCatalog, heroName, heroSlug, heroPortrait, onlyLostKnown, ocrWorker}=refs;
 addEventListener('resize', fitOverlay);
-function drawOverlay(){ octx.clearRect(0,0,ov.width,ov.height); const s=scl();
-  // During a calibration preview, draw the PROPOSED boxes (accent, dashed)
-  // instead of the committed ones — the scout reviews the candidate placement
-  // before committing it.
-  const src=pendingCal?pendingCal.boxes:boxes;
-  for(const side of ['a','b']){ const b=src[side]; if(!b) continue;
-    octx.strokeStyle=pendingCal?css('--accent'):(side==='a'?css('--blue'):css('--red')); octx.lineWidth=2; octx.strokeRect(b.x*s,b.y*s,b.w*s,b.h*s);
-    octx.setLineDash(pendingCal?[4,3]:[3,3]); octx.lineWidth=1; for(let i=1;i<5;i++){const x=(b.x+i*b.w/5)*s;octx.beginPath();octx.moveTo(x,b.y*s);octx.lineTo(x,(b.y+b.h)*s);octx.stroke();} octx.setLineDash([]); }
-  if(dragS&&dragC){ octx.strokeStyle=css('--accent'); octx.lineWidth=2; octx.strokeRect(Math.min(dragS.x,dragC.x),Math.min(dragS.y,dragC.y),Math.abs(dragC.x-dragS.x),Math.abs(dragC.y-dragS.y)); } }
-function evp(e){ const r=ov.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
 ov.addEventListener('mousedown',e=>{ if(!drawMode)return; dragS=evp(e); dragC=dragS; });
 ov.addEventListener('mousemove',e=>{ if(!drawMode||!dragS)return; dragC=evp(e); drawOverlay(); });
 ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s=scl();
@@ -676,92 +648,13 @@ ov.addEventListener('mouseup',e=>{ if(!drawMode||!dragS)return; const p=evp(e),s
   document.getElementById('calhint').textContent=t; setStageHint(t);
   drawOverlay(); updateBtns(); if(done) selfTest(); });
 function setStageHint(html){ const e=document.getElementById('stagehint'); if(e) e.innerHTML=html; }
-// Confidence helpers shared by the post-commit self-test and the pre-commit
-// preview: how many of the 10 portrait cells score confidently (>= 0.55).
-function calOk(bx){ const comp=readComp(bx); if(!comp) return null; return [...comp.a,...comp.b].filter(s=>s.score>=0.55).length; }
-function calMsg(ok){ return ok>=8?`<span class="ok">calibration looks good — ${ok}/10 portraits recognised.</span>`
-    : ok>=5?`calibration: ${ok}/10 recognised — usable; nudge the boxes if some read ??.`
-    : `<span class="warn">only ${ok}/10 recognised — boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>`; }
 function selfTest(){ if(!(boxes.a&&boxes.b&&vid.srcObject)) return; const ok=calOk(boxes); if(ok==null) return;
   const msg=calMsg(ok); document.getElementById('calhint').innerHTML=msg; setStageHint(msg); maybeClaim(); }
-// Auto-calibrate: the HUD sits at fixed fractions of the screen (mirror of
-// owdb/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive from
-// the captured resolution — no dragging. Self-test then confirms alignment.
-const AUTO_STRIPS={ a:[0.0506,0.0832,0.2579,0.0675], b:[0.6912,0.0818,0.2573,0.0705] };
-// Find the game render area inside the capture, stripping near-black letterbox /
-// pillarbox (odd aspect ratios / resolutions), capped at 20% per edge. Does NOT
-// strip a window title bar (it isn't black) — share the whole screen for that.
-function detectContentRect(){ const W=vid.videoWidth,H=vid.videoHeight; if(!W) return {x:0,y:0,w:W,h:H};
-  const sw=Math.min(320,W), sh=Math.max(1,Math.round(H*sw/W));
-  const cv=document.createElement('canvas'); cv.width=sw; cv.height=sh; const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(vid,0,0,sw,sh);
-  const d=cx.getImageData(0,0,sw,sh).data, BLACK=24;
-  const rowMax=y=>{let m=0;for(let x=0;x<sw;x++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
-  const colMax=x=>{let m=0;for(let y=0;y<sh;y++){const i=(y*sw+x)*4,g=Math.max(d[i],d[i+1],d[i+2]);if(g>m)m=g;}return m;};
-  const cY=Math.floor(sh*0.2), cX=Math.floor(sw*0.2);
-  let t=0; while(t<cY&&rowMax(t)<BLACK)t++; let b=sh-1; while(b>sh-1-cY&&rowMax(b)<BLACK)b--;
-  let l=0; while(l<cX&&colMax(l)<BLACK)l++; let r=sw-1; while(r>sw-1-cX&&colMax(r)<BLACK)r--;
-  const sx=W/sw, sy=H/sh; return {x:l*sx,y:t*sy,w:(r-l+1)*sx,h:(b-t+1)*sy};
-}
-function boxesFromStrips(R,dx,dy){ const o={}; for(const s of ['a','b']){ const [fx,fy,fw,fh]=AUTO_STRIPS[s];
-  o[s]={x:R.x+(fx+dx)*R.w, y:R.y+(fy+dy)*R.h, w:fw*R.w, h:fh*R.h}; } return o; }
-// Sum of the 10 cells' best centre-match scores — higher = better aligned.
-function scoreBoxes(frame, bxs){ ensureWork(); let sum=0;
-  for(const side of ['a','b']){ const b=bxs[side];
-    for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      sum += bestMatch(cellGrayPadded(frame,cell), side, true).score; } }
-  return sum; }
-let pendingCal=null;   // {boxes, ok} — candidate placement awaiting the scout's confirmation
-function autoCalibrate(){ if(!vid.videoWidth){ const w='<span class="warn">Share your screen first.</span>';
-    document.getElementById('calhint').innerHTML=w; setStageHint(w); return; }
-  const R=detectContentRect();
-  let best=boxesFromStrips(R,0,0);
-  // The strips are fixed screen fractions, but a window title bar or HUD-position
-  // variance shifts everything. When the ref library is loaded, sweep a small
-  // offset and keep the placement that recognises the most portraits. No refs or
-  // no improvement => the base strips (previous behaviour). Blind-safe.
-  if(REFS.length){ const frame=grabFrame(); let bestScore=scoreBoxes(frame,best);
-    for(let dyi=-8;dyi<=8;dyi++) for(let dxi=-2;dxi<=2;dxi++){ if(!dyi&&!dxi) continue;
-      const cand=boxesFromStrips(R, dxi*0.01, dyi*0.01), sc=scoreBoxes(frame,cand);
-      if(sc>bestScore){ bestScore=sc; best=cand; } } }
-  // Auto-calibrate only re-places the two portrait strips.
-  // Preview BEFORE commit: show where the boxes WOULD go and how confident the
-  // read is, so a bad placement is rejected instead of silently saved. Nothing
-  // is written until the scout clicks "Use these boxes".
-  pendingCal={boxes:best, ok:calOk(best)};
-  renderCalPreview(); drawOverlay(); }
-function renderCalPreview(){ const p=document.getElementById('calpreview'); if(!p||!pendingCal) return;
-  const ok=pendingCal.ok, head=ok==null?`Auto-calibrate found the boxes — review the placement below.`
-    : ok>=8?`<span class="ok">${ok}/10 portraits confident — this looks right.</span>`
-    : ok>=5?`${ok}/10 portraits confident — usable, but check the boxes below.`
-    : `<span class="warn">only ${ok}/10 portraits confident — the placement is likely off.</span>`;
-  p.querySelector('.calprev-msg').innerHTML=head;
-  p.style.display='block';
-  document.getElementById('calhint').innerHTML=head; setStageHint(head); }
-function commitCal(){ if(!pendingCal) return; boxes=pendingCal.boxes; pendingCal=null;
-  localStorage.setItem('owdb_cap_boxes',JSON.stringify(boxes));
-  const p=document.getElementById('calpreview'); if(p) p.style.display='none';
-  drawOverlay(); updateBtns(); selfTest(); }
-function retryCal(){ if(!vid.srcObject){ clearCalPreview(); return; } autoCalibrate(); }
-function clearCalPreview(){ pendingCal=null; const p=document.getElementById('calpreview'); if(p) p.style.display='none'; drawOverlay(); }
-function stopCapture(){ clearCalPreview(); if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; }
-  releaseClaim(); drawOverlay(); updateBtns(); document.getElementById('calhint').textContent='Screen capture stopped. Click Share my screen to resume.'; }
-// Set which box we're about to draw, updating the hint in both the page and the
-// (fullscreen) stage. Used by the setup buttons and the in-stage buttons alike.
-function pickBox(side){ clearCalPreview(); drawMode=side;
-  const t = side==='a' ? 'Drag a box over the 5 BLUE (left) portraits.'
-    : 'Drag a box over the 5 RED (right) portraits.';
-  document.getElementById('calhint').textContent=t; setStageHint(t); }
-// Fullscreen calibration: blow the preview up to the whole screen so the boxes
-// are easy to place on a 2K/4K monitor. The overlay canvas is re-fitted on the
-// change so it stays pixel-aligned with the enlarged video.
-function enterFsCal(){ const s=document.getElementById('stage'); if(s.requestFullscreen) s.requestFullscreen().catch(()=>{}); }
 document.addEventListener('fullscreenchange',()=>{ setTimeout(()=>{ fitOverlay(); drawOverlay(); }, 60);
   // The tour panel is outside the fullscreen node, so it would vanish during
   // fullscreen calibration — hide it there, bring it back on exit.
   const t=document.getElementById('tour'), fs=!!(document.fullscreenElement);
   if(t){ t.style.display = (fs||tourIdx<0) ? 'none' : 'block'; } });
-function togglePreview(){ const L=document.getElementById('layout'); L.classList.toggle('nopreview');
-  document.getElementById('hidep').textContent=L.classList.contains('nopreview')?'Show preview':'Hide preview'; }
 async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:5},audio:false});
     clearCalPreview();
     vid.srcObject=st; await vid.play().catch(()=>{}); vid.onloadedmetadata=()=>fitOverlay(); setTimeout(fitOverlay,300);
@@ -791,8 +684,6 @@ function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCo
   setd('finish',!(session&&session.snaps.length));
   maybeAutoPop(); warmOcr(); updateGuide(); }
 let _firstVisit=null;
-function isFirstVisit(){ if(_firstVisit!==null) return _firstVisit;
-  const name=(localStorage.getItem('owdb_name')||'').trim(); return (_firstVisit=!name&&!(boxes.a&&boxes.b)); }
 function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
   const fv=isFirstVisit();
@@ -818,7 +709,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
 // ever hunting for a button. The panel sits at the bottom (toasts own the top
 // right); the highlighted element keeps working — it is a guide, not a lock.
 const TOUR_KEY='owdb_tour_done';
-let tourSteps=[], tourIdx=-1;
+let tourIdx=-1;
 function tourDefs(){
   return [
     {t:"Let's capture your first replay", target:null, btn:'Start',
@@ -841,70 +732,19 @@ function tourDefs(){
       done:()=>localStorage.getItem('owdb_first_publish')!=null}
   ];
 }
-function tourHighlight(targetId){
-  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
-  if(!targetId) return;
-  const el=document.getElementById(targetId); if(!el) return;
-  el.classList.add('tour-highlight');
-  try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
-}
-function tourRender(){
-  const t=document.getElementById('tour'), s=tourSteps[tourIdx]; if(!t||!s) return;
-  t.querySelector('.tour-count').textContent=(tourIdx+1)+' / '+tourSteps.length;
-  t.querySelector('.tour-title').textContent=s.t;
-  t.querySelector('.tour-body').innerHTML=s.body;
-  const nxt=t.querySelector('#tourNext');
-  nxt.textContent=s.btn||'Next';
-  // Back arrow: only once there's a step behind you.
-  t.querySelector('#tourPrev').style.visibility=(tourIdx===0)?'hidden':'visible';
-  tourHighlight(s.target);
-}
-function tourOpen(){
-  tourSteps=tourDefs();
-  tourIdx=tourSteps.findIndex(s=>!s.done());   // resume at first incomplete step
-  if(tourIdx<0){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  const t=document.getElementById('tour'); t.classList.add('open'); t.style.display='block';
-  tourRender();
-}
-function tourDone(silent){
-  localStorage.setItem(TOUR_KEY,'1');
-  const t=document.getElementById('tour'); if(t){ t.classList.remove('open'); t.style.display='none'; }
-  tourHighlight(null);
-  if(!silent) toast('Tour closed — the <b>How it works</b> card above has the same steps any time.','info');
-}
-let tourManualAt=0;   // last manual prev/next click — pauses auto-advance briefly so a reviewed step doesn't bounce forward instantly
-function tourNext(){ if(tourIdx>=0&&tourIdx<tourSteps.length-1){ tourIdx++; tourManualAt=Date.now(); tourRender(); } else { tourDone(true); } }
-function tourPrev(){ if(tourIdx>0){ tourIdx--; tourManualAt=Date.now(); tourRender(); } }
-function tourTick(){
-  if(tourIdx<0) return;
-  if(Date.now()-tourManualAt<2500) return;   // grace period after a manual step
-  if(tourSteps[tourIdx].done()) tourNext();   // auto-advance as each action happens
-}
-function maybeShowTour(){
-  if(!HAS_CAPTURE) return;
-  if(localStorage.getItem(TOUR_KEY)==='1') return;
-  // A returning scout who already published has a name — never tour them again.
-  if((localStorage.getItem('owdb_name')||'').trim()){ localStorage.setItem(TOUR_KEY,'1'); return; }
-  tourOpen();
-}
+// Mechanism now lives in engine/tour.js (shared with scrim.html). tourDefs
+// above stays page copy; firstVisitExtra/skipIf are this page's policy (a
+// saved name means a returning, already-published scout - see that
+// module's header for why this isn't branched on inside it).
+const tour=OWDBTour.make({doc:document, steps:tourDefs(), tourKey:TOUR_KEY,
+  firstVisitExtra:()=>!(localStorage.getItem('owdb_name')||'').trim(),
+  skipIf:()=>!!(localStorage.getItem('owdb_name')||'').trim()});
+const {open:tourOpen, next:tourNext, prev:tourPrev, render:tourRender, tick:tourTick,
+       highlight:tourHighlight, done:tourDone, isFirstVisit, maybeShow:maybeShowTour}=tour;
 
-// ---------- matcher ----------
-const work=document.createElement('canvas'); let wctx;
-function ensureWork(){ work.width=REF_W+2*PAD; work.height=REF_H+2*PAD; wctx=work.getContext('2d',{willReadFrequently:true}); }
-function cellGrayPadded(frame, cell){ const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  wctx.drawImage(frame,fx,fy,fw,fh,0,0,work.width,work.height);
-  const d=wctx.getImageData(0,0,work.width,work.height).data, g=new Float32Array(work.width*work.height);
-  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; return g; }
-function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
-  const offs = fast ? [PAD] : [0,PAD,2*PAD];   // fast = centre only: sensitive to box offset, for the calibrate sweep
-  for(const dy of offs) for(const dx of offs){ const cand=new Float32Array(REF_W*REF_H); let m=0;
-    for(let y=0;y<REF_H;y++){ const s=(y+dy)*W+dx; for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
-    m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
-    for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
-  return best; }
-function grabFrame(){ const c=document.createElement('canvas'); c.width=vid.videoWidth; c.height=vid.videoHeight; c.getContext('2d').drawImage(vid,0,0); return c; }
-function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
-function heroPortrait(n){ const src=HERO_ICON[heroSlug(n)]; return src?`<img class="hp" src="${src}" alt="${esc(n)}" title="${esc(n)}">`:''; }
+// bestMatch/heroSlug/heroPortrait now live in engine/refs.js (shared with
+// scrim.html) - see that file's header for the bestMatch/importRefs
+// cosmetic-only-divergence finding and the ocrWorker real one.
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
 // read both sides -> {a:[{name,guid,score}], b:[...]}; render to target
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
@@ -924,40 +764,14 @@ function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensu
 // clearly wins. Same difflib ratio as the exe (owdb/capture.py), so a
 // garbled read still can't assign sides or players from noise.
 //
-// MIN_STRONG_NAMES is lower here (2, vs the exe's 3) — a deliberate, browser-
-// only divergence. The exe's thresholds were measured against Windows' native
-// OCR on dxcam frames (owdb/capture.py: good reads cleared 5-6 strong
-// names, a known-garbage misaligned frame scored 0). tesseract.js reading a
-// getDisplayMedia canvas is a weaker OCR engine on a lossier source, and
-// field use since the auto-detect-on-Snapshot gate shipped (2026-07-31) put
-// its real hit rate around 70% at MIN_STRONG_NAMES=3 — clearing snapshots
-// often enough to be reliable, but failing (and blocking capture entirely,
-// since this gate is now mandatory) often enough to be frustrating. Dropping
-// to 2 is the single most targeted loosening: it only lowers how many
-// individually-strong reads are required, not the match-quality bar
-// (STRONG_NAME_SCORE) or the aggregate-lead bar (AUTO_SIDE_MARGIN, the
-// stronger anti-noise gate — it alone would already reject the exe's
-// documented garbage case, margin 25 vs this 100 threshold).
-const AUTO_SIDE_MARGIN=100, STRONG_NAME_SCORE=75, MIN_STRONG_NAMES=2;
-// difflib.SequenceMatcher.ratio() = 2*M/(len a+len b), M = total size of the
-// longest matching blocks (Ratcliff/Obershelp). Names are short → skip junk.
-function _matchTotal(a,ai,aj,b,bi,bj){ let besti=ai,bestj=bi,best=0,j2={};
-  for(let i=ai;i<aj;i++){ const nj={};
-    for(let j=bi;j<bj;j++){ if(a[i]===b[j]){ const k=(j2[j-1]||0)+1; nj[j]=k;
-      if(k>best){besti=i-k+1;bestj=j-k+1;best=k;} } } j2=nj; }
-  let tot=best;
-  if(best){ tot+=_matchTotal(a,ai,besti,b,bi,bestj); tot+=_matchTotal(a,besti+best,aj,b,bestj+best,bj); }
-  return tot; }
-// Fold accents before comparing: the HUD renders the real Battle.net name
-// (e.g. "Hēv"), but tessedit_char_whitelist is plain ASCII, so OCR can only
-// ever return "Hev" - without this, an otherwise-perfect read scores as a
-// near-miss purely because of a diacritic it was never allowed to emit.
-function _normName(s){ return String(s==null?'':s).normalize('NFD')
-  .replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
-function simScore(a,b){ a=_normName(a); b=_normName(b);
-  const L=a.length+b.length; if(!L) return 0; return 200*_matchTotal(a,0,a.length,b,0,b.length)/L; }  // 0..100
-function affinity(names,roster){ let s=0; for(const n of names){ if(!n) continue;
-  let best=0; for(const r of roster) best=Math.max(best,simScore(n,r)); s+=best; } return s; }
+// normName/simScore/affinity and the AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/
+// MIN_STRONG_NAMES constants live in engine/names.js now (shared with
+// scrim.html) — see that file for the MIN_STRONG_NAMES rationale.
+//
+// confidentLeft below is index.html-only: it returns 't1'/'t2', not the
+// 'a'/'b' vocabulary of scrim.html's confidentOrientation (which moved into
+// the shared module unchanged). Unifying the two return vocabularies is a
+// later phase, not part of this mechanical extraction.
 // Which faction is on the LEFT HUD strip: 't1', 't2', or null when unclear.
 function confidentLeft(leftNames,rightNames,t1,t2){
   const direct=affinity(leftNames,t1)+affinity(rightNames,t2);
@@ -972,65 +786,49 @@ function confidentLeft(leftNames,rightNames,t1,t2){
     if(best>=STRONG_NAME_SCORE) strong++; }
   return strong>=MIN_STRONG_NAMES ? got : null; }
 
-// tesseract.js, loaded lazily from CDN on first use (this page isn't an artifact,
-// so no CSP block). warmOcr() (below) kicks the download off the moment the tool
-// is capture-ready, so it's ready by the time a Snapshot needs it.
-// The script tag + Tesseract.createWorker() both pull more assets (core wasm,
-// eng.traineddata) from CDNs with no built-in deadline, so a stalled (not
-// failed - a genuine network *error* already rejects via onload/onerror)
-// connection hangs forever with no way to notice. Race a timeout alongside it,
-// and - unlike a plain memoized promise - clear _ocrLoading on ANY failure so
-// Re-detect/Auto-detect actually retries instead of replaying the same dead
-// promise for the rest of the session.
-const OCR_LOAD_TIMEOUT_MS=30000;
+// ocrWorker now lives in engine/refs.js (shared with scrim.html) - see that
+// file's header for why the char whitelist below stays here instead of
+// moving with it: scrim.html reuses the SAME shared worker for
+// scoreboard/screenshot OCR (full sentences, spaces, dashes), which this
+// gamertag-only whitelist would silently mangle if it were baked into the
+// shared ocrWorker() itself.
+// _ocrWorker/_ocrLoading/_ocrLoadFailed/_ocrLoadError stay page-level globals
+// - ocrWorker() (engine/refs.js) sets them, and warmOcr/ensureSideResolved/
+// ocrNames below read and clear them directly, so they can't become
+// module-private state without breaking that.
 // _ocrLoadError holds the reason text from the LAST failed attempt (warmOcr's
 // background retry swallows the promise rejection to avoid an unhandled-
 // rejection console spam, so without this the operator - and anyone we ask
 // for a screenshot - only ever sees "OCR engine failed to load" with no way
 // to tell a timeout from a real network/CORS/CDN error).
 let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false, _ocrLoadError=null;
-function ocrWorker(){ if(_ocrWorker) return Promise.resolve(_ocrWorker);
-  if(_ocrLoading) return _ocrLoading;
-  const attempt=(async()=>{
-    if(!window.Tesseract){ await new Promise((res,rej)=>{ const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-      s.integrity='sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
-      s.crossOrigin='anonymous';
-      s.onload=res; s.onerror=()=>rej(new Error('could not load the OCR library (offline?)')); document.head.appendChild(s); }); }
-    const w=await Tesseract.createWorker('eng');
-    await w.setParameters({ tessedit_pageseg_mode:'7',
-      tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
-    _ocrWorker=w; _ocrLoadFailed=false; return w; })();
-  _ocrLoading=Promise.race([attempt,
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR is taking too long to load - try again')),OCR_LOAD_TIMEOUT_MS))]
-  ).catch(e=>{ _ocrLoading=null; _ocrLoadFailed=true;
-    _ocrLoadError=(e&&e.message)?e.message:String(e); console.error('[owdb] OCR load failed:',e);
-    throw e; });
-  return _ocrLoading; }
 // Preload the OCR engine the moment the tool is capture-ready, so the FIRST
 // Snapshot's automatic side-detect doesn't pay the worker spin-up cost while
 // the operator stares at "detecting sides…" with nothing to do but wait or
 // force Swap L/R. No-op once it's running; harmless if OCR is never used.
 function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().then(()=>{ _ocrLoadFailed=false; },()=>{}); }
-// Name bar sits at ~48-90% of each portrait cell's height (mirror of the .exe's
-// read_hud_names); grayscale + 6x upscale + a light contrast stretch lift the
-// ~10px text enough for OCR.
-function nameCanvas(frame,cell){ const padX=Math.max(4,Math.round(cell.w*0.05));
-  const sx=Math.max(0,cell.x-padX), sy=cell.y+cell.h*0.48, sw=cell.w+2*padX, sh=cell.h*0.42, sc=6;
-  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(sw*sc)); cv.height=Math.max(1,Math.round(sh*sc));
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(frame, sx,sy,sw,sh, 0,0,cv.width,cv.height);
-  const im=cx.getImageData(0,0,cv.width,cv.height), d=im.data;
-  for(let i=0;i<d.length;i+=4){ let g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-    g=(g-128)*1.5+140; g=g<0?0:g>255?255:g; d[i]=d[i+1]=d[i+2]=g; }
-  cx.putImageData(im,0,0); return cv; }
 const OCR_READ_TIMEOUT_MS=8000;
-async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker(); const out={a:[],b:[]}; let done=0;
+async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
+  // Restrict recognition to the charset HUD gamertags actually use - cuts
+  // stray glyphs (border/icon bleed) from diluting simScore's fuzzy match
+  // ratio. Scoped to this page's own use of the shared worker, not set
+  // inside engine/refs.js's ocrWorker() itself - see this file's ocrWorker
+  // comment above for why.
+  await w.setParameters({ tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
+  const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
+    // One row for all five slots. The calibration box is fitted to the
+    // PORTRAITS, and the fixed 48-90%-of-cell-height band it implies straddles
+    // the portrait bottom, the name and the health bar - which is why OCR came
+    // back as letter-soup and comp_slots.player_id was 0 of 1620. Finding the
+    // row across the whole strip lets the five names reinforce each other; per
+    // slot, the portrait above and the bar below win. null = not found, and
+    // nameCanvas falls back to the old fractions. See engine/frames.js.
+    const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       let data;
       try{
-        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell)),
+        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell,row)),
           new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]));
       }catch(e){
         // tesseract.js processes jobs sequentially on one worker, so a stalled
@@ -1083,6 +881,49 @@ function attribute(names,roster){ const out=[null,null,null,null,null], cand=[];
   const openIds=roster.filter(p=>p.id&&!usedId.has(p.id)).map(p=>p.id);
   if(openSlots.length===1 && openIds.length===1) out[openSlots[0]]=openIds[0];
   return out; }
+// ---------- Role-constrained assignment (engine/assign.js) ----------
+// The five who actually played THIS game, with their FACEIT roles. Keyed per
+// game, not per match: 27% of match-teams field more than five once substitutes
+// are counted, and assign.js needs an exact five-over-five cover to constrain
+// against (see tools/build_capture_data.py and the design doc).
+// Returns [] when the feed predates `lineups`, which is the fallback signal.
+function gameLineup(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
+  const t=((DATA.lineups||{})[`${c.match_id}:${c.game_no}`]||{})[teamId];
+  if(!t||!t.players) return [];
+  return t.players.map(p=>{ const game=(p.game_name||'').trim(), nick=(p.nick||'').trim();
+    return { id:p.id||null, role:p.role||null, names:[...new Set([game,nick].filter(Boolean))] }; })
+    .filter(x=>x.id&&x.names.length); }
+// The role of the hero recognised in each slot — this is what turns "which of
+// five?" into "which of two?", and settles the tank outright. An unrecognised
+// portrait contributes null, which leaves its role group unresolved rather than
+// forcing a body into the slot.
+function slotRoles(comp, side){
+  const roles=(DATA.hero_roles)||{};
+  return (comp&&comp[side]||[]).map(s=>{ if(!s||!s.guid) return null;
+    return roles[s.guid] || (CUSTOM_HEROES[s.guid]&&CUSTOM_HEROES[s.guid].role) || null; }); }
+// Resolve one side's five slots. Prefers the role-constrained assignment and
+// falls back to the name-only greedy matcher when this game has no lineup in the
+// feed (an older data.json, or a match whose FACEIT stats never captured) — a
+// stale feed degrades to the previous behaviour rather than to nothing.
+//
+// sidesKnown GATES THE ROLE CONSTRAINT, and that is a safety requirement, not a
+// refinement. The name-only matcher degrades harmlessly when the left/right
+// mapping is wrong: every read is compared against the other team's roster, so
+// nothing matches and every slot comes back null. Role-forcing has no such
+// protection — a one-player role group is assigned with NO name evidence, so
+// against the wrong roster it confidently tags the wrong team's tank. That
+// happened in a real capture (2026-08-18): side detection failed, sides stayed
+// unconfirmed, and Hazard was attributed to the opposing team's tank. Below the
+// gate we use names only, which cannot invent an attribution it has no evidence
+// for.
+function attributeSide(names, teamId, comp, side, sidesKnown){
+  const lineup=gameLineup(teamId);
+  if(sidesKnown && lineup.length===5 && typeof OWDBAssign!=='undefined'){
+    const r=OWDBAssign.assign(names, lineup, slotRoles(comp,side));
+    if(r.ids.some(Boolean)) return r;
+  }
+  return { ids:attribute(names,teamRoster(teamId)), conf:[null,null,null,null,null] };
+}
 function setDetectMsg(html,cls){ const e=document.getElementById('sidehint');
   if(e) e.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
 function sideTeamName(id){ const c=selectedCode(); if(!c) return '?';
@@ -1114,7 +955,18 @@ async function detectSides(){ const c=selectedCode(), s=session;
   // was null — still worth a best-effort tag against the current/default sides).
   const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
   const lRoster=teamRoster(leftId), rRoster=teamRoster(rightId);
-  const aIds=attribute(names.a,lRoster), bIds=attribute(names.b,rRoster);
+  // The recognised heroes supply each slot's role, which is what constrains the
+  // assignment. Read fresh here rather than threaded in: detectSides is called
+  // from the first-snapshot gate and from the manual button, and only one of
+  // those has a comp in hand.
+  const comp=readComp()||{a:[],b:[]};
+  // Sides are known when THIS read identified them, or when the operator locked
+  // them by hand. A blank/auto selection with an inconclusive read is NOT known,
+  // and must not reach the role constraint — see attributeSide.
+  const sidesKnown=!!left || !!(s&&s.sideResolved);
+  const aRes=attributeSide(names.a,leftId,comp,'a',sidesKnown),
+        bRes=attributeSide(names.b,rightId,comp,'b',sidesKnown);
+  const aIds=aRes.ids, bIds=bRes.ids;
   // Keep the RAW HUD reads next to the ids they produced. attribute() is lossy —
   // a slot the current matcher can't resolve is stored as null and the text that
   // produced it is gone forever, so every matcher improvement is frozen out of
@@ -1122,7 +974,12 @@ async function detectSides(){ const c=selectedCode(), s=session;
   // captures re-matchable offline. Session-level, exactly like `players`: a
   // mid-map retag rewrites both together so a raw read always explains the id
   // published beside it.
-  if(s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b}; }
+  // playersConf records HOW each slot was decided ('forced' from the role
+  // constraint alone, 'matched' on name evidence, null = abstained), so Review
+  // can surface the abstentions first and a later matcher can tell a confident
+  // tag from a weak one.
+  if(s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b};
+         s.playersConf={a:aRes.conf,b:bRes.conf}; }
   return {left, aIds, bIds, lRoster, rRoster};
 }
 // Manual re-run/override: sides now resolve automatically on the first snapshot
@@ -1167,8 +1024,19 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
       const names=await ocrNames();
       if(session!==s || selectedCode()!==c) return;
       const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
-      const aIds=attribute(names.a,teamRoster(leftId)), bIds=attribute(names.b,teamRoster(rightId));
-      if(session===s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b}; }
+      const comp=readComp()||{a:[],b:[]};
+      // This runs only because the operator just LOCKED a side (onSideChange
+      // calls it when sideResolved goes true), so the orientation is known by
+      // construction — but pass it explicitly rather than letting an omitted
+      // argument decide: attributeSide treats a missing sidesKnown as "not
+      // known" and would quietly drop the role constraint in the one place the
+      // sides are most certain.
+      const known=!!s.sideResolved;
+      const aRes=attributeSide(names.a,leftId,comp,'a',known),
+            bRes=attributeSide(names.b,rightId,comp,'b',known);
+      const aIds=aRes.ids, bIds=bRes.ids;
+      if(session===s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b};
+                       s.playersConf={a:aRes.conf,b:bRes.conf}; }
       const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
       setDetectMsg(hit?`${hit}/10 players tagged`:'still couldn’t read HUD names — check calibration.','ok');
     }catch(e){ if(session===s) setDetectMsg('player re-tag failed: '+(e.message||e),'warn'); }
@@ -1225,39 +1093,9 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
   }finally{ s._detecting=false; }
 }
 
-// ---------- hero recognition: learn a miss / add a new hero ----------
-// A ref = a 64x36 grayscale portrait template. The built-in library is refs.json
-// (curator-baked); operators can LEARN more from the live frame here — a fix when
-// a portrait reads wrong, or a brand-new hero the library has never seen. Learned
-// refs persist in IndexedDB, merge into REFS on load, and export as JSON so the
-// curator can fold the good ones back into refs.json.
-function bytesToB64(u8){ let s=''; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s); }
-// Mirror of loadFeeds' refs.json decode: center + L2-normalise so bestMatch's
-// cosine similarity is comparable to the baked refs. Tagged local for Clear.
-function refTemplate(rec){ const px=b64bytes(rec.d); if(px.length!==REF_W*REF_H) return null;
-  let m=0; for(let i=0;i<px.length;i++) m+=px[i]; m/=px.length;
-  const c=new Float32Array(px.length); let ss=0; for(let i=0;i<px.length;i++){ c[i]=px[i]-m; ss+=c[i]*c[i]; }
-  return {n:rec.n, g:rec.g, v:rec.v, c, norm:Math.sqrt(ss)||1, local:true}; }
-async function addRef(rec){ if(!rec.id) rec.id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
-  const t=refTemplate(rec); if(!t) return false;
-  LOCAL_REFS.push(rec); REFS.push(t); try{ await idbPutIn('refs',rec); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; return true; }
-// The 64x36 grayscale icon crop for slot i on a side — the SAME icon region the
-// matcher reads (right 1-LF width, top TF height of the cell), so a learned ref
-// lines up with future reads.
-function learnCrop(side,i){ const b=boxes[side]; const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-  const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
-  const cv=document.createElement('canvas'); cv.width=REF_W; cv.height=REF_H;
-  const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(grabFrame(), fx,fy,fw,fh, 0,0,REF_W,REF_H);
-  const d=cx.getImageData(0,0,REF_W,REF_H).data, px=new Uint8Array(REF_W*REF_H);
-  for(let j=0,k=0;j<d.length;j+=4,k++) px[k]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);
-  return bytesToB64(px); }
-// Every hero the picker offers = unique guids in REFS (built-in + learned) plus
-// operator-added heroes, by name.
-function heroCatalog(){ const m={}; for(const r of REFS) if(r.g) m[r.g]=r.n;
-  for(const g in CUSTOM_HEROES) m[g]=CUSTOM_HEROES[g].name;
-  return Object.keys(m).map(g=>({g, n:m[g]})).sort((a,b)=>a.n.localeCompare(b.n)); }
+// refTemplate/addRef/learnCrop/heroCatalog now live in engine/refs.js
+// (shared with scrim.html) - see that file for the ref-library docstring
+// this section used to carry.
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
@@ -1311,19 +1149,7 @@ async function onFixPick(sel){ const side=sel.dataset.side, i=+sel.dataset.i, wr
 // Recognition can misread; here the operator fixes a whole map's comp before it
 // goes out — remap a wrong hero to the right one, or drop a spurious read, across
 // every observation of that map (player attribution is carried along).
-function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
-// Re-run the matcher on a stored 64x36 grayscale crop (centre it in the padded buffer).
-function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
-  for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
-  return bestMatch(gp, side); }
-// Render a stored grayscale crop to a (scaled) canvas for the review portraits.
-function grayCanvas(b64, scale){ scale=scale||2; const px=b64bytes(b64);
-  const tmp=document.createElement('canvas'); tmp.width=REF_W; tmp.height=REF_H;
-  const im=tmp.getContext('2d').createImageData(REF_W,REF_H);
-  for(let i=0,j=0;i<px.length;i++,j+=4){ im.data[j]=im.data[j+1]=im.data[j+2]=px[i]; im.data[j+3]=255; }
-  tmp.getContext('2d').putImageData(im,0,0);
-  const cv=document.createElement('canvas'); cv.width=REF_W*scale; cv.height=REF_H*scale;
-  const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false; cx.drawImage(tmp,0,0,cv.width,cv.height); return cv; }
+// heroName/matchCrop now live in engine/refs.js (shared with scrim.html).
 function renderReview(rec, host){ host.innerHTML=''; const cat=heroCatalog();
   const opts='<option value="">— fix to… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ new hero…</option>';
   for(const side of ['a','b']){ const label=side==='a'?(rec.side_a_team||'Left'):(rec.side_b_team||'Right');
@@ -1413,24 +1239,11 @@ async function assignPlayer(rec, side, heroGuid, playerId, host){
   renderReview(rec, host); }
 // Persist a reviewed + corrected map to the maps store so edits stick.
 async function saveReviewRec(rec){ await idbPut(rec); }
-function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-  const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
-    refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
-  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }
-async function importRefs(file){ try{ const j=JSON.parse(await file.text());
-  if(j.w && (j.w!==REF_W || j.h!==REF_H)){ refMsg('those refs are a different size — skipped.','warn'); return; }
-  for(const g in (j.heroes||{})){ CUSTOM_HEROES[g]={name:j.heroes[g].name, role:j.heroes[g].role||'Damage'}; try{ await idbPutIn('heroes',{g, ...CUSTOM_HEROES[g]}); }catch(e){} }
-  let n=0; for(const r of (j.refs||[])){ if(r.d && r.g && r.v){ await addRef({n:r.n, g:r.g, v:r.v, d:r.d, added_at:Date.now()}); n++; } }
-  refMsg('imported '+n+' refs.','ok');
- }catch(e){ refMsg('import failed: '+(e.message||e),'warn'); } }
-async function clearLearnedRefs(){ if(!(await uiConfirm('Remove all learned refs? The built-in library stays; operator-added heroes are kept.','Clear learned refs'))) return;
-  REFS=REFS.filter(t=>!t.local); LOCAL_REFS=[]; try{ await idbClear('refs'); }catch(e){}
-  const rc=document.getElementById('refcount'); if(rc) rc.textContent='0 learned'; refMsg('cleared learned refs.','ok'); }
+// exportRefs/importRefs/clearLearnedRefs now live in engine/refs.js (shared
+// with scrim.html).
 
 // ---------- capture session (rounds / sub-map / attack / dedup) ----------
 let session=null, pipWin=null, savedKeys=new Set();   // match:game already saved locally
-let pipAutoShown=false, pipAutoPending=false;   // auto-open the control panel once the tool is capture-ready (see maybeAutoPop)
 function startMap(){ const c=selectedCode();
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   // sideResolved: whether the LEFT team is known (auto-detected or manually
@@ -1468,7 +1281,10 @@ function currentLeftId(){ const c=selectedCode(); if(!c) return null;
 // (playersRaw deliberately survives: a raw HUD read is orientation-independent —
 // slot A is the left of the HUD whichever team stands there — so it stays valid
 // and worth publishing even if the follow-up retag fails and leaves ids empty.)
-function onSideChange(){ if(session){ session.players=null;
+// playersConf goes with players, not with playersRaw: it describes how a slot was
+// matched to a ROSTER, so it is only meaningful for the orientation it was
+// computed under.
+function onSideChange(){ if(session){ session.players=null; session.playersConf=null;
   session.sideResolved=!!((document.querySelector('input[name=side]:checked')||{}).value||'');
   if(session.sideResolved) retagPlayers(); }
   relabelTeams(); }
@@ -1486,8 +1302,7 @@ function refreshSession(){ if(!session) return;
     el.textContent=`R${s.round}${s.sub?' ['+s.sub+']':''}  ${fmt(s.aNames,s.aPlayers)}  vs  ${fmt(s.bNames,s.bPlayers)}`; ol.appendChild(el); });
   updateBtns(); renderPipControls();
 }
-function onlyLostKnown(prev,cur){ if(!prev) return false; if(prev.length!==cur.length) return false;
-  for(let i=0;i<prev.length;i++){ if(prev[i]===cur[i]||cur[i]==null) continue; return false; } return true; }
+// onlyLostKnown now lives in engine/refs.js (shared with scrim.html).
 function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</span>`:'';
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
@@ -1585,16 +1400,14 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 }
 
 // ---------- save map -> IndexedDB (keyed match:game, replace) ----------
-function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('owscout-capture',4);
-  r.onupgradeneeded=()=>{ const db=r.result;
-    if(!db.objectStoreNames.contains('maps')) db.createObjectStore('maps',{keyPath:'id'});
-    if(!db.objectStoreNames.contains('refs')) db.createObjectStore('refs',{keyPath:'id'});      // learned hero refs
-    if(!db.objectStoreNames.contains('heroes')) db.createObjectStore('heroes',{keyPath:'g'});   // operator-added heroes
-  };
-  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-function idbGetAll(store){ return idb().then(db=>new Promise(res=>{ const rq=db.transaction(store,'readonly').objectStore(store).getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); })); }
-function idbPutIn(store,rec){ return idb().then(db=>new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); })); }
-function idbClear(store){ return idb().then(db=>new Promise(res=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).clear(); tx.oncomplete=res; })); }
+// idb/idbGetAll/idbPutIn/idbClear now live in engine/idb.js (shared with
+// scrim.html); this page owns the store list (maps/refs/heroes - it never
+// touches scrims/scrim_maps, those are scrim.html's) and schema version (4,
+// unchanged - see engine/idb.js for why touching it is dangerous).
+const IDB_STORES={maps:'id', refs:'id', heroes:'g'};
+const {getAll:idbGetAll, putIn:idbPutIn, clear:idbClear}=OWDBIdb;
+OWDBIdb.open(4, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadFeeds() runs later, at the bottom of this script)
+function idb(){ return OWDBIdb.open(4, IDB_STORES); }
 async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('maps','readonly').objectStore('maps').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
 async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }
@@ -1612,24 +1425,31 @@ async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const
 // three arrays must be appended inside the same skip so index i means the same
 // slot in each. `pairs` keeps its 2-tuple arity — owdb/contribute.py and
 // tools/audit_capture_sides.py read pair[1] positionally.
-function buildObservations(snaps, players, playersRaw, phased){
+function buildObservations(snaps, players, playersRaw, phased, playersConf){
   const observations=[];
   for(const s of (snaps||[])){ for(const side of ['a','b']){ const slots=(side==='a'?s.a:s.b)||[];
     const pids=(players&&players[side])||[];        // per-slot FACEIT ids from Auto-detect
     const raws=(playersRaw&&playersRaw[side])||[];  // per-slot raw OCR read behind those ids
-    const heroes=[], pairs=[], ingame_names=[];
+    // How each id was decided: 'forced' (role constraint alone), 'matched' (name
+    // evidence cleared both gates), null (abstained). A parallel array rather
+    // than a third element of `pairs` — pair arity is read positionally by
+    // owdb/contribute.py and tools/audit_capture_sides.py.
+    const confs=(playersConf&&playersConf[side])||[];
+    const heroes=[], pairs=[], ingame_names=[], player_conf=[];
     for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue;
-      heroes.push(g); pairs.push([g, pids[i]||null]); ingame_names.push(raws[i]||null); }
+      heroes.push(g); pairs.push([g, pids[i]||null]); ingame_names.push(raws[i]||null);
+      player_conf.push(confs[i]||null); }
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: phased? (s.attacker===side?'attack':'defend') : null,
-      heroes, pairs, ingame_names }); } }
+      heroes, pairs, ingame_names, player_conf }); } }
   return observations;
 }
 async function finishMap(){ if(!session||!session.snaps.length) return; const c=session.code;
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
   const leftId = sideId||c.t1, rightId = (leftId===c.t1)?c.t2:c.t1;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nm=id=>(rs[id]&&rs[id].name)||null;
-  const observations=buildObservations(session.snaps, session.players, session.playersRaw, session.phased);
+  const observations=buildObservations(session.snaps, session.players, session.playersRaw,
+    session.phased, session.playersConf);
   const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
@@ -1687,61 +1507,22 @@ async function renderCaptured(){ const rows=await idbAll(); document.getElementB
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 
 // ---------- pop-out control panel (Document PiP): full scouting console over OW ----------
-// Controls are rebuilt per map (startMap calls this) so sub-map / flip buttons
-// always match the current map — the whole loop runs with no alt-tab.
-function renderPipControls(){ setPopBtn(); if(!pipWin||pipWin.closed) return; const d=pipWin.document;
-  const main=d.getElementById('prow-main'), side=d.getElementById('prow-side'),
-    sub=d.getElementById('prow-sub'), atk=d.getElementById('prow-atk'),
-    fin=d.getElementById('prow-finish'); if(!main) return;
-  const mk=(p,t,fn,cls)=>{ const b=d.createElement('button'); b.textContent=t; if(cls)b.className=cls; b.onclick=fn; p.appendChild(b); };
-  main.className='prow'; main.innerHTML='';
-  mk(main,'◉ Snapshot',()=>snapshot(false),'go');
-  mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo);
-  mk(main,'⧉ Copy code',()=>{ const c=selectedCode(); if(c){ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); } });
-  // side row — always available while a map is live: flip the LEFT team or force
-  // a fresh side read. Sides auto-detect on the first Snapshot press; this is the
-  // no-alt-tab ESCAPE HATCH for when that read fails or gets it backwards, so a
-  // scout glued to the game doesn't have to leave this window to fix it.
-  side.innerHTML='';
-  if(session){ side.className='prow'+(session.sideResolved?'':' warn');
-    if(!session.sideResolved){ const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l); }
-    mk(side,'⇄ Swap L/R',swapSides); mk(side,'⟳ Re-detect',autoDetect); }
-  else side.className='prow';
-  // sub-map row (control maps) — warn colour until one is picked; active highlighted
-  sub.innerHTML='';
-  if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
-    const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
-    const spent=usedSubmaps(session.snaps, session.round);
-    session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
-  else sub.className='prow';
-  // attack row (escort/hybrid) — click the team that's attacking this round;
-  // warn colour from round 3 while unconfirmed (time-bank, not parity — see
-  // setAttacker), same treatment as the sub-map row above.
-  atk.innerHTML='';
-  if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
-    atk.className='prow'+(needsConfirm?' warn':'');
-    const l=d.createElement('span'); l.className='lbl';
-    l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
-    const {leftName,rightName}=sideNames();
-    const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
-      if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
-      else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
-      b.onclick=()=>setAttacker(side); atk.appendChild(b); };
-    mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
-  else atk.className='prow';
-  // finish row — pinned to the bottom so it's always the last thing you reach;
-  // finishing is the one "commit" action, deliberately separated from the live buttons.
-  fin.className='prow'; fin.innerHTML='';
-  mk(fin,'✓ Finish + save this map',()=>finishMap(),'fin go');
-}
-// Reads the palette currently active on this page (via getComputedStyle, not
-// a guessed token table) so the control panel always matches — including
-// palettes added after this code was written.
-function pipColors(){ const cs=getComputedStyle(document.documentElement); const v=n=>cs.getPropertyValue(n).trim();
-  return {bg:v('--bg'),surface2:v('--surface2'),fg:v('--fg'),muted:v('--muted'),line:v('--line'),line2:v('--line2'),
-    accent:v('--accent'),onAccent:v('--on-accent'),good:v('--good'),mid:v('--mid'),bad:v('--bad')}; }
-function pipPanelCss(c){
-  return `#pinfo{padding:5px 8px 1px;color:${c.muted};font-size:11px}`+
+// Mechanism now lives in engine/overlay.js (shared with scrim.html). This
+// page's controls/CSS/HTML are genuinely different from scrim.html's (a
+// Re-detect-sides button, "spent" sub-map dimming, an auto-fetch checkbox,
+// a dedicated Finish row) so they're passed in as ctx data, not merged -
+// see that module's header for why.
+const overlay=OWDBOverlay.make({doc:document, width:360, height:500,
+  labels:{off:'⇱ Control panel', on:'⇱ Panel open'},
+  toasts:{noDPIP:'Control panel needs Chrome/Edge 116+ or Firefox 151+ (Document Picture-in-Picture).',
+    autoPop:'Control panel opens on your next click or keypress — capture without alt-tab'},
+  // overflow-y:auto is a safety net, not just sizing - if the operator (or a
+  // future palette/content change) ever makes this taller than the window,
+  // everything scrolls into reach instead of the Finish button clipping off
+  // the bottom silently.
+  bodyStyle:c=>`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif;height:100vh;overflow-y:auto;box-sizing:border-box`,
+  panelCss:c=>
+    `#pinfo{padding:5px 8px 1px;color:${c.muted};font-size:11px}`+
     `#pinfo .pmap{color:${c.fg};font-weight:600;font-size:12.5px;margin-top:1px}`+
     `#pinfo .pteams{font-size:11px;margin-top:1px}#pinfo .tl{color:#5a9bd8}#pinfo .tr{color:#e9694f}`+
     `#pmsg{padding:0 8px;min-height:14px;font-size:11px}`+
@@ -1760,61 +1541,79 @@ function pipPanelCss(c){
     `.prow input{margin:0}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:1px 0;border-top:1px solid ${c.line};font-size:11px}.slot:first-of-type{border-top:0}`+
     `.hp{width:16px;height:16px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
-    `.sc{font-size:10.5px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`; }
-// Re-applies the current palette to an already-open control panel, so a
-// mid-session palette change doesn't require closing and reopening it.
-function restylePipPanel(){ if(!pipWin||pipWin.closed) return; const c=pipColors();
-  pipWin.document.body.style.background=c.bg; pipWin.document.body.style.color=c.fg;
-  const st=pipWin.document.getElementById('pipstyle'); if(st) st.textContent=pipPanelCss(c); }
-async function popout(){ if(!('documentPictureInPicture' in window)){ toast('Control panel needs Chrome/Edge 116+ or Firefox 151+ (Document Picture-in-Picture).','warn'); return; }
-  if(pipWin&&!pipWin.closed) return;   // already open — keep the one window
-  try{ const w=await documentPictureInPicture.requestWindow({width:360,height:500}); pipWin=w; pipAutoShown=true; setPopBtn();
-    const c=pipColors();
-    // overflow-y:auto is a safety net, not just sizing - if the operator (or a
-    // future palette/content change) ever makes this taller than the window,
-    // everything scrolls into reach instead of the Finish button clipping off
-    // the bottom silently.
-    w.document.body.style.cssText=`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif;height:100vh;overflow-y:auto;box-sizing:border-box`;
-    const st=w.document.createElement('style'); st.id='pipstyle'; st.textContent=pipPanelCss(c);
-    w.document.head.appendChild(st);
-    w.document.body.innerHTML='<div id="pinfo"></div><div id="pmsg"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="prow" id="prow-opts"><label><input type="checkbox" id="pautofetch"> auto-fetch next map</label></div><div class="pt"><h3>Left</h3><div id="poutA"></div></div><div class="pt"><h3>Right</h3><div id="poutB"></div></div><div id="prow-finish"></div>';
-    target={A:w.document.getElementById('poutA'),B:w.document.getElementById('poutB')};
-    const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
-      pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
-        localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; }
-    renderPipControls();
-    w.document.addEventListener('keydown',handleKey);          // shortcuts work from the control panel too
-    // Map + teams: the operator is watching the game, not the browser tab, so
-    // the one place they DO see (this floating panel) should say what's being
-    // scouted without needing to alt-tab back to the main page to check.
-    const tick=()=>{ if(w.closed) return; const el=w.document.getElementById('pinfo'); const c=selectedCode();
-      if(!el) return;
-      if(!session){ el.textContent=c?'':'pick a replay'; return; }
-      const {leftName,rightName}=sideNames();
-      el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
-        `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
-        `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; };
-    w._tick=setInterval(tick,600); tick();
-    w.addEventListener('pagehide',()=>{ clearInterval(w._tick); pipWin=null; setPopBtn(); target={A:document.getElementById('outA'),B:document.getElementById('outB')}; });
-  }catch(err){ toast('Pop-out failed: '+esc(err&&err.message?err.message:String(err)),'bad'); } }
-// Reflect the control panel's open/closed state on the (now prominent) button.
-function setPopBtn(){ const b=document.getElementById('pop'); if(!b) return;
-  const on=!!(pipWin&&!pipWin.closed);
-  b.classList.toggle('on',on);
-  b.textContent=on?'⇱ Panel open':'⇱ Control panel'; }
-// Auto-open the control panel: the tool is "ready for capture" when the screen is
-// shared, both boxes are set, and a replay code is picked. Browsers only allow
-// requestWindow() inside a user gesture, so we can't open it the moment `ready`
-// flips by itself — instead we ARM it then, and fire it on the next click or
-// capture keypress. Only ever auto-opens once per page load; after the scout
-// closes it themselves we don't fight them, the button reopens it.
-function readyForCapture(){ return !!(vid.srcObject&&boxes.a&&boxes.b&&selectedCode()); }
-function maybeAutoPop(){
-  if(pipAutoShown||!('documentPictureInPicture' in window)) return;
-  if(!readyForCapture()){ pipAutoPending=false; return; }
-  if(!pipAutoPending){ pipAutoPending=true; toast('Control panel opens on your next click or keypress — capture without alt-tab','info',4500); }
-}
-function gestureAutoPop(){ if(!pipAutoPending||drawMode) return; pipAutoPending=false; popout(); }
+    `.sc{font-size:10.5px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
+  middleHtml:'<div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div><div class="prow" id="prow-opts"><label><input type="checkbox" id="pautofetch"> auto-fetch next map</label></div>',
+  finishHtml:'<div id="prow-finish"></div>',
+  afterOpen:w=>{ const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
+    pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
+      localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; } },
+  // Map + teams: the operator is watching the game, not the browser tab, so
+  // the one place they DO see (this floating panel) should say what's being
+  // scouted without needing to alt-tab back to the main page to check.
+  tick:el=>{ const c=selectedCode();
+    if(!session){ el.textContent=c?'':'pick a replay'; return; }
+    const {leftName,rightName}=sideNames();
+    el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
+      `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
+      `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; },
+  // Controls are rebuilt per map (startMap calls renderPipControls) so
+  // sub-map / flip buttons always match the current map — no alt-tab.
+  controls:[
+    {id:'prow-main', render:(main,d,mk)=>{
+      main.className='prow'; main.innerHTML='';
+      mk(main,'◉ Snapshot',()=>snapshot(false),'go');
+      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo);
+      mk(main,'⧉ Copy code',()=>{ const c=selectedCode(); if(c){ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); } });
+    }},
+    // side row — always available while a map is live: flip the LEFT team or
+    // force a fresh side read. Sides auto-detect on the first Snapshot press;
+    // this is the no-alt-tab ESCAPE HATCH for when that read fails or gets it
+    // backwards, so a scout glued to the game doesn't have to leave this
+    // window to fix it.
+    {id:'prow-side', render:(side,d,mk)=>{
+      side.innerHTML='';
+      if(session){ side.className='prow'+(session.sideResolved?'':' warn');
+        if(!session.sideResolved){ const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l); }
+        mk(side,'⇄ Swap L/R',swapSides); mk(side,'⟳ Re-detect',autoDetect); }
+      else side.className='prow';
+    }},
+    // sub-map row (control maps) — warn colour until one is picked; active
+    // highlighted; spent (already captured) sub-maps dimmed.
+    {id:'prow-sub', render:(sub,d,mk)=>{
+      sub.innerHTML='';
+      if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
+        const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
+        const spent=usedSubmaps(session.snaps, session.round);
+        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
+      else sub.className='prow';
+    }},
+    // attack row (escort/hybrid) — click the team that's attacking this
+    // round; warn colour from round 3 while unconfirmed (time-bank, not
+    // parity — see setAttacker).
+    {id:'prow-atk', render:(atk,d,mk)=>{
+      atk.innerHTML='';
+      if(session&&session.phased){ const needsConfirm=!attackerGateOk(session);
+        atk.className='prow'+(needsConfirm?' warn':'');
+        const l=d.createElement('span'); l.className='lbl';
+        l.textContent='Attack R'+session.round+(needsConfirm?' — confirm ▸':''); atk.appendChild(l);
+        const {leftName,rightName}=sideNames();
+        const mkatk=(side,name,color)=>{ const b=d.createElement('button'); b.textContent=name;
+          if(session.attacker===side&&session.attackerConfirmed){ b.className='on'; }
+          else { b.style.borderColor=color; if(needsConfirm&&session.attacker===side) b.style.borderStyle='dashed'; }
+          b.onclick=()=>setAttacker(side); atk.appendChild(b); };
+        mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
+      else atk.className='prow';
+    }},
+    // finish row — pinned to the bottom so it's always the last thing you
+    // reach; finishing is the one "commit" action, deliberately separated
+    // from the live buttons.
+    {id:'prow-finish', render:(fin,d,mk)=>{
+      fin.className='prow'; fin.innerHTML='';
+      mk(fin,'✓ Finish + save this map',()=>finishMap(),'fin go');
+    }},
+  ],
+});
+const {popout, maybeAutoPop, gestureAutoPop, setPopBtn, pipColors, pipPanelCss, renderPipControls, restylePipPanel}=overlay;
 document.addEventListener('pointerdown',gestureAutoPop);
 
 // ---------- publish: build contribution + upload to the worker ----------
@@ -2086,7 +1885,6 @@ document.getElementById('autofetch').onchange=e=>{ localStorage.setItem('owdb_au
 // Keyboard shortcuts — active only when THIS page (or the control panel) has
 // focus; a browser can't see keys while Overwatch is focused. Ignore keys while
 // typing in a field. Actions self-guard on session state.
-function isTyping(el){ return el && (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable); }
 function handleKey(e){ if(e.ctrlKey||e.metaKey||e.altKey||isTyping(e.target)) return; const k=e.key.toLowerCase(); let hit=true;
   if(hit) gestureAutoPop();
   if(k==='s'||k===' ') snapshot(false); else if(k==='r') nextRound(); else if(k==='z') undo();

@@ -117,6 +117,36 @@ canonical and this copy is the bug.
 - **The capture pages' Content-Security-Policy lives in a `<meta>` tag**, so
   `curl -I` shows nothing. It has silently broken browser APIs before — check it
   first when something fails quietly in `docs/capture/`.
+- **The capture pages share an engine under `docs/capture/engine/`.** A fix to
+  calibration, hero recognition, the overlay or name matching belongs in the
+  module, not in a page. The snapshot/review/finish cluster is still forked
+  between the two pages until phase 3 — check both when touching it.
+- **Player assignment abstains; do not "improve" it into guessing.** The floor in
+  `docs/capture/engine/assign.js` is the only thing keeping the wrong-attribution
+  rate at zero — removing it took the same resolver to 33.6% wrong once the OCR
+  reads degraded. If you change either threshold, re-run `tools/assign_eval.py`
+  and move the numbers in `ARCHITECTURE.md` with it.
+- **`data.json`'s `lineups` is per game and `rosters` is per match on purpose.**
+  27% of match-teams field more than five players once substitutes are counted,
+  which destroys the exact five-over-five cover assignment relies on. Do not
+  collapse the two.
+- **`AUTO_STRIPS` is correct live; the frames in `screenshots/` do not match it.**
+  Verified 2026-08-18: auto-calibrate reports 10/10 portraits confident against a
+  live share. On those old replay-HUD screenshots it reaches only 4.83-5.48 where
+  the measured strip scores 6.06-6.82, and the gap is strip *size* (~6% wider,
+  ~14% taller) so no dx/dy sweep closes it. That is a property of the fixtures,
+  not a bug: derive boxes from the pixels when evaluating against them (as
+  `tools/real_frame_eval/gen_all.py` does) and do NOT change `AUTO_STRIPS`.
+- **The HUD name crop must come from `nameRow()`, not from a fraction of the
+  calibration box.** The box is fitted to the portraits; every fixed band under
+  it that anyone has tried also contains the health bar or the portrait bottom,
+  and tesseract reads the bar. Find the row once per SIDE across the five-slot
+  strip — per slot it picks the hero portrait. Two per-slot attempts were built
+  and reverted; `tools/real_frame_eval/README.md` records both so they are not
+  tried a third time. Any change to the locator or its constants must be re-run
+  through that harness (`rowfind_sweep.py`, then `rowfind_parity.py`, which
+  proves the shipped JS still matches the Python the sweep uses) **before** it
+  goes anywhere near a live capture.
 - **Captures are season-scoped** (`data/captures/s9/`). Two writers key off a
   per-season constant each: `CURRENT_SEASON` in `infra/upload-worker/worker.js`
   and `CONTRIB_DIR` in `owdb/contribute.py`. At the cutover, follow

@@ -14,7 +14,12 @@ apart.
 data.json:
   { built_at, code_wipe_date, divisions:[...],
     codes: [{code,match_id,game_no,map,division,team_a,team_b,t1,t2,finished_at}],
-    rosters: { <match_id>: { <team_id>: {name, players:[{id,nick,game_name}]} } } }
+    rosters:    { <match_id>: { <team_id>: {name, players:[...]} } },
+    lineups:    { "<match_id>:<game_no>": { <team_id>:
+                    {name, players:[{id,nick,game_name,role}]} } },
+    hero_roles: { <hero_guid>: "Tank"|"Damage"|"Support" } }
+`rosters` is per coded match (capture attribution); `lineups` is the exact five
+who played ONE game, with roles (player assignment).
 Whether a code is already scouted is read from the sibling docs/captured.json,
 so it is not duplicated here.
 """
@@ -120,6 +125,59 @@ def main() -> None:
             slot["players"].append(
                 {"id": rp["pid"], "nick": rp["nick"], "game_name": rp["gname"]})
         rosters[mid] = by_team
+
+    # The exact five who played ONE game, per team, WITH their FACEIT role.
+    #
+    # Keyed per game rather than per match, which is not a refinement of `rosters`
+    # above but a correctness requirement. `rosters` groups by (team, player)
+    # across the whole match, so a substitution inflates it: measured over the
+    # database, 610 of 2260 match-teams (27%) carry more than five players. The
+    # browser's role-constrained assignment
+    # (docs/capture/engine/assign.js, specs/2026-08-16-player-assignment-design.md)
+    # depends on an EXACT COVER of five players over five slots — hand it six and
+    # the damage group has three candidates for two slots, so the constraint that
+    # makes the whole thing work is gone and a substitute who never played this
+    # game becomes a candidate.
+    #
+    # Additive, deliberately: `rosters` is what scrim opponent identification
+    # consumes, and there the ACCUMULATED squad is the right answer. Two
+    # consumers, two correct shapes; neither should be bent to serve the other.
+    #
+    # role is FACEIT's own per-game value (the i16 stats field). A game whose
+    # stats never captured comes back with the '-' sentinel, stored here as null —
+    # assign.js leaves such a group to the operator rather than forcing it.
+    lineups: dict[str, dict[str, dict[str, object]]] = {}
+    for c in codes:
+        key = f"{c['match_id']}:{c['game_no']}"
+        if key in lineups:
+            continue
+        by_team = {}
+        for rp in con.execute(
+            """SELECT rp.team_id, te.name tname, rp.player_id pid,
+                      COALESCE(p.nickname, rp.player_id) nick, p.game_name gname,
+                      rp.role
+               FROM round_players rp
+               LEFT JOIN players p ON p.id = rp.player_id
+               LEFT JOIN teams te ON te.id = rp.team_id
+               WHERE rp.match_id = ? AND rp.game_no = ? AND rp.team_id IS NOT NULL""",
+            (c["match_id"], c["game_no"]),
+        ):
+            slot = by_team.setdefault(rp["team_id"], {"name": rp["tname"], "players": []})
+            role = rp["role"] if rp["role"] in ("Tank", "Damage", "Support") else None
+            slot["players"].append({
+                "id": rp["pid"], "nick": rp["nick"],
+                "game_name": rp["gname"], "role": role})
+        lineups[key] = by_team
+
+    # guid -> role for every hero. The browser had no role data at all for the
+    # built-in heroes (only CUSTOM_HEROES carried one), and the role-constrained
+    # player assignment reads the role OFF THE RECOGNISED HERO to decide which
+    # players can be standing in a slot. 52 entries, so the size cost is nil.
+    hero_roles = {
+        r["guid"]: r["role"]
+        for r in con.execute("SELECT guid, role FROM heroes WHERE role IS NOT NULL")
+    }
+
     con.close()
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -133,11 +191,14 @@ def main() -> None:
                       if f"{r} {t}" in seen_divs],
         "codes": codes,
         "rosters": rosters,
+        "lineups": lineups,
+        "hero_roles": hero_roles,
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh)
     print(f"wrote {OUT}  ({len(codes)} codes across {sorted(seen_divs)}, "
-          f"{len(rosters)} matches, {os.path.getsize(OUT)//1024} KB)")
+          f"{len(rosters)} matches, {len(lineups)} game lineups, "
+          f"{os.path.getsize(OUT)//1024} KB)")
 
 
 if __name__ == "__main__":

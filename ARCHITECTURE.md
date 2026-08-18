@@ -586,6 +586,102 @@ has learned, held in the browser's own IndexedDB.
 jsDelivr on first use and runs in a worker. It is optional: when it fails to
 load, capture continues without name attribution rather than breaking.
 
+**The crop handed to tesseract is found, not assumed.** The calibration box is
+fitted to the *portraits*, and the fixed band underneath it that the crop used
+to assume (48-90% of cell height) straddles the portrait bottom, the name and
+the health bar on a real frame - so the brightest thing in the crop was the
+health bar and the reads came back as letter-soup. That is the likeliest reason
+`comp_slots.player_id` was 0 of 1620 historically. `engine/frames.js nameRow()`
+now locates the name row **once per side, across the whole five-slot strip**,
+and all five crops use it. Per slot it cannot be done: the hero portrait sits
+inside the cell *above* the name and its art is transition-dense, and a long
+name can out-score the health bar - the two obvious per-slot heuristics were
+both tried and both picked the wrong band. Across the strip the five names
+reinforce each other while portrait noise averages out. The row is the run of
+rows with many horizontal light/dark transitions that does not fill the strip
+(a full health bar fills ~0.55 of it, a name ~0.15-0.32) and sits in the
+quietest surroundings, the names being drawn on a dark plate. Measured on real
+frames: 15 of 90 slots read correctly before, 77 of 90 after, and every one of
+the 90 resolves once the role constraint is applied - against 36 of 90 with two
+*wrong* before. `tools/real_frame_eval/` has the numbers, the threshold sweep
+(1800 box/resolution variants, all landing on the row) and a parity check that
+runs the shipped JS over real pixels.
+
+**Names are not how a slot is assigned to a player — role is.** Overwatch
+tournament play is role-locked, and FACEIT records the role each player queued
+for, per game: 8303 of 8356 team-games in the database are exactly 1 Tank /
+2 Damage / 2 Support, and all 53 exceptions are a *missing* role rather than a
+real 2-tank comp. So `engine/assign.js` reads the role off the hero recognised
+in each slot and uses it to partition the candidates. A correctly-read comp
+collapses from 120 permutations to 1 × 2 × 2 = 4 — and **the tank is determined
+with no name evidence at all**. It is the same reduction `owdb/match.py` already
+applies to hero matching, pointed at players instead.
+
+Assignment is optimal within a role group rather than greedy, and it abstains
+rather than guesses: a contested group must clear a lead over the runner-up, and
+then either an absolute score floor or one slot matching decisively — a single
+confident read settles its partner by elimination, and the group mean must not
+veto that. **The floor is what makes this safe.**
+Without it the identical resolver produced 33.6% *wrong* attributions once the
+reads degraded to noise, because uniform noise reliably manufactures a score
+lead between two candidates. `tools/assign_eval.py` measures all of this against
+every real lineup with ground truth known by construction; re-run it when the
+rosters grow.
+
+**Its corruption model understates the win, and `tools/real_frame_eval/` shows
+why.** Run against real tesseract output on real HUD frames — ground truth taken
+from the replay code burnt into the frame — the name-only matcher resolves 85% of
+slots and the role-constrained one 100%, neither ever wrong. The synthetic model
+degrades every name a little; real OCR destroys whole names and leaves the rest
+pristine. It returned `4.04` for a clean, legible `PROXY` in six frames of eight.
+And a slot reading `JODAN` perfectly still matched nothing, because FACEIT's
+stored `game_name` for that player says `Arclite` — **the battletag on a FACEIT
+account can be stale against the live Battle.net name**, which is worth
+remembering before trusting `game_name` as an identity key.
+
+The name matcher survives as the fallback for a game with no `lineups` entry, so
+a stale feed degrades to the old behaviour rather than to nothing. The
+per-slot outcome is published as `player_conf` (`forced` / `matched` / `null`)
+beside the raw read, so a later matcher can tell a role-determined tag from a
+name-matched one.
+
+**`docs/capture/index.html` and `docs/capture/scrim.html` share a JS engine
+under `docs/capture/engine/`, not by copy-paste.** The two pages used to be
+hand-maintained forks of one another: a 2026-08-12 audit
+(`tools/capture_divergence.py`) found 104 top-level functions defined in both
+files, 44 of them silently drifted apart. Seven modules were extracted so the
+logic is owned once:
+
+| Module | Owns |
+| --- | --- |
+| `engine/names.js` | Name normalisation, similarity scoring, roster affinity, `confidentOrientation`. The fold transliterates stroked Latin letters (`ø ł ħ ŧ …`) as well as decomposing accents — NFD leaves the stroked ones alone, so the roster kept a glyph an ASCII-restricted OCR could never emit |
+| `engine/assign.js` | Role-constrained player assignment: which FACEIT player is in which HUD slot (league capture only) |
+| `engine/util.js` | HTML/attr escaping, CSS injection, base64 helpers, toasts, modals, the `ICONS` table |
+| `engine/idb.js` | IndexedDB open/read/write; `open(version, stores)` takes its store list from the caller rather than hard-coding one |
+| `engine/frames.js` | Screen share, frame grab, greyscale canvases, HUD name-row location and name crops; `ctx.onStop` is the page-specific teardown hook |
+| `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
+| `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
+| `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
+
+**The module contract is a UMD IIFE plus `make(ctx)` for anything stateful.**
+Every module exports the same way `docs/capture/scoreboard.js` always has —
+`module.exports = Mod` under Node, `global.OWDBxxx` (`OWDBNames`, `OWDBUtil`,
+`OWDBIdb`, `OWDBFrames`, `OWDBCalibration`, `OWDBRefs`, `OWDBOverlay`,
+`OWDBTour`) in the browser — so the same file runs under `node --test` and in
+either page unmodified. A module that needs per-page state (DOM handles,
+which boxes to draw, what happens on stop) takes a `make(ctx)` factory and
+reads its behaviour from `ctx`; page differences are **injected, never
+branched on inside the module**. `docs/capture/scoreboard.js` is the original
+of this pattern — the engine modules generalise it.
+
+**The snapshot/review/finish cluster is deliberately not extracted.**
+`finishMap` and its neighbours stay forked, defined separately in each page,
+until phase 3: `finishMap` is roughly 1,530 characters in `index.html`
+against a roughly 110-character stub in `scrim.html`, and phase 3 rewrites the
+scrim finish flow anyway, which would waste an extraction done now. Anyone
+touching snapshot, review, or finish logic must check **both**
+`docs/capture/index.html` and `docs/capture/scrim.html`.
+
 **The app is fed by two committed JSON files rather than by crawling FACEIT.**
 `docs/capture/data.json` carries the capturable replay codes and the rosters, and
 is rebuilt by `tools/build_capture_data.py` on every CI run.
@@ -608,14 +704,16 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 
 | File | Responsibility |
 | --- | --- |
-| `docs/capture/index.html` | The league capture app — 2,138 lines, self-contained apart from theme and OCR |
+| `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js` |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, each with a co-located `*.test.js` |
+| `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |
 | `docs/capture/hero_icons.json` | Hero portrait art for the UI |
 | `tools/build_capture_data.py` | Builds `docs/capture/data.json` from the ingest database |
 | `tools/build_capture_refs.py` | Builds `docs/capture/refs.json` from a curator's local library |
+| `tools/capture_divergence.py` | Reports which top-level functions still differ between the two pages — run it before touching shared code |
 
 ### How it connects
 
@@ -637,6 +735,14 @@ now pins the four clauses that matter: `worker-src blob:`, `wasm-unsafe-eval`,
 the `data:` connect source, and the jsDelivr origin the OCR library is loaded
 from.
 
+**`script-src` lacked `'self'` until commit `bc91c1f` (2026-08-12), and that
+silently blocked every same-origin script.** `style-src`, `img-src`, and
+`font-src` all carried `'self'`; `script-src` did not, so `<script
+src="scoreboard.js">` never loaded in production — `window.Scoreboard` was
+undefined on both pages the whole time, with no console error pointing at the
+CSP. Adding `'self'` was a prerequisite for the engine extraction below, since
+every `engine/*.js` file is loaded the same same-origin way.
+
 **The page is not an artifact and may use a CDN.** Unlike `docs/index.html`,
 which must stay self-contained, this page links `docs/theme.css` directly and
 pulls `tesseract.js` from jsDelivr.
@@ -645,7 +751,21 @@ pulls `tesseract.js` from jsDelivr.
 runs `node --check` over the inline scripts — see
 `tests/test_capture_scrim.py::test_league_capture_html_inline_script_is_syntactically_valid`.
 Editing a capture page without running those tests risks shipping a page that
-does not parse.
+does not parse. **`tests/test_capture_js_units.py` runs every
+`docs/capture/**/*.test.js` file under `node --test`** — before this shim
+existed, `scoreboard.test.js`'s 9 tests sat green in the repo but were never
+actually executed by anything. Run `tools/capture_divergence.py` before
+touching any function shared between the two pages; it reports which
+top-level functions still differ so a fix does not silently apply to only one
+page.
+
+**Real drift the extraction fixed, as a sample of what "104 shared functions,
+44 diverged" meant in practice:** `simScore` — the scrim page's name
+normaliser was weaker than the league page's; `uiModal` — the scrim copy had
+dropped the `textarea` case, which broke editing and re-parsing an OCR read
+on that page only; `ocrWorker` — the scrim page never got the league page's
+OCR load timeout, so a stuck load could hang forever on scrim capture but not
+on league capture.
 
 ## 7. Scrims
 
@@ -916,12 +1036,37 @@ app never has to crawl FACEIT itself.
       "<team_id>": {"name": "Qwiz Esports",
         "players": [{"id": "…", "nick": "qeezyow", "game_name": "qeezy"}]}
     }
-  }
+  },
+  "lineups": {
+    "<match_id>:<game_no>": {
+      "<team_id>": {"name": "Qwiz Esports",
+        "players": [{"id": "…", "nick": "qeezyow", "game_name": "qeezy",
+                     "role": "Tank"}]}
+    }
+  },
+  "hero_roles": {"0x02E000000000007A": "Tank"}
 }
 ```
 
 `game_name` is the Battle.net name the Overwatch HUD actually shows, which is
 why ingest backfills it separately — the FACEIT nickname often differs.
+
+**`lineups` is keyed per game and `rosters` per match, and that is not
+redundancy.** `rosters` groups by `(team, player)` across the whole match, so a
+substitution inflates it — 610 of 2260 real match-teams (27%) carry more than
+five players. Player assignment needs an *exact cover* of five over five slots;
+hand it six and the damage group has three candidates for two slots, so the role
+constraint stops constraining and a substitute who never played that game becomes
+a candidate for it. Scrim opponent identification wants
+the opposite — the accumulated squad, because a season's stand-ins are what still
+identify a lineup when two players are on smurfs. Two consumers, two correct
+shapes; neither should be bent to serve the other.
+
+`role` is FACEIT's own per-game value (the `i16` stats field), stored as `null`
+for a game whose stats never captured rather than guessed. `hero_roles` exists
+because the browser otherwise has no role for a *built-in* hero at all — only
+`CUSTOM_HEROES` carried one — and the slot's role is read off the recognised
+hero.
 
 ### `docs/capture/refs.json` — the hero reference library
 
