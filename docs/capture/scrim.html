@@ -822,7 +822,14 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
       onSideChange(); s.sideResolved=true;
       snapMsg(`sides auto-detected (${res.source}) \u2014 ${val==='us'?'us':'them'} on left`, false); return true; }
     snapMsg(sideFailureHint(ourRosterNames().length>0), true); return false;
-  }catch(e){ snapMsg('side detection failed \u2014 set the left team manually, then Snapshot again', true); return false; }
+  }catch(e){
+    // Say WHY. This handler swallowed the reason, and twice in one session
+    // that cost real time: a failed OCR load and a matcher fault both arrived
+    // as the same eight words with the exception discarded.
+    console.error('side detection failed:', e);
+    const why=(e&&e.message)?' ('+e.message+')':'';
+    snapMsg('side detection failed'+why+' — set the left team manually, then Snapshot again', true);
+    return false; }
   finally{ s._detecting=false; } }
 
 // ---------- selected code ----------
