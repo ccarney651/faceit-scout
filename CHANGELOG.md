@@ -17,6 +17,34 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-19
+
+### Fixed
+- **HUD names were being cropped with their neighbour's plate border attached.**
+  Each name crop padded the portrait cell by 5% of its width on either side,
+  which on a tight HUD reaches into the *next* name plate and drags its edge in.
+  Tesseract reads those bars as `|`, `i`, `§` or `}`, so a perfectly legible
+  `ASHBORN` came back as `§ ASHBORN |}`. The crop now follows the glyphs, and
+  a run touching the cell edge is treated as the border rather than a letter -
+  unless it is wide, because a name like `CHEESEBURGER` genuinely fills its
+  cell and must not be clipped.
+
+  Measured over twelve real frames with known ground truth, live captures and
+  archived ones together: exact reads go from 75/120 to 110/120, stray
+  characters from 57 to 2, and no frame got worse.
+
+- **A name wrapped in that punctuation matched nothing.** The comparison
+  lowercased and cut at `#` and nothing else, so `§ ASHBORN |}` was never equal
+  to `ashborn`, and `i XYPHER |` normalised whole to `ixypher`. In the field
+  four of five legible names were discarded and scrim side detection reported
+  that it could not tell which side was ours - on a read a person resolves at a
+  glance. Names now normalise without punctuation and also match on their
+  whitespace-separated fragments of three characters or more, so a stray `i`
+  falls away without taking `XYPHER` with it. The three-of-five bar is
+  unchanged, so noise still cannot name a team on its own.
+
+---
+
 ## 2026-08-18 (later)
 
 ### Added
