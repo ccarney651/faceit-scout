@@ -492,6 +492,29 @@ function codeFeedWarn(){
     el.textContent='League-code check unavailable — data.json carries no codes (a local checkout ships an empty feed; CI publishes the real one).';
   }
 }
+// Every team the feed knows, and their rosters keyed by lowercased name.
+//
+// `team_rosters` is the ACCUMULATED squad for every team in the league - 159 of
+// them - while `rosters` is per coded match and reaches 19. This was built from
+// `rosters` alone, which predates team_rosters, and it showed twice in the
+// field: the team autocomplete offered no Master-division teams at all, and
+// faceitRoster() could not find a team that had never played a coded match -
+// including the operator's own, which quietly disabled half of side detection.
+//
+// team_rosters wins where a team is in both: it is the whole squad across the
+// season, so it matches a lineup that a single match's five cannot.
+function indexLeagueTeams(d){
+  d=d||{};
+  const names=new Set(), rosters={};
+  const add=t=>{ if(!t||!t.name||!t.players) return;
+    names.add(t.name);
+    const k=t.name.trim().toLowerCase();
+    if(!rosters[k]) rosters[k]=t; };
+  const tr=d.team_rosters||{}; for(const tid in tr) add(tr[tid]);
+  const per=d.rosters||{}; for(const mid in per){ const m=per[mid]||{}; for(const tid in m) add(m[tid]); }
+  for(const c of (d.codes||[])){ if(c.team_a) names.add(c.team_a); if(c.team_b) names.add(c.team_b); }
+  return { names:[...names].sort(), rosters };
+}
 async function loadTeamNames(){
   try{
     const d=await (await fetch('data.json',{cache:'no-store'})).json();
@@ -499,23 +522,9 @@ async function loadTeamNames(){
     CODE_INDEX=OWDBSession.buildCodeIndex(d);
     CODE_FEED = CODE_INDEX.codes.size ? 'ready' : 'empty';
     codeFeedWarn();
-    const seen=new Set();
-    FACEIT_ROSTERS={};
-    for(const mid in (d.rosters||{})){
-      const match=d.rosters[mid];
-      for(const tid in match){
-        const t=match[tid];
-        if(t && t.name && t.players){
-          seen.add(t.name);
-          const key=t.name.trim().toLowerCase();
-          FACEIT_ROSTERS[key]=t;
-        }
-      }
-    }
-    for(const c of (d.codes||[])){
-      if(c.team_a){seen.add(c.team_a);} if(c.team_b){seen.add(c.team_b);}
-    }
-    LEAGUE_TEAMS=[...seen].sort();
+    const idx=indexLeagueTeams(d);
+    FACEIT_ROSTERS=idx.rosters;
+    LEAGUE_TEAMS=idx.names;
     const dl=document.getElementById('teamnames'); if(dl) dl.innerHTML=LEAGUE_TEAMS.map(t=>`<option value="${esc(t)}">`).join('');
   }catch(e){
     // Loud, not silent: index.html surfaces the same failure via feedError, and

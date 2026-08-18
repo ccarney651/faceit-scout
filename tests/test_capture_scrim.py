@@ -788,3 +788,72 @@ def test_an_existing_scrims_own_team_is_never_overridden_by_the_remembered_one()
 
 def test_the_form_stays_blank_when_no_team_is_remembered() -> None:
     assert _run_us("return scrimFormTeamUs(null);") == ""
+
+
+# ---------------------------------------------------------------------------
+# Which teams the page knows about
+# ---------------------------------------------------------------------------
+# The page built its team list and roster lookup from `rosters` alone, which is
+# per CODED MATCH: 19 teams against the 159 in `team_rosters`. That is why the
+# autocomplete offered no Master-division teams, and why faceitRoster() could
+# not find a team that had not played a coded match - including, in the field,
+# the operator's own.
+
+_FEED_FIXTURE = """{
+  team_rosters:{
+    t1:{name:'Vertex', players:[{game_name:'gcb'},{nick:'Xypher'}]},
+    t2:{name:'Master Div Team', players:[{game_name:'someone'}]}
+  },
+  rosters:{ 'm1':{ t3:{name:'Coded Only', players:[{game_name:'coded'}]} } },
+  codes:[{team_a:'Coded Only', team_b:'Named In Codes'}]
+}"""
+
+
+def _run_feed(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    src = (_extract(("function indexLeagueTeams(", "async function loadTeamNames("))
+           + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));")
+    tmp = Path("scrim_feed_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True)
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_every_team_in_the_league_is_offered_not_just_the_coded_ones() -> None:
+    names = _run_feed(f"return indexLeagueTeams({_FEED_FIXTURE}).names;")
+    assert "Master Div Team" in names, "a team with no coded match is still a real team"
+    assert "Vertex" in names
+
+
+def test_teams_reachable_only_through_a_coded_match_are_kept() -> None:
+    # Older feeds carry no team_rosters at all; dropping this would trade one
+    # regression for another.
+    names = _run_feed(f"return indexLeagueTeams({_FEED_FIXTURE}).names;")
+    assert "Coded Only" in names
+
+
+def test_a_team_named_only_in_the_code_list_is_still_offered() -> None:
+    names = _run_feed(f"return indexLeagueTeams({_FEED_FIXTURE}).names;")
+    assert "Named In Codes" in names
+
+
+def test_the_roster_lookup_finds_a_team_that_never_played_a_coded_match() -> None:
+    # This is the side-detection half: ourSide() needs a roster for our team,
+    # and ours had no coded match.
+    roster = _run_feed(f"return indexLeagueTeams({_FEED_FIXTURE}).rosters['vertex'];")
+    assert roster and [p.get("game_name") or p.get("nick") for p in roster["players"]] == ["gcb", "Xypher"]
+
+
+def test_the_roster_lookup_is_case_insensitive() -> None:
+    assert _run_feed(f"return !!indexLeagueTeams({_FEED_FIXTURE}).rosters['master div team'];")
+
+
+def test_teams_are_listed_once_and_sorted() -> None:
+    names = _run_feed(f"return indexLeagueTeams({_FEED_FIXTURE}).names;")
+    assert names == sorted(set(names)), "duplicates or unsorted names in the picker"
