@@ -54,7 +54,7 @@ test('two smurfs still identify the team, and are reported as unmatched', () => 
   const got = O.identifyTeam(seen, O.buildTeamIndex(FEED));
   assert.equal(got.team_id, 't1');
   assert.equal(got.matched, 3);
-  assert.deepEqual(got.unmatched.sort(), ['throwaway123', 'xx_alt_xx']);
+  assert.deepEqual(got.unmatched.sort(), ['throwaway123', 'xxaltxx']);
 });
 
 test('three smurfs fall back to no team rather than to a wrong one', () => {
@@ -194,8 +194,44 @@ test('a learned alias is removed when the whole side is rejected', () => {
 });
 
 test('rejecting a different side leaves an unrelated team alone', () => {
-  const store = O.learnAliases({}, 't1', ['alt_one']);
+  const store = O.learnAliases({}, 't1', ['altone']);
   const said = O.normSet(['someone', 'else', 'entirely']);
   const keep = store.t1.filter(n => said.indexOf(n) === -1);
-  assert.deepEqual(keep, ['alt_one']);
+  assert.deepEqual(keep, ['altone']);
+});
+
+// --- OCR noise around a legible name ----------------------------------------
+// Real reads from a live scrim (2026-08-19). Every name is legible to a human
+// and all but one were legible to tesseract; the matcher threw them away
+// because norm() only lowercased and cut at '#', so "§ ASHBORN |}" was never
+// equal to "ashborn". One of five matched, against a bar of three, and side
+// detection reported "could not tell which side is yours" on a perfect read.
+const FIELD_READS = ['Ny fc', 'SYNEX', 'i XYPHER |', '§ ASHBORN |}', 'i NUT |'];
+const OUR_SQUAD = ['khaled', 'Nenonxx', 'Ashborn', 'Synex', 'Lexrr', 'gcb', 'Xypher', 'NUT'];
+
+test('a name wrapped in OCR punctuation still matches', () => {
+  assert.ok(O.normSet(['§ ASHBORN |}']).includes('ashborn'));
+});
+
+test('a stray one-character token does not swallow the name beside it', () => {
+  // "i XYPHER |" normalised as one string is "ixypher", which matches nothing.
+  assert.ok(O.normSet(['i XYPHER |']).includes('xypher'));
+});
+
+test('a three-letter name survives token filtering', () => {
+  // The shortest real name in the squad. Drop tokens under three characters
+  // and this one goes with them.
+  assert.ok(O.normSet(['i NUT |']).includes('nut'));
+});
+
+test('the side we are on is found from a real, noisy read', () => {
+  const left = ['= GROKA §', '5 OTAKAW 1', '§ KATT0S |', '§ CHEESEBURGER §', '§ OIDOPUAA §'];
+  assert.equal(O.ourSide(left, FIELD_READS, OUR_SQUAD), 'right');
+});
+
+test('noise does not manufacture a match against the wrong team', () => {
+  // The same reads against a squad that shares none of those names must still
+  // come back null - loosening the comparison must not start inventing sides.
+  const strangers = ['proxy', 'mappsy', 'twerknation', 'arclite', 'szatan'];
+  assert.equal(O.ourSide(['a', 'b', 'c', 'd', 'e'], FIELD_READS, strangers), null);
 });

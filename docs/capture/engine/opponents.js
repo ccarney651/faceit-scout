@@ -33,17 +33,36 @@
   // discriminator, so both sides are folded the same way before comparison.
   // Mirrors OWDBNames.normName; duplicated deliberately so this module stays
   // usable on its own under node:test without wiring up names.js.
+  // Battle.net names carry a #1234 discriminator; everything after it is noise.
+  // Punctuation goes too: OCR wraps a perfectly legible name in whatever it
+  // made of the plate edges - "§ ASHBORN |}" is ASHBORN, and comparing it
+  // as a whole string is how a clean read matched nothing.
   function norm(name) {
     var s = String(name == null ? '' : name).trim().toLowerCase();
     var hash = s.indexOf('#');
-    return hash === -1 ? s : s.slice(0, hash);
+    if (hash !== -1) s = s.slice(0, hash);
+    return s.replace(/[^a-z0-9]/g, '');
   }
 
+  // Minimum length for a fragment to be treated as a name in its own right.
+  // Three, because the shortest real name met in the field is NUT - and
+  // because one- and two-character fragments are exactly what OCR invents.
+  var MIN_TOKEN = 3;
+
+  // Every string a read could reasonably BE: the whole thing stripped, plus
+  // each whitespace-separated fragment. "i XYPHER |" normalises whole to
+  // "ixypher", which matches nothing - the stray letter has to be allowed to
+  // fall away without taking the name with it. Roster names are put through
+  // the same expansion, so the comparison stays symmetric.
   function normSet(names) {
     var out = [];
+    function push(k) { if (k && out.indexOf(k) === -1) out.push(k); }
     (names || []).forEach(function (n) {
-      var k = norm(n);
-      if (k && out.indexOf(k) === -1) out.push(k);
+      push(norm(n));
+      String(n == null ? '' : n).split(/\s+/).forEach(function (part) {
+        var k = norm(part);
+        if (k.length >= MIN_TOKEN) push(k);
+      });
     });
     return out;
   }
