@@ -25,7 +25,8 @@ APP = Path(__file__).resolve().parents[1] / "docs" / "capture" / "index.html"
 
 def _pure_js() -> str:
     html = APP.read_text(encoding="utf-8")
-    start = html.index("function buildObservations(snaps, players, playersRaw, phased){")
+    start = html.index(
+        "function buildObservations(snaps, players, playersRaw, phased, playersConf){")
     end = html.index("\n}", start) + len("\n}")
     assert end > start, "extraction anchors moved in index.html"
     return html[start:end]
@@ -100,10 +101,31 @@ def test_pairs_keep_their_two_tuple_arity() -> None:
     assert all(len(p) == 2 for o in got for p in o["pairs"])
 
 
+def test_player_conf_follows_the_same_skip_as_every_other_array() -> None:
+    """`player_conf` records HOW a slot was assigned ('forced' from the role
+    constraint alone, 'matched' on name evidence, null = abstained). It is a
+    fourth parallel array, so it must be dropped under the same skip as the rest
+    or a 'forced' tag lands on the wrong hero."""
+    gappy = ("[{round:1,sub:null,attacker:'a',ts:0,"
+             "a:['ga1',null,'ga3',null,'ga5'],b:['gb1','gb2','gb3','gb4','gb5']}]")
+    conf = ("{a:['forced',null,'matched',null,'matched'],"
+            "b:[null,null,null,null,null]}")
+    obs = _run(f"return buildObservations({gappy},{_PLAYERS},{_RAW},false,{conf})")[0]
+    assert obs["player_conf"] == ["forced", "matched", "matched"]
+    assert len(obs["heroes"]) == len(obs["pairs"]) == len(obs["ingame_names"]) \
+        == len(obs["player_conf"])
+
+
+def test_a_capture_with_no_confidence_data_still_publishes_nulls() -> None:
+    """An older session object (or the greedy fallback path) passes nothing."""
+    got = _run(f"return buildObservations({_FULL},{_PLAYERS},{_RAW},false);")
+    assert got[0]["player_conf"] == [None] * 5
+
+
 def test_the_rest_of_the_observation_shape_is_unchanged() -> None:
     got = _run(f"return buildObservations({_FULL},{_PLAYERS},{_RAW},true);")
     assert set(got[0]) == {"side", "ts", "sub_map", "round_no", "phase",
-                           "heroes", "pairs", "ingame_names"}
+                           "heroes", "pairs", "ingame_names", "player_conf"}
     assert (got[0]["side"], got[0]["phase"]) == ("a", "attack")
     assert (got[1]["side"], got[1]["phase"]) == ("b", "defend")
     # Unphased maps (Control/Push) carry no attack/defend at all.

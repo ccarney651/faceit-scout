@@ -401,6 +401,7 @@ button:disabled{opacity:.45;cursor:default}
   </div>
 </div>
 <script src="engine/names.js"></script>
+<script src="engine/assign.js"></script>
 <script src="engine/util.js"></script>
 <script src="engine/idb.js"></script>
 <script src="engine/frames.js"></script>
@@ -613,7 +614,7 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 // index.html releases its live-scouting claim (a system scrims don't have),
 // so onStop is releaseClaim here and null on scrim.html.
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:releaseClaim});
-const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
@@ -816,10 +817,18 @@ async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
   await w.setParameters({ tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.'~" });
   const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
+    // One row for all five slots. The calibration box is fitted to the
+    // PORTRAITS, and the fixed 48-90%-of-cell-height band it implies straddles
+    // the portrait bottom, the name and the health bar - which is why OCR came
+    // back as letter-soup and comp_slots.player_id was 0 of 1620. Finding the
+    // row across the whole strip lets the five names reinforce each other; per
+    // slot, the portrait above and the bar below win. null = not found, and
+    // nameCanvas falls back to the old fractions. See engine/frames.js.
+    const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
       let data;
       try{
-        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell)),
+        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell,row)),
           new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]));
       }catch(e){
         // tesseract.js processes jobs sequentially on one worker, so a stalled
@@ -872,6 +881,49 @@ function attribute(names,roster){ const out=[null,null,null,null,null], cand=[];
   const openIds=roster.filter(p=>p.id&&!usedId.has(p.id)).map(p=>p.id);
   if(openSlots.length===1 && openIds.length===1) out[openSlots[0]]=openIds[0];
   return out; }
+// ---------- Role-constrained assignment (engine/assign.js) ----------
+// The five who actually played THIS game, with their FACEIT roles. Keyed per
+// game, not per match: 27% of match-teams field more than five once substitutes
+// are counted, and assign.js needs an exact five-over-five cover to constrain
+// against (see tools/build_capture_data.py and the design doc).
+// Returns [] when the feed predates `lineups`, which is the fallback signal.
+function gameLineup(teamId){ const c=selectedCode(); if(!c||!teamId) return [];
+  const t=((DATA.lineups||{})[`${c.match_id}:${c.game_no}`]||{})[teamId];
+  if(!t||!t.players) return [];
+  return t.players.map(p=>{ const game=(p.game_name||'').trim(), nick=(p.nick||'').trim();
+    return { id:p.id||null, role:p.role||null, names:[...new Set([game,nick].filter(Boolean))] }; })
+    .filter(x=>x.id&&x.names.length); }
+// The role of the hero recognised in each slot — this is what turns "which of
+// five?" into "which of two?", and settles the tank outright. An unrecognised
+// portrait contributes null, which leaves its role group unresolved rather than
+// forcing a body into the slot.
+function slotRoles(comp, side){
+  const roles=(DATA.hero_roles)||{};
+  return (comp&&comp[side]||[]).map(s=>{ if(!s||!s.guid) return null;
+    return roles[s.guid] || (CUSTOM_HEROES[s.guid]&&CUSTOM_HEROES[s.guid].role) || null; }); }
+// Resolve one side's five slots. Prefers the role-constrained assignment and
+// falls back to the name-only greedy matcher when this game has no lineup in the
+// feed (an older data.json, or a match whose FACEIT stats never captured) — a
+// stale feed degrades to the previous behaviour rather than to nothing.
+//
+// sidesKnown GATES THE ROLE CONSTRAINT, and that is a safety requirement, not a
+// refinement. The name-only matcher degrades harmlessly when the left/right
+// mapping is wrong: every read is compared against the other team's roster, so
+// nothing matches and every slot comes back null. Role-forcing has no such
+// protection — a one-player role group is assigned with NO name evidence, so
+// against the wrong roster it confidently tags the wrong team's tank. That
+// happened in a real capture (2026-08-18): side detection failed, sides stayed
+// unconfirmed, and Hazard was attributed to the opposing team's tank. Below the
+// gate we use names only, which cannot invent an attribution it has no evidence
+// for.
+function attributeSide(names, teamId, comp, side, sidesKnown){
+  const lineup=gameLineup(teamId);
+  if(sidesKnown && lineup.length===5 && typeof OWDBAssign!=='undefined'){
+    const r=OWDBAssign.assign(names, lineup, slotRoles(comp,side));
+    if(r.ids.some(Boolean)) return r;
+  }
+  return { ids:attribute(names,teamRoster(teamId)), conf:[null,null,null,null,null] };
+}
 function setDetectMsg(html,cls){ const e=document.getElementById('sidehint');
   if(e) e.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
 function sideTeamName(id){ const c=selectedCode(); if(!c) return '?';
@@ -903,7 +955,18 @@ async function detectSides(){ const c=selectedCode(), s=session;
   // was null — still worth a best-effort tag against the current/default sides).
   const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
   const lRoster=teamRoster(leftId), rRoster=teamRoster(rightId);
-  const aIds=attribute(names.a,lRoster), bIds=attribute(names.b,rRoster);
+  // The recognised heroes supply each slot's role, which is what constrains the
+  // assignment. Read fresh here rather than threaded in: detectSides is called
+  // from the first-snapshot gate and from the manual button, and only one of
+  // those has a comp in hand.
+  const comp=readComp()||{a:[],b:[]};
+  // Sides are known when THIS read identified them, or when the operator locked
+  // them by hand. A blank/auto selection with an inconclusive read is NOT known,
+  // and must not reach the role constraint — see attributeSide.
+  const sidesKnown=!!left || !!(s&&s.sideResolved);
+  const aRes=attributeSide(names.a,leftId,comp,'a',sidesKnown),
+        bRes=attributeSide(names.b,rightId,comp,'b',sidesKnown);
+  const aIds=aRes.ids, bIds=bRes.ids;
   // Keep the RAW HUD reads next to the ids they produced. attribute() is lossy —
   // a slot the current matcher can't resolve is stored as null and the text that
   // produced it is gone forever, so every matcher improvement is frozen out of
@@ -911,7 +974,12 @@ async function detectSides(){ const c=selectedCode(), s=session;
   // captures re-matchable offline. Session-level, exactly like `players`: a
   // mid-map retag rewrites both together so a raw read always explains the id
   // published beside it.
-  if(s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b}; }
+  // playersConf records HOW each slot was decided ('forced' from the role
+  // constraint alone, 'matched' on name evidence, null = abstained), so Review
+  // can surface the abstentions first and a later matcher can tell a confident
+  // tag from a weak one.
+  if(s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b};
+         s.playersConf={a:aRes.conf,b:bRes.conf}; }
   return {left, aIds, bIds, lRoster, rRoster};
 }
 // Manual re-run/override: sides now resolve automatically on the first snapshot
@@ -956,8 +1024,19 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
       const names=await ocrNames();
       if(session!==s || selectedCode()!==c) return;
       const leftId=currentLeftId(), rightId=(leftId===c.t1)?c.t2:c.t1;
-      const aIds=attribute(names.a,teamRoster(leftId)), bIds=attribute(names.b,teamRoster(rightId));
-      if(session===s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b}; }
+      const comp=readComp()||{a:[],b:[]};
+      // This runs only because the operator just LOCKED a side (onSideChange
+      // calls it when sideResolved goes true), so the orientation is known by
+      // construction — but pass it explicitly rather than letting an omitted
+      // argument decide: attributeSide treats a missing sidesKnown as "not
+      // known" and would quietly drop the role constraint in the one place the
+      // sides are most certain.
+      const known=!!s.sideResolved;
+      const aRes=attributeSide(names.a,leftId,comp,'a',known),
+            bRes=attributeSide(names.b,rightId,comp,'b',known);
+      const aIds=aRes.ids, bIds=bRes.ids;
+      if(session===s){ s.players={a:aIds,b:bIds}; s.playersRaw={a:names.a,b:names.b};
+                       s.playersConf={a:aRes.conf,b:bRes.conf}; }
       const hit=aIds.filter(Boolean).length+bIds.filter(Boolean).length;
       setDetectMsg(hit?`${hit}/10 players tagged`:'still couldn’t read HUD names — check calibration.','ok');
     }catch(e){ if(session===s) setDetectMsg('player re-tag failed: '+(e.message||e),'warn'); }
@@ -1206,7 +1285,10 @@ function currentLeftId(){ const c=selectedCode(); if(!c) return null;
 // (playersRaw deliberately survives: a raw HUD read is orientation-independent —
 // slot A is the left of the HUD whichever team stands there — so it stays valid
 // and worth publishing even if the follow-up retag fails and leaves ids empty.)
-function onSideChange(){ if(session){ session.players=null;
+// playersConf goes with players, not with playersRaw: it describes how a slot was
+// matched to a ROSTER, so it is only meaningful for the orientation it was
+// computed under.
+function onSideChange(){ if(session){ session.players=null; session.playersConf=null;
   session.sideResolved=!!((document.querySelector('input[name=side]:checked')||{}).value||'');
   if(session.sideResolved) retagPlayers(); }
   relabelTeams(); }
@@ -1351,24 +1433,31 @@ async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const
 // three arrays must be appended inside the same skip so index i means the same
 // slot in each. `pairs` keeps its 2-tuple arity — owdb/contribute.py and
 // tools/audit_capture_sides.py read pair[1] positionally.
-function buildObservations(snaps, players, playersRaw, phased){
+function buildObservations(snaps, players, playersRaw, phased, playersConf){
   const observations=[];
   for(const s of (snaps||[])){ for(const side of ['a','b']){ const slots=(side==='a'?s.a:s.b)||[];
     const pids=(players&&players[side])||[];        // per-slot FACEIT ids from Auto-detect
     const raws=(playersRaw&&playersRaw[side])||[];  // per-slot raw OCR read behind those ids
-    const heroes=[], pairs=[], ingame_names=[];
+    // How each id was decided: 'forced' (role constraint alone), 'matched' (name
+    // evidence cleared both gates), null (abstained). A parallel array rather
+    // than a third element of `pairs` — pair arity is read positionally by
+    // owdb/contribute.py and tools/audit_capture_sides.py.
+    const confs=(playersConf&&playersConf[side])||[];
+    const heroes=[], pairs=[], ingame_names=[], player_conf=[];
     for(let i=0;i<slots.length;i++){ const g=slots[i]; if(!g) continue;
-      heroes.push(g); pairs.push([g, pids[i]||null]); ingame_names.push(raws[i]||null); }
+      heroes.push(g); pairs.push([g, pids[i]||null]); ingame_names.push(raws[i]||null);
+      player_conf.push(confs[i]||null); }
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: phased? (s.attacker===side?'attack':'defend') : null,
-      heroes, pairs, ingame_names }); } }
+      heroes, pairs, ingame_names, player_conf }); } }
   return observations;
 }
 async function finishMap(){ if(!session||!session.snaps.length) return; const c=session.code;
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
   const leftId = sideId||c.t1, rightId = (leftId===c.t1)?c.t2:c.t1;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nm=id=>(rs[id]&&rs[id].name)||null;
-  const observations=buildObservations(session.snaps, session.players, session.playersRaw, session.phased);
+  const observations=buildObservations(session.snaps, session.players, session.playersRaw,
+    session.phased, session.playersConf);
   const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,

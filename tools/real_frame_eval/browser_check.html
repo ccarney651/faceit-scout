@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Real-frame check in a real browser</title>
+<!--
+  Runs the SHIPPED capture engine over a real frame from screenshots/, in a
+  real browser, with no screen share:
+
+    1. auto-calibration, exactly as engine/calibration.js autoCalibrate() does
+       it (base AUTO_STRIPS, then the dx/dy sweep scored by portrait matching);
+    2. engine/frames.js nameRow() on the boxes that produced;
+    3. engine/frames.js nameCanvas() with that row.
+
+  The node and Python harnesses next to this file cannot cover any of that:
+  they have no canvas, so they cannot run drawImage/getImageData, and they use
+  a *derived* calibration box rather than the one the product actually picks.
+
+  Serve the REPO ROOT (not docs/) so both /docs/capture/ and /screenshots/ are
+  same-origin - a cross-origin frame taints the canvas and getImageData throws:
+
+      .venv/Scripts/python.exe -m http.server 8000 --bind 127.0.0.1
+      "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+        --headless=new --disable-gpu --virtual-time-budget=30000 --dump-dom \
+        "http://127.0.0.1:8000/tools/real_frame_eval/browser_check.html"
+
+  or just open that URL in a browser. #out holds the JSON result.
+-->
+<pre id="out">running…</pre>
+<script src="/docs/capture/engine/util.js"></script>
+<script src="/docs/capture/engine/frames.js"></script>
+<script src="/docs/capture/engine/refs.js"></script>
+<script src="/docs/capture/engine/calibration.js"></script>
+<script>
+// The page-level globals index.html declares before the engine modules run.
+// The modules close over these by name at call time (see engine/frames.js's
+// header), so a harness has to declare them the same way.
+const PAD = 2;
+let REFS = [], REF_W = 64, REF_H = 36, LF = 0.42, TF = 0.45;
+let LOCAL_REFS = [], CUSTOM_HEROES = {}, HERO_ICON = {};
+let boxes = {}, drawMode = null, dragS = null, dragC = null;
+const b64bytes = OWDBUtil.b64bytes;
+function selectedCode() { return null; }
+function clearCalPreview() {} function drawOverlay() {} function updateBtns() {}
+function renderCalPreview() {} function setStageHint() {}
+
+const FRAMES = [
+  '/screenshots/Screenshot 2026-07-15 200028.png',
+  '/screenshots/Screenshot 2026-07-15 231525.png',
+  '/screenshots/Screenshot 2026-07-15 231549.png',
+  '/screenshots/Screenshot 2026-07-15 231604.png',
+  '/screenshots/Screenshot 2026-07-15 231629.png',
+  '/screenshots/Screenshot 2026-07-15 231639.png',
+  '/screenshots/Screenshot 2026-07-15 231647.png',
+  '/screenshots/Screenshot 2026-07-15 231657.png',
+  '/screenshots/image.png',
+];
+
+function loadFrame(url) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      // A canvas is drawable and can carry the two properties the engine reads
+      // off ctx.video, so it stands in for the shared <video> element.
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      c.videoWidth = c.width; c.videoHeight = c.height;
+      res(c);
+    };
+    img.onerror = () => rej(new Error('could not load ' + url));
+    img.src = encodeURI(url);
+  });
+}
+
+async function loadRefs() {
+  const rj = await (await fetch('/docs/capture/refs.json', { cache: 'no-store' })).json();
+  REF_W = rj.w; REF_H = rj.h; LF = rj.left_fraction; TF = rj.top_fraction;
+  REFS = rj.refs.map(r => {
+    const px = b64bytes(r.d);
+    let m = 0; for (let i = 0; i < px.length; i++) m += px[i];
+    m /= px.length;
+    const c = new Float32Array(px.length);
+    let ss = 0;
+    for (let i = 0; i < px.length; i++) { c[i] = px[i] - m; ss += c[i] * c[i]; }
+    return { n: r.n, g: r.g, v: r.v, c, norm: Math.sqrt(ss) || 1 };
+  });
+  return REFS.length;
+}
+
+// A transcription of autoCalibrate()'s placement search, minus the DOM and the
+// operator confirmation. Kept in the same order and with the same bounds so it
+// reports the boxes the product would actually offer.
+function calibrate(cal, frames, frame) {
+  const R = frames.detectContentRect();
+  let best = cal.boxesFromStrips(R, 0, 0);
+  const base = JSON.parse(JSON.stringify(best));
+  let bestScore = cal.scoreBoxes(frame, best), pick = [0, 0];
+  for (let dyi = -8; dyi <= 8; dyi++) {
+    for (let dxi = -2; dxi <= 2; dxi++) {
+      if (!dyi && !dxi) continue;
+      const cand = cal.boxesFromStrips(R, dxi * 0.01, dyi * 0.01);
+      const sc = cal.scoreBoxes(frame, cand);
+      if (sc > bestScore) { bestScore = sc; best = cand; pick = [dxi, dyi]; }
+    }
+  }
+  return { rect: R, base, boxes: best, score: +bestScore.toFixed(3), offset: pick };
+}
+
+const r2 = o => ({ x: Math.round(o.x), y: Math.round(o.y), w: Math.round(o.w), h: Math.round(o.h) });
+
+// Where the five portraits actually are on these frames, measured off the
+// pixels (see tools/real_frame_eval/README.md). Scored here against whatever
+// auto-calibration picks, using the product's own portrait matcher, so the
+// comparison is not a matter of opinion.
+const MEASURED = { a: { x: 57, y: 97, w: 700, h: 111 }, b: { x: 1800, y: 97, w: 700, h: 111 } };
+
+// Per-cell best hero match, the same call scoreBoxes() sums over.
+function cells(frames, refs, frame, bxs) {
+  frames.ensureWork();
+  const out = {};
+  for (const side of ['a', 'b']) {
+    const b = bxs[side];
+    out[side] = [];
+    for (let i = 0; i < 5; i++) {
+      const cell = { x: b.x + i * b.w / 5, y: b.y, w: b.w / 5, h: b.h };
+      const m = refs.bestMatch(frames.cellGrayPadded(frame, cell), side, true);
+      out[side].push([m.g || '??', +m.score.toFixed(2)]);
+    }
+  }
+  return out;
+}
+
+(async () => {
+  const out = { refs: 0, frames: {} };
+  try {
+    out.refs = await loadRefs();
+    for (const url of FRAMES) {
+      const frame = await loadFrame(url);
+      const frames = OWDBFrames.make({ doc: document, video: frame, onStop: null });
+      const refs = OWDBRefs.make({ doc: document });
+      // calibration.js reaches for these by name, exactly as on the pages.
+      window.ensureWork = frames.ensureWork;
+      window.grabFrame = () => frame;
+      window.cellGrayPadded = frames.cellGrayPadded;
+      window.detectContentRect = frames.detectContentRect;
+      window.bestMatch = refs.bestMatch;
+      const cal = OWDBCalibration.make({
+        doc: document, video: frame, ov: document.createElement('canvas'),
+        octx: document.createElement('canvas').getContext('2d'), boxKeys: ['a', 'b'],
+      });
+      const c = calibrate(cal, frames, frame);
+      const rec = {
+        rect: r2(c.rect), offset: c.offset, sides: {},
+        score: { auto: c.score, base: +cal.scoreBoxes(frame, c.base).toFixed(3),
+                 measured: +cal.scoreBoxes(frame, MEASURED).toFixed(3) },
+        heroes: { auto: cells(frames, refs, frame, c.boxes),
+                  measured: cells(frames, refs, frame, MEASURED) },
+      };
+      for (const side of ['a', 'b']) {
+        const b = c.boxes[side];
+        const row = frames.nameRow(frame, b);
+        const cell = { x: b.x, y: b.y, w: b.w / 5, h: b.h };
+        const cv = frames.nameCanvas(frame, cell, row);
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i];
+        rec.sides[side] = {
+          box: r2(b), base: r2(c.base[side]), row,
+          crop: [cv.width, cv.height], meanLuma: Math.round(s / (d.length / 4)),
+          rowFromMeasured: frames.nameRow(frame, MEASURED[side]),
+        };
+      }
+      out.frames[url.split('/').pop()] = rec;
+    }
+  } catch (e) {
+    out.error = String(e && e.stack || e);
+  }
+  document.getElementById('out').textContent = JSON.stringify(out, null, 1);
+})();
+</script>

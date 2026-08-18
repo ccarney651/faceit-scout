@@ -2,6 +2,10 @@
 
 Extracts the pure attribute()/simScore() region from index.html (same
 pattern as test_capture_attacker_gate.py) and runs it under Node.
+
+The region also holds attributeSide(), the chooser between the role-constrained
+resolver and the name-only matcher. Its `sidesKnown` argument is a safety gate,
+not a refinement - see the tests at the bottom of this file.
 """
 from __future__ import annotations
 
@@ -110,3 +114,82 @@ def test_accents_are_folded_before_comparing() -> None:
     # and the same in reverse (accented read, plain roster entry)
     roster2 = "[{id:'p1',names:['Hev']}]"
     assert _run(f"return attribute(['H\\u0113v'],{roster2});")[0] == "p1"
+
+
+# --- attributeSide: the role constraint must not run against the wrong team ---
+
+_ASSIGN = Path(__file__).resolve().parents[1] / "docs" / "capture" / "engine" / "assign.js"
+
+# One coded game, one match, both teams' five with roles - the shape gameLineup()
+# reads out of the feed. Team t2's tank is the trap: with the sides backwards,
+# the role constraint would force team t1's slot onto it with no name evidence.
+_FEED = """
+global.DATA={ lineups:{ 'm1:1':{
+  t1:{players:[{id:'a-tank',nick:'AyzoOW',game_name:'ayzo',role:'Tank'},
+               {id:'a-dps1',nick:'d1',game_name:'d1',role:'Damage'},
+               {id:'a-dps2',nick:'d2',game_name:'d2',role:'Damage'},
+               {id:'a-sup1',nick:'s1',game_name:'s1',role:'Support'},
+               {id:'a-sup2',nick:'s2',game_name:'s2',role:'Support'}]},
+  t2:{players:[{id:'b-tank',nick:'CP3_ow',game_name:'Faisal',role:'Tank'},
+               {id:'b-dps1',nick:'e1',game_name:'e1',role:'Damage'},
+               {id:'b-dps2',nick:'e2',game_name:'e2',role:'Damage'},
+               {id:'b-sup1',nick:'f1',game_name:'f1',role:'Support'},
+               {id:'b-sup2',nick:'f2',game_name:'f2',role:'Support'}]} } },
+  rosters:{}, hero_roles:{ 'hazard':'Tank', 'ashe':'Damage', 'sojourn':'Damage',
+                           'ana':'Support', 'kiriko':'Support' } };
+global.selectedCode=()=>({match_id:'m1', game_no:1, t1:'t1', t2:'t2'});
+global.CUSTOM_HEROES={};
+global.OWDBAssign=require(%(assign)s);
+const COMP={a:[{guid:'hazard'},{guid:'ashe'},{guid:'sojourn'},{guid:'ana'},{guid:'kiriko'}]};
+const BLANK=['','','','',''];
+"""
+
+
+def _run_sides(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    feed = _FEED % {"assign": json.dumps(str(_ASSIGN))}
+    src = (_pure_js() + "\n" + feed
+           + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));")
+    script = Path(__file__).resolve().parent / "_tmp_attribute_side_check.js"
+    script.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(script)], capture_output=True, text=True, timeout=20)
+    finally:
+        script.unlink(missing_ok=True)
+    assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    return json.loads(proc.stdout)
+
+
+def test_with_the_sides_known_the_tank_is_forced_with_no_name_evidence() -> None:
+    # Every read is empty. Only one player on t1 can be the tank, so the slot
+    # resolves anyway - this is the whole point of the role constraint.
+    got = _run_sides("return attributeSide(BLANK,'t1',COMP,'a',true);")
+    assert got["ids"][0] == "a-tank"
+    assert got["conf"][0] == "forced"
+
+
+def test_with_the_sides_unknown_nothing_is_forced() -> None:
+    # Same reads, sides unconfirmed: fall back to names only, which has no
+    # evidence and therefore tags nothing. Abstaining is the correct answer.
+    got = _run_sides("return attributeSide(BLANK,'t1',COMP,'a',false);")
+    assert got["ids"] == [None] * 5
+
+
+def test_the_gate_is_what_stops_a_confident_wrong_team_tag() -> None:
+    # The failure this gate exists for (real capture, 2026-08-18): the page had
+    # left/right backwards, so side 'a' was scored against the OTHER team. With
+    # the sides believed known, the role constraint hands the slot t2's tank -
+    # a confident, wrong attribution built on no name evidence at all.
+    wrong = _run_sides("return attributeSide(BLANK,'t2',COMP,'a',true);")
+    assert wrong["ids"][0] == "b-tank", "expected the unguarded behaviour to mis-tag"
+    # Below the gate the same call cannot invent it.
+    guarded = _run_sides("return attributeSide(BLANK,'t2',COMP,'a',false);")
+    assert guarded["ids"] == [None] * 5
+
+
+def test_an_omitted_sidesknown_argument_is_treated_as_not_known() -> None:
+    # Callers must pass it. If one forgets, the safe reading is "unknown".
+    got = _run_sides("return attributeSide(BLANK,'t1',COMP,'a');")
+    assert got["ids"] == [None] * 5
