@@ -571,6 +571,12 @@ function learnOurRoster(names){
 // What an auto-created scrim starts with as "our team": whatever we already
 // know, so the name is typed once ever rather than once per scrim.
 function newScrimTeamUs(){ return ourTeamName()||''; }
+// The same answer for the SETUP FORM. "+ new scrim..." clears every field, and
+// clearing this one threw away the one thing we already knew - which is exactly
+// how the field bug showed up. An existing scrim always keeps what it was saved
+// with: it may have been played as a different team, or named before this was
+// ever remembered.
+function scrimFormTeamUs(s){ return (s&&s.team_us) || newScrimTeamUs(); }
 // Why side detection gave up, in the operator's terms. Two causes, two fixes:
 // either nothing has ever said which team is ours (the common one, and the one
 // the old message never mentioned), or we know the roster and still could not
@@ -1314,7 +1320,7 @@ async function renderScrimPanel(){
   renderScrimMaps();
 }
 function fillScrimForm(){ const s=activeScrim||{};
-  document.getElementById('scus').value=s.team_us||''; document.getElementById('scopp').value=s.opponent||'';
+  document.getElementById('scus').value=scrimFormTeamUs(s); document.getElementById('scopp').value=s.opponent||'';
   document.getElementById('scbans').checked=!!s.uses_bans;
   document.getElementById('scdate').value=s.date||''; document.getElementById('scnotes').value=s.notes||''; }
 async function onScrimPick(){

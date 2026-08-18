@@ -770,3 +770,21 @@ def test_a_new_scrim_starts_with_the_team_we_already_know_is_ours() -> None:
 
 def test_a_new_scrim_is_blank_when_nothing_is_remembered_yet() -> None:
     assert _run_us("return newScrimTeamUs();") == ""
+
+
+def test_the_form_prefills_our_team_for_a_brand_new_scrim() -> None:
+    # Picking "+ new scrim…" clears the form. It must not clear the one field
+    # we already know the answer to - that was the field-reported bug.
+    assert _run_us("rememberOurTeam('Vertex'); return scrimFormTeamUs(null);") == "Vertex"
+    assert _run_us("rememberOurTeam('Vertex'); return scrimFormTeamUs({});") == "Vertex"
+
+
+def test_an_existing_scrims_own_team_is_never_overridden_by_the_remembered_one() -> None:
+    # Scrims played as a different team, or an older scrim named before the
+    # team was remembered, must keep what they were saved with.
+    got = _run_us("rememberOurTeam('Vertex'); return scrimFormTeamUs({team_us:'Some Other Team'});")
+    assert got == "Some Other Team"
+
+
+def test_the_form_stays_blank_when_no_team_is_remembered() -> None:
+    assert _run_us("return scrimFormTeamUs(null);") == ""
