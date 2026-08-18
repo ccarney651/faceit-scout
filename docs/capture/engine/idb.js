@@ -70,10 +70,19 @@
   // onupgradeneeded only ever ADDS stores, so no existing data is touched -
   // learned hero refs in particular are irreplaceable and must survive this.
   //
-  // `opponents` joined the same bump rather than taking a sixth version of its
-  // own: v5 has not shipped yet, so nobody is sitting on it and a second bump
-  // would only mean two upgrade transactions for the same end state.
-  var SCHEMA_VERSION = 5;
+  // 5 -> 6 because the reasoning below was wrong in the field. `opponents`
+  // was folded into the v5 bump on the grounds that "v5 has not shipped yet,
+  // so nobody is sitting on it" - but the operator had been running the branch
+  // for a week and held a v5 database created before that store existed.
+  // onupgradeneeded fires once per version and had already run for them, so
+  // the store was never created and every scrim side-detection attempt died on
+  // "'opponents' is not a known object store name".
+  //
+  // The rule, with no exception for unshipped versions: A STORE ADDED TO AN
+  // ALREADY-ISSUED VERSION REACHES NOBODY WHO HAS USED IT. "Unshipped" is not
+  // a property of the code, it is a claim about every database in existence,
+  // and anyone testing the branch falsifies it.
+  var SCHEMA_VERSION = 6;
 
   // Set by the caller's open(version, stores) call; reused by
   // getAll/putIn/clear so every operation talks to the same schema.

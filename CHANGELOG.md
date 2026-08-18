@@ -20,6 +20,18 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-19
 
 ### Fixed
+- **Scrim side detection died on a missing database store.** The `opponents`
+  store was added during opponent identification and folded into an existing
+  schema version, on the reasoning that the version had not shipped yet.
+  Anyone already testing that version held a database created before the store
+  existed, and `onupgradeneeded` fires once per version - so it was never
+  created for them, and every side-detection attempt threw
+  `'opponents' is not a known object store name`. The version is bumped, which
+  only ever adds stores, so learned hero portraits are untouched.
+
+  The rule, with no exception for unshipped versions: a store added to an
+  already-issued version reaches nobody who has already used it.
+
 - **HUD names were being cropped with their neighbour's plate border attached.**
   Each name crop padded the portrait cell by 5% of its width on either side,
   which on a tight HUD reaches into the *next* name plate and drags its edge in.

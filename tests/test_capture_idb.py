@@ -257,3 +257,26 @@ def test_scrims_html_still_opens_without_a_version_and_does_not_use_the_module()
         "will trigger onupgradeneeded (and block on the capture pages) the "
         "moment it doesn't match every open capture tab's version"
     )
+
+
+def test_the_opponents_store_needs_its_own_version_bump() -> None:
+    """The field failure, 2026-08-19.
+
+    `opponents` was added to ALL_STORES during phase 2a and folded into the v5
+    bump, on the reasoning that "v5 has not shipped yet, so nobody is sitting
+    on it". The operator was sitting on it: they had been running this branch
+    for a week, so their browser held a v5 database created BEFORE that store
+    existed. onupgradeneeded fires once per version and had already run, so the
+    store was never created, and every scrim side-detection attempt died on
+    "IDBDatabase.transaction: 'opponents' is not a known object store name".
+
+    A store added to an already-issued version reaches nobody who has used it.
+    """
+    js = ENGINE_IDB.read_text(encoding="utf-8")
+    m = re.search(r"SCHEMA_VERSION\s*=\s*(\d+)", js)
+    assert m, "engine/idb.js: SCHEMA_VERSION not found"
+    assert int(m.group(1)) >= 6, (
+        f"SCHEMA_VERSION is {m.group(1)}. 'opponents' shipped inside v5 to "
+        "browsers that had already created a v5 database without it; only a "
+        "further bump creates it for them"
+    )
