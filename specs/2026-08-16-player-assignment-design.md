@@ -16,8 +16,13 @@ When OCR cannot read the names, it returns nothing. Stylised Battle.net names
 make this common — `The best in the west` fields `ÄL7ÖTĦÌ` and `Mź7w`, which
 `tessedit_char_whitelist` (plain ASCII) can only ever render approximately.
 
-The result is that hero observations are captured with no player attached, which
-is why `comp_slots.player_id` is **0 of 1620 rows**.
+The result is that hero observations are captured with no player attached.
+
+(An earlier draft of this document cited `comp_slots.player_id` being 0 of 1620
+rows as evidence. That figure is from the local `owscout.sqlite3`, whose captures
+**predate the attribution feature entirely** — see the field-notes on the desktop
+app's `read_hud_names`, which reads the same HUD correctly. It is not evidence
+for anything here, and the case below does not need it.)
 
 ## 2. The insight
 
@@ -111,8 +116,7 @@ geometry against a located row:
   located row           77/90              90/90        0
 ```
 
-That is very likely why `comp_slots.player_id` was 0 of 1620 historically, and it
-means the 2026-08-16 live session's 6/10 was measuring the crop, not the
+It means the 2026-08-16 live session's 6/10 was measuring the crop, not the
 resolver.
 
 The fix is `engine/frames.js nameRow()`: find the name row once **per side**

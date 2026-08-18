@@ -165,11 +165,19 @@ canonical and this copy is the bug.
    everywhere except FACEIT Masters, and the tool takes about a minute per map,
    so time is not the problem. The named friction fixes are **delivered**: the
    guided first-capture tour, auto-calibrate confidence preview, and contributor
-   impact card (2026-08-04); the capture-funnel callout (2026-08-09); and
-   league-wide click-to-codes (2026-08-09). The priority remains to **iterate on
-   adoption** — watch where new scouts stall and remove the next friction.
-   Remaining P2 items: NA Advanced seeding (one line in `matches.txt`), and
+   impact card (2026-08-04); the capture-funnel callout (2026-08-09);
+   league-wide click-to-codes (2026-08-09); and **player attribution**
+   (2026-08-18) — captures now say which FACEIT player is in which HUD slot,
+   which had never worked. The priority remains to **iterate on adoption** —
+   watch where new scouts stall and remove the next friction. Remaining P2
+   items: NA Advanced seeding (one line in `matches.txt`), and
    `--external-data` page splitting only if page weight grows.
+   Shipped WITHOUT scrim mode, deliberately: the release branched at the last
+   commit of the shared-engine extraction (scrim mode phase 0), so the engine
+   and the attribution work went live while everything scrim-facing stayed on
+   `scrim-mode`. That seam is reusable — phase 0 is a pure refactor plus fixes,
+   and nothing above it is.
+
 2. **Ship scrim mode.** Scrim capture is currently **switched off in
    production** — `docs/capture/scrim.html` renders an unconditional
    `#scrimpaused` overlay that no script removes (commit `f2881cf`). Un-pausing

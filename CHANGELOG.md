@@ -25,8 +25,7 @@ Entries before 2026-08-11 were reconstructed from git history.
   a fixed 48-90% of that box's height. On a real frame that band straddles the
   portrait bottom, the name and the health bar - and the bar, being a solid
   bright block, is the brightest thing in it. Reads came back as letter-soup or
-  empty, which is the likeliest reason `comp_slots.player_id` was 0 of 1620
-  historically.
+  empty.
 
   The name row is now *located* in the frame, once per side across the whole
   five-slot strip, and all five crops use it. It cannot be done per slot: the

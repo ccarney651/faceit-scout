@@ -590,8 +590,7 @@ load, capture continues without name attribution rather than breaking.
 fitted to the *portraits*, and the fixed band underneath it that the crop used
 to assume (48-90% of cell height) straddles the portrait bottom, the name and
 the health bar on a real frame - so the brightest thing in the crop was the
-health bar and the reads came back as letter-soup. That is the likeliest reason
-`comp_slots.player_id` was 0 of 1620 historically. `engine/frames.js nameRow()`
+health bar and the reads came back as letter-soup. `engine/frames.js nameRow()`
 now locates the name row **once per side, across the whole five-slot strip**,
 and all five crops use it. Per slot it cannot be done: the hero portrait sits
 inside the cell *above* the name and its art is transition-dense, and a long
