@@ -17,6 +17,36 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-18 (later)
+
+### Added
+- **Hero bans can be recorded from the capture panel.** Bans are a per-map fact
+  noted while the map runs, and the operator is watching the game with the panel
+  on top - so asking them to alt-tab back to the setup card to record one was
+  asking them not to record it. The panel now carries the same hero picker,
+  by-us/by-them picker and ban list as the card, beside the map controls, and
+  only when the scrim uses bans.
+
+### Fixed
+- **Scrim side detection could never fire.** It matches the HUD against our own
+  roster and abstains when that roster is empty - and it was always empty: the
+  store meant to remember which team is ours had no writer anywhere in the page,
+  and a scrim created without filling in "Our team" had nothing else to offer.
+  Every scrim therefore fell back to picking the left team by hand.
+
+  Naming the team on a scrim now remembers it for every future scrim, and a new
+  scrim starts pre-filled with it. Finishing a map also *learns* the names on
+  our side of the HUD, which covers stand-ins, alt accounts, and teams that are
+  not in the league feed at all. Learning is tied to finishing a map rather than
+  to the side control changing: on change, a single swap would teach it the
+  opposing five as well, both sides would then match "us", and the detector -
+  which refuses to guess when both overlap - would abstain for good.
+
+  When it still cannot tell, the message now names the cause. It used to say
+  "pick the left team above", which is what to do, not what was wrong.
+
+---
+
 ## 2026-08-18
 
 ### Fixed

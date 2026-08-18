@@ -465,3 +465,308 @@ def test_a_ban_can_record_who_banned_it() -> None:
     assert 'id="banby"' in html
     for who in ('value="us"', 'value="them"'):
         assert who in html, f"ban attribution is missing {who}"
+
+
+# ---------------------------------------------------------------------------
+# Hero bans: the markup is shared by the setup card and the capture overlay
+# ---------------------------------------------------------------------------
+# The overlay is a SEPARATE DOCUMENT (a popped-out window), so the ban chips
+# cannot be built by a function that reaches for elements by id on the main
+# page. banChipsHtml() is the pure half, rendered into whichever container the
+# caller owns.
+
+
+def _bans_js() -> str:
+    """banChipsHtml plus the two helpers it closes over, which the page gets
+    from engine/util.js and engine/refs.js and this test stubs."""
+    return "\n".join([
+        "function esc(s){return String(s==null?'':s)"
+        ".replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')"
+        ".replace(/\"/g,'&quot;');}",
+        "var HERO_NAMES={'0x01':'Sombra'};",
+        "function heroName(g){return HERO_NAMES[g]||'';}",
+        _extract(("function banChipsHtml(", "function renderBans()")),
+    ])
+
+
+def _run_bans(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    src = _bans_js() + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));"
+    tmp = Path("scrim_bans_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True)
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_no_bans_renders_an_empty_state_not_an_empty_string() -> None:
+    # An empty container would read as "the control is broken"; the operator
+    # needs to see that nothing has been recorded yet.
+    html = _run_bans("return banChipsHtml([]);")
+    assert "none recorded" in html
+
+
+def test_each_ban_renders_a_chip_with_a_remove_control() -> None:
+    html = _run_bans("return banChipsHtml([{g:'0x01',n:'Sombra'},{g:'0x02',n:'Ana'}]);")
+    assert html.count("banx") == 2, "one remove control per ban"
+    assert 'data-i="0"' in html and 'data-i="1"' in html, "removal is by index"
+    assert "Sombra" in html and "Ana" in html
+
+
+def test_a_ban_falls_back_to_the_hero_catalogue_when_it_carries_no_name() -> None:
+    html = _run_bans("return banChipsHtml([{g:'0x01'}]);")
+    assert "Sombra" in html
+
+
+def test_who_banned_it_is_shown_only_when_recorded() -> None:
+    with_by = _run_bans("return banChipsHtml([{g:'0x01',n:'Sombra',by:'them'}]);")
+    without = _run_bans("return banChipsHtml([{g:'0x01',n:'Sombra'}]);")
+    assert "them" in with_by
+    assert "faint" not in without, "no by-tag when nobody recorded who banned it"
+
+
+def test_hero_names_are_escaped() -> None:
+    # Learned hero names are operator-typed, and this markup is injected with
+    # innerHTML into two documents.
+    html = _run_bans("return banChipsHtml([{g:'x',n:'<img src=x onerror=1>'}]);")
+    assert "<img" not in html and "&lt;img" in html
+
+
+# The panel row itself. The operator asked for ban entry beside the map picker,
+# because during a scrim they are looking at the panel, not the page.
+
+_ROW_STUBS = """
+var CALLS=[];
+function esc(s){return String(s==null?'':s);}
+function heroCatalog(){ return [{g:'0x01',n:'Sombra'},{g:'0x02',n:'Ana'}]; }
+function heroName(g){ return ({'0x01':'Sombra','0x02':'Ana'})[g]||''; }
+var MAP_BANS=[], session=null, SCRIM={uses_bans:false};
+function usesBans(){ return !!SCRIM.uses_bans; }
+function renderBans(){ CALLS.push('renderBans'); }
+function renderBansInto(box){ box.__chips=true; }
+function el(tag){ return { tagName:tag, className:'', innerHTML:'', textContent:'', value:'',
+  children:[], style:{}, appendChild:function(c){ this.children.push(c); return c; },
+  querySelectorAll:function(){ return []; } }; }
+var d={ createElement:el };
+var mk=function(p,t,fn,cls){ var b=el('button'); b.textContent=t; b.onclick=fn; p.appendChild(b); return b; };
+function descend(node, out){ out=out||[]; (node.children||[]).forEach(function(c){ out.push(c); descend(c,out); }); return out; }
+"""
+
+
+def _run_row(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    row = _extract(("{id:'prow-bans'", "{id:'prow-atk'"))
+    src = (_ROW_STUBS + "\nvar ROW=" + row.rstrip().rstrip(",") + ";\n"
+           + "console.log(JSON.stringify((()=>{" + body + "})()));")
+    tmp = Path("scrim_row_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True)
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_the_panel_has_no_ban_row_when_the_scrim_does_not_use_bans() -> None:
+    # Most scrims do not ban. A control for something the block never does is
+    # noise on a panel that sits on top of the game.
+    kids = _run_row("""
+      var row=el('div'); SCRIM.uses_bans=false; session={};
+      ROW.render(row,d,mk); return descend(row).length;""")
+    assert kids == 0
+
+
+def test_the_panel_has_no_ban_row_before_a_map_is_running() -> None:
+    kids = _run_row("""
+      var row=el('div'); SCRIM.uses_bans=true; session=null;
+      ROW.render(row,d,mk); return descend(row).length;""")
+    assert kids == 0, "bans are recorded per map, so there is nothing to ban against yet"
+
+
+def test_the_ban_row_offers_every_hero_and_who_banned_it() -> None:
+    tags = _run_row("""
+      var row=el('div'); SCRIM.uses_bans=true; session={};
+      ROW.render(row,d,mk);
+      return descend(row).map(function(n){return n.tagName;});""")
+    assert tags.count("select") == 2, "a hero picker and a by-us/by-them picker"
+
+
+def test_the_ban_row_shows_the_bans_already_recorded() -> None:
+    chips = _run_row("""
+      var row=el('div'); SCRIM.uses_bans=true; session={};
+      MAP_BANS=[{g:'0x01',n:'Sombra'}];
+      ROW.render(row,d,mk);
+      return descend(row).filter(function(n){return n.__chips;}).length;""")
+    assert chips == 1, "the row must render the existing bans, not just an input"
+
+
+def test_every_panel_row_has_somewhere_to_render() -> None:
+    """A row in `controls` whose id is missing from `middleHtml` never renders.
+
+    renderPipControls() looks each id up in the panel document and skips the
+    ones it cannot find (`if (el) row.render(...)`), so the row is simply
+    absent with no error anywhere. This was a real miss when the bans row was
+    added.
+    """
+    import re
+    html = APP.read_text(encoding="utf-8")
+    declared = set(re.findall(r"\{id:'(prow-[a-z]+)'", html))
+    # Two slots, not one: popout() concatenates middleHtml and finishHtml, and
+    # scrim.html puts its Finish row in the second.
+    slots = re.findall(r"(?:middleHtml|finishHtml):'([^']*)'", html)
+    assert slots, "middleHtml/finishHtml moved in scrim.html"
+    present = set(re.findall(r'id="(prow-[a-z]+)"', " ".join(slots)))
+    assert declared, "no panel rows found - the controls list moved"
+    assert declared <= present, (
+        f"panel rows with nowhere to render: {sorted(declared - present)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Knowing which side is us
+# ---------------------------------------------------------------------------
+# ourSide() in engine/opponents.js matches the HUD against our own roster and
+# returns null the moment that roster is empty. In the field it was ALWAYS
+# empty: the scrim carried no "Our team", and the remembered-team store had no
+# writer at all, so side detection could never fire. These cover the two ways
+# we now know who we are.
+
+_US_STUBS = """
+var STORE={};
+var localStorage={ getItem:function(k){ return k in STORE?STORE[k]:null; },
+                   setItem:function(k,v){ STORE[k]=String(v); },
+                   removeItem:function(k){ delete STORE[k]; } };
+var FEED={ vertex:['GCB','KHALED','XYPHER','ASHBORN','NUT'] };
+function faceitRoster(name){ return FEED[(name||'').trim().toLowerCase()]||[]; }
+var activeScrim=null;
+"""
+
+
+def _run_us(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    src = (_US_STUBS + _extract(("const OUR_TEAM_KEY=", "const ALIAS_KEY="))
+           + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));")
+    tmp = Path("scrim_us_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True)
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_with_no_team_named_anywhere_we_admit_we_do_not_know_who_we_are() -> None:
+    # The field failure. An empty roster must stay empty rather than become
+    # some default - ourSide() then abstains and the operator sets it by hand.
+    assert _run_us("return ourRosterNames();") == []
+
+
+def test_the_scrims_own_team_field_is_enough_to_know_us() -> None:
+    names = _run_us("activeScrim={team_us:'Vertex'}; return ourRosterNames();")
+    assert "GCB" in names and len(names) == 5
+
+
+def test_our_team_is_remembered_across_scrims() -> None:
+    # Typing it into one scrim must be the last time it is typed. The next
+    # scrim starts blank and must still resolve.
+    names = _run_us("""
+        rememberOurTeam('Vertex');
+        activeScrim={team_us:''};
+        return ourRosterNames();""")
+    assert "GCB" in names
+
+
+def test_names_learned_from_a_manual_side_pick_count_as_us() -> None:
+    # The case the league feed cannot cover: a stand-in, a smurf, or a team
+    # that is not in the league at all.
+    names = _run_us("""
+        rememberOurTeam('Vertex');
+        learnOurRoster(['GCB','KHALED','StandInSmurf']);
+        return ourRosterNames();""")
+    assert "StandInSmurf" in names, "a learned name must widen who counts as us"
+    assert "XYPHER" in names, "and must not replace the roster we already had"
+
+
+def test_a_team_outside_the_league_can_still_be_learned() -> None:
+    names = _run_us("""
+        learnOurRoster(['GROKA','OTAKAW','JJUUZOU','CHEESEBURGER','OIDOPUAA']);
+        return ourRosterNames();""")
+    assert len(names) == 5, "no feed entry, but five confirmed names is still a roster"
+
+
+def test_learning_accumulates_and_never_duplicates() -> None:
+    names = _run_us("""
+        learnOurRoster(['GCB','KHALED']);
+        learnOurRoster(['KHALED','NEWSTANDIN']);
+        return ourRosterNames();""")
+    assert sorted(names) == ["GCB", "KHALED", "NEWSTANDIN"]
+
+
+# Learning happens when a map is FINISHED, not when the side radio changes.
+# On change would be worse than useless: a swap would teach it the opposing
+# five as well, both sides would then match "us", and ourSide() - which
+# refuses to guess when both overlap - would abstain forever.
+
+
+def test_our_names_come_from_the_side_the_operator_marked_as_ours() -> None:
+    snaps = ("[{aPlayers:['GCB','KHALED'],bPlayers:['GROKA','OTAKAW']}]")
+    left_us = _run_us(f"return ourNamesFromSnaps({snaps},'us');")
+    left_them = _run_us(f"return ourNamesFromSnaps({snaps},'them');")
+    assert left_us == ["GCB", "KHALED"]
+    assert left_them == ["GROKA", "OTAKAW"], "'them' on the left means we are on the right"
+
+
+def test_nothing_is_learned_while_the_sides_are_unconfirmed() -> None:
+    # Learning the wrong five is not a small error: both sides then match us
+    # and ourSide() abstains forever after.
+    snaps = "[{aPlayers:['GCB'],bPlayers:['GROKA']}]"
+    assert _run_us(f"return ourNamesFromSnaps({snaps},'');") == []
+
+
+def test_names_are_gathered_across_every_snapshot_of_the_map() -> None:
+    # A substitution mid-map means the five are not the same in every snapshot.
+    snaps = ("[{aPlayers:['GCB','KHALED']},{aPlayers:['GCB','SUBBED_IN']}]")
+    assert _run_us(f"return ourNamesFromSnaps({snaps},'us');") == ["GCB", "KHALED", "SUBBED_IN"]
+
+
+def test_unattributed_slots_are_skipped() -> None:
+    snaps = "[{aPlayers:['GCB',null,'',undefined,'KHALED']}]"
+    assert _run_us(f"return ourNamesFromSnaps({snaps},'us');") == ["GCB", "KHALED"]
+
+
+def test_the_failure_message_says_we_do_not_know_who_you_are() -> None:
+    # The old message ("pick the left team above, then Snapshot again") said
+    # what to do but never what was wrong - and the wrong thing was almost
+    # always that nothing had told the tool which team is ours.
+    hint = _run_us("return sideFailureHint(false);")
+    assert "Our team" in hint, "name the field that fixes it"
+    assert "remember" in hint.lower(), "and say it only has to be done once"
+
+
+def test_a_different_message_when_we_know_who_we_are_and_still_cannot_tell() -> None:
+    # Different cause, different fix: the roster is known, so this is a bad
+    # OCR read or a stand-in, and re-reading may well work.
+    hint = _run_us("return sideFailureHint(true);")
+    assert "Our team" not in hint
+    assert hint != _run_us("return sideFailureHint(false);")
+
+
+def test_a_new_scrim_starts_with_the_team_we_already_know_is_ours() -> None:
+    # Typed once, never again: an auto-created scrim inherits the remembered
+    # team so side detection works on its very first map.
+    assert _run_us("rememberOurTeam('Vertex'); return newScrimTeamUs();") == "Vertex"
+
+
+def test_a_new_scrim_is_blank_when_nothing_is_remembered_yet() -> None:
+    assert _run_us("return newScrimTeamUs();") == ""

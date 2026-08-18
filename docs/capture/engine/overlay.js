@@ -23,7 +23,10 @@
 //     panel DOM built yet" gate, same as the original's `if(!main) return`.
 //   - ctx.middleHtml / ctx.finishHtml: the row-container markup popout()
 //     splices into the panel body, before/after the Left/Right team panels.
-//     scrim.html's finishHtml is '' (no dedicated Finish row).
+//     Both pages currently put their Finish row in finishHtml. EVERY id in
+//     ctx.controls must appear in one of these two strings: renderPipControls
+//     skips ids it cannot find in the panel document, so a row declared but
+//     not slotted here simply never appears, with no error anywhere.
 //   - ctx.panelCss(c) / ctx.bodyStyle(c): the two pages are genuinely
 //     different designs here (index.html is denser - smaller padding/type -
 //     because it fits more rows into the same-ish window), not one page

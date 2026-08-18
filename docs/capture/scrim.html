@@ -548,6 +548,63 @@ async function buildLearnedRosters(){
 const OUR_TEAM_KEY='owdb_our_team';
 function ourTeamName(){ return localStorage.getItem(OUR_TEAM_KEY)||''; }
 function setOurTeamName(n){ if(n) localStorage.setItem(OUR_TEAM_KEY,n); else localStorage.removeItem(OUR_TEAM_KEY); }
+// Remember it the first time a scrim names it, so it is typed once and never
+// again. This store had NO writer until 2026-08-18, which is why side
+// detection never fired in the field: ourSide() was always handed an empty
+// roster and abstained, every time.
+function rememberOurTeam(n){ n=(n||'').trim(); if(n) setOurTeamName(n); }
+
+// The HUD names we have confirmed are us, learned from the sides the operator
+// set by hand. Kept apart from the league feed on purpose: a scrim team need
+// not be a league team at all, and stand-ins and alt accounts never appear in
+// the feed however good it is.
+const OUR_ROSTER_KEY='owdb_our_roster';
+function loadOurRoster(){
+  try{ const a=JSON.parse(localStorage.getItem(OUR_ROSTER_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; } }
+function learnOurRoster(names){
+  const have=loadOurRoster();
+  (names||[]).forEach(n=>{ n=(n||'').trim();
+    if(n && !have.some(h=>h.toLowerCase()===n.toLowerCase())) have.push(n); });
+  try{ localStorage.setItem(OUR_ROSTER_KEY, JSON.stringify(have)); }catch(e){}
+  return have; }
+// What an auto-created scrim starts with as "our team": whatever we already
+// know, so the name is typed once ever rather than once per scrim.
+function newScrimTeamUs(){ return ourTeamName()||''; }
+// Why side detection gave up, in the operator's terms. Two causes, two fixes:
+// either nothing has ever said which team is ours (the common one, and the one
+// the old message never mentioned), or we know the roster and still could not
+// match it - a bad read or a stand-in, where re-reading may well work.
+function sideFailureHint(haveOurRoster){
+  return haveOurRoster
+    ? 'could not tell which side is yours from the HUD names — pick the left team above, then Snapshot again'
+    : 'nothing has said which team is yours — fill in "Our team" on this scrim, or pick the left team above and it will be remembered from now on'; }
+// The names on our side of a finished map. Learning is deliberately tied to
+// FINISHING rather than to the side radio changing: a swap would teach it the
+// opposing five as well, both sides would then match us, and ourSide() -
+// which refuses to guess when both overlap - would abstain for good. By the
+// time a map is saved the operator has had the whole map to notice a wrong
+// side, so the assignment is evidence rather than a keystroke.
+//
+// leftTeam is the radio's value: 'us' when OUR team is on the left of the HUD,
+// 'them' when theirs is. Empty means unconfirmed, and unconfirmed teaches
+// nothing.
+function ourNamesFromSnaps(snaps, leftTeam){
+  if(leftTeam!=='us' && leftTeam!=='them') return [];
+  const key = leftTeam==='them' ? 'bPlayers' : 'aPlayers';
+  const out=[];
+  (snaps||[]).forEach(s=>((s&&s[key])||[]).forEach(n=>{
+    n=(n||'').trim(); if(n && out.indexOf(n)===-1) out.push(n); }));
+  return out; }
+// Who counts as us: the league roster for our team if we have one, widened by
+// everything learned from manual picks. Union, so a stand-in never displaces
+// the squad.
+function ourRosterNames(){
+  const name=ourTeamName()||(activeScrim&&activeScrim.team_us)||'';
+  const out=[], seen={};
+  faceitRoster(name).concat(loadOurRoster()).forEach(n=>{
+    const k=(n||'').trim().toLowerCase(); if(!k||seen[k]) return; seen[k]=1; out.push(n); });
+  return out; }
 // Aliases are smurf accounts learned per team. Local only, and deliberately
 // never included in a shared scout - that would leak the mapping between a
 // player's main and their alts.
@@ -575,7 +632,7 @@ async function resolveScrimIdentity(names){
 
   // Which side are we? Prefer our own roster; fall back to "one side resolved
   // to the team we said is ours".
-  const ours=faceitRoster(ourTeamName()||(activeScrim&&activeScrim.team_us)||'');
+  const ours=ourRosterNames();
   out.ourSide=OWDBOpponents.ourSide(names.a, names.b, ours);
   if(!out.ourSide){
     const mine=(ourTeamName()||'').trim().toLowerCase();
@@ -749,7 +806,7 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
       document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===val); });
       onSideChange(); s.sideResolved=true;
       snapMsg(`sides auto-detected (${res.source}) \u2014 ${val==='us'?'us':'them'} on left`, false); return true; }
-    snapMsg('could not auto-detect sides \u2014 pick the left team above, then Snapshot again', true); return false;
+    snapMsg(sideFailureHint(ourRosterNames().length>0), true); return false;
   }catch(e){ snapMsg('side detection failed \u2014 set the left team manually, then Snapshot again', true); return false; }
   finally{ s._detecting=false; } }
 
@@ -1185,6 +1242,10 @@ async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return nul
   return out; }
 async function finishScrimMap(c){
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
+  // The map is done and the operator lived with this side assignment, so the
+  // names on our half of the HUD are now evidence of who we are. Learned here
+  // and nowhere else - see ourNamesFromSnaps for why not on the radio.
+  learnOurRoster(ourNamesFromSnaps(session.snaps, sideId));
   const leftLabel = sideId==='them' ? c.team_b : c.team_a;
   const rightLabel = sideId==='them' ? c.team_a : c.team_b;
   const observations=[];
@@ -1272,7 +1333,7 @@ async function ensureScrim(){
   if(activeScrim) return activeScrim;
   activeScrim={ id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
     created_at:new Date().toISOString(), map_no:1,
-    team_us:'', opponent:'', date:new Date().toISOString().slice(0,10),
+    team_us:newScrimTeamUs(), opponent:'', date:new Date().toISOString().slice(0,10),
     notes:'', auto_created:true, updated_at:new Date().toISOString() };
   await idbPutScrim(activeScrim);
   localStorage.setItem('owdb_cap_scrim', activeScrim.id);
@@ -1292,15 +1353,31 @@ function fillBanPicker(){
   sel.innerHTML='<option value="">＋ add a ban…</option>'
     + cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('');
 }
+// The chip markup for a map's bans. Pure, and deliberately separate from
+// renderBans(): the capture overlay is a SEPARATE DOCUMENT (a popped-out
+// window), so the same markup has to be rendered into the page's card AND into
+// the panel, and neither can be built by something that reaches for elements by
+// id on the main page.
+function banChipsHtml(bans){
+  if(!bans||!bans.length) return '<span class="status faint">none recorded</span>';
+  return bans.map((b,i)=>
+    `<span class="chip">${esc(b.n||heroName(b.g)||b.g)}${b.by?` <span class="faint">${esc(b.by)}</span>`:''}`
+    +`<button class="ghost banx" data-i="${i}" title="Remove" style="padding:0 5px;line-height:1">×</button></span>`).join('');
+}
+// Paint those chips into any container, in any document, and wire removal.
+function renderBansInto(box){
+  if(!box) return;
+  box.innerHTML = banChipsHtml(MAP_BANS);
+  box.querySelectorAll('.banx').forEach(btn=>{
+    btn.onclick=()=>{ MAP_BANS.splice(+btn.dataset.i,1); renderBans(); }; });
+}
 function renderBans(){
-  const row=document.getElementById('banrow'); if(!row) return;
-  row.style.display = (usesBans() && session) ? '' : 'none';
-  const box=document.getElementById('banchips'); if(!box) return;
-  box.innerHTML = MAP_BANS.map((b,i)=>
-    `<span class="chip">${esc(b.n||heroName(b.g)||b.g)}${b.by?` <span class="faint">${esc(b.by)}</span>`:''}
-      <button class="ghost banx" data-i="${i}" title="Remove" style="padding:0 5px;line-height:1">×</button></span>`).join('')
-    || '<span class="status faint">none recorded</span>';
-  box.querySelectorAll('.banx').forEach(btn=>{ btn.onclick=()=>{ MAP_BANS.splice(+btn.dataset.i,1); renderBans(); }; });
+  const row=document.getElementById('banrow');
+  if(row) row.style.display = (usesBans() && session) ? '' : 'none';
+  renderBansInto(document.getElementById('banchips'));
+  // Keep the panel's copy in step - a ban added on either surface must show on
+  // both, and the operator is usually looking at the panel.
+  if(typeof renderPipControls==='function') renderPipControls();
 }
 function addBan(){
   const sel=document.getElementById('banhero'), by=document.getElementById('banby');
@@ -1322,6 +1399,8 @@ async function saveScrim(){
   const opponent=(document.getElementById('scopp').value||'').trim();
   if(!team_us&&!opponent){ toast('enter at least one team name first','warn'); return; }
   if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
+  // Typed once, remembered for good: this is the store that had no writer.
+  rememberOurTeam(team_us);
   Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
     date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
     uses_bans:!!document.getElementById('scbans').checked,
@@ -1764,7 +1843,9 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
     `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
-  middleHtml:'<div id="prow-next"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div>',
+  // Every row id in `controls` must exist here: renderPipControls() looks each
+  // one up in the panel document and silently skips the ones it cannot find.
+  middleHtml:'<div id="prow-next"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-bans"></div><div id="prow-atk"></div>',
   finishHtml:'<div id="prow-finish"></div>',
   // Which team is on which side is the one thing this panel exists to tell the
   // operator, and it was the one thing it did not say. Named columns (below)
@@ -1831,6 +1912,30 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
         const spent=usedSubmaps(session.snaps, session.round);
         session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
       else sub.className='prow';
+    }},
+    // Hero bans, entered from the panel. Bans are a per-MAP fact recorded while
+    // the map is running, and the operator is watching the game with the panel
+    // on top - so asking them to alt-tab back to the setup card to record one
+    // is asking them not to record it. Hidden entirely unless this scrim bans,
+    // for the same reason the card's own ban row is: a control for something
+    // the block never does is noise.
+    {id:'prow-bans', render:(row,d,mk)=>{
+      row.innerHTML=''; row.className='prow';
+      if(!(usesBans() && session)) return;
+      const l=d.createElement('span'); l.className='lbl'; l.textContent='Bans'; row.appendChild(l);
+      const hero=d.createElement('select'), by=d.createElement('select');
+      hero.innerHTML='<option value="">＋ ban…</option>'
+        + heroCatalog().slice().sort((a,b)=>(a.n||'').localeCompare(b.n||''))
+            .map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('');
+      by.innerHTML='<option value="">either</option><option value="us">us</option>'
+        + '<option value="them">them</option>';
+      hero.onchange=()=>{ const g=hero.value; if(!g) return;
+        if(!MAP_BANS.some(b=>b.g===g)) MAP_BANS.push({g, n:heroName(g)||g, by:by.value||null});
+        hero.value=''; renderBans(); };
+      row.appendChild(hero); row.appendChild(by);
+      const chips=d.createElement('div'); chips.className='row';
+      chips.style.cssText='gap:4px;flex-wrap:wrap;margin-top:4px';
+      row.appendChild(chips); renderBansInto(chips);
     }},
     {id:'prow-atk', render:(atk,d,mk)=>{
       atk.innerHTML='';
