@@ -47,6 +47,91 @@
     return global.OWDBUtil;
   }
 
+  // --- name-row location ---------------------------------------------------
+  //
+  // Every constant here was swept over the nine real frames in screenshots/,
+  // each at four capture resolutions and with the calibration box shifted and
+  // stretched (tools/real_frame_eval/rowfind_sweep.py). Re-run that sweep
+  // before changing any of them.
+
+  // Search window for the name row, as a fraction of the calibration box's
+  // height. Starts below the portraits (top_fraction is 0.45) and runs past
+  // the bottom of the box, because the box is fitted to the portraits and the
+  // names hang underneath them.
+  var NAME_BAND_TOP = 0.30, NAME_BAND_BOT = 1.15;
+  // A full health bar fills ~0.55 of the strip and a name ~0.15-0.32, so this
+  // is what tells the two apart. It has to be a fill test and not a "which is
+  // brighter" or "which is first" test: the bar out-scores a short name on
+  // brightness, and the hero portrait sits ABOVE the name, so both of those
+  // shortcuts were tried and both picked the wrong band.
+  var NAME_FILL_MAX = 0.42;
+  var NAME_RUN_FRAC = 0.35;   // rows scoring this share of the peak join a run
+
+  // findNameRow(rgba, w, h) -> { y, h } | null
+  //
+  // `rgba` is the search band of ONE side's strip, w x h, as ImageData.data.
+  // Returns the text row's position within that band.
+  //
+  // Text is a row with many horizontal light/dark transitions that does not
+  // fill the strip; the run of such rows sitting in the quietest surroundings
+  // wins, because the HUD draws the names on a dark plate and nothing else in
+  // the band has empty rows above and below it.
+  function findNameRow(rgba, w, h) {
+    if (!w || !h || !rgba || rgba.length < w * h * 4) return null;
+    var lum = new Uint8Array(w * h), hist = new Uint32Array(256), i, j, y, x;
+    for (i = 0, j = 0; j < w * h; i += 4, j++) {
+      var g = (0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2]) | 0;
+      lum[j] = g; hist[g]++;
+    }
+    // The 88th percentile picks glyph strokes out of the plate. Clamped
+    // because a bright scene behind the HUD can push it to 255, which would
+    // select nothing at all - four box variants in the sweep did exactly that.
+    var want = Math.floor(w * h * 0.88), acc = 0, T = 0;
+    for (T = 0; T < 256; T++) { acc += hist[T]; if (acc >= want) break; }
+    if (T < 120) T = 120; else if (T > 230) T = 230;
+
+    var fill = new Float64Array(h), tr = new Float64Array(h), score = new Float64Array(h), max = 0;
+    for (y = 0; y < h; y++) {
+      var on = 0, ch = 0, prev = false, base = y * w;
+      for (x = 0; x < w; x++) {
+        var v = lum[base + x] > T;
+        if (v) on++;
+        if (x && v !== prev) ch++;
+        prev = v;
+      }
+      fill[y] = on / w; tr[y] = ch / w;
+      score[y] = fill[y] <= NAME_FILL_MAX ? tr[y] : 0;
+      if (score[y] > max) max = score[y];
+    }
+    if (max <= 0) return null;
+
+    // Mean fill of the three rows either side of a run. A run that reaches the
+    // edge of the band has no such rows, and is penalised for it - whatever it
+    // is, it continues past where we looked.
+    function quiet(s, e) {
+      var a = 0, na = 0, b = 0, nb = 0, k;
+      for (k = Math.max(0, s - 3); k < s; k++) { a += fill[k]; na++; }
+      for (k = e + 1; k < Math.min(h, e + 4); k++) { b += fill[k]; nb++; }
+      a = na ? a / na : 0.5; b = nb ? b / nb : 0.5;
+      return Math.max(0, 1 - (a + b) / 0.20);
+    }
+
+    var thr = NAME_RUN_FRAC * max, best = null, bestv = -1, start = -1;
+    for (y = 0; y <= h; y++) {
+      var inRun = y < h && score[y] >= thr;
+      if (inRun && start < 0) start = y;
+      else if (!inRun && start >= 0) {
+        var end = y - 1, sum = 0;
+        for (var k = start; k <= end; k++) sum += tr[k];
+        var v2 = (sum / (end - start + 1)) * quiet(start, end);
+        if (v2 > bestv) { bestv = v2; best = [start, end]; }
+        start = -1;
+      }
+    }
+    if (!best) return null;
+    return { y: best[0], h: best[1] - best[0] + 1 };
+  }
+
   function make(ctx) {
     // Reused across every ensureWork/cellGrayPadded call, same as the
     // original module-scoped `work`/`wctx` pair each page declared once.
@@ -88,12 +173,47 @@
       return cv;
     }
 
-    // Name bar sits at ~48-90% of each portrait cell's height (mirror of the
-    // .exe's read_hud_names); grayscale + 6x upscale + a light contrast
-    // stretch lift the ~10px text enough for OCR.
-    function nameCanvas(frame, cell) {
+    // Where the name row sits inside one side's five-slot strip, in frame
+    // coordinates: { y, h }, or null when nothing text-like was found.
+    //
+    // Call this ONCE PER SIDE and hand the result to all five nameCanvas()
+    // calls. The row is deliberately not found per slot: all five names share
+    // one row, so across the strip they reinforce each other while the noise
+    // that defeats a single cell - the hero portrait above the name, a bright
+    // scene showing through the plate - averages out. Two per-slot attempts
+    // failed exactly there (see the header of tools/real_frame_eval/).
+    function nameRow(frame, box) {
+      var fw = frame.width, fh = frame.height;
+      var x0 = Math.max(0, Math.round(box.x)), x1 = Math.min(fw, Math.round(box.x + box.w));
+      var y0 = Math.max(0, Math.round(box.y + box.h * NAME_BAND_TOP));
+      var y1 = Math.min(fh, Math.round(box.y + box.h * NAME_BAND_BOT));
+      if (x1 - x0 < 8 || y1 - y0 < 6) return null;
+      var cv = ctx.doc.createElement('canvas');
+      cv.width = x1 - x0; cv.height = y1 - y0;
+      var cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(frame, x0, y0, cv.width, cv.height, 0, 0, cv.width, cv.height);
+      var found = findNameRow(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
+      if (!found) return null;
+      // Tesseract wants a little air around the glyphs; the run itself is their
+      // exact extent.
+      var pad = Math.max(2, Math.round(found.h * 0.25));
+      var y = Math.max(0, y0 + found.y - pad);
+      return { y: y, h: Math.min(fh - y, found.h + 2 * pad) };
+    }
+
+    // Without a row, the name bar is assumed to sit at ~48-90% of each portrait
+    // cell's height (mirror of the .exe's read_hud_names). That assumption is
+    // why this function needs `row`: on a real 2557x1438 frame the 48-90% band
+    // straddles the portrait bottom, the name AND the health bar, and the bar
+    // is the brightest thing in it - real tesseract returned letter-soup for 75
+    // of 90 slots. With the located row it reads 77 of 90 outright, and every
+    // one of the 90 resolves once assign.js applies the role constraint.
+    // Grayscale + 6x upscale + a light contrast stretch lift the ~10px text
+    // enough for OCR.
+    function nameCanvas(frame, cell, row) {
       var padX = Math.max(4, Math.round(cell.w * 0.05));
-      var sx = Math.max(0, cell.x - padX), sy = cell.y + cell.h * 0.48, sw = cell.w + 2 * padX, sh = cell.h * 0.42, sc = 6;
+      var sx = Math.max(0, cell.x - padX), sw = cell.w + 2 * padX, sc = 6;
+      var sy = row ? row.y : cell.y + cell.h * 0.48, sh = row ? row.h : cell.h * 0.42;
       var cv = ctx.doc.createElement('canvas');
       cv.width = Math.max(1, Math.round(sw * sc)); cv.height = Math.max(1, Math.round(sh * sc));
       var cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
@@ -158,6 +278,7 @@
       grabFrame: grabFrame,
       grayCanvas: grayCanvas,
       cellGrayPadded: cellGrayPadded,
+      nameRow: nameRow,
       nameCanvas: nameCanvas,
       detectContentRect: detectContentRect,
       stopCapture: stopCapture,
@@ -166,7 +287,7 @@
     };
   }
 
-  var Mod = { make: make };
+  var Mod = { make: make, findNameRow: findNameRow };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBFrames = Mod;

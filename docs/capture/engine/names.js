@@ -60,6 +60,19 @@
     return tot;
   }
 
+  // Latin letters with a STROKE or BAR rather than a combining accent. NFD only
+  // decomposes what has a canonical decomposition, and these have none - so the
+  // fold below left them untouched while OCR, restricted to ASCII, can only ever
+  // emit the base letter. The roster kept "słøw" while a *perfect* read said
+  // "slow", scoring 50 against a bar of 75: a name that could never match no
+  // matter how good the OCR got. Affects 10 of 1304 league players (measured by
+  // tools/assign_eval.py); see specs/2026-08-16-player-assignment-design.md 4.4.
+  var STROKED = {
+    'ø': 'o', 'ł': 'l', 'đ': 'd', 'ħ': 'h', 'ŧ': 't', 'ŋ': 'n', 'ɓ': 'b',
+    'ƒ': 'f', 'ŀ': 'l', 'ɛ': 'e', 'ɠ': 'g', 'ƕ': 'h', 'ǂ': 't', 'ǃ': '!',
+    'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'þ': 'p', 'ð': 'd', 'ı': 'i', 'ſ': 's',
+  };
+
   // Fold accents before comparing: the HUD renders the real Battle.net name
   // (e.g. "Hēv"), but tessedit_char_whitelist is plain ASCII, so OCR can only
   // ever return "Hev" - without this, an otherwise-perfect read scores as a
@@ -70,7 +83,14 @@
     var str = String(s == null ? '' : s);
     var hashIdx = str.indexOf('#');
     if (hashIdx !== -1) str = str.slice(0, hashIdx);
-    return str.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    str = str.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    // After the accent fold, so a lower-cased stroked letter is what we look up.
+    var out = '';
+    for (var i = 0; i < str.length; i++) {
+      var ch = str.charAt(i);
+      out += (STROKED[ch] !== undefined) ? STROKED[ch] : ch;
+    }
+    return out;
   }
 
   function simScore(a, b) {

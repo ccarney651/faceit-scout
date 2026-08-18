@@ -42,6 +42,28 @@ test('an unrelated name scores far below the strong-match bar', () => {
   assert.ok(Names.simScore('Kirbz', 'Zzzzz') < Names.STRONG_NAME_SCORE);
 });
 
+// Stroked/barred Latin letters have no canonical decomposition, so the NFD fold
+// alone left them in place while an ASCII-restricted OCR could only ever emit
+// the base letter. See specs/2026-08-16-player-assignment-design.md 4.4.
+test('normName transliterates stroked letters NFD cannot decompose', () => {
+  assert.equal(Names.normName('ŚŁØŴ'), 'slow');
+  assert.equal(Names.normName('ŦŪX'), 'tux');
+  assert.equal(Names.normName('Ƕ2Ɓ'), 'h2b');
+  assert.equal(Names.normName('Mßkn'), 'msskn');
+});
+
+test('a real HUD read now matches a stroked roster name', () => {
+  // Before the transliteration these scored 50 and 66.7 against a bar of 75 -
+  // unmatchable even with a flawless read.
+  assert.ok(Names.simScore('slow', 'ŚŁØŴ') >= Names.STRONG_NAME_SCORE);
+  assert.ok(Names.simScore('teddybear!', 'ŦeddyƁearǃ') >= Names.STRONG_NAME_SCORE);
+});
+
+test('normName leaves ordinary decomposable accents working as before', () => {
+  assert.equal(Names.normName('Hēv'), 'hev');
+  assert.equal(Names.normName('Mź7w'), 'mz7w');
+});
+
 test('affinity sums each name best match against the roster', () => {
   const roster = ['Kirbz', 'Vega'];
   assert.equal(Names.affinity(['Kirbz'], roster), 100);

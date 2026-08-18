@@ -505,7 +505,7 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 // index.html releases its live-scouting claim (a system scrims don't have),
 // so onStop is null here and releaseClaim on index.html.
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:null});
-const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
@@ -903,8 +903,11 @@ let _ocrWorker=null, _ocrLoading=null, _ocrLoadFailed=false, _ocrLoadError=null;
 async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return null;
   const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
+    // Found once per side, not per slot - see the same call in index.html
+    // ocrNames() and engine/frames.js nameRow() for why.
+    const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      const {data}=await w.recognize(nameCanvas(frame,cell));
+      const {data}=await w.recognize(nameCanvas(frame,cell,row));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       snapMsg('reading HUD names… '+(++done)+'/10'); } }
   return out; }

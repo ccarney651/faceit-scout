@@ -586,6 +586,65 @@ has learned, held in the browser's own IndexedDB.
 jsDelivr on first use and runs in a worker. It is optional: when it fails to
 load, capture continues without name attribution rather than breaking.
 
+**The crop handed to tesseract is found, not assumed.** The calibration box is
+fitted to the *portraits*, and the fixed band underneath it that the crop used
+to assume (48-90% of cell height) straddles the portrait bottom, the name and
+the health bar on a real frame - so the brightest thing in the crop was the
+health bar and the reads came back as letter-soup. That is the likeliest reason
+`comp_slots.player_id` was 0 of 1620 historically. `engine/frames.js nameRow()`
+now locates the name row **once per side, across the whole five-slot strip**,
+and all five crops use it. Per slot it cannot be done: the hero portrait sits
+inside the cell *above* the name and its art is transition-dense, and a long
+name can out-score the health bar - the two obvious per-slot heuristics were
+both tried and both picked the wrong band. Across the strip the five names
+reinforce each other while portrait noise averages out. The row is the run of
+rows with many horizontal light/dark transitions that does not fill the strip
+(a full health bar fills ~0.55 of it, a name ~0.15-0.32) and sits in the
+quietest surroundings, the names being drawn on a dark plate. Measured on real
+frames: 15 of 90 slots read correctly before, 77 of 90 after, and every one of
+the 90 resolves once the role constraint is applied - against 36 of 90 with two
+*wrong* before. `tools/real_frame_eval/` has the numbers, the threshold sweep
+(1800 box/resolution variants, all landing on the row) and a parity check that
+runs the shipped JS over real pixels.
+
+**Names are not how a slot is assigned to a player — role is.** Overwatch
+tournament play is role-locked, and FACEIT records the role each player queued
+for, per game: 8303 of 8356 team-games in the database are exactly 1 Tank /
+2 Damage / 2 Support, and all 53 exceptions are a *missing* role rather than a
+real 2-tank comp. So `engine/assign.js` reads the role off the hero recognised
+in each slot and uses it to partition the candidates. A correctly-read comp
+collapses from 120 permutations to 1 × 2 × 2 = 4 — and **the tank is determined
+with no name evidence at all**. It is the same reduction `owdb/match.py` already
+applies to hero matching, pointed at players instead.
+
+Assignment is optimal within a role group rather than greedy, and it abstains
+rather than guesses: a contested group must clear a lead over the runner-up, and
+then either an absolute score floor or one slot matching decisively — a single
+confident read settles its partner by elimination, and the group mean must not
+veto that. **The floor is what makes this safe.**
+Without it the identical resolver produced 33.6% *wrong* attributions once the
+reads degraded to noise, because uniform noise reliably manufactures a score
+lead between two candidates. `tools/assign_eval.py` measures all of this against
+every real lineup with ground truth known by construction; re-run it when the
+rosters grow.
+
+**Its corruption model understates the win, and `tools/real_frame_eval/` shows
+why.** Run against real tesseract output on real HUD frames — ground truth taken
+from the replay code burnt into the frame — the name-only matcher resolves 85% of
+slots and the role-constrained one 100%, neither ever wrong. The synthetic model
+degrades every name a little; real OCR destroys whole names and leaves the rest
+pristine. It returned `4.04` for a clean, legible `PROXY` in six frames of eight.
+And a slot reading `JODAN` perfectly still matched nothing, because FACEIT's
+stored `game_name` for that player says `Arclite` — **the battletag on a FACEIT
+account can be stale against the live Battle.net name**, which is worth
+remembering before trusting `game_name` as an identity key.
+
+The name matcher survives as the fallback for a game with no `lineups` entry, so
+a stale feed degrades to the old behaviour rather than to nothing. The
+per-slot outcome is published as `player_conf` (`forced` / `matched` / `null`)
+beside the raw read, so a later matcher can tell a role-determined tag from a
+name-matched one.
+
 **`docs/capture/index.html` and `docs/capture/scrim.html` share a JS engine
 under `docs/capture/engine/`, not by copy-paste.** The two pages used to be
 hand-maintained forks of one another: a 2026-08-12 audit
@@ -595,10 +654,11 @@ logic is owned once:
 
 | Module | Owns |
 | --- | --- |
-| `engine/names.js` | Name normalisation, similarity scoring, roster affinity, `confidentOrientation` |
+| `engine/names.js` | Name normalisation, similarity scoring, roster affinity, `confidentOrientation`. The fold transliterates stroked Latin letters (`ø ł ħ ŧ …`) as well as decomposing accents — NFD leaves the stroked ones alone, so the roster kept a glyph an ASCII-restricted OCR could never emit |
+| `engine/assign.js` | Role-constrained player assignment: which FACEIT player is in which HUD slot (league capture only) |
 | `engine/util.js` | HTML/attr escaping, CSS injection, base64 helpers, toasts, modals, the `ICONS` table |
 | `engine/idb.js` | IndexedDB open/read/write; `open(version, stores)` takes its store list from the caller rather than hard-coding one |
-| `engine/frames.js` | Screen share, frame grab, greyscale canvases; `ctx.onStop` is the page-specific teardown hook |
+| `engine/frames.js` | Screen share, frame grab, greyscale canvases, HUD name-row location and name crops; `ctx.onStop` is the page-specific teardown hook |
 | `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
 | `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
 | `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
@@ -976,12 +1036,37 @@ app never has to crawl FACEIT itself.
       "<team_id>": {"name": "Qwiz Esports",
         "players": [{"id": "…", "nick": "qeezyow", "game_name": "qeezy"}]}
     }
-  }
+  },
+  "lineups": {
+    "<match_id>:<game_no>": {
+      "<team_id>": {"name": "Qwiz Esports",
+        "players": [{"id": "…", "nick": "qeezyow", "game_name": "qeezy",
+                     "role": "Tank"}]}
+    }
+  },
+  "hero_roles": {"0x02E000000000007A": "Tank"}
 }
 ```
 
 `game_name` is the Battle.net name the Overwatch HUD actually shows, which is
 why ingest backfills it separately — the FACEIT nickname often differs.
+
+**`lineups` is keyed per game and `rosters` per match, and that is not
+redundancy.** `rosters` groups by `(team, player)` across the whole match, so a
+substitution inflates it — 610 of 2260 real match-teams (27%) carry more than
+five players. Player assignment needs an *exact cover* of five over five slots;
+hand it six and the damage group has three candidates for two slots, so the role
+constraint stops constraining and a substitute who never played that game becomes
+a candidate for it. Scrim opponent identification wants
+the opposite — the accumulated squad, because a season's stand-ins are what still
+identify a lineup when two players are on smurfs. Two consumers, two correct
+shapes; neither should be bent to serve the other.
+
+`role` is FACEIT's own per-game value (the `i16` stats field), stored as `null`
+for a game whose stats never captured rather than guessed. `hero_roles` exists
+because the browser otherwise has no role for a *built-in* hero at all — only
+`CUSTOM_HEROES` carried one — and the slot's role is read off the recognised
+hero.
 
 ### `docs/capture/refs.json` — the hero reference library
 

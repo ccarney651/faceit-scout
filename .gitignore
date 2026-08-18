@@ -65,3 +65,14 @@ crops/
 tools/scrim_code/node_modules/
 # Generated paste-ready workshop text (rebuilt via `npm run build`)
 tools/scrim_code/scrim_owdb.txt
+
+# tesseract.js for tools/real_frame_eval/. Deliberately NOT a repo dependency -
+# the capture page loads tesseract from a CDN at runtime, and this is installed
+# ad hoc to run the eval harness. It must never be committed (a `git add -A`
+# swept it in once).
+/node_modules/
+# Tesseract drops its language data in the repo root on first run.
+/eng.traineddata
+
+# Agent worktrees are their own git repositories; committing one embeds a repo.
+.claude/worktrees/

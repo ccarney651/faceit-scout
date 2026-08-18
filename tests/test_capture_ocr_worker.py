@@ -219,6 +219,7 @@ def _run_names(body: str, timeout_ms: int = 50) -> str:
     stubs = r"""
     global.boxes={a:{x:0,y:0,w:500,h:80}, b:{x:600,y:0,w:500,h:80}};
     global.grabFrame=()=>({});
+    global.nameRow=()=>({y:40,h:14});
     global.nameCanvas=()=>({});
     global.setDetectMsg=()=>{};
     global.ocrProgress=()=>{};
