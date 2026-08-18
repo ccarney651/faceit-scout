@@ -51,9 +51,8 @@ row           92.4    77/90                    90/90      0        0
 rowtight      91.0    73/90                    90/90      0        0
 ```
 
-`shipped` is the geometry that had been running in production, and it is why
-`comp_slots.player_id` was 0 of 1620 historically: on a real frame the 48–90%
-band straddles the portrait bottom, the name **and** the health bar, and the bar
+`shipped` is the geometry that had been running in production: on a real frame
+the 48–90% band straddles the portrait bottom, the name **and** the health bar, and the bar
 is the brightest thing in it. It also produced two *wrong* attributions — the
 only wrong ones anywhere in this harness.
 
