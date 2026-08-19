@@ -129,6 +129,19 @@ Entries before 2026-08-11 were reconstructed from git history.
   second chance to drift from `faceit_sync/subroles.py`. The first copy had
   already drifted silently. `docs/scrims.html` gains its only external script.
 
+### Changed
+- **Registered the 2026-08-19 patch code wipe, dated the 18th.** Every replay
+  code from before the patch is dead, so the site marks those maps lost to the
+  wipe rather than offering them.
+
+  The date is deliberately a day early. `codeDead` is date-granular
+  (`when[:10] <= wipe`), and the patch landed mid-evening, so dating it the
+  19th would have marked that day's post-patch league games dead too - and
+  their codes are alive. Offering a dead code costs one failed capture attempt;
+  hiding a live one loses the map for good, because a code nobody scouts is
+  never recoverable. The reasoning is recorded beside the entry in
+  `owdb/db.py`, which remains the only place a wipe date is written.
+
 ### Fixed
 - **The scrims viewer rendered an empty shell.** Its CSP is
   `script-src 'unsafe-inline'` with no `'self'` - correct while every line it

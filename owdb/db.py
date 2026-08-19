@@ -239,6 +239,14 @@ _SEED_WIPES = [
     ("2026-07-14", "observed", "invalidated all S9 regular season codes"),
     ("2026-07-28", "observed", "mid-season patch; invalidated all pre-patch S9 codes"),
     ("2026-08-11", "observed", "hero-release patch; invalidated all pre-patch S9 codes"),
+    # Dated a day EARLY, deliberately. The patch landed on the 19th, mid-
+    # evening. codeDead() is date-granular (`when[:10] <= wipe`), so dating
+    # this the 19th would mark every game that day dead - including the
+    # league games played after the patch, whose codes are alive. The two
+    # errors are not equal: offering a dead code costs one failed capture
+    # attempt, while hiding a live one loses that map permanently, because
+    # a code nobody scouts is never recoverable. So this errs toward alive.
+    ("2026-08-18", "observed", "patch on the 19th; dated the 18th so same-day post-patch games stay scoutable"),
 ]
 # The date the site and merge use without a database: a game finished on or
 # before this can never be replayed unless it was captured first. Update this
