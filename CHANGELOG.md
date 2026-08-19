@@ -19,6 +19,33 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-08-19
 
+### Added
+- **The replay code can be read off the screen.** Overwatch prints it on the HUD
+  banner the whole time, and it was being typed by hand - six random characters,
+  mid-scrim. A *Read code* button on the scrim panel now fills the field from
+  the screen, and one on the league page checks the code you have selected
+  against the one actually on screen.
+
+  That second case is the point. The league picker is a dropdown of lookalike
+  six-character strings; picking the wrong one attributes every comp captured
+  afterwards to the wrong match, teams and players, publishes it, and gives no
+  signal that it happened. The read is checked against the division's feed, so
+  an exact match selects it, a unique one-character miss is offered as a
+  correction, and anything else changes nothing.
+
+  Codes turn out to be **Crockford Base32** - measured across all 4328 in the
+  database, the alphabet is the ten digits plus A-Z without I, L, O and U, each
+  of the 32 symbols appearing 750-850 times. That is a published standard whose
+  exclusions exist for exactly our reason (I and L confusable with 1, O with 0),
+  so the OCR correction rules come from its spec rather than from guesswork.
+
+  Measured 12/12 correct with **zero wrong reads** across twelve real frames in
+  two window modes. Zero-wrong is the gate that mattered: a refused read costs a
+  retry, a wrong one is a corrupted record that looks correct forever. A read
+  that cannot be validated is discarded rather than guessed at, and on the scrim
+  page - which has no feed to check against - nothing is ever recorded without
+  the operator seeing it in the panel field first.
+
 ### Changed
 - **The capture panel is the scrim workflow; the page is setup only.** The page
   could still add a map, start it, enter bans and import a session - and its
