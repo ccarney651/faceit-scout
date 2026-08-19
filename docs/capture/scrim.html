@@ -389,7 +389,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/heroes.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/replaycode.js"></script><script src="engine/heroes.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -850,7 +850,7 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 // index.html releases its live-scouting claim (a system scrims don't have),
 // so onStop is null here and releaseClaim on index.html.
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:null});
-const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, codeCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
@@ -1399,6 +1399,39 @@ async function ensureScrim(){
   await renderScrimPanel();
   return activeScrim;
 }
+// ---------- replay code off the screen ----------
+// The code Overwatch prints on the HUD banner, read on demand. Geometry and
+// validation live in engine/replaycode.js; this is the browser half - grab a
+// frame, crop, hand it to the shared OCR worker, and put the result through
+// the gate.
+//
+// The worker is SHARED with the name and scoreboard reads, and engine/refs.js's
+// header records why no character whitelist is set globally: readScoreboard()
+// needs full sentences and a code-only whitelist would break it. So both
+// parameters are set here and restored immediately after - a whitelist left in
+// place would not throw, it would quietly corrupt the next scoreboard read.
+//
+// Measured 12/12 correct with zero wrong reads over the ground-truth frames
+// (tools/real_frame_eval/). Zero WRONG is the number that matters: a crop that
+// clips a glyph can still yield six valid Crockford characters, which no gate
+// here can detect - see that README for the guard that was tried and rejected.
+async function readReplayCode(){
+  if(!vid.srcObject) return null;
+  if(!boxes.a) return null;
+  const box=OWDBReplayCode.codeBox(boxes.a);
+  if(!box) return null;
+  try{
+    const w=await ocrWorker();
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
+    const {data}=await w.recognize(codeCanvas(grabFrame(), box));
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    return OWDBReplayCode.foldCode(data && data.text);
+  }catch(e){
+    console.error('[owdb] replay-code read failed:', e);
+    return null;
+  }
+}
+
 // ---------- hero bans ----------
 // Bans are optional per scrim: some teams play them, some do not, and a ban
 // control on a scrim that never bans is just noise. Stored per MAP rather than
@@ -1865,6 +1898,16 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
       code.value=LAST_CODE||'';
       code.oninput=()=>{ LAST_CODE=code.value; };
       row.appendChild(code);
+      // Read it off the screen rather than typing six random characters. The
+      // result lands in the field above where the operator can see it BEFORE
+      // pressing Start - which is the only check there is on this page, since
+      // a scrim has no feed to validate against and a clipped glyph can yield
+      // a well-formed wrong code.
+      mk(row,'⌘ Read code',async()=>{
+        const got=await readReplayCode();
+        if(got){ code.value=got; LAST_CODE=got; snapMsg('read '+got); }
+        else snapMsg('could not read the code — calibrate and try again', true);
+      },'');
       mk(row,'▶ Start',()=>{ const c=code.value; LAST_CODE=''; startMapNamed(map.value, c); },'go');
     }},
     {id:'prow-main', render:(main,d,mk)=>{

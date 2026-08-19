@@ -293,6 +293,33 @@
     // letterbox / pillarbox (odd aspect ratios / resolutions), capped at 20%
     // per edge. Does NOT strip a window title bar (it isn't black) - share
     // the whole screen for that.
+    // The replay-code crop: upscale hard, then push contrast, exactly as
+    // nameCanvas does for HUD names. The code sits on a semi-transparent plate
+    // over arbitrary game art - the same problem, and contrast is what solved
+    // it there (15/90 reads to 77/90).
+    //
+    // These constants are duplicated in tools/real_frame_eval/code_crop.py,
+    // which is what the crop offsets were swept against. THEY MUST MATCH: the
+    // parity check compares rectangles, and a different contrast curve would
+    // still be two different images through the same box.
+    function codeCanvas(frame, box) {
+      var sc = 6;
+      var cv = ctx.doc.createElement('canvas');
+      cv.width = Math.max(1, Math.round(box.w * sc));
+      cv.height = Math.max(1, Math.round(box.h * sc));
+      var cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+      cx.drawImage(frame, box.x, box.y, box.w, box.h, 0, 0, cv.width, cv.height);
+      var im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
+      for (var i = 0; i < d.length; i += 4) {
+        var g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        g = (g - 128) * 1.9 + 140; g = g < 0 ? 0 : g > 255 ? 255 : g;
+        d[i] = d[i + 1] = d[i + 2] = g;
+      }
+      cx.putImageData(im, 0, 0);
+      return cv;
+    }
+
     function detectContentRect() {
       var W = ctx.video.videoWidth, H = ctx.video.videoHeight;
       if (!W) return { x: 0, y: 0, w: W, h: H };
@@ -342,6 +369,7 @@
       cellGrayPadded: cellGrayPadded,
       nameRow: nameRow,
       nameCanvas: nameCanvas,
+      codeCanvas: codeCanvas,
       detectContentRect: detectContentRect,
       stopCapture: stopCapture,
       togglePreview: togglePreview,

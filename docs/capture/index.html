@@ -402,6 +402,7 @@ button:disabled{opacity:.45;cursor:default}
 </div>
 <script src="engine/names.js"></script>
 <script src="engine/assign.js"></script>
+<script src="engine/replaycode.js"></script>
 <script src="engine/util.js"></script>
 <script src="engine/idb.js"></script>
 <script src="engine/frames.js"></script>
@@ -578,6 +579,39 @@ function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   
   document.getElementById('codenote').textContent=`${cs.length} codes shown`;
   if(cur){ const idx=cs.findIndex(c=>codeKey(c)===codeKey(cur)); if(idx>=0){ sel.value=String(idx); return true; } }
   return false; }
+// ---------- replay code off the screen ----------
+// The code Overwatch prints on the HUD banner, read on demand. Geometry and
+// validation live in engine/replaycode.js; this is the browser half - grab a
+// frame, crop, hand it to the shared OCR worker, and put the result through
+// the gate.
+//
+// The worker is SHARED with the name and scoreboard reads, and engine/refs.js's
+// header records why no character whitelist is set globally: readScoreboard()
+// needs full sentences and a code-only whitelist would break it. So both
+// parameters are set here and restored immediately after - a whitelist left in
+// place would not throw, it would quietly corrupt the next scoreboard read.
+//
+// Measured 12/12 correct with zero wrong reads over the ground-truth frames
+// (tools/real_frame_eval/). Zero WRONG is the number that matters: a crop that
+// clips a glyph can still yield six valid Crockford characters, which no gate
+// here can detect - see that README for the guard that was tried and rejected.
+async function readReplayCode(){
+  if(!vid.srcObject) return null;
+  if(!boxes.a) return null;
+  const box=OWDBReplayCode.codeBox(boxes.a);
+  if(!box) return null;
+  try{
+    const w=await ocrWorker();
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
+    const {data}=await w.recognize(codeCanvas(grabFrame(), box));
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    return OWDBReplayCode.foldCode(data && data.text);
+  }catch(e){
+    console.error('[owdb] replay-code read failed:', e);
+    return null;
+  }
+}
+
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
@@ -614,7 +648,7 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 // index.html releases its live-scouting claim (a system scrims don't have),
 // so onStop is releaseClaim here and null on scrim.html.
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:releaseClaim});
-const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, codeCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now

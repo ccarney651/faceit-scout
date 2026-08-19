@@ -1252,3 +1252,43 @@ def test_a_scrim_with_no_maps_cannot_be_closed_out() -> None:
     assert "SCRIM_MAP_COUNT" in row, "finish-scrim is offered before any map exists"
     src = _extract(("async function endScrimCapture()", "// scrimDate():"))
     assert "SCRIM_MAP_COUNT" in src, "the guard is only in the rendering, not the action"
+
+
+# --- reading the replay code off the screen -------------------------------
+
+def test_the_panel_can_read_the_replay_code_off_the_screen() -> None:
+    row = _extract(("{id:'prow-next'", "{id:'prow-main'"))
+    assert "readReplayCode(" in row, "the panel has no way to read the code"
+
+
+def test_reading_the_code_restores_the_shared_workers_settings() -> None:
+    # One worker is shared with readHudNames and readScoreboard. engine/refs.js
+    # records that no whitelist is set globally because readScoreboard needs
+    # full text - so a code-only whitelist left in place does not fail loudly,
+    # it silently corrupts the next scoreboard read.
+    src = _extract(("async function readReplayCode(", "// ---------- hero bans"))
+    assert "tessedit_char_whitelist" in src
+    assert src.count("setParameters") >= 2, "the whitelist is set but never restored"
+    assert "tessedit_char_whitelist:''" in src.replace(" ", ""), (
+        "the whitelist must be cleared again, not left set to the code alphabet"
+    )
+
+
+def test_an_unreadable_code_writes_nothing() -> None:
+    src = _extract(("async function readReplayCode(", "// ---------- hero bans"))
+    assert "foldCode(" in src, "the read is not put through the validation gate"
+
+
+def test_no_code_is_recorded_without_the_operator_seeing_it() -> None:
+    """Starting a map must not read a code by itself.
+
+    A crop that clips a glyph can produce six valid Crockford characters that
+    are the wrong code - TJDE6W read as 8TDE6W, measured in the sweep - and
+    foldCode cannot catch that, because it is well-formed. The scrim page has
+    no feed to check against, so the operator seeing the read in the panel
+    field IS the check. Filling it during Start removes that.
+    """
+    src = _extract(("async function startMapNamed(", "// A sub-map captured in an EARLIER round"))
+    assert "readReplayCode" not in src, (
+        "starting a map reads a code the operator never saw"
+    )
