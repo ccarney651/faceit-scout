@@ -596,22 +596,41 @@ function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   
 // (tools/real_frame_eval/). Zero WRONG is the number that matters: a crop that
 // clips a glyph can still yield six valid Crockford characters, which no gate
 // here can detect - see that README for the guard that was tried and rejected.
+// Why the last read failed, so the operator is told what actually went wrong
+// rather than being sent to re-calibrate a calibration that is already good.
+// The side-detection hunt cost an evening to three wrong guesses because the
+// failure was a single swallowed message; this is that lesson applied.
+let LAST_CODE_READ={why:null, raw:null, box:null};
 async function readReplayCode(){
-  if(!vid.srcObject) return null;
-  if(!boxes.a) return null;
+  LAST_CODE_READ={why:null, raw:null, box:null};
+  if(!vid.srcObject){ LAST_CODE_READ.why='share your screen first'; return null; }
+  if(!boxes.a){ LAST_CODE_READ.why='calibrate first — the code is found relative to the left team portraits'; return null; }
   const box=OWDBReplayCode.codeBox(boxes.a);
-  if(!box) return null;
+  if(!box){ LAST_CODE_READ.why='the calibration box has no size'; return null; }
+  LAST_CODE_READ.box=box;
   try{
     const w=await ocrWorker();
+    const cv=codeCanvas(grabFrame(), box);
     await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
-    const {data}=await w.recognize(codeCanvas(grabFrame(), box));
+    const {data}=await w.recognize(cv);
     await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
-    return OWDBReplayCode.foldCode(data && data.text);
+    const raw=(data&&data.text||'').replace(/\s+/g,'');
+    LAST_CODE_READ.raw=raw;
+    const got=OWDBReplayCode.foldCode(raw);
+    if(!got){
+      LAST_CODE_READ.why = raw ? ('read "'+raw+'", which is not a six-character code') : 'the crop came back empty';
+      // The crop is the thing to look at when this happens, and it is otherwise
+      // invisible - it lives for one call inside a canvas nobody can see.
+      try{ console.log('[owdb] replay-code crop', box, cv.toDataURL()); }catch(e){}
+    }
+    return got;
   }catch(e){
+    LAST_CODE_READ.why='OCR failed: '+((e&&e.message)||String(e));
     console.error('[owdb] replay-code read failed:', e);
     return null;
   }
 }
+function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
 
 // matchReadCode(read, codes) - what a code read off the screen corresponds to
 // in this division's feed.
@@ -667,7 +686,7 @@ document.getElementById('code').onchange=onCode;
 // This asks the screen instead.
 document.getElementById('readcode').onclick=async()=>{
   const got=await readReplayCode();
-  if(!got){ snapMsg('could not read the code off the screen — calibrate, then try again', true); return; }
+  if(!got){ snapMsg(esc(codeReadProblem()), true); return; }
   const cs=currentCodes(), m=matchReadCode(got, cs);
   if(m.kind==='none'){ snapMsg('screen says '+esc(got)+', which is not a code in this division — nothing changed', true); return; }
   const cur=selectedCode();
