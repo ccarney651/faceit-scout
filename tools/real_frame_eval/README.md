@@ -310,3 +310,24 @@ Agreement is also the guard that the edge-ink idea failed to provide. A crop
 clipping a glyph can yield six valid characters that are the wrong code, which
 `foldCode` cannot detect — but it is unlikely to yield the *same* wrong code
 under three different preprocessings, and a disagreement refuses outright.
+
+### Resolution robustness
+
+The three live-convention frames resampled to five resolutions, `boxes.a` taken
+from `AUTO_STRIPS` fractions of each, read through the contrast ladder:
+
+| resolution | correct | no-read | wrong |
+| --- | --- | --- | --- |
+| 1280×720 | 3/3 | 0 | 0 |
+| 1600×900 | 3/3 | 0 | 0 |
+| 1920×1080 | 3/3 | 0 | 0 |
+| 2560×1440 | 3/3 | 0 | 0 |
+| 3840×2160 | 3/3 | 0 | 0 |
+
+The test is pessimistic: every frame is resampled from a 1440p source, so the
+HUD text is softer than a native render at that resolution would be.
+
+**Not covered: aspect ratios other than 16:9.** `AUTO_STRIPS` expresses the HUD
+as fractions of the frame, which only holds while the aspect ratio does. There
+is no ultrawide or 16:10 frame in the set, so nothing here says whether the
+crop lands on an ultrawide HUD — do not assume it does.

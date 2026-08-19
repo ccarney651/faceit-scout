@@ -40,11 +40,40 @@ Entries before 2026-08-11 were reconstructed from git history.
   so the OCR correction rules come from its spec rather than from guesswork.
 
   Measured 12/12 correct with **zero wrong reads** across twelve real frames in
-  two window modes. Zero-wrong is the gate that mattered: a refused read costs a
-  retry, a wrong one is a corrupted record that looks correct forever. A read
-  that cannot be validated is discarded rather than guessed at, and on the scrim
-  page - which has no feed to check against - nothing is ever recorded without
-  the operator seeing it in the panel field first.
+  two window modes, and confirmed live on 2026-08-19 against `SZDPQQ`.
+  Zero-wrong is the gate that mattered: a refused read costs a retry, a wrong
+  one is a corrupted record that looks correct forever. A read that cannot be
+  validated is discarded rather than guessed at, and on the scrim page - which
+  has no feed to check against - nothing is ever recorded without the operator
+  seeing it in the panel field first.
+
+  The code plate is semi-transparent, so no single contrast setting works: the
+  boost that read every stored frame returned an empty crop on the first live
+  one, where no boost at all read it perfectly. Each read therefore runs three
+  preprocessing passes and takes the answer only when they agree. Disagreement
+  refuses, which is also the only workable guard against the one failure the
+  validator cannot catch - a crop clipping a glyph, yielding six valid
+  characters that are the wrong code.
+
+### Confirmed live
+- **2026-08-19, `SZDPQQ`, Ilios, The Hyenas vs Telacy Navy.** Read correctly
+  with the right code already selected, and - with a deliberately wrong code
+  selected - it read the screen and moved the selection back to the right match.
+  That second case is the entire point of the feature.
+- **Every resolution from 1280x720 to 3840x2160 reads correctly**, zero wrong
+  (`tools/real_frame_eval/`). The crop is expressed as fractions of the
+  calibration box, which is itself fractions of the frame, so scale-invariance
+  is structural rather than tuned - this measures that it actually holds.
+  Aspect ratios other than 16:9 are **not** covered: the HUD fractions assume
+  it, and no ultrawide frame exists to test against.
+
+  The code plate is semi-transparent, so no single contrast setting works: the
+  boost that read every stored frame returned an empty crop on the first live
+  one, where no boost at all read it perfectly. Each read therefore runs three
+  preprocessing passes and takes the answer only when they agree. Disagreement
+  refuses, which is also the only workable guard against the one failure
+  `foldCode` cannot catch - a crop clipping a glyph, yielding six valid
+  characters that are the wrong code.
 
 ### Changed
 - **The capture panel is the scrim workflow; the page is setup only.** The page
