@@ -57,7 +57,38 @@
     return out.length === LEN ? out : null;
   }
 
-  var Mod = { ALPHABET: ALPHABET, LEN: LEN, foldCode: foldCode };
+  // Where the code sits, as fractions of the calibrated TEAM 1 portrait strip.
+  //
+  // ANCHORED TO THE STRIP, NOT TO THE SCREEN. auto-calibrate has already fitted
+  // that strip to this particular HUD at this particular resolution and window
+  // mode, so expressing the crop against it costs nothing and inherits all of
+  // that work. The HUD name band was originally a fraction of the SCREEN and
+  // straddled the portrait bottom, the name and the health bar the moment the
+  // window mode changed; that is the mistake this avoids.
+  //
+  // Fitted by tools/real_frame_eval/code_sweep.py - do not hand-edit.
+  var DX = 1.079;      // left edge, in strip widths right of the strip's left edge
+  var DW = 0.127;      // width, in strip widths
+  var DY = -0.495;     // top edge, in strip heights below the strip's top (negative = above)
+  var DH = 0.198;      // height, in strip heights
+  var PAD = 0.35;      // extra margin, in multiples of the box's own size
+
+  function codeBox(a) {
+    if (!a || !(a.w > 0) || !(a.h > 0)) return null;
+    var w = DW * a.w, h = DH * a.h;
+    var px = w * PAD, py = h * PAD;
+    return {
+      x: Math.round(a.x + DX * a.w - px),
+      y: Math.round(a.y + DY * a.h - py),
+      w: Math.round(w + 2 * px),
+      h: Math.round(h + 2 * py),
+    };
+  }
+
+  var Mod = {
+    ALPHABET: ALPHABET, LEN: LEN, foldCode: foldCode, codeBox: codeBox,
+    OFFSETS: { DX: DX, DW: DW, DY: DY, DH: DH, PAD: PAD },
+  };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBReplayCode = Mod;
