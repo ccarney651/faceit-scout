@@ -1032,12 +1032,37 @@ def test_closing_a_scrims_capture_leaves_the_scrim_editable() -> None:
         "closing capture must not write a finished/void flag onto the scrim")
 
 
-def test_a_hero_with_no_portrait_is_still_readable_in_the_grid() -> None:
-    # hero_icons.json is optional and can lag a new hero. A button whose only
-    # content is an <img> that never loads is an invisible button, and the
-    # grid's cells are deliberately line-height:0 to make the portraits flush.
+def test_every_hero_in_the_grid_is_named_under_its_portrait() -> None:
+    # Portraits alone are recognisable for the heroes you play and guesswork
+    # for the rest, and a ban is entered under time pressure during a draft.
+    html = _run_bangrid("return banGridHtml([{g:'r',n:'Reinhardt'}], []);")
+    assert ">Reinhardt<" in html, "the name must be text under the tile, not just alt text"
+
+
+def test_a_hero_with_no_portrait_still_occupies_a_full_tile() -> None:
+    # hero_icons.json is optional and can lag a new hero. Without a stand-in
+    # for the image the tile would collapse to its name and break the grid.
     html = _run_bangrid("""
         heroPortrait=function(){ return ''; };
         return banGridHtml([{g:'x',n:'Nohero'}], []);""")
-    assert "Nohero" in html
-    assert "bantxt" in html, "a portrait-less hero needs a visible text fallback"
+    assert ">Nohero<" in html
+    assert "banph" in html, "a portrait-less hero needs a placeholder the size of a portrait"
+
+
+def test_the_ban_grid_tiles_are_a_fixed_size() -> None:
+    # The panel is resizable, and fractional columns made the portraits grow
+    # with it - a hero select the size of the window is harder to scan, not
+    # easier. Fixed tiles reflow into more columns instead of inflating.
+    css = APP.read_text(encoding="utf-8").replace(" ", "")
+    assert "repeat(6,1fr)" not in css, "ban tiles stretch with the panel again"
+    assert "repeat(auto-fill,52px)" in css
+
+
+def test_the_ban_grid_is_styled_on_the_page_as_well_as_the_panel() -> None:
+    # The panel builds its stylesheet in JS from the live palette; the page
+    # card has no such thing, so rules written only into panelCss leave the
+    # page's tiles wearing the default button padding.
+    html = APP.read_text(encoding="utf-8")
+    page_css = html[html.index("<style>"):html.index("</style>")]
+    assert ".banbtn" in page_css, "the ban grid is unstyled on the page card"
+    assert ".bangrid" in page_css

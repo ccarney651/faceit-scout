@@ -148,6 +148,26 @@
   .sstep.todo{opacity:.6}
   .shint{color:var(--muted);font-size:13px}
   .hp{width:22px;height:22px;border-radius:4px;flex:none;object-fit:cover;background:var(--surface2)}
+  /* The ban grid, on the page card. These rules exist twice - here and, built
+     from the live palette, in the pop-out panel's generated stylesheet - because
+     the panel is a separate document with no access to this one. Written only
+     there at first, which left the page's tiles wearing the page's default
+     button padding: a 52px portrait inside a button with 9px of padding and a
+     22px .hp rule fighting it. Keep the two in step. */
+  .bangrp{width:100%;margin-top:5px}
+  .bangrp .lbl{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--muted)}
+  .bangrid{display:grid;grid-template-columns:repeat(auto-fill,52px);gap:5px;justify-content:start}
+  .banbtn{padding:0;width:52px;border:1px solid var(--line2);background:var(--surface2);
+    border-radius:6px;overflow:hidden;cursor:pointer;display:block;text-align:center}
+  .banbtn:hover{border-color:var(--accent)}
+  .banbtn .hp{width:52px;height:52px;margin:0;border-radius:0;display:block;object-fit:cover}
+  .banph{display:block;width:52px;height:52px;background:var(--line)}
+  .bnm{display:block;font-size:8.5px;line-height:1.2;padding:2px 2px 3px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .banbtn.banned{border-color:var(--bad)}
+  .banbtn.banned .hp,.banbtn.banned .banph{opacity:.3;filter:grayscale(1)}
+  .banbtn.banned .bnm{color:var(--bad)}
   .slot{align-items:center}
   .slot .hp{margin-right:6px}
   .hd{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
@@ -1435,7 +1455,8 @@ function banGridHtml(catalogue, bans){
     `<div class="bangrp"><span class="lbl">${esc(grp.role)}</span><div class="bangrid">`
     + grp.heroes.map(h=>
         `<button type="button" class="banbtn${gone[h.g]?' banned':''}" data-g="${esc(h.g)}"`
-        + ` title="${esc(h.n)}">${heroPortrait(h.n)||`<span class="bantxt">${esc(h.n)}</span>`}</button>`).join('')
+        + ` title="${esc(h.n)}">${heroPortrait(h.n)||'<span class="banph"></span>'}`
+        + `<span class="bnm">${esc(h.n)}</span></button>`).join('')
     + '</div></div>').join('');
 }
 // The chip markup for a map's bans. Pure, and deliberately separate from
@@ -1976,24 +1997,28 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
-    // The ban grid: the in-game hero select, shrunk to a 360px panel. Six
-    // 26px portraits per row fits every role block without a scrollbar, and
-    // the role heading is what makes a hero findable at a glance - the reason
-    // this replaced a 53-entry dropdown.
-    `.bangrp{width:100%;margin-top:3px}.bangrp .lbl{display:block;margin-bottom:2px}`+
-    `.bangrid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}`+
-    `.banbtn{padding:0;border:1px solid ${c.line2};background:${c.surface2};border-radius:5px;`+
-      `line-height:0;overflow:hidden;cursor:pointer}`+
-    `.banbtn .hp{width:100%;height:auto;aspect-ratio:1;margin:0;order:0;border-radius:4px;display:block}`+
-    // hero_icons.json is optional and can lag a new hero. Without this the
-    // button would be an empty 26px square - the cells are line-height:0 so
-    // the portraits sit flush, which makes bare text invisible.
-    `.bantxt{display:block;font-size:8px;line-height:1.15;padding:4px 1px;color:${c.muted};`+
-      `overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`+
+    // The ban grid: the in-game hero select, shrunk to a panel. Tiles are a
+    // FIXED 52px, never fractional - the panel is resizable, and columns that
+    // stretch with it turned the portraits into billboards. Fixed tiles reflow
+    // into more columns instead, which is what makes the grid scannable.
+    `.bangrp{width:100%;margin-top:5px}.bangrp .lbl{display:block;margin-bottom:3px}`+
+    `.bangrid{display:grid;grid-template-columns:repeat(auto-fill,52px);gap:5px;justify-content:start}`+
+    `.banbtn{padding:0;width:52px;border:1px solid ${c.line2};background:${c.surface2};`+
+      `border-radius:6px;overflow:hidden;cursor:pointer;display:block;text-align:center}`+
+    `.banbtn:hover{border-color:${c.accent}}`+
+    `.banbtn .hp{width:52px;height:52px;margin:0;order:0;border-radius:0;display:block;object-fit:cover}`+
+    // Stands in for a portrait hero_icons.json has not caught up with, so the
+    // tile keeps its shape rather than collapsing to its name.
+    `.banph{display:block;width:52px;height:52px;background:${c.line}}`+
+    // Portraits alone are recognisable for the heroes you play and guesswork
+    // for the rest - and a ban is entered under time pressure, mid-draft.
+    `.bnm{display:block;font-size:8.5px;line-height:1.2;padding:2px 2px 3px;color:${c.muted};`+
+      `white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`+
     // A banned hero reads as struck out of the pool, not merely selected -
     // same visual language as the spent sub-maps above.
-    `.banbtn.banned{border-color:${c.bad};background:${c.bad}}`+
-    `.banbtn.banned .hp{opacity:.35;filter:grayscale(1)}`+
+    `.banbtn.banned{border-color:${c.bad}}`+
+    `.banbtn.banned .hp,.banbtn.banned .banph{opacity:.3;filter:grayscale(1)}`+
+    `.banbtn.banned .bnm{color:${c.bad}}`+
     `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
   // Every row id in `controls` must exist here: renderPipControls() looks each
   // one up in the panel document and silently skips the ones it cannot find.
