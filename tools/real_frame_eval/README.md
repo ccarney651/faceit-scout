@@ -331,3 +331,57 @@ HUD text is softer than a native render at that resolution would be.
 as fractions of the frame, which only holds while the aspect ratio does. There
 is no ultrawide or 16:10 frame in the set, so nothing here says whether the
 crop lands on an ultrawide HUD — do not assume it does.
+
+### The strip is the whole game, and the contrast ladder does not guard it (2026-08-19)
+
+`codeBox()` is fractions of the TEAM 1 strip, so the crop inherits auto-calibrate's
+work — that is why it survives every resolution above. The same property makes the
+strip the only thing holding the read up, and the strip is not always
+auto-calibrate's: `calMsg` in `engine/calibration.js` *tells* the scout to drag the
+boxes by hand when auto-calibrate scores low, and a non-16:9 scout is pushed down
+that same path, because AUTO_STRIPS mis-sizes and the sweep only searches
+translation.
+
+So: perturb each frame's own strip one axis at a time and read through the shipped
+ladder. `code_strip_tolerance.py` renders, `code_strip_tolerance.js` scores. Twelve
+frames, 1% steps.
+
+```
+              no wrong reads       first wrong read
+dx            -1% .. +2%           -2%  (3 of 12), +3%  (7 of 12)
+dy            -2% .. +2%           -3%  (2 of 12), +3%  (1 of 12)
+scale         -1% .. +3%           -2%  (1 of 12), +4%  (1 of 12)
+```
+
+**The failures are wrong codes, not refusals — 54 of them across the grid.** At
+dx −4%, ten of twelve frames returned a well-formed six-character code belonging to
+no game: `TJDE6W` read as `YTJDE6`, `D9X9N2` as `FD9X9N`. The crop slid left, took a
+spurious leading glyph and dropped the trailing one.
+
+**This is the guard the contrast ladder was believed to provide, and it does not.**
+The reasoning above — "unlikely to yield the *same* wrong code under three different
+preprocessings" — holds for noise and fails for geometry. A shifted crop is shifted
+identically at every contrast level, so all three passes agree, and agreement is
+exactly what the shipped rule accepts on. Contrast cannot see a mistake that is the
+same in all three images.
+
+A second *geometry* can. Reading at strip offsets {−1%, 0, +1%}, each still a full
+contrast ladder, and accepting only when all three agree (`code_strip_guard_sim.py`,
+simulated against the measured table — no tesseract needed to retry a value of d):
+
+```
+axis     shipped: wrong reads      candidate: wrong reads    cost at a correct strip
+dx              23                        0                  none (12/12)
+dy               7                        0                  1 extra refusal in 12
+scale           24                        0                  none (12/12)
+```
+
+Zero wrong reads at every strip error measured, against 54. The cost is one refusal
+in twelve on one axis, and three times the OCR work for a button pressed by hand.
+
+**Not shipped yet** — this is the measurement, not the change. What it already
+settles is narrower and usable now: the code reader is trustworthy on a strip
+auto-calibrate produced, and should not be trusted on a hand-dragged one. The two
+strip conventions in `code_truth.py` differ by 6–23% on the same HUD, an order of
+magnitude outside the ±2% envelope.
+
