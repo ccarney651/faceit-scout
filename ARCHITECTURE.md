@@ -854,13 +854,29 @@ calls this at every point a code can start a scrim capture
 offering to jump to League capture instead of letting the save proceed. A
 league map's replay code can no longer be recorded as a private scrim.
 
-**Three features on the page still carry `WIP` badges** and are not
-trustworthy yet: auto side-detection, the scoreboard OCR read, and the
-score-box read. Screenshot-session import has graduated — it is now the
-session manifest (`buildScaffold()` in `engine/session.js`), the scaffolding
-that maps a parsed replay-history screenshot to a scrim session for capture,
-not a substitute for capturing. The three remaining WIP reads are scoped to
-phases 2 and 3 of `specs/2026-08-12-scrim-mode-design.md`.
+**Three features still carry `WIP` badges**: auto side-detection, the scoreboard
+OCR read, and the score-box read. Side detection has since worked end to end in
+the field (2026-08-19, all ten slots), but one confirmed run is not a track
+record and the badge stays until it has several. The other two are scoped to
+phase 3 of `specs/2026-08-12-scrim-mode-design.md`.
+
+**The scrim workflow lives in the pop-out panel, not on the page.** The page is
+setup — share the screen, calibrate, name the scrim — and pressing *Save scrim*
+opens the panel. From there the whole loop closes without an alt-tab: choose the
+map and its optional replay code, note the bans on a role-grouped hero grid,
+capture, *Finish + save*, then either the next map or *Finish scrim capture*
+(offered only between maps, and only once a map has been saved). The page has no
+map, ban or import controls at all; anything it offered during a scrim was a
+control that cost an alt-tab, and its own *Start map* predated the ban picker
+and could begin a map with the draft unrecorded.
+
+**Two functions are deliberately kept without a caller**:
+`parseScrimSessionText()` in `scrim.html` and `buildScaffold()` in
+`engine/session.js`. Both were the screenshot importer's, whose UI was removed
+with the rest of the page's map controls — importing a whole replay history is
+not something done mid-game. They read and league-annotate replay-history text,
+which is exactly what the planned replay-code OCR needs, so they are reserved
+rather than deleted. Their tests still run.
 
 ## 8. Infrastructure and CI
 
