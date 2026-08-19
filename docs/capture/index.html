@@ -274,6 +274,7 @@ button:disabled{opacity:.45;cursor:default}
       <div class="row" style="margin-top:8px">
         <select id="code" class="skel" disabled></select>
         <button id="copy" class="ghost" title="Copy the selected replay code into your clipboard">Copy</button>
+        <button id="readcode" class="ghost" title="Read the replay code off the screen and check it against this division's codes">Read code</button><span class="wip" title="Experimental — OCRs the code printed on the HUD banner. Checked against the feed, so a misread cannot select a code that does not exist.">WIP</span>
         <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
       </div>
       <div class="row" style="margin-top:8px">
@@ -402,6 +403,7 @@ button:disabled{opacity:.45;cursor:default}
 </div>
 <script src="engine/names.js"></script>
 <script src="engine/assign.js"></script>
+<script src="engine/replaycode.js"></script>
 <script src="engine/util.js"></script>
 <script src="engine/idb.js"></script>
 <script src="engine/frames.js"></script>
@@ -578,6 +580,100 @@ function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   
   document.getElementById('codenote').textContent=`${cs.length} codes shown`;
   if(cur){ const idx=cs.findIndex(c=>codeKey(c)===codeKey(cur)); if(idx>=0){ sel.value=String(idx); return true; } }
   return false; }
+// ---------- replay code off the screen ----------
+// The code Overwatch prints on the HUD banner, read on demand. Geometry and
+// validation live in engine/replaycode.js; this is the browser half - grab a
+// frame, crop, hand it to the shared OCR worker, and put the result through
+// the gate.
+//
+// The worker is SHARED with the name and scoreboard reads, and engine/refs.js's
+// header records why no character whitelist is set globally: readScoreboard()
+// needs full sentences and a code-only whitelist would break it. So both
+// parameters are set here and restored immediately after - a whitelist left in
+// place would not throw, it would quietly corrupt the next scoreboard read.
+//
+// Measured 12/12 correct with zero wrong reads over the ground-truth frames
+// (tools/real_frame_eval/). Zero WRONG is the number that matters: a crop that
+// clips a glyph can still yield six valid Crockford characters, which no gate
+// here can detect - see that README for the guard that was tried and rejected.
+// Why the last read failed, so the operator is told what actually went wrong
+// rather than being sent to re-calibrate a calibration that is already good.
+// The side-detection hunt cost an evening to three wrong guesses because the
+// failure was a single swallowed message; this is that lesson applied.
+// Contrast levels to try, in one pass each. NO SINGLE LEVEL WORKS: the code
+// plate is semi-transparent, so what is behind it decides whether a boost
+// sharpens the glyphs or saturates them away. A hard 1.9 boost read all twelve
+// screenshot frames and returned an EMPTY crop on the first live one, where 1.0
+// read it perfectly.
+//
+// Taking the answer only when the passes AGREE is also the guard that was
+// missing: a crop clipping a glyph can yield six valid characters that are the
+// wrong code, which foldCode cannot detect - but it is unlikely to yield the
+// SAME wrong code under different preprocessing.
+const CODE_CONTRASTS=[1.0, 1.45, 1.9];
+let LAST_CODE_READ={why:null, raw:null, box:null};
+async function readReplayCode(){
+  LAST_CODE_READ={why:null, raw:null, box:null};
+  if(!vid.srcObject){ LAST_CODE_READ.why='share your screen first'; return null; }
+  if(!boxes.a){ LAST_CODE_READ.why='calibrate first — the code is found relative to the left team portraits'; return null; }
+  const box=OWDBReplayCode.codeBox(boxes.a);
+  if(!box){ LAST_CODE_READ.why='the calibration box has no size'; return null; }
+  LAST_CODE_READ.box=box;
+  try{
+    const w=await ocrWorker();
+    const frame=grabFrame();
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
+    const seen=[], raws=[];
+    for(const contrast of CODE_CONTRASTS){
+      const cv=codeCanvas(frame, box, contrast);
+      const {data}=await ocrRead(w, cv);
+      const raw=(data&&data.text||'').replace(/\s+/g,'');
+      raws.push(contrast+':'+(raw||'-'));
+      const one=OWDBReplayCode.foldCode(raw);
+      if(one && seen.indexOf(one)===-1) seen.push(one);
+      try{ if(!one) console.log('[owdb] replay-code crop x'+contrast, box, cv.toDataURL()); }catch(e){}
+    }
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    LAST_CODE_READ.raw=raws.join(' | ');
+    if(seen.length===1) return seen[0];
+    if(seen.length>1){
+      LAST_CODE_READ.why='the passes disagreed ('+seen.join(' vs ')+') — not recording a guess';
+      return null;
+    }
+    LAST_CODE_READ.why='no pass produced a six-character code — read '+LAST_CODE_READ.raw;
+    return null;
+  }catch(e){
+    LAST_CODE_READ.why='OCR failed: '+((e&&e.message)||String(e));
+    console.error('[owdb] replay-code read failed:', e);
+    return null;
+  }
+}
+function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
+
+// matchReadCode(read, codes) - what a code read off the screen corresponds to
+// in this division's feed.
+//
+// The feed is what makes the league read trustworthy where a scrim read is not:
+// here every code has a right answer available, so a one-character miss is
+// recoverable rather than silently wrong. Crockford excludes I/L/O precisely
+// because they are confusable with 1/0 and foldCode applies the published
+// folding; this catches what survives it.
+//
+// A TIE ABSTAINS. Two feed codes one character from the read means choosing
+// either could file the capture against the wrong match, which is the exact
+// failure this exists to prevent.
+function matchReadCode(read, codes){
+  if(!read) return {kind:'none', code:null};
+  const list=(codes||[]).map(c=>c.code).filter(Boolean);
+  if(list.indexOf(read)!==-1) return {kind:'exact', code:read};
+  const near=list.filter(c=>{
+    if(c.length!==read.length) return false;
+    let d=0; for(let i=0;i<c.length;i++) if(c[i]!==read[i]) d++;
+    return d===1;
+  });
+  if(near.length===1) return {kind:'near', code:near[0]};
+  return {kind:'none', code:null};
+}
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
@@ -602,6 +698,23 @@ document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); }
 document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
 document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };
 document.getElementById('code').onchange=onCode;
+// The wrong-match guard. Picking the wrong code from a dropdown of lookalike
+// six-character strings attributes every comp captured afterwards to the wrong
+// match, teams and players, and publishes it - with nothing to say it happened.
+// This asks the screen instead.
+document.getElementById('readcode').onclick=async()=>{
+  const got=await readReplayCode();
+  if(!got){ snapMsg(esc(codeReadProblem()), true); return; }
+  const cs=currentCodes(), m=matchReadCode(got, cs);
+  if(m.kind==='none'){ snapMsg('screen says '+esc(got)+', which is not a code in this division — nothing changed', true); return; }
+  const cur=selectedCode();
+  if(cur && cur.code===m.code){ snapMsg('screen says '+esc(m.code)+' — matches what is selected'); return; }
+  const idx=cs.findIndex(c=>c.code===m.code);
+  const sel=document.getElementById('code');
+  sel.value=String(idx); onCode();
+  snapMsg((m.kind==='near'?'read '+esc(got)+', nearest code is ':'screen says ')
+      +esc(m.code)+' — selected it');
+};
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
 function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`${c.code} — copied`;} }
 document.getElementById('skip').onclick=nextCode;
@@ -614,7 +727,7 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 // index.html releases its live-scouting claim (a system scrims don't have),
 // so onStop is releaseClaim here and null on scrim.html.
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:releaseClaim});
-const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, codeCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
@@ -807,7 +920,37 @@ let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false, _oc
 // the operator stares at "detecting sides…" with nothing to do but wait or
 // force Swap L/R. No-op once it's running; harmless if OCR is never used.
 function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().then(()=>{ _ocrLoadFailed=false; },()=>{}); }
+// Every OCR read goes through ocrRead(). ocrWorker()'s load timeout
+// (engine/refs.js) only covers getting the worker; a recognize() that stalls
+// after that hangs its caller forever with no error to report - and because
+// tesseract.js runs one job at a time per worker, every other read sharing
+// that worker queues behind it and hangs too. The first version of this fix
+// lived inside index.html's ocrNames() alone, which left the replay-code
+// read - added later, on the same cached worker - able to wedge it anyway.
+// So: race a deadline, and on any failure throw the worker away rather than
+// let the next read stack up behind a dead job; the next ocrWorker() call
+// then builds a fresh one.
+//
+// The silence is the point. A caller can only name a reason for an error
+// that actually arrives: scrim.html's ensureSideResolved() catch was written
+// to say WHY a detection failed and could not, for a read that never
+// returned.
+//
+// Kept byte-identical on both capture pages - tools/capture_divergence.py
+// counts it as shared, and it belongs in engine/refs.js with the rest of the
+// worker lifecycle (_ocrWorker/_ocrLoading are already written there) once
+// the ctx plumbing is worth the churn to two test modules.
 const OCR_READ_TIMEOUT_MS=8000;
+async function ocrRead(w, cv){
+  try{
+    return await Promise.race([w.recognize(cv),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]);
+  }catch(e){
+    try{ w.terminate(); }catch(_){}
+    _ocrWorker=null; _ocrLoading=null;
+    throw e;
+  }
+}
 async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
   // Restrict recognition to the charset HUD gamertags actually use - cuts
   // stray glyphs (border/icon bleed) from diluting simScore's fuzzy match
@@ -826,20 +969,7 @@ async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
     // nameCanvas falls back to the old fractions. See engine/frames.js.
     const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      let data;
-      try{
-        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell,row)),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]));
-      }catch(e){
-        // tesseract.js processes jobs sequentially on one worker, so a stalled
-        // recognize() call likely wedges the worker itself, not just this one
-        // read - queuing later reads behind it would hang them too. Throw the
-        // whole worker away so the next ocrWorker() call starts a fresh one
-        // instead of stacking up behind a dead job.
-        try{ w.terminate(); }catch(_){}
-        _ocrWorker=null; _ocrLoading=null;
-        throw e;
-      }
+      const {data}=await ocrRead(w, nameCanvas(frame,cell,row));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       setDetectMsg('reading HUD names… '+(++done)+'/10'); ocrProgress(done/10); } }
   return out; }
@@ -1098,6 +1228,10 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
 // this section used to carry.
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
+  // #refpanel lives inside the collapsed <details id="herocard">, so filling it
+  // without opening the section looks exactly like the button doing nothing -
+  // which is how "teach it a miss" was reported as broken.
+  const card=document.getElementById('herocard'); if(card) card.open=true;
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
   const frame=grabFrame(), cat=heroCatalog();
   const opts='<option value="">— correct hero… —</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">＋ add a new hero…</option>';
@@ -1404,10 +1538,14 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 // scrim.html); this page owns the store list (maps/refs/heroes - it never
 // touches scrims/scrim_maps, those are scrim.html's) and schema version (4,
 // unchanged - see engine/idb.js for why touching it is dangerous).
-const IDB_STORES={maps:'id', refs:'id', heroes:'g'};
+// ALL_STORES, not this page's subset: onupgradeneeded fires once per version,
+// so whichever page opens the DB first would otherwise fix the version with
+// only its own stores and leave the other page throwing on every transaction.
+// See engine/idb.js's header.
+const IDB_STORES=OWDBIdb.ALL_STORES;
 const {getAll:idbGetAll, putIn:idbPutIn, clear:idbClear}=OWDBIdb;
-OWDBIdb.open(4, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadFeeds() runs later, at the bottom of this script)
-function idb(){ return OWDBIdb.open(4, IDB_STORES); }
+OWDBIdb.open(OWDBIdb.SCHEMA_VERSION, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadFeeds() runs later, at the bottom of this script)
+function idb(){ return OWDBIdb.open(OWDBIdb.SCHEMA_VERSION, IDB_STORES); }
 async function idbAll(){ const db=await idb(); return new Promise(res=>{ const rq=db.transaction('maps','readonly').objectStore('maps').getAll(); rq.onsuccess=()=>res(rq.result||[]); }); }
 async function idbPut(rec){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 async function idbDel(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('maps','readwrite'); tx.objectStore('maps').delete(id); tx.oncomplete=res; }); }
@@ -1547,6 +1685,10 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:500,
   afterOpen:w=>{ const pa=w.document.getElementById('pautofetch'); if(pa){ pa.checked=document.getElementById('autofetch').checked;
     pa.onchange=()=>{ document.getElementById('autofetch').checked=pa.checked;
       localStorage.setItem('owdb_autofetch',pa.checked?'1':'0'); }; } },
+  // Name the two read-out columns after the teams on those sides, so the reads
+  // are labelled where they are read rather than only in the line above.
+  slotLabels:()=>{ if(!session) return {left:'Left', right:'Right'};
+    const {leftName,rightName}=sideNames(); return {left:leftName, right:rightName}; },
   // Map + teams: the operator is watching the game, not the browser tab, so
   // the one place they DO see (this floating panel) should say what's being
   // scouted without needing to alt-tab back to the main page to check.

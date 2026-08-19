@@ -7,7 +7,7 @@
 <meta name="description" content="Private scrim tracking dashboard — browser-local, never published. Hero frequencies, map stats, and composition breakdowns from your scrim captures.">
 <meta name="theme-color" content="#0d1015">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="stylesheet" href="theme.css">
 <style>
 /* app shell */
@@ -92,8 +92,86 @@ tbody tr:hover{background:var(--surface2)}
 .map-row .mr-meta{font-size:12px;color:var(--muted)}
 .map-row .hero-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 
+/* practice coverage — what we have and haven't been playing */
+.covgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.covcell{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 10px;
+  border-left-width:3px}
+.covcell .covmode{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.covcell .covn{font-size:21px;font-weight:680;letter-spacing:-.02em;margin-top:2px}
+.covcell .covwhen{font-size:11.5px;color:var(--faint);margin-top:1px}
+/* Colour carries the same message as the text, never on its own: "never
+   played" and "N days ago" already say it for anyone who cannot see the hue. */
+.cov-ok{border-left-color:var(--support,#4ac28a)}
+.cov-stale{border-left-color:var(--mid,#d3a02a)}
+.cov-never{border-left-color:var(--line)}
+.cov-never .covn{color:var(--faint)}
+.covnote{margin:8px 2px 0;font-size:12.5px;color:var(--muted)}
+
+/* per-map coverage inside a mode */
+.covmaps{margin-top:7px;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.covmap{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:1px 0}
+.covmap .cmn{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.covmap .cmv{color:var(--fg);font-weight:650;font-variant-numeric:tabular-nums}
+.covmap0 .cmn,.covmap0 .cmv{color:var(--faint);font-weight:400}
+
+/* date range */
+.rangebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px}
+.rangebar .rglab{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
+.rangebar select,.rangebar input[type=date]{background:var(--surface);color:var(--fg);
+  border:1px solid var(--line);border-radius:8px;padding:4px 8px;font:inherit;font-size:12.5px}
+.rangebar .rgdash{color:var(--faint);font-size:12px}
+.rangebar .rgcount{color:var(--muted);font-size:12px;margin-left:2px}
+
+/* opponent identity */
+.oppout{font-size:11px;font-weight:650;color:var(--accent);text-decoration:none;
+  border:1px solid var(--line);border-radius:6px;padding:0 5px;vertical-align:1px}
+.oppout:hover{text-decoration:underline}
+.oppmeta{color:var(--faint);font-weight:400;font-size:12px}
+
 /* hero role colors */
 .role-Tank{color:var(--tank)}.role-Damage{color:var(--damage)}.role-Support{color:var(--support)}
+
+  /* Section label inside a card. Was used before it was ever defined, so these
+     headings have been rendering as unstyled body text. */
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:5px}
+
+  /* comps, pools and swaps — the analysis the league Scout pages show */
+  .comprow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    padding:7px 2px}
+  .comprow+.comprow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+  .comprow .cchips{display:flex;gap:4px;flex-wrap:wrap;min-width:0}
+  .comprow .cmeta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--faint);
+    white-space:nowrap;font-variant-numeric:tabular-nums}
+  .wl{font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .wl .w{color:var(--good,#4ac28a)}.wl .l{color:var(--bad,#e56a6a)}.wl .d{color:var(--muted)}
+  .poolgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+  .poolcard .ph{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    margin-bottom:4px}
+  .poolcard .barval{color:var(--fg)}
+  .staple{border-left:2px solid var(--accent);padding-left:5px;margin-left:-7px}
+  .swaprow{display:grid;grid-template-columns:minmax(120px,1fr) minmax(150px,1.3fr) auto;
+    gap:10px;align-items:center;padding:7px 2px;font-size:13px}
+  .swaprow+.swaprow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+  .swaprow .trig{font-size:12px;color:var(--muted);min-width:0}
+  .swaprow .trig b{color:var(--fg);font-weight:650}
+  .swaprow .chg{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .swaprow .arw{color:var(--faint)}
+  .swaprow .cnt{font-size:11.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .kind{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    padding:1px 5px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+  .kind.core{border-color:var(--mid,#d3a02a);color:var(--mid,#d3a02a)}
+  .segh{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--faint);margin:9px 0 2px}
+  .segh:first-child{margin-top:0}
+  @media(max-width:640px){.swaprow{grid-template-columns:1fr}}
+
+/* demo banner — must not be mistakable for real data */
+.demobar{border:1px solid var(--mid,#d3a02a);border-left-width:3px;border-radius:10px;
+  background:color-mix(in srgb,var(--mid,#d3a02a) 10%,transparent);
+  padding:9px 12px;margin:0 0 14px;font-size:13px;color:var(--fg)}
+.demobar a{color:var(--accent);font-weight:650;text-decoration:none;margin-left:8px;white-space:nowrap}
+.demobar a:hover{text-decoration:underline}
 
 /* empty state */
 .empty{text-align:center;padding:40px 20px;color:var(--muted)}
@@ -125,6 +203,43 @@ tbody tr:hover{background:var(--surface2)}
     <a href="capture/index.html" style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:10px 18px;border-radius:4px;text-decoration:none">Open League capture →</a>
   </div>
 </div>
+<script>
+// ---- scrim lock ----
+// Scrim capture is merged but not open. The overlay above is STATIC MARKUP;
+// this script only ever REMOVES it. That direction is the whole design: a
+// syntax error here, a CSP block, localStorage disabled, an exception - any
+// of it leaves the page locked. A gate that added the overlay instead would
+// fail open, and an unfinished capture tool reaching everyone is the outcome
+// worth engineering against.
+//
+// It is a soft gate, not a security boundary. The token is readable in this
+// file by anyone who looks; the point is that nobody arrives here by accident,
+// not that it cannot be bypassed. Nothing behind it is secret - it writes only
+// to the visitor's own browser.
+//
+// Unlock once per browser with ?unlock=scrimbeta (it persists), re-lock with
+// ?lock=1. There is deliberately NO localhost exemption: a dev bypass would
+// mean the state that ships is the one state nothing ever exercises, and
+// tools/verify_capture_browser.js serves over 127.0.0.1. One token, one code
+// path, checked in a browser.
+//
+// Kept byte-identical on docs/capture/scrim.html and docs/scrims.html - one
+// records scrims and the other reads them, so unlocking either alone ships
+// half a feature. A test compares them.
+(function(){
+  try{
+    var KEY='owdb_scrim_unlock', TOKEN='scrimbeta';
+    var q=new URLSearchParams(location.search);
+    if(q.get('lock')) localStorage.removeItem(KEY);
+    else if(q.get('unlock')) localStorage.setItem(KEY, q.get('unlock'));
+    if(localStorage.getItem(KEY)===TOKEN){
+      var el=document.getElementById('scrimpaused');
+      if(el) el.remove();
+    }
+  }catch(e){ /* stay locked */ }
+})();
+</script>
+
 <div class="topbar">
   <div class="topbar-in">
     <div class="toprow">
@@ -143,6 +258,7 @@ tbody tr:hover{background:var(--surface2)}
   </div>
 </div>
 <main id="content"><div class="loading">Reading scrims from this browser…</div></main>
+<script src="capture/engine/heroes.js"></script>
 <script>
 // ---------- tiny helpers ----------
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
@@ -151,20 +267,14 @@ const dshort = (s)=> s? String(s).slice(0,10) : '?';
 let GUID_TO_NAME = {};
 let HERO_ROLE = {};
 
-// ---------- hero role inference (refs.json gives name only, not role) ----------
-const ROLE_MAP = {
-  tank: ['D.Mon','D.Va','Doomfist','Hazard','Junker Queen','Mauga','Orisa','Ramattra','Reinhardt','Roadhog','Sigma','Winston','Wrecking Ball','Zarya'],
-  damage: ['Ashe','Bastion','Cassidy','Echo','Genji','Hanzo','Junkrat','Mei','Pharah','Reaper','Sojourn','Soldier: 76','Sombra','Symmetra','Torbjorn','Tracer','Venture','Widowmaker'],
-  support: ['Ana','Baptiste','Brigitte','Illari','Juno','Kiriko','Lifeweaver','Lucio','Mercy','Moira','Zenyatta']
-};
-function inferRole(name){
-  if(!name) return null;
-  const n = name.toLowerCase();
-  for(const [role,heroes] of Object.entries(ROLE_MAP)){
-    if(heroes.some(h => h.toLowerCase()===n)) return role.charAt(0).toUpperCase()+role.slice(1);
-  }
-  return null;
-}
+// ---------- hero roles ----------
+// ROLE_MAP and inferRole live in capture/engine/heroes.js, loaded above: the
+// capture page's ban picker groups by role too, and a second hand-kept copy of
+// this table would be a second chance for it to drift from
+// faceit_sync/subroles.py - which the first copy had already done silently.
+// This page is otherwise self-contained; that one script tag is the exception,
+// and it is a plain data module with no DOM or IndexedDB reach.
+const {ROLE_MAP, inferRole} = OWDBHeroes;
 
 // ---------- IndexedDB ----------
 function openDB(){
@@ -217,8 +327,46 @@ function heroRoleClass(guid){
 }
 
 // ---------- data processing ----------
+// ---------- demo mode ----------
+// ?demo=1 renders a sample block instead of this browser's scrims, so an empty
+// page can show what a filled-in one looks like. It reads through the SAME
+// rendering path as real data - a separate mock page would drift and prove
+// nothing about the real one.
+//
+// It never touches IndexedDB. Someone trying the demo must not end up with
+// invented scrims in their own database.
+const DEMO = new URLSearchParams(location.search).get('demo')==='1';
+let DEMO_NOTE = '';
+// Dates are stored as @@MINUSn@@ so the sample always looks recent rather than
+// ageing into "played 200 days ago" the moment it is committed.
+function demoDate(v){
+  const m = /^@@MINUS(\d+)@@/.exec(String(v||''));
+  if(!m) return v;
+  const d = new Date(Date.now() - (+m[1])*86400000).toISOString().slice(0,10);
+  return String(v).replace(/^@@MINUS\d+@@/, d);
+}
+async function loadDemo(){
+  const r = await fetch('scrims-demo.json', {cache:'no-store'});
+  const d = await r.json();
+  DEMO_NOTE = d.note||'';
+  const fix = o => { const c = {...o}; if(c.date) c.date = demoDate(c.date);
+                     if(c.created_at) c.created_at = demoDate(c.created_at); return c; };
+  OPPONENTS = {};
+  (d.opponents||[]).forEach(o=>{ OPPONENTS[o.id]=o; });
+  return { scrims:(d.scrims||[]).map(fix), maps:(d.scrim_maps||[]).map(fix) };
+}
+
 async function loadData(){
   await loadRefs();
+  if(DEMO){
+    const {scrims, maps} = await loadDemo();
+    scrims.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
+    const mapsByScrim = {};
+    for(const m of maps){ (mapsByScrim[m.scrim_id] = mapsByScrim[m.scrim_id]||[]).push(m); }
+    for(const id in mapsByScrim) mapsByScrim[id].sort((a,b)=>(a.map_no||0)-(b.map_no||0));
+    return {scrims, maps, mapsByScrim};
+  }
+  await loadOpponents();
   const scrims = await idbGetAll('scrims');
   const maps = await idbGetAll('scrim_maps');
   // Sort scrims newest first
@@ -280,6 +428,502 @@ function allObservations(maps){
   return [].concat(...maps.map(m=>m.observations||[]));
 }
 
+// Every mode a scrim can be played on. Listed rather than derived from the
+// captured maps, because the whole point is showing the mode you HAVEN'T
+// touched - deriving it from what exists would hide exactly that.
+const SCRIM_MODES = ['Control','Escort','Hybrid','Push','Flashpoint'];
+
+// mapCoverage(scrims, maps, today) — what have we actually been practising?
+// Per mode: how many maps, when last, and how long ago. Answers "we haven't
+// played Push in three weeks", which is the practice-log question the design
+// names and the reason this page is more than a capture archive.
+//
+// Voided maps are excluded: a restarted map was not practice, and counting it
+// would say you covered a mode you actually abandoned.
+// Every map in the competitive pool, by mode. Listed for the same reason the
+// modes are: showing that you have played Ilios four times and Nepal never is
+// the point, and deriving the list from captured maps would hide Nepal.
+const POOL = {
+  Control: ['Antarctic Peninsula','Busan','Ilios','Lijiang Tower','Nepal','Oasis','Samoa'],
+  Escort: ['Circuit Royal','Dorado','Havana','Junkertown','Rialto','Route 66','Shambali Monastery','Watchpoint: Gibraltar'],
+  Hybrid: ['Blizzard World','Eichenwalde','Hollywood',"King's Row",'Midtown','Numbani','Paraiso'],
+  Push: ['Colosseo','Esperanca','New Queen Street','Runasapi'],
+  Flashpoint: ['New Junk City','Suravasa'],
+};
+
+function mapCoverage(scrims, maps, today){
+  const dateOf = {};
+  (scrims||[]).forEach(s=>{ dateOf[s.id] = s.date || (s.created_at||'').slice(0,10); });
+  const acc = {};
+  SCRIM_MODES.forEach(m=>{
+    acc[m] = {mode:m, games:0, last:null, maps:{}};
+    (POOL[m]||[]).forEach(name=>{ acc[m].maps[name] = 0; });
+  });
+  (maps||[]).forEach(m=>{
+    if(m.void) return;
+    const cat = m.map_category;
+    if(!acc[cat]) acc[cat] = {mode:cat, games:0, last:null, maps:{}};   // an unexpected mode still shows
+    acc[cat].games++;
+    if(m.map_name) acc[cat].maps[m.map_name] = (acc[cat].maps[m.map_name]||0)+1;
+    const d = dateOf[m.scrim_id] || '';
+    if(d && (!acc[cat].last || d > acc[cat].last)) acc[cat].last = d;
+  });
+  const now = today || new Date().toISOString().slice(0,10);
+  const out = Object.values(acc);
+  out.forEach(c=>{
+    c.days = c.last ? Math.max(0, Math.round((Date.parse(now)-Date.parse(c.last))/86400000)) : null;
+  });
+  // Least-practised first: never-played at the top, then longest since.
+  out.sort((a,b)=>{
+    if(a.games===0 && b.games!==0) return -1;
+    if(b.games===0 && a.games!==0) return 1;
+    return (b.days==null?-1:b.days)-(a.days==null?-1:a.days);
+  });
+  return out;
+}
+
+// A mode untouched for this long is worth pointing at. Three weeks is a guess,
+// not a measurement - it is a nudge, so it only has to be roughly right.
+const STALE_DAYS = 21;
+
+function coverageStrip(scrims, maps){
+  const cov = mapCoverage(scrims, maps);
+  if(!cov.some(c=>c.games)) return '';
+  const cell = c => {
+    const state = c.games===0 ? 'never' : (c.days>=STALE_DAYS ? 'stale' : 'ok');
+    const when = c.games===0 ? 'never played'
+      : c.days===0 ? 'today' : c.days===1 ? 'yesterday' : c.days+' days ago';
+    // Per-map counts inside the mode: the mode total hides that you have played
+    // Ilios four times and never touched Nepal, which is the gap worth seeing.
+    const names = Object.keys(c.maps||{}).sort((a,b)=>
+      (c.maps[b]-c.maps[a]) || a.localeCompare(b));
+    const rows = names.map(n=>`<div class="covmap${c.maps[n]?'':' covmap0'}">
+        <span class="cmn">${esc(n)}</span><span class="cmv">${c.maps[n]||'·'}</span></div>`).join('');
+    return `<div class="covcell cov-${state}">
+      <div class="covmode">${esc(c.mode)}</div>
+      <div class="covn">${c.games||'—'}</div>
+      <div class="covwhen">${esc(when)}</div>
+      ${rows?`<div class="covmaps">${rows}</div>`:''}
+    </div>`;
+  };
+  const gaps = cov.filter(c=>c.games===0 || c.days>=STALE_DAYS);
+  const note = gaps.length
+    ? `<div class="covnote">Least practised: <b>${gaps.slice(0,3).map(c=>esc(c.mode)).join(', ')}</b></div>`
+    : `<div class="covnote">Every mode practised in the last ${STALE_DAYS} days.</div>`;
+  return `<div class="section-h"><h2>Practice coverage</h2></div>
+    <div class="covgrid">${cov.map(cell).join('')}</div>${note}`;
+}
+
+// ---------- comp analysis ----------
+// The same semantics the league Scout pages use (owdb/analysis.py), reimplemented
+// here because this page has no build step and no server: a comp is a FAMILY, not
+// an exact five, and a hero pool is counted in ROUNDS, not maps. Counting maps
+// flattens "played every round" and "played for one point" to the same "1 map",
+// which is the difference between a staple and a one-off.
+//
+// `roles` is guid -> 'Tank'|'Damage'|'Support' (matched case-insensitively), passed
+// in rather than read from the page global so these stay pure and testable.
+
+// An observation's round. The capture page writes `round_no`; older records and
+// hand-built fixtures may carry `round`. Missing means the map was never
+// segmented, which is one round, not zero.
+function obsRound(o){
+  if(o.round_no!=null) return o.round_no;
+  if(o.round!=null) return o.round;
+  return 1;
+}
+
+// A segment is the unit a comp is actually chosen for: the sub-map on Control,
+// the attack/defend phase on Escort and Hybrid, and the whole map otherwise.
+// Push and Flashpoint are mirrored, so both teams play the same thing.
+function segmentOf(map, o){
+  const cat = map.map_category||'';
+  if(cat==='Control') return o.sub_map || ('Point '+obsRound(o));
+  if(cat==='Escort'||cat==='Hybrid'){
+    if(o.phase==='attack') return 'Attack';
+    if(o.phase==='defend') return 'Defend';
+  }
+  return 'Map';
+}
+
+// A lineup, deduplicated. The hero limit is always on in 5v5, so the same hero
+// appearing twice is a misread (one portrait matched two slots), never a real
+// lineup — and left in, it would let sameComp count one shared hero twice and
+// fold unrelated comps together.
+function lineupOf(o){
+  const seen = {}, out = [];
+  for(const g of (o.heroes||[])){
+    if(!g || seen[g]) continue;
+    seen[g] = 1; out.push(g);
+  }
+  return out.sort();
+}
+
+// A side is five players. More than that after dedup is a read that cannot be
+// true, and there is no way to tell which portrait is the spurious one — so the
+// snapshot is dropped rather than allowed to invent a sixth pick.
+const MAX_LINEUP = 5;
+function usableObs(o){
+  const n = lineupOf(o).length;
+  return n > 0 && n <= MAX_LINEUP;
+}
+
+// One side's observations on one map, in the order they were played. Empty
+// snapshots are dropped: a frame where nothing read is not a lineup change.
+function sideObs(map, side){
+  return (map.observations||[])
+    .filter(o=> o.side===side && usableObs(o))
+    .map((o,i)=> ({o, i}))
+    .sort((x,y)=> (obsRound(x.o)-obsRound(y.o)) || ((x.o.ts||0)-(y.o.ts||0)) || (x.i-y.i))
+    .map(x=> x.o);
+}
+
+function tankOf(lineup, roles){
+  for(const h of lineup){ if(String(roles[h]||'').toLowerCase()==='tank') return h; }
+  return null;
+}
+
+// Two lineups are the same comp family if they share >=4 heroes, or exactly 3
+// including the same tank — the tank anchors identity in 5v5. This relation is
+// deliberately not transitive, which is why clustering below is greedy.
+function sameComp(a, b, roles){
+  const sb = new Set(b);
+  // Distinct shared heroes. Counting a repeat twice would clear the >=4 bar on
+  // three real heroes and fold two different comps into one family.
+  const shared = [...new Set(a)].filter(h=> sb.has(h));
+  if(shared.length>=4) return true;
+  if(shared.length===3){
+    const ta = tankOf(a, roles);
+    return !!ta && shared.indexOf(ta)>=0 && tankOf(b, roles)===ta;
+  }
+  return false;
+}
+
+// instances: [{heroes:[guid], mapKey, result:'win'|'loss'|'draw'|null}]
+// The most-frequent lineup anchors a family and absorbs the lineups matching it.
+// W-L is counted over distinct MAPS, not instances: a three-segment map that a
+// team opened the same way each time is one win, not three.
+function clusterComps(instances, roles){
+  const freq = {};
+  instances.forEach(i=>{
+    const k = i.heroes.join(',');
+    if(!freq[k]) freq[k] = {heroes:i.heroes, n:0};
+    freq[k].n++;
+  });
+  const order = Object.keys(freq).sort((a,b)=> freq[b].n-freq[a].n || a.localeCompare(b));
+  const assigned = new Set();
+  const fams = [];
+  for(const anchor of order){
+    if(assigned.has(anchor)) continue;
+    const members = new Set([anchor]);
+    assigned.add(anchor);
+    for(const other of order){
+      if(assigned.has(other)) continue;
+      if(sameComp(freq[anchor].heroes, freq[other].heroes, roles)){
+        members.add(other); assigned.add(other);
+      }
+    }
+    const insts = instances.filter(i=> members.has(i.heroes.join(',')));
+    const resultByMap = {};
+    insts.forEach(i=>{ resultByMap[i.mapKey] = i.result; });
+    let wins=0, losses=0, draws=0;
+    Object.keys(resultByMap).forEach(k=>{
+      const r = resultByMap[k];
+      if(r==='win') wins++; else if(r==='loss') losses++; else if(r==='draw') draws++;
+    });
+    fams.push({
+      heroes: freq[anchor].heroes,
+      samples: insts.length,
+      maps: Object.keys(resultByMap).length,
+      wins, losses, draws,
+      variants: [...members].map(k=> freq[k].heroes),
+    });
+  }
+  fams.sort((a,b)=> (b.maps-a.maps) || (b.samples-a.samples));
+  return fams;
+}
+
+// One instance per segment: the lineup they OPENED that segment on. Openers are
+// what a scout can act on — the settled comp is a response to what happened.
+function compInstances(maps, side){
+  const out = [];
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    const seen = new Set();
+    for(const o of sideObs(m, side)){
+      const seg = segmentOf(m, o);
+      if(seen.has(seg)) continue;
+      seen.add(seg);
+      const heroes = lineupOf(o);
+      if(heroes.length < 2) continue;   // a partial read is not a comp
+      out.push({heroes, mapKey:m.id||(m.scrim_id+':'+m.map_no), segment:seg,
+                map_name:m.map_name||'?', map_category:m.map_category||'',
+                result: resultFor(m, side)});
+    }
+  }
+  return out;
+}
+
+// Map results are recorded from OUR point of view, so the opponent's record is
+// the mirror of ours. A draw stays a draw.
+function resultFor(map, side){
+  const r = map.result||null;
+  if(side!=='b') return r;
+  if(r==='win') return 'loss';
+  if(r==='loss') return 'win';
+  return r;
+}
+
+// Hero pool counted in rounds. Returns {total, counts} where total is the number
+// of captured rounds for that side and counts[guid] is how many of them the hero
+// appeared in — so "9 of 11 rounds" reads as a staple and "1 of 11" does not.
+function heroPool(maps, side){
+  const rounds = {};
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    for(const o of sideObs(m, side)){
+      const k = (m.id||(m.scrim_id+':'+m.map_no))+':'+obsRound(o);
+      if(!rounds[k]) rounds[k] = new Set();
+      lineupOf(o).forEach(g=> rounds[k].add(g));
+    }
+  }
+  const counts = {};
+  const keys = Object.keys(rounds);
+  keys.forEach(k=> rounds[k].forEach(g=>{ counts[g] = (counts[g]||0)+1; }));
+  return {total: keys.length, counts};
+}
+
+// The enemy lineup at the moment of an observation: their most recent snapshot
+// at or before it. That is the state the swap was made against.
+function enemyAt(oppObs, o){
+  const r = obsRound(o), t = o.ts||0;
+  let best = null;
+  for(const e of oppObs){
+    const er = obsRound(e), et = e.ts||0;
+    if(er > r) break;
+    if(er === r && et > t) break;
+    best = e;
+  }
+  return best ? lineupOf(best) : [];
+}
+
+// Mid-map changes for one side of one map, classified flex (same comp) vs core
+// (different comp), with the enemy lineup they were made against.
+//
+// CAVEAT: the league pipeline confirms a swap through player identity, so a
+// substitution is never misread as a tactical swap. Scrim capture cannot do that
+// yet — HUD name reading is unreliable (design phase 2b) — so this is a pure
+// hero-set difference. In a scrim block, where the five players rarely change
+// mid-map, that is usually the same thing; it is not guaranteed to be.
+function swapEvents(map, side, roles){
+  const own = sideObs(map, side);
+  const opp = sideObs(map, side==='a'?'b':'a');
+  const evs = [];
+  for(let i=1;i<own.length;i++){
+    // Within a segment only. Across a segment boundary a different lineup is a
+    // new OPENER — chosen for the next point, or for the other half of an
+    // attack/defend map — not a mid-map answer to what the enemy was doing.
+    // Counting those inflates "core swaps" with every ordinary comp choice.
+    if(segmentOf(map, own[i]) !== segmentOf(map, own[i-1])) continue;
+    const prev = lineupOf(own[i-1]), curr = lineupOf(own[i]);
+    if(prev.join(',')===curr.join(',')) continue;
+    // A partial read looks like four heroes leaving at once. Comparing unequal
+    // lineup sizes would manufacture swaps out of missed portraits.
+    if(prev.length!==curr.length) continue;
+    const ps = new Set(prev), cs = new Set(curr);
+    const gone = prev.filter(h=> !cs.has(h));
+    const came = curr.filter(h=> !ps.has(h));
+    if(!gone.length || !came.length) continue;
+    evs.push({out:gone, in:came, kind: sameComp(prev,curr,roles)?'flex':'core',
+              vs: enemyAt(opp, own[i])});
+  }
+  return evs;
+}
+
+// Recurring swaps across every map, led by their trigger.
+//
+// Baseline subtraction: an enemy hero fielded in nearly every snapshot is not a
+// trigger, it is just always there. A candidate is only reported when its
+// presence rate AT the swap beats its rate across all of this side's snapshots.
+function aggregateSwaps(maps, side, roles){
+  const agg = {};
+  const base = {};
+  let baseTotal = 0;
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    const own = sideObs(m, side);
+    const opp = sideObs(m, side==='a'?'b':'a');
+    own.forEach(o=>{
+      new Set(enemyAt(opp, o)).forEach(g=>{ base[g] = (base[g]||0)+1; });
+      baseTotal++;
+    });
+    swapEvents(m, side, roles).forEach(ev=>{
+      const key = ev.out.join('+')+'>'+ev.in.join('+')+':'+ev.kind;
+      if(!agg[key]) agg[key] = {out:ev.out, in:ev.in, kind:ev.kind, count:0, vs:{}, maps:new Set()};
+      const slot = agg[key];
+      slot.count++;
+      slot.maps.add(m.map_name||m.id);
+      new Set(ev.vs).forEach(g=>{ slot.vs[g] = (slot.vs[g]||0)+1; });
+    });
+  }
+  return Object.keys(agg).map(k=>{
+    const s = agg[k], n = s.count;
+    const ranked = Object.keys(s.vs).sort((a,b)=> s.vs[b]-s.vs[a] || a.localeCompare(b));
+    let vs;
+    if(n===1){
+      // A one-off has an exact enemy lineup — showing it beats losing the cause
+      // to a majority threshold that needs two occurrences to clear.
+      vs = ranked;
+    }else{
+      const thresh = Math.max(2, Math.floor((n+1)/2));
+      vs = ranked.filter(g=> s.vs[g]>=thresh &&
+        (!baseTotal || (s.vs[g]/n) > ((base[g]||0)/baseTotal)));
+    }
+    return {out:s.out, in:s.in, kind:s.kind, count:n, maps:[...s.maps], vs:vs.slice(0,5)};
+  }).sort((a,b)=> (b.count-a.count) || (b.in.length-a.in.length));
+}
+
+// Per map: what they opened each segment on, and the swaps seen on that map.
+function mapBreakdown(maps, side, roles){
+  const by = {};
+  for(const m of (maps||[])){
+    if(m.void) continue;
+    const name = m.map_name||'?';
+    if(!by[name]) by[name] = {name, category:m.map_category||'', plays:0, segments:{}, swaps:[], maps:[]};
+    by[name].plays++;
+    by[name].maps.push(m);
+  }
+  Object.keys(by).forEach(name=>{
+    const b = by[name];
+    compInstances(b.maps, side).forEach(i=>{
+      if(!b.segments[i.segment]) b.segments[i.segment] = [];
+      b.segments[i.segment].push(i);
+    });
+    Object.keys(b.segments).forEach(seg=>{
+      b.segments[seg] = clusterComps(b.segments[seg], roles);
+    });
+    b.swaps = aggregateSwaps(b.maps, side, roles);
+  });
+  return Object.values(by).sort((a,b)=> b.plays-a.plays || a.name.localeCompare(b.name));
+}
+
+// ---------- bans ----------
+// A map's bans: [{g, n, by:'us'|'them'|null}]. Some teams scrim with hero bans
+// and some do not, so every one of these degrades to nothing rather than
+// pretending a team that never bans has a ban profile.
+//
+// Scrim capture does NOT record draft ORDER — the operator adds bans as they
+// notice them — so there is no "first ban" here, only preferred bans. Claiming
+// an order the capture never recorded would be the more useful-looking lie.
+function mapBans(map){
+  return (map.bans||[]).filter(b=> b && b.g);
+}
+
+// Maps where bans were RECORDED — the denominator every ban rate divides by.
+// Two things count: a map with bans on it, and a map the operator explicitly
+// marked as played without any. The second is why `no_bans` exists at all: an
+// empty list on its own is indistinguishable from a map nobody recorded bans
+// for, so both used to be excluded, and every rate was computed against too
+// small a pool.
+function bannedMaps(maps){
+  return (maps||[]).filter(m=> !m.void && (mapBans(m).length || m.no_bans));
+}
+
+// Heroes banned most often, optionally by one side only. The denominator is
+// maps where bans were recorded at all — a map captured without them is not
+// evidence that nothing was banned.
+function banPreferences(maps, by){
+  const pool = bannedMaps(maps);
+  const counts = {};
+  pool.forEach(m=>{
+    const gs = new Set(mapBans(m).filter(b=> !by || b.by===by).map(b=>b.g));
+    gs.forEach(g=>{ counts[g] = (counts[g]||0)+1; });
+  });
+  return {
+    maps: pool.length,
+    rows: Object.keys(counts).sort((a,b)=> counts[b]-counts[a] || a.localeCompare(b))
+      .map(g=> ({guid:g, count:counts[g]})),
+  };
+}
+
+// The record on maps where a hero was banned out, from `side`'s point of view.
+// Reads as "with Sojourn gone we are 4-1", which is the decision the operator
+// is actually making when they choose what to ban.
+function banRecord(maps, side){
+  const acc = {};
+  bannedMaps(maps).forEach(m=>{
+    const r = resultFor(m, side);
+    new Set(mapBans(m).map(b=>b.g)).forEach(g=>{
+      if(!acc[g]) acc[g] = {guid:g, maps:0, wins:0, losses:0, draws:0};
+      acc[g].maps++;
+      if(r==='win') acc[g].wins++; else if(r==='loss') acc[g].losses++;
+      else if(r==='draw') acc[g].draws++;
+    });
+  });
+  return Object.values(acc).sort((a,b)=> b.maps-a.maps ||
+    a.guid.localeCompare(b.guid));
+}
+
+// How a side opens when a given hero is banned. Only heroes banned on at least
+// `minMaps` maps: one map is an anecdote, and presenting it as a read on their
+// draft would be worse than saying nothing.
+const BAN_RESPONSE_MIN_MAPS = 2;
+function banResponse(maps, side, roles, minMaps){
+  const need = minMaps || BAN_RESPONSE_MIN_MAPS;
+  const byBan = {};
+  bannedMaps(maps).forEach(m=>{
+    const insts = compInstances([m], side);
+    if(!insts.length) return;
+    new Set(mapBans(m).map(b=>b.g)).forEach(g=>{
+      (byBan[g] = byBan[g] || []).push(...insts);
+    });
+  });
+  return Object.keys(byBan).map(g=>{
+    const insts = byBan[g];
+    const n = new Set(insts.map(i=> i.mapKey)).size;
+    return {guid:g, maps:n, opens: clusterComps(insts, roles).slice(0,3)};
+  }).filter(r=> r.maps >= need)
+    .sort((a,b)=> b.maps-a.maps || a.guid.localeCompare(b.guid));
+}
+
+// Only the heroes that actually changed. Repeating four unchanged portraits
+// buries the one that matters — the same reason the Scout map cards do it.
+function compDelta(from, to){
+  const f = new Set(from), t = new Set(to);
+  return {out: from.filter(h=>!t.has(h)), in: to.filter(h=>!f.has(h))};
+}
+
+// ---------- opponent registry ----------
+// Scrim records point at an opponent by id: opponent_team_id for a league team,
+// opponent_id for a group we only know locally. Resolving through the registry
+// means renaming a group once relabels every scrim against them.
+let OPPONENTS = {};
+async function loadOpponents(){
+  OPPONENTS = {};
+  try{ (await idbGetAll('opponents')).forEach(o=>{ OPPONENTS[o.id]=o; }); }catch(e){}
+}
+function opponentOf(s){
+  if(!s) return {label:'Opponent', kind:'unknown', team_id:null};
+  if(s.opponent_team_id) return {label:s.opponent||'league team', kind:'league_team', team_id:s.opponent_team_id};
+  const g = s.opponent_id && OPPONENTS[s.opponent_id];
+  if(g) return {label:g.label||s.opponent||'Opponent', kind:'local_group', team_id:null,
+                times_played:g.times_played||1};
+  return {label:s.opponent||'Opponent', kind:s.opponent?'named':'unknown', team_id:null};
+}
+// A league opponent links out to their public profile rather than duplicating
+// league analysis here - deliberately deferred in the design until there is
+// enough scrim data to make a side-by-side worth reading.
+function opponentLabelHtml(s){
+  const o = opponentOf(s);
+  if(o.kind==='league_team'){
+    return `${esc(o.label)} <a class="oppout" href="index.html#scout" title="League team — open their profile on the dashboard">league ↗</a>`;
+  }
+  if(o.kind==='local_group' && o.times_played>1){
+    return `${esc(o.label)} <span class="oppmeta">· ${o.times_played}×</span>`;
+  }
+  return esc(o.label);
+}
+
 // ---------- render helpers ----------
 function heroBar(guid, count, total, maxCount){
   const pct = maxCount ? Math.round(100*count/maxCount) : 0;
@@ -303,6 +947,100 @@ function statTile(n, label, sub){
   return `<div class="card tile"><div class="n">${esc(String(n))}</div><div class="l">${esc(label)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
 }
 
+// ---------- comp / pool / swap rendering ----------
+const ROLE_ORDER = {Tank:0, Damage:1, Support:2};
+function byRole(heroes){
+  return heroes.slice().sort((a,b)=>
+    ((ROLE_ORDER[HERO_ROLE[a]] ?? 3) - (ROLE_ORDER[HERO_ROLE[b]] ?? 3)) ||
+    heroName(a).localeCompare(heroName(b)));
+}
+function heroChip(g){
+  return `<span class="chip ${heroRoleClass(g)}">${esc(heroName(g))}</span>`;
+}
+function compChips(heroes){ return byRole(heroes).map(heroChip).join(''); }
+
+function wlHtml(f){
+  const parts = [];
+  if(f.wins) parts.push(`<span class="w">${f.wins}W</span>`);
+  if(f.losses) parts.push(`<span class="l">${f.losses}L</span>`);
+  if(f.draws) parts.push(`<span class="d">${f.draws}D</span>`);
+  // No result recorded is not 0-0: saying so would read as "they lost nothing".
+  return parts.length ? `<span class="wl">${parts.join(' ')}</span>`
+                      : `<span class="cnt">no result</span>`;
+}
+
+// Comp families, most-played first. `samples` counts segments, `maps` counts
+// distinct maps — a comp run on both halves of one map is one map, two segments.
+function compTable(fams, limit){
+  if(!fams.length) return '<div class="note">Not enough captured comps yet.</div>';
+  return fams.slice(0, limit||6).map(f=>{
+    const variants = f.variants.length>1
+      ? ` · ${f.variants.length} variations` : '';
+    return `<div class="comprow">
+      <div class="cchips">${compChips(f.heroes)}</div>
+      <div class="cmeta">
+        <span>${f.maps} map${f.maps===1?'':'s'}${variants}</span>${wlHtml(f)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Hero pool in rounds, split by role. The denominator is what makes it readable:
+// "9 of 11 rounds" is a staple, "1 of 11" is a one-off, and both are "1 map".
+const STAPLE_SHARE = 0.6;
+function poolCards(pool){
+  if(!pool.total) return '<div class="note">No rounds captured yet.</div>';
+  const groups = {Tank:[], Damage:[], Support:[], Other:[]};
+  Object.keys(pool.counts).forEach(g=>{
+    (groups[HERO_ROLE[g]] || groups.Other).push([g, pool.counts[g]]);
+  });
+  const card = (role)=>{
+    const rows = groups[role].sort((a,b)=> b[1]-a[1] || heroName(a[0]).localeCompare(heroName(b[0])));
+    if(!rows.length) return `<div class="card poolcard"><div class="ph role-${role}">${role}</div>
+      <div class="note" style="margin-top:0">None seen</div></div>`;
+    const body = rows.map(([g,c])=>{
+      const pct = Math.round(100*c/pool.total);
+      const staple = c/pool.total >= STAPLE_SHARE ? ' staple' : '';
+      return `<div class="barrow${staple}">
+        <span class="lab ${heroRoleClass(g)}">${esc(heroName(g))}</span>
+        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+        <span class="barval">${c}/${pool.total}</span>
+      </div>`;
+    }).join('');
+    return `<div class="card poolcard"><div class="ph role-${role}">${role}</div>${body}</div>`;
+  };
+  const extra = groups.Other.length ? card('Other') : '';
+  return `<div class="poolgrid">${card('Tank')}${card('Damage')}${card('Support')}${extra}</div>`;
+}
+
+// Recurring swaps, led by the trigger — that is the actionable half ("they
+// answer a D.Va with this"), so it reads first rather than last.
+function swapList(swaps, limit, opts){
+  opts = opts||{};
+  if(!swaps.length) return '<div class="note">No mid-map swaps captured yet.</div>';
+  return swaps.slice(0, limit||8).map(s=>{
+    const trig = s.vs.length
+      ? `vs <b>${s.vs.map(g=>esc(heroName(g))).join(', ')}</b>`
+      : '<span style="color:var(--faint)">no consistent trigger</span>';
+    const where = opts.showMaps && s.maps.length
+      ? ` · ${esc(s.maps.slice(0,3).join(', '))}` : '';
+    return `<div class="swaprow">
+      <div class="trig">${trig}</div>
+      <div class="chg">${s.out.map(heroChip).join('')}<span class="arw">→</span>${s.in.map(heroChip).join('')}</div>
+      <div class="cnt"><span class="kind ${s.kind}">${s.kind}</span> ${s.count}×${where}</div>
+    </div>`;
+  }).join('');
+}
+
+// Swap detection is a hero-set difference, not a player-identity match like the
+// league pipeline. Saying so once beats letting someone read a substitution as a
+// read on the enemy comp.
+function swapCaveat(){
+  return `<div class="note">Swaps are detected from hero changes, not player
+    identity — a player subbing in on a different hero looks the same as a
+    tactical swap.</div>`;
+}
+
 // ---------- TABS ----------
 
 // Overview
@@ -322,6 +1060,29 @@ function renderOverview(data){
   html += statTile(dateRange||'—', 'Date range');
   html += '</div>';
 
+  html += coverageStrip(scrims, maps);
+
+  // Our own side, analysed exactly as an opponent would be. A scrim log is a
+  // mirror before it is a scouting tool: what you keep running, and how wide
+  // your pool actually is, is the first thing a block is meant to tell you.
+  const played = maps.filter(m=>!m.void);
+  const ourPool = heroPool(played, 'a');
+  const ourFams = clusterComps(compInstances(played, 'a'), HERO_ROLE);
+  const ourSwaps = aggregateSwaps(played, 'a', HERO_ROLE);
+  if(ourPool.total){
+    html += '<div class="section-h"><h2>Our comps</h2>'
+         +  `<span class="note">over ${ourPool.total} captured round${ourPool.total===1?'':'s'}</span></div>`;
+    html += `<div class="card">${compTable(ourFams, 5)}</div>`;
+    html += '<div class="section-h"><h2>Our hero pool</h2>'
+         +  '<span class="note">rounds played, not maps</span></div>';
+    html += poolCards(ourPool);
+    if(ourSwaps.length){
+      html += '<div class="section-h"><h2>Our swaps</h2></div>';
+      html += `<div class="card">${swapList(ourSwaps, 5, {showMaps:true})}</div>`;
+      html += swapCaveat();
+    }
+  }
+
   // Recent activity
   html += '<div class="section-h"><h2>Recent activity</h2></div>';
   const recent = scrims.slice(0, 5);
@@ -331,7 +1092,7 @@ function renderOverview(data){
     const topH = heroFrequency(sObs).slice(0, 6);
     html += `<div class="card mt10">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <span style="font-weight:650;font-size:14px">${esc(s.team_us||'us')} <span style="color:var(--faint);font-weight:400">vs</span> ${esc(s.opponent||'opponent')}</span>
+        <span style="font-weight:650;font-size:14px">${esc(s.team_us||'us')} <span style="color:var(--faint);font-weight:400">vs</span> ${opponentLabelHtml(s)}</span>
         <span style="font-size:12px;color:var(--faint)">${esc(s.date||'')} · ${sMaps.length} map${sMaps.length===1?'':'s'}</span>
       </div>`;
     if(topH.length){
@@ -356,7 +1117,7 @@ function renderTeams(data){
   // Build opponent stats
   const teamStats = {};
   for(const s of scrims){
-    const opp = s.opponent||'Unknown';
+    const opp = opponentOf(s).label||'Unknown';
     if(!teamStats[opp]) teamStats[opp] = {scrims:[], maps:[], observations:[]};
     teamStats[opp].scrims.push(s);
     const sMaps = mapsByScrim[s.id]||[];
@@ -372,89 +1133,182 @@ function renderTeams(data){
     return bLast.localeCompare(aLast);
   });
 
-  let html = '';
+  let html = '', anySwaps = false;
   for(const [opp, ts] of entries){
-    const oppObs = allObservations(ts.maps);
-    const ourObs = ts.observations;
+    const played = ts.maps.filter(m=>!m.void);
+    const fams = clusterComps(compInstances(played, 'b'), HERO_ROLE);
+    const pool = heroPool(played, 'b');
+    const swaps = aggregateSwaps(played, 'b', HERO_ROLE);
+    const oursVs = clusterComps(compInstances(played, 'a'), HERO_ROLE);
+
     html += `<div class="card mt10">
       <div class="section-h" style="margin-top:0;border-bottom:0">
         <h2>${esc(opp)}</h2>
-        <span class="note">${ts.maps.length} map${ts.maps.length===1?'':'s'} · ${ts.scrims.length} scrim${ts.scrims.length===1?'':'s'}</span>
+        <span class="note">${played.length} map${played.length===1?'':'s'} · ${ts.scrims.length} scrim${ts.scrims.length===1?'':'s'} · ${pool.total} round${pool.total===1?'':'s'}</span>
       </div>`;
 
-    // Their heroes
-    const theirFreq = heroFrequency(ts.observations, 'b');
-    const ourFreq = heroFrequency(ts.observations, 'a');
-    const maxTheir = theirFreq.length ? theirFreq[0][1] : 1;
-    const maxOur = ourFreq.length ? ourFreq[0][1] : 1;
+    html += '<div class="eyebrow mt10">Their comps</div>';
+    html += compTable(fams);
 
-    html += '<div class="grid cols-2" style="margin-top:0">';
-    html += '<div>';
-    html += '<div class="eyebrow">Their heroes</div>';
-    if(theirFreq.length){
-      html += theirFreq.slice(0,8).map(([g,c])=> heroBar(g, c, null, maxTheir)).join('');
-    } else {
-      html += '<div class="note">No observations</div>';
-    }
+    html += '<div class="eyebrow mt14">Their hero pool <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint)">— rounds played, not maps</span></div>';
+    html += poolCards(pool);
+
+    html += '<div class="eyebrow mt14">Their swaps</div>';
+    html += swapList(swaps, 6, {showMaps:true});
+    anySwaps = anySwaps || swaps.length > 0;
+
+    html += '<div class="eyebrow mt14">What we ran against them</div>';
+    html += compTable(oursVs, 4);
+
     html += '</div>';
-    html += '<div>';
-    html += '<div class="eyebrow">Our heroes</div>';
-    if(ourFreq.length){
-      html += ourFreq.slice(0,8).map(([g,c])=> heroBar(g, c, null, maxOur)).join('');
-    } else {
-      html += '<div class="note">No observations</div>';
-    }
-    html += '</div>';
-    html += '</div></div>';
   }
+  // Once at the end, not under every team card — the caveat is about how swaps
+  // are detected, which does not change from one opponent to the next.
+  if(anySwaps) html += swapCaveat();
   return html;
 }
 
-// Maps
+// Maps — one card per map, mode-grouped. Openers by segment on the left, the
+// swaps seen on that map on the right, mirroring the league Scout map cards.
+// Segments matter here: a Hybrid attack comp and a Hybrid defend comp are
+// different decisions, and averaging them over the map hides both.
 function renderMaps(data){
   const {maps} = data;
   if(!maps.length) return emptyState();
 
-  const categories = ['Control','Escort','Hybrid','Push','Flashpoint','Clash'];
-  const byCategory = {};
-  for(const cat of categories) byCategory[cat] = [];
-  for(const m of maps){
-    const cat = m.map_category||'Other';
-    if(!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(m);
-  }
+  const categories = ['Control','Escort','Hybrid','Push','Flashpoint'];
+  const theirs = mapBreakdown(maps, 'b', HERO_ROLE);
+  const ours = {};
+  mapBreakdown(maps, 'a', HERO_ROLE).forEach(b=>{ ours[b.name] = b; });
 
-  // Build map stats
-  const mapStats = {};
-  for(const m of maps){
-    const name = m.map_name||'Unknown';
-    if(!mapStats[name]) mapStats[name] = {category:m.map_category||'', observations:[], count:0};
-    mapStats[name].count++;
-    mapStats[name].observations.push(...(m.observations||[]));
-  }
+  // Segments read best in the order they are played, not alphabetically.
+  const SEG_ORDER = {Attack:0, Defend:1, Map:0};
+  const segSort = (a,b)=> ((SEG_ORDER[a] ?? 9)-(SEG_ORDER[b] ?? 9)) || a.localeCompare(b);
 
   let html = '';
-  for(const cat of categories){
-    const catMaps = Object.entries(mapStats).filter(([n,s])=> s.category===cat);
+  for(const cat of categories.concat(['Other'])){
+    const catMaps = theirs.filter(b=> (cat==='Other' ? !categories.includes(b.category) : b.category===cat));
     if(!catMaps.length) continue;
     html += `<div class="modeh">${esc(cat)}</div>`;
-    for(const [name, stats] of catMaps.sort((a,b)=>b[1].count-a[1].count)){
-      const ourHeroes = topHeroes(stats.observations, 'a', 5);
-      const theirHeroes = topHeroes(stats.observations, 'b', 5);
-      const totalObs = totalObservations(stats.observations);
+    for(const b of catMaps){
+      const mine = ours[b.name] || {segments:{}, swaps:[]};
+      const wins = b.maps.filter(m=>m.result==='loss').length;   // their win = our loss
+      const losses = b.maps.filter(m=>m.result==='win').length;
+      const draws = b.maps.filter(m=>m.result==='draw').length;
+      const record = (wins||losses||draws)
+        ? ` · <b>${wins}W ${losses}L${draws?' '+draws+'D':''}</b> for them` : '';
       html += `<div class="card mt10">
         <div class="section-h" style="margin-top:0;border-bottom:0">
-          <h2>${esc(name)}</h2>
-          <span class="note">${stats.count} time${stats.count===1?'':'s'} · ${totalObs} hero obs</span>
+          <h2>${esc(b.name)}</h2>
+          <span class="note">${b.plays} time${b.plays===1?'':'s'}${record}</span>
         </div>
         <div class="grid cols-2" style="margin-top:0">`;
-      html += '<div><div class="eyebrow">Our picks</div>';
-      html += ourHeroes || '<div class="note">No observations</div>';
-      html += '</div><div><div class="eyebrow">Their picks</div>';
-      html += theirHeroes || '<div class="note">No observations</div>';
+
+      html += '<div><div class="eyebrow">Their openers</div>';
+      const segs = Object.keys(b.segments).sort(segSort);
+      if(segs.length){
+        for(const seg of segs){
+          html += `<div class="segh">${esc(seg)}</div>`;
+          html += compTable(b.segments[seg], 3);
+        }
+      }else{
+        html += '<div class="note">No comps captured.</div>';
+      }
+      html += '</div>';
+
+      html += '<div><div class="eyebrow">Their swaps here</div>';
+      html += swapList(b.swaps, 5);
+      const mySegs = Object.keys(mine.segments).sort(segSort);
+      if(mySegs.length){
+        html += '<div class="eyebrow mt14">Our openers</div>';
+        for(const seg of mySegs){
+          html += `<div class="segh">${esc(seg)}</div>`;
+          html += compTable(mine.segments[seg], 2);
+        }
+      }
       html += '</div></div></div>';
     }
   }
+  return html;
+}
+
+// Bans — only reachable when some map actually recorded them.
+function renderBans(data){
+  const maps = data.maps.filter(m=>!m.void);
+  const pool = bannedMaps(maps);
+  if(!pool.length){
+    return `<div class="empty"><h2>No bans recorded</h2>
+      <p>Some teams scrim with hero bans and some do not. Turn bans on for a
+      scrim in the capture page and the heroes you record here will drive this
+      page.</p><a href="capture/scrim.html">Open scrim capture →</a></div>`;
+  }
+
+  const barRows = (rows, total)=>{
+    if(!rows.length) return '<div class="note">None recorded.</div>';
+    const max = rows[0].count;
+    return rows.slice(0,10).map(r=>{
+      const pct = max ? Math.round(100*r.count/max) : 0;
+      return `<div class="barrow">
+        <span class="lab ${heroRoleClass(r.guid)}">${esc(heroName(r.guid))}</span>
+        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+        <span class="barval">${r.count}/${total}</span>
+      </div>`;
+    }).join('');
+  };
+
+  const theirs = banPreferences(maps, 'them');
+  const ourown = banPreferences(maps, 'us');
+  const either = banPreferences(maps, null);
+
+  let html = `<div class="note" style="margin-top:0">Across
+    <b>${pool.length}</b> map${pool.length===1?'':'s'} where bans were recorded.
+    Scrim capture does not record draft order, so these are preferred bans, not
+    first bans.</div>`;
+
+  html += '<div class="section-h"><h2>Preferred bans</h2></div>';
+  html += '<div class="grid cols-2">';
+  html += `<div class="card"><div class="eyebrow">They banned</div>${barRows(theirs.rows, theirs.maps)}</div>`;
+  html += `<div class="card"><div class="eyebrow">We banned</div>${barRows(ourown.rows, ourown.maps)}</div>`;
+  html += '</div>';
+  if(!theirs.rows.length && !ourown.rows.length && either.rows.length){
+    html += `<div class="card mt10"><div class="eyebrow">Banned, side not noted</div>
+      ${barRows(either.rows, either.maps)}</div>`;
+  }
+
+  // Win rate with a hero gone. This is the decision the operator is making when
+  // they pick what to ban, so it is stated from our side.
+  html += '<div class="section-h"><h2>Our record with a hero banned out</h2>'
+       +  '<span class="note">every ban on the map, whoever made it</span></div>';
+  const rec = banRecord(maps, 'a');
+  if(rec.length){
+    html += '<div class="card">' + rec.map(r=>`<div class="comprow">
+      <div class="cchips">${heroChip(r.guid)}</div>
+      <div class="cmeta"><span>${r.maps} map${r.maps===1?'':'s'}</span>${wlHtml(r)}</div>
+    </div>`).join('') + '</div>';
+  }else{
+    html += '<div class="note">No results recorded on the banned maps yet.</div>';
+  }
+
+  // How each side opens once a hero is gone.
+  const theirResp = banResponse(maps, 'b', HERO_ROLE);
+  const ourResp = banResponse(maps, 'a', HERO_ROLE);
+  const respBlock = (rows, who)=>{
+    if(!rows.length){
+      return `<div class="note">Not enough repeated bans yet — a hero has to be
+        banned on ${BAN_RESPONSE_MIN_MAPS} maps before ${who} opening under it
+        means anything.</div>`;
+    }
+    return rows.map(r=>`<div class="card mt10">
+      <div class="section-h" style="margin-top:0;border-bottom:0">
+        <h2>${esc(heroName(r.guid))} banned</h2>
+        <span class="note">${r.maps} map${r.maps===1?'':'s'}</span>
+      </div>${compTable(r.opens, 3)}</div>`).join('');
+  };
+  html += '<div class="section-h"><h2>How they open under a ban</h2></div>';
+  html += respBlock(theirResp, 'their');
+  html += '<div class="section-h"><h2>How we open under a ban</h2></div>';
+  html += respBlock(ourResp, 'our');
+
   return html;
 }
 
@@ -472,7 +1326,7 @@ function renderScrims(data){
 
     html += `<div class="scrim-card" id="${scrimId}">
       <div class="scrim-hd" onclick="toggleScrim('${scrimId}')" aria-expanded="false">
-        <div class="sh-teams">${esc(s.team_us||'us')} <span class="sh-vs">vs</span> ${esc(s.opponent||'opponent')}</div>
+        <div class="sh-teams">${esc(s.team_us||'us')} <span class="sh-vs">vs</span> ${opponentLabelHtml(s)}</div>
         <div class="sh-meta">
           <span class="sh-date">${esc(s.date||'')}</span>
           <span class="chip" style="background:transparent;border-color:var(--line)">${sMaps.length} map${sMaps.length===1?'':'s'}</span>
@@ -544,6 +1398,18 @@ function emptyState(){
     <h2>No scrims yet</h2>
     <p>Capture your first scrim to see stats here. Everything stays private on this browser.</p>
     <a href="capture/scrim.html">+ Capture a scrim →</a>
+    <p class="mt14" style="font-size:13px">Not sure it's worth it?
+      <a href="?demo=1">See a filled-in example →</a></p>
+  </div>`;
+}
+
+// A banner that cannot be mistaken for real data. It names real teams and real
+// players, so saying plainly that the results are invented is not decoration -
+// someone could otherwise read it as a record of games those teams played.
+function demoBanner(){
+  return `<div class="demobar">
+    <b>Sample data.</b> ${esc(DEMO_NOTE || 'These scrims never happened.')}
+    <a href="scrims.html">Leave the demo →</a>
   </div>`;
 }
 
@@ -552,17 +1418,106 @@ const TABS = [
   {id:'overview', label:'Overview', render:d=>renderOverview(d)},
   {id:'teams', label:'Teams', render:d=>renderTeams(d)},
   {id:'maps', label:'Maps', render:d=>renderMaps(d)},
+  // Bans are optional in scrims, so this tab appears only once some map has
+  // recorded them - a team that never bans should not be shown an empty tab
+  // asking why they have no ban profile.
+  {id:'bans', label:'Bans', render:d=>renderBans(d), when:d=> bannedMaps(d.maps).length>0},
   {id:'scrims', label:'Scrims', render:d=>renderScrims(d)},
 ];
+// Which tabs this dataset earns. Computed against everything loaded, not the
+// current range, so narrowing the period does not make a tab vanish mid-session.
+function visibleTabs(){
+  return TABS.filter(t=> !t.when || (DATA_ALL && t.when(DATA_ALL)));
+}
 
-let DATA = null;
+let DATA = null;        // range-filtered, what the tabs render
+let DATA_ALL = null;    // everything loaded, so switching range needs no reload
 let HANDLED_HASH = '';
+
+// ---------- date range ----------
+// Everything on the page is scoped to a period. A year of scrims can span two
+// or three different teams, and mixing them produces hero pools that belong to
+// nobody - so the range is a first-class control, not a nicety.
+const RANGE_KEY = 'owdb_scrim_range';
+const RANGES = [
+  {id:'30', label:'Last 30 days', days:30},
+  {id:'90', label:'Last 90 days', days:90},
+  {id:'season', label:'Last 6 months', days:182},
+  {id:'all', label:'All time', days:null},
+  {id:'custom', label:'Custom…', days:null},
+];
+let RANGE = {id:'all', from:'', to:''};
+function loadRange(){
+  try{ const r = JSON.parse(localStorage.getItem(RANGE_KEY)||'null'); if(r&&r.id) RANGE = r; }catch(e){}
+}
+function saveRange(){ try{ localStorage.setItem(RANGE_KEY, JSON.stringify(RANGE)); }catch(e){} }
+function rangeBounds(){
+  if(RANGE.id==='custom') return {from:RANGE.from||'', to:RANGE.to||''};
+  const def = RANGES.find(r=>r.id===RANGE.id);
+  if(!def || def.days==null) return {from:'', to:''};
+  return {from:new Date(Date.now()-def.days*86400000).toISOString().slice(0,10), to:''};
+}
+function scrimDateOf(s){ return s.date || (s.created_at||'').slice(0,10); }
+// Filters the loaded data rather than re-reading storage, so switching range is
+// instant and the underlying records are never mutated.
+function applyRange(data){
+  const {from, to} = rangeBounds();
+  if(!from && !to) return data;
+  const scrims = data.scrims.filter(s=>{
+    const d = scrimDateOf(s); if(!d) return true;      // undated: never hide it
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  });
+  const keep = new Set(scrims.map(s=>s.id));
+  const maps = data.maps.filter(m=>keep.has(m.scrim_id));
+  const mapsByScrim = {};
+  maps.forEach(m=>{ (mapsByScrim[m.scrim_id] = mapsByScrim[m.scrim_id]||[]).push(m); });
+  Object.keys(mapsByScrim).forEach(id=>mapsByScrim[id].sort((a,b)=>(a.map_no||0)-(b.map_no||0)));
+  return {scrims, maps, mapsByScrim};
+}
+// Re-render the current tab after a range change. Cheap: the data is already
+// in memory, so this filters rather than re-reads storage.
+function wireRangeBar(tabId){
+  const sel = document.getElementById('rgsel');
+  if(sel) sel.onchange = () => {
+    RANGE = {id:sel.value, from:RANGE.from, to:RANGE.to};
+    saveRange(); show(tabId);
+  };
+  ['rgfrom','rgto'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.onchange = () => {
+      RANGE = {id:'custom', from:(document.getElementById('rgfrom')||{}).value||'',
+                             to:(document.getElementById('rgto')||{}).value||''};
+      saveRange(); show(tabId);
+    };
+  });
+}
+
+function renderRangeBar(){
+  const b = rangeBounds();
+  const opts = RANGES.map(r=>`<option value="${r.id}"${RANGE.id===r.id?' selected':''}>${esc(r.label)}</option>`).join('');
+  const custom = RANGE.id==='custom'
+    ? `<input type="date" id="rgfrom" value="${esc(RANGE.from||'')}" aria-label="From">
+       <span class="rgdash">to</span>
+       <input type="date" id="rgto" value="${esc(RANGE.to||'')}" aria-label="To">`
+    : '';
+  const total = DATA_ALL ? DATA_ALL.scrims.length : 0;
+  const shown = DATA ? DATA.scrims.length : 0;
+  const count = (total && shown!==total) ? `<span class="rgcount">${shown} of ${total} scrims</span>` : '';
+  return `<div class="rangebar">
+    <label class="rglab" for="rgsel">Period</label>
+    <select id="rgsel">${opts}</select>${custom}${count}</div>`;
+}
 
 function show(id){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
   const c = document.getElementById('content');
-  const tab = TABS.find(t=>t.id===id)||TABS[0];
-  c.innerHTML = tab.render(DATA);
+  const vis = visibleTabs();
+  const tab = vis.find(t=>t.id===id)||vis[0];
+  DATA = applyRange(DATA_ALL);
+  c.innerHTML = (DEMO?demoBanner():'') + renderRangeBar() + tab.render(DATA);
+  wireRangeBar(id);
   try{window.scrollTo(0,0)}catch(e){}
   HANDLED_HASH = '#'+id;
   if(location.hash !== HANDLED_HASH) location.hash = id;
@@ -572,20 +1527,23 @@ function hashDispatch(){
   const h = location.hash||'#overview';
   if(h === HANDLED_HASH) return;
   const id = h.slice(1);
-  const valid = TABS.some(t=>t.id===id);
+  const valid = visibleTabs().some(t=>t.id===id);
   show(valid?id:'overview');
 }
 
 // ---------- boot ----------
 async function boot(){
+  // Data first: which tabs exist depends on what was captured.
+  DATA_ALL = await loadData();
+  DATA = DATA_ALL;
+
   const nav = document.getElementById('nav');
-  TABS.forEach(t=>{
+  visibleTabs().forEach(t=>{
     const b = el(`<button data-id="${t.id}">${esc(t.label)}</button>`);
     b.onclick = ()=>show(t.id);
     nav.appendChild(b);
   });
 
-  DATA = await loadData();
   hashDispatch();
 }
 

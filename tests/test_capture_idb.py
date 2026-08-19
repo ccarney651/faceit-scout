@@ -151,44 +151,92 @@ def test_reopening_at_the_same_version_does_not_wipe_existing_data() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_both_capture_pages_request_schema_version_4() -> None:
-    for page in (INDEX_HTML, SCRIM_HTML):
-        html = page.read_text(encoding="utf-8")
-        m = re.search(r"OWDBIdb\.open\(\s*(\d+)\s*,", html)
-        assert m, f"{page.name}: no OWDBIdb.open(version, stores) call found"
-        assert m.group(1) == "4", (
-            f"{page.name}: schema version changed to {m.group(1)} - this must "
-            "stay 4 or every contributor's learned refs/maps/scrims need a "
-            "real, deliberate migration, not an incidental one from this task"
-        )
+def test_a_per_page_store_subset_breaks_the_other_page() -> None:
+    """Why both pages must pass ALL_STORES. This reproduces the real bug.
 
+    onupgradeneeded fires once per version. If each page opens the database
+    with only the stores it uses, whichever page gets there first creates its
+    own stores AND fixes the version - so the second page's stores are never
+    created, and every transaction on them throws "One of the specified object
+    stores was not found".
 
-def test_index_html_still_owns_maps_refs_heroes() -> None:
-    html = INDEX_HTML.read_text(encoding="utf-8")
-    m = re.search(r"IDB_STORES\s*=\s*\{([^}]*)\}", html)
-    assert m, "index.html: IDB_STORES declaration not found"
-    stores = m.group(1)
-    for name in ("maps", "refs", "heroes"):
-        assert name in stores, f"index.html: IDB_STORES is missing '{name}'"
-    assert "scrims" not in stores and "scrim_maps" not in stores, (
-        "index.html: IDB_STORES gained a scrim.html-only store - "
-        "index.html never touches scrims/scrim_maps"
+    This is symmetric and total: league page first kills scrim capture, scrim
+    page first kills league capture. It predates the engine extraction (main @
+    7e7bde2 fails identically) and was survivable only because scrim capture
+    was paused. Un-pausing scrims made the normal path a broken one.
+    """
+    out = _run(
+        "await open(4, {maps:'id', refs:'id', heroes:'g'});\n"          # league first
+        "const db = await open(4, {refs:'id', scrims:'id'});\n"         # scrim second
+        "console.log(JSON.stringify({ok:true, "
+        "scrims: db.objectStoreNames.contains('scrims')}));"
+    )
+    assert out["scrims"] is False, (
+        "the fake IndexedDB no longer models version-gated upgrades, so this "
+        "test can no longer demonstrate the hazard it documents"
     )
 
 
-def test_scrim_html_still_owns_refs_heroes_scrims_scrim_maps() -> None:
-    html = SCRIM_HTML.read_text(encoding="utf-8")
-    m = re.search(r"IDB_STORES\s*=\s*\{([^}]*)\}", html)
-    assert m, "scrim.html: IDB_STORES declaration not found"
+def test_one_shared_store_list_survives_either_page_opening_first() -> None:
+    """The fix: identical store lists, so first-open order stops mattering."""
+    all_stores = "{maps:'id', refs:'id', heroes:'g', scrims:'id', scrim_maps:'id'}"
+    for first, second in (("league", "scrim"), ("scrim", "league")):
+        out = _run(
+            f"await open(5, {all_stores});\n"     # whichever page opens first
+            f"const db = await open(5, {all_stores});\n"
+            "const want = ['heroes','maps','refs','scrim_maps','scrims'];\n"
+            "console.log(JSON.stringify({ok:true, "
+            "names: want.filter(n => db.objectStoreNames.contains(n))}));"
+        )
+        assert out["names"] == ["heroes", "maps", "refs", "scrim_maps", "scrims"], (
+            f"{first} page first, then {second}: expected every store present"
+        )
+
+
+def test_both_capture_pages_pass_the_shared_store_list() -> None:
+    """Neither page may go back to declaring its own subset.
+
+    A subset is the intuitive design and it is exactly the bug above, so this
+    is pinned rather than left to reviewer memory.
+    """
+    for page in (INDEX_HTML, SCRIM_HTML):
+        html = page.read_text(encoding="utf-8")
+        assert "IDB_STORES=OWDBIdb.ALL_STORES" in html.replace(" ", ""), (
+            f"{page.name}: declares its own store list again - whichever page "
+            "opens the database first would leave the other page's stores "
+            "uncreated. See engine/idb.js's header."
+        )
+        assert "OWDBIdb.open(OWDBIdb.SCHEMA_VERSION,IDB_STORES)" in html.replace(" ", ""), (
+            f"{page.name}: no longer opens at the module's SCHEMA_VERSION"
+        )
+
+
+def test_all_stores_covers_every_store_either_page_uses() -> None:
+    js = ENGINE_IDB.read_text(encoding="utf-8")
+    m = re.search(r"ALL_STORES\s*=\s*\{(.*?)\n\s*\};", js, re.DOTALL)
+    assert m, "engine/idb.js: ALL_STORES declaration not found"
     stores = m.group(1)
-    for name in ("refs", "heroes", "scrims", "scrim_maps"):
-        assert name in stores, f"scrim.html: IDB_STORES is missing '{name}'"
-    # scrim.html never reads/writes the 'maps' store (that's index.html's),
-    # so it must not create it either.
-    assert not re.search(r"\bmaps\s*:", stores), (
-        "scrim.html: IDB_STORES gained the 'maps' store - scrim.html has no "
-        "code path that uses it, so creating it here would be new, untested "
-        "surface, not a faithful port"
+    for name, key in (("maps", "'id'"), ("refs", "'id'"), ("heroes", "'g'"),
+                      ("scrims", "'id'"), ("scrim_maps", "'id'")):
+        assert re.search(rf"\b{name}\s*:\s*{key}", stores), (
+            f"ALL_STORES is missing '{name}: {key}' - dropping a store name or "
+            "changing a keyPath orphans existing records under that store"
+        )
+
+
+def test_schema_version_was_bumped_to_heal_split_databases() -> None:
+    """v5 exists to repair browsers left at v4 with only half the stores.
+
+    Without a version change, onupgradeneeded never fires again for them and
+    they stay broken forever. The upgrade only ADDS stores, so learned hero
+    refs - which are hand-taught and irreplaceable - are untouched.
+    """
+    js = ENGINE_IDB.read_text(encoding="utf-8")
+    m = re.search(r"SCHEMA_VERSION\s*=\s*(\d+)", js)
+    assert m, "engine/idb.js: SCHEMA_VERSION not found"
+    assert int(m.group(1)) >= 5, (
+        f"SCHEMA_VERSION is {m.group(1)}; it must be at least 5 or databases "
+        "created before the shared store list never gain the missing stores"
     )
 
 
@@ -208,4 +256,27 @@ def test_scrims_html_still_opens_without_a_version_and_does_not_use_the_module()
         "docs/scrims.html now passes a version to indexedDB.open - this "
         "will trigger onupgradeneeded (and block on the capture pages) the "
         "moment it doesn't match every open capture tab's version"
+    )
+
+
+def test_the_opponents_store_needs_its_own_version_bump() -> None:
+    """The field failure, 2026-08-19.
+
+    `opponents` was added to ALL_STORES during phase 2a and folded into the v5
+    bump, on the reasoning that "v5 has not shipped yet, so nobody is sitting
+    on it". The operator was sitting on it: they had been running this branch
+    for a week, so their browser held a v5 database created BEFORE that store
+    existed. onupgradeneeded fires once per version and had already run, so the
+    store was never created, and every scrim side-detection attempt died on
+    "IDBDatabase.transaction: 'opponents' is not a known object store name".
+
+    A store added to an already-issued version reaches nobody who has used it.
+    """
+    js = ENGINE_IDB.read_text(encoding="utf-8")
+    m = re.search(r"SCHEMA_VERSION\s*=\s*(\d+)", js)
+    assert m, "engine/idb.js: SCHEMA_VERSION not found"
+    assert int(m.group(1)) >= 6, (
+        f"SCHEMA_VERSION is {m.group(1)}. 'opponents' shipped inside v5 to "
+        "browsers that had already created a v5 database without it; only a "
+        "further bump creates it for them"
     )

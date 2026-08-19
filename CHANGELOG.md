@@ -17,6 +17,239 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-19
+
+### Added
+- **The replay code can be read off the screen.** Overwatch prints it on the HUD
+  banner the whole time, and it was being typed by hand - six random characters,
+  mid-scrim. A *Read code* button on the scrim panel now fills the field from
+  the screen, and one on the league page checks the code you have selected
+  against the one actually on screen.
+
+  That second case is the point. The league picker is a dropdown of lookalike
+  six-character strings; picking the wrong one attributes every comp captured
+  afterwards to the wrong match, teams and players, publishes it, and gives no
+  signal that it happened. The read is checked against the division's feed, so
+  an exact match selects it, a unique one-character miss is offered as a
+  correction, and anything else changes nothing.
+
+  Codes turn out to be **Crockford Base32** - measured across all 4328 in the
+  database, the alphabet is the ten digits plus A-Z without I, L, O and U, each
+  of the 32 symbols appearing 750-850 times. That is a published standard whose
+  exclusions exist for exactly our reason (I and L confusable with 1, O with 0),
+  so the OCR correction rules come from its spec rather than from guesswork.
+
+  Measured 12/12 correct with **zero wrong reads** across twelve real frames in
+  two window modes, and confirmed live on 2026-08-19 against `SZDPQQ`.
+  Zero-wrong is the gate that mattered: a refused read costs a retry, a wrong
+  one is a corrupted record that looks correct forever. A read that cannot be
+  validated is discarded rather than guessed at, and on the scrim page - which
+  has no feed to check against - nothing is ever recorded without the operator
+  seeing it in the panel field first.
+
+  The code plate is semi-transparent, so no single contrast setting works: the
+  boost that read every stored frame returned an empty crop on the first live
+  one, where no boost at all read it perfectly. Each read therefore runs three
+  preprocessing passes and takes the answer only when they agree. Disagreement
+  refuses, which is also the only workable guard against the one failure the
+  validator cannot catch - a crop clipping a glyph, yielding six valid
+  characters that are the wrong code.
+
+### Confirmed live
+- **2026-08-19, `SZDPQQ`, Ilios, The Hyenas vs Telacy Navy.** Read correctly
+  with the right code already selected, and - with a deliberately wrong code
+  selected - it read the screen and moved the selection back to the right match.
+  That second case is the entire point of the feature.
+- **Every resolution from 1280x720 to 3840x2160 reads correctly**, zero wrong
+  (`tools/real_frame_eval/`). The crop is expressed as fractions of the
+  calibration box, which is itself fractions of the frame, so scale-invariance
+  is structural rather than tuned - this measures that it actually holds.
+  Aspect ratios other than 16:9 are **not** covered: the HUD fractions assume
+  it, and no ultrawide frame exists to test against.
+
+  The code plate is semi-transparent, so no single contrast setting works: the
+  boost that read every stored frame returned an empty crop on the first live
+  one, where no boost at all read it perfectly. Each read therefore runs three
+  preprocessing passes and takes the answer only when they agree. Disagreement
+  refuses, which is also the only workable guard against the one failure
+  `foldCode` cannot catch - a crop clipping a glyph, yielding six valid
+  characters that are the wrong code.
+
+### Changed
+- **The capture panel is the scrim workflow; the page is setup only.** The page
+  could still add a map, start it, enter bans and import a session - and its
+  "Start map" ran before bans had anywhere to be entered on that surface, so a
+  map could begin with the draft unrecorded. Everything done DURING a scrim now
+  lives in the pop-out panel: choose the map, note the bans, capture, finish,
+  choose the next, close the scrim out. The page keeps what happens before the
+  game - share the screen, calibrate, name the scrim - and nothing else. That is
+  305 lines of markup and handlers gone from it.
+
+  The panel's next-map row gained an optional replay-code field, because
+  removing the page's field would otherwise have left no way to record one at
+  all. The screenshot importer's UI went too; `parseScrimSessionText` stays,
+  since the replay-code OCR reads the same replay-history text.
+
+- **The pre-map panel says what it is for.** It led with "no map running", which
+  names what is not happening. It now reads "Select the map, and any bans" - the
+  second half only when the scrim uses them.
+
+- **"Finish scrim capture" waits for a captured map.** Closing out a scrim with
+  nothing in it left an empty record and threw away the setup.
+
+- **Hero bans are picked from the capture panel, before the map starts.** They
+  were entered from a 53-entry dropdown that only appeared *while a map was
+  running* - after the draft they were meant to record. The panel now carries a
+  role-grouped grid of hero portraits, laid out like the in-game hero select,
+  on the pre-map screen beside the map picker. Clicking a portrait bans it and
+  clicking it again undoes that, so a misclick is fixable where it happened.
+
+  Both surfaces render the same picker, so a ban set on either is set
+  everywhere. The map-start paths no longer clear the ban list - they used to,
+  which would have eaten every ban the moment Start was pressed - and it is
+  cleared when a map finishes instead.
+
+- **"No bans this map" is recorded as a fact.** An empty ban list could not say
+  it: that is equally what a map nobody recorded bans for looks like, so the
+  viewer excluded both from the denominator and every ban rate was computed
+  against too small a pool. A map explicitly played without bans now counts as
+  the evidence it is.
+
+- **The capture panel opens when a scrim is saved, and can close a scrim out.**
+  Saving a scrim pops the panel immediately - it runs inside the click, which is
+  what satisfies the browser's user-gesture rule - so the whole loop happens
+  there: pick map, pick bans, capture, finish, next map. "Finish scrim capture"
+  sits beside that loop and is rendered only between maps, so it is unreachable
+  mid-capture by construction rather than by a refusal. It ends the capture
+  session only: the scrim stays in the picker and stays editable.
+
+- **The hero role table has one copy again.** `ROLE_MAP` moved out of
+  `docs/scrims.html` into `docs/capture/engine/heroes.js`, which both pages now
+  load - the ban grid needs roles too, and a second hand-kept copy would be a
+  second chance to drift from `faceit_sync/subroles.py`. The first copy had
+  already drifted silently. `docs/scrims.html` gains its only external script.
+
+### Changed
+- **Scrim mode is merged, and stays closed.** Everything built for scrims -
+  panel-first capture, the hero-grid ban picker, player names against heroes,
+  the replay-code reader - is now on the live site rather than a branch, but
+  both scrim pages open behind a lock. Capture and viewer are gated together:
+  unlocking one alone would ship a tool that records scrims nobody can read.
+
+  The overlay is static markup and the gate script only ever removes it, so a
+  syntax error, a blocked script or a browser with localStorage off all leave
+  the page locked. It is a soft gate, not a security boundary - nothing behind
+  it is secret, and it writes only to your own browser.
+
+- **Registered the 2026-08-19 patch code wipe, dated the 18th.** Every replay
+  code from before the patch is dead, so the site marks those maps lost to the
+  wipe rather than offering them.
+
+  The date is deliberately a day early. `codeDead` is date-granular
+  (`when[:10] <= wipe`), and the patch landed mid-evening, so dating it the
+  19th would have marked that day's post-patch league games dead too - and
+  their codes are alive. Offering a dead code costs one failed capture attempt;
+  hiding a live one loses the map for good, because a code nobody scouts is
+  never recoverable. The reasoning is recorded beside the entry in
+  `owdb/db.py`, which remains the only place a wipe date is written.
+
+### Fixed
+- **The scrims viewer rendered an empty shell.** Its CSP is
+  `script-src 'unsafe-inline'` with no `'self'` - correct while every line it
+  ran was inline, and wrong the moment it gained an external script (the
+  `engine/heroes.js` extraction above). The browser blocked the file,
+  `OWDBHeroes is not defined` threw at the top of the inline script, and the
+  page stopped before it defined a single tab: no nav, no content, on every
+  tab and both the demo and real data. The policy now allows `'self'`, and a
+  test fails if any page loads a script its own CSP forbids. Same shape as the
+  `scoreboard.js` block found earlier this month, and invisible to `curl -I`
+  for the same reason - the policy is a `<meta http-equiv>` tag.
+- **A stalled OCR read hung the capture pages with nothing to show for it.**
+  `ocrWorker()`'s deadline only covers *loading* the engine; a `recognize()`
+  that stalls after that never returns, and because tesseract.js runs one job
+  at a time per worker, every other read sharing it queues behind and hangs
+  too. The guard existed inside the league page's `ocrNames()` alone, so the
+  scrim page's four reads - HUD names, both scoreboard crops, the replay code -
+  and the league page's own replay-code read had no deadline at all. All of
+  them now go through one helper that times out and discards the wedged
+  worker. This is what let a failure stay silent: the scrim page's side
+  detection is written to say *why* it failed, and could say nothing for an
+  error that never arrived.
+- **The scrim panel never said who was on which hero.** It read the ten HUD
+  names, saved them with every snapshot and paired them into the finished map -
+  and then printed a hardcoded em-dash in all ten Player cells, so the one
+  screen the operator watches during a scrim showed nothing it already knew.
+  The cell now shows the name read for that slot, replaced by a roster's own
+  spelling when the read matches one (ours, or the opponent's when they were
+  identified as a league team). A blank cell means nothing was read there -
+  a name is never invented to fill one.
+- **Scrim side detection died on a missing database store.** The `opponents`
+  store was added during opponent identification and folded into an existing
+  schema version, on the reasoning that the version had not shipped yet.
+  Anyone already testing that version held a database created before the store
+  existed, and `onupgradeneeded` fires once per version - so it was never
+  created for them, and every side-detection attempt threw
+  `'opponents' is not a known object store name`. The version is bumped, which
+  only ever adds stores, so learned hero portraits are untouched.
+
+  The rule, with no exception for unshipped versions: a store added to an
+  already-issued version reaches nobody who has already used it.
+
+- **HUD names were being cropped with their neighbour's plate border attached.**
+  Each name crop padded the portrait cell by 5% of its width on either side,
+  which on a tight HUD reaches into the *next* name plate and drags its edge in.
+  Tesseract reads those bars as `|`, `i`, `§` or `}`, so a perfectly legible
+  `ASHBORN` came back as `§ ASHBORN |}`. The crop now follows the glyphs, and
+  a run touching the cell edge is treated as the border rather than a letter -
+  unless it is wide, because a name like `CHEESEBURGER` genuinely fills its
+  cell and must not be clipped.
+
+  Measured over twelve real frames with known ground truth, live captures and
+  archived ones together: exact reads go from 75/120 to 110/120, stray
+  characters from 57 to 2, and no frame got worse.
+
+- **A name wrapped in that punctuation matched nothing.** The comparison
+  lowercased and cut at `#` and nothing else, so `§ ASHBORN |}` was never equal
+  to `ashborn`, and `i XYPHER |` normalised whole to `ixypher`. In the field
+  four of five legible names were discarded and scrim side detection reported
+  that it could not tell which side was ours - on a read a person resolves at a
+  glance. Names now normalise without punctuation and also match on their
+  whitespace-separated fragments of three characters or more, so a stray `i`
+  falls away without taking `XYPHER` with it. The three-of-five bar is
+  unchanged, so noise still cannot name a team on its own.
+
+---
+
+## 2026-08-18 (later)
+
+### Added
+- **Hero bans can be recorded from the capture panel.** Bans are a per-map fact
+  noted while the map runs, and the operator is watching the game with the panel
+  on top - so asking them to alt-tab back to the setup card to record one was
+  asking them not to record it. The panel now carries the same hero picker,
+  by-us/by-them picker and ban list as the card, beside the map controls, and
+  only when the scrim uses bans.
+
+### Fixed
+- **Scrim side detection could never fire.** It matches the HUD against our own
+  roster and abstains when that roster is empty - and it was always empty: the
+  store meant to remember which team is ours had no writer anywhere in the page,
+  and a scrim created without filling in "Our team" had nothing else to offer.
+  Every scrim therefore fell back to picking the left team by hand.
+
+  Naming the team on a scrim now remembers it for every future scrim, and a new
+  scrim starts pre-filled with it. Finishing a map also *learns* the names on
+  our side of the HUD, which covers stand-ins, alt accounts, and teams that are
+  not in the league feed at all. Learning is tied to finishing a map rather than
+  to the side control changing: on change, a single swap would teach it the
+  opposing five as well, both sides would then match "us", and the detector -
+  which refuses to guess when both overlap - would abstain for good.
+
+  When it still cannot tell, the message now names the cause. It used to say
+  "pick the left team above", which is what to do, not what was wrong.
+
+---
+
 ## 2026-08-18
 
 ### Fixed
@@ -217,11 +450,45 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-08-13
 
+### Fixed
+- **The two capture pages no longer fight over the IndexedDB schema, and the
+  database moves to version 5.** Each page opened `owscout-capture` at version
+  4 declaring only the stores it used, but `onupgradeneeded` fires once per
+  version — so whichever page a browser opened *first* created its own stores
+  and fixed the version, leaving the other page's stores uncreated and every
+  transaction on them throwing *"One of the specified object stores was not
+  found"*. Opening the league page first killed scrim capture; opening the
+  scrim page first killed league capture. Both pages now pass the single
+  `ALL_STORES` map in `docs/capture/engine/idb.js`.
+
+  **Version 5 is what repairs existing browsers.** One stuck at v4 with half
+  the stores would never fire `onupgradeneeded` again without a version change.
+  The upgrade only ever *adds* stores, so learned hero references, custom
+  heroes and captured maps are untouched — verified in a real browser.
+
+  The bug predates this work (`main` at `7e7bde2` fails identically) and only
+  became reachable when scrim capture was un-paused, since a paused scrim page
+  never touched its stores. Contributors with an established database were
+  unaffected, having accumulated every store over time; a fresh install hit it
+  immediately.
+
 ### Changed
+- **Scrim capture is un-paused.** The unconditional `#scrimpaused` overlay
+  added in `f2881cf` is gone from both `docs/capture/scrim.html` (blocked
+  capturing) and `docs/scrims.html` (blocked viewing) — removing only one
+  would have shipped scrims you could record but not read. Un-pausing was
+  gated on the league-code block: `docs/capture/scrim.html` now refuses to
+  start a scrim capture on a code it recognises as a live league match,
+  naming the division, via `classifyCode`/`buildCodeIndex` in
+  `docs/capture/engine/session.js` checked against `docs/capture/data.json`'s
+  codes. This finishes phases 0-1 of `specs/2026-08-12-scrim-mode-design.md`;
+  see `ARCHITECTURE.md` §7. This changes the operational procedure for
+  recording scrims — the capture and viewer pages are usable again instead of
+  redirecting to League capture.
 - **`docs/capture/index.html` and `docs/capture/scrim.html` now share a JS
   engine instead of being hand-maintained forks.** The two pages had drifted:
   104 top-level functions existed in both, 44 of them silently different.
-  Seven modules — `names.js`, `util.js`, `idb.js`, `frames.js`,
+  Nine modules — `names.js`, `util.js`, `idb.js`, `frames.js`,
   `calibration.js`, `refs.js`, `overlay.js`, `tour.js` — moved to
   `docs/capture/engine/`, cutting the shared-but-forked count to 34. No
   user-visible behaviour changed; where the code lives did. The

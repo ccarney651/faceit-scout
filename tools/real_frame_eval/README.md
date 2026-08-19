@@ -69,6 +69,32 @@ Confirmed live the same day: code `3DQNHD` on Oasis tagged 10/10 with none wrong
 and none abstained, where the same code managed 6/10 with four abstentions before
 the fix.
 
+## Cropping to the glyphs, and what it costs (2026-08-19)
+
+The crop padded each portrait cell by 5% of its width per side, which on a
+tight HUD reaches into the NEIGHBOURING name plate and drags its border in.
+Tesseract reads those bars as `|`, `i`, `§` or `}` - a legible `ASHBORN`
+arriving as `§ ASHBORN |}`. Cropping to the glyph run instead, over twelve
+frames with known truth (`tightcrop_eval.py`, scored by `tightcrop_score.js`):
+
+```
+  pad     75/120 exact   92/120 resolve   57 stray characters
+  tight  110/120 exact  111/120 resolve    2 stray characters
+```
+
+**It is not free, and the exception is worth knowing.** `PROXY` - already the
+harness's pathological slot - reads correctly in 5 of 8 frames when the crop is
+wide and only 2 of 8 when it is tight. A margin sweep says the margin is not
+the cause: 4px through 16px all give 2/8, and 20px gives 3/8. Tesseract simply
+does better on that particular glyph sequence with more surrounding context,
+which is the opposite of what the other ten names want.
+
+Tight still wins by a wide margin overall, and `PROXY` is exactly the slot
+`assign.js` recovers by elimination anyway - that recovery is why the resolver
+exists. But "no frame got worse" is a frame-level statement, not a slot-level
+one, and a future change here should re-run the sweep rather than assume the
+trade-off has stayed the same shape.
+
 ## The locator, and the two attempts that failed first
 
 All five of a team's names share one row, so the row is found **once per side
@@ -197,3 +223,111 @@ the thing it is actually used on.
 - The whole crop result assumes calibration put the box on the portraits. It says
   nothing about what happens when calibration is grossly wrong — then the crop is
   meaningless, but so is hero recognition, and the page already says so.
+
+## Replay-code reading (2026-08-19)
+
+`code_truth.py` → `code_crop.py` → `code_eval.js`, swept by `code_sweep.py` and
+checked against the shipped module by `code_parity.js`.
+
+Twelve frames with hand-verified codes, two window modes, five distinct codes.
+
+| offsets | correct | no-read | wrong |
+| --- | --- | --- | --- |
+| provisional (eyeballed) | 9/12 | 3 | 0 |
+| fitted against a HAND-MEASURED strip | 12/12 | 0 | 0 — **and it failed in the field** |
+| fitted against the strip auto-calibrate really produces | **12/12** | 0 | **0** |
+
+### The middle row is the lesson
+
+The second fit scored a perfect 12/12 offline and then read nothing at all on a
+live capture. The offsets are fractions **of the calibration box**, and the box
+they were fitted against was hand-measured — not the one `auto-calibrate` hands
+over. Reading `boxes.a` out of a real session gives
+`(129.536, 119.808, 660.224, 97.2)`, which is `AUTO_STRIPS`' fractions
+unmodified. Against that box the same code is 0.217 strip-heights tall; against
+the hand-measured one it is 0.198.
+
+So the offline score was measuring a rectangle that does not occur in the field.
+**When fitting anything expressed relative to a calibration box, get the box out
+of a live session first** — `console.log(JSON.stringify(boxes.a))` — rather than
+measuring the HUD by eye.
+
+The 2557×1438 frames sit at a *different* HUD position again (strip at x=57,
+where `AUTO_STRIPS` would put it at x=129; rendering the auto box on one cuts the
+first portrait in half). They are kept for reading accuracy but excluded from the
+geometry fit, since they cannot constrain offsets expressed against a box they
+do not match.
+
+The three provisional failures were all one mode: tesseract inventing a leading
+character out of the mottled plate edge, giving seven characters. `foldCode`
+refused them, which is why WRONG stayed 0 — the fix belonged in the crop.
+
+### An edge-ink guard was tried and does not work
+
+19 of 45 swept geometries produced a *wrong* read — six valid Crockford
+characters, right length, wrong code. The worst is `TJDE6W` read as `8TDE6W` off
+a crop shifted left and narrowed. That is the failure the whole design is built
+to avoid, and `foldCode` cannot catch it: it is well-formed.
+
+The obvious guard — refuse when ink touches the crop's left or right edge, the
+way `findNameSpan` drops edge-touching glyph runs for HUD names — **was measured
+and rejected**. It does not separate the cases:
+
+| frame | right-edge ink | read |
+| --- | --- | --- |
+| `234953` | 0.350 | **correct** (`9962X3`) |
+| `231525` (clipped geometry) | 0.372 | **wrong** (`8TDE6W`) |
+
+`234953` has a bright diagonal of game art at the crop edge, not a clipped
+glyph, and any threshold catching the wrong read rejects that correct one.
+Do not re-try this without a signal that actually distinguishes background from
+a cut glyph.
+
+What is relied on instead: the league page validates every read against the
+feed, where a wrong code matches nothing; and the scrim page never records a
+code the operator has not seen in the panel field first.
+
+### One contrast level does not exist
+
+The plate the code sits on is **semi-transparent**, so what is behind it decides
+whether a contrast boost sharpens the glyphs or saturates them away. Measured on
+one live crop (`SZDPQQ`, Ilios):
+
+| contrast | read |
+| --- | --- |
+| 1.0 | `SZDPQQ` |
+| 1.45 | *empty* |
+| 1.9 | *empty* |
+
+1.9 is what read all twelve screenshot frames. It returned an empty crop on the
+first live one. Both facts are real; neither level is right.
+
+So the pages run a **ladder** — 1.0, 1.45, 1.9 — and take the answer only when
+the passes that produced a code agree. Over the frame set that is 12/12 correct
+with zero wrong, and it *rescues* two frames that 1.0 alone could not read.
+
+Agreement is also the guard that the edge-ink idea failed to provide. A crop
+clipping a glyph can yield six valid characters that are the wrong code, which
+`foldCode` cannot detect — but it is unlikely to yield the *same* wrong code
+under three different preprocessings, and a disagreement refuses outright.
+
+### Resolution robustness
+
+The three live-convention frames resampled to five resolutions, `boxes.a` taken
+from `AUTO_STRIPS` fractions of each, read through the contrast ladder:
+
+| resolution | correct | no-read | wrong |
+| --- | --- | --- | --- |
+| 1280×720 | 3/3 | 0 | 0 |
+| 1600×900 | 3/3 | 0 | 0 |
+| 1920×1080 | 3/3 | 0 | 0 |
+| 2560×1440 | 3/3 | 0 | 0 |
+| 3840×2160 | 3/3 | 0 | 0 |
+
+The test is pessimistic: every frame is resampled from a 1440p source, so the
+HUD text is softer than a native render at that resolution would be.
+
+**Not covered: aspect ratios other than 16:9.** `AUTO_STRIPS` expresses the HUD
+as fractions of the frame, which only holds while the aspect ratio does. There
+is no ultrawide or 16:10 frame in the set, so nothing here says whether the
+crop lands on an ultrawide HUD — do not assume it does.

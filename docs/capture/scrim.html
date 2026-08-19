@@ -148,6 +148,31 @@
   .sstep.todo{opacity:.6}
   .shint{color:var(--muted);font-size:13px}
   .hp{width:22px;height:22px;border-radius:4px;flex:none;object-fit:cover;background:var(--surface2)}
+  /* The ban grid, on the page card. These rules exist twice - here and, built
+     from the live palette, in the pop-out panel's generated stylesheet - because
+     the panel is a separate document with no access to this one. Written only
+     there at first, which left the page's tiles wearing the page's default
+     button padding. tests/test_capture_scrim.py compares the two selector sets,
+     which is the only thing keeping them in step; every class here starts with
+     `ban` so that one prefix finds all of them. */
+  .bangrp{width:100%;margin-top:6px}
+  .banrole{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--muted);font-weight:700}
+  .bangrid{display:grid;grid-template-columns:repeat(auto-fill,52px);gap:5px;justify-content:start}
+  .banbtn{padding:0;width:52px;border:1px solid var(--line2);background:var(--surface2);
+    border-radius:6px;overflow:hidden;cursor:pointer;display:block;color:var(--muted)}
+  .banbtn:hover{border-color:var(--accent);color:var(--fg)}
+  .banbtn .hp{width:52px;height:52px;margin:0;border-radius:0;display:block;object-fit:cover}
+  .banph{display:block;width:52px;height:52px;background:var(--line)}
+  /* Two short lines rather than one ellipsised one: "Wrecking Ball" and
+     "Junker Queen" are real heroes and "Wreckin..." is not a name. Fixed
+     height so every tile in a row ends level whether it wrapped or not.
+     Colour is inherited from the tile, so the banned state tints the name
+     without a rule of its own. */
+  .banname{display:flex;align-items:center;justify-content:center;height:21px;padding:0 3px;
+    font-size:8.5px;line-height:1.1;text-align:center;overflow:hidden;color:inherit}
+  .banbtn.banned{border-color:var(--bad);color:var(--bad)}
+  .banbtn.banned .hp,.banbtn.banned .banph{opacity:.3;filter:grayscale(1)}
   .slot{align-items:center}
   .slot .hp{margin-right:6px}
   .hd{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
@@ -165,6 +190,43 @@
     <a href="index.html" style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:10px 18px;border-radius:4px;text-decoration:none">Open League capture →</a>
   </div>
 </div>
+<script>
+// ---- scrim lock ----
+// Scrim capture is merged but not open. The overlay above is STATIC MARKUP;
+// this script only ever REMOVES it. That direction is the whole design: a
+// syntax error here, a CSP block, localStorage disabled, an exception - any
+// of it leaves the page locked. A gate that added the overlay instead would
+// fail open, and an unfinished capture tool reaching everyone is the outcome
+// worth engineering against.
+//
+// It is a soft gate, not a security boundary. The token is readable in this
+// file by anyone who looks; the point is that nobody arrives here by accident,
+// not that it cannot be bypassed. Nothing behind it is secret - it writes only
+// to the visitor's own browser.
+//
+// Unlock once per browser with ?unlock=scrimbeta (it persists), re-lock with
+// ?lock=1. There is deliberately NO localhost exemption: a dev bypass would
+// mean the state that ships is the one state nothing ever exercises, and
+// tools/verify_capture_browser.js serves over 127.0.0.1. One token, one code
+// path, checked in a browser.
+//
+// Kept byte-identical on docs/capture/scrim.html and docs/scrims.html - one
+// records scrims and the other reads them, so unlocking either alone ships
+// half a feature. A test compares them.
+(function(){
+  try{
+    var KEY='owdb_scrim_unlock', TOKEN='scrimbeta';
+    var q=new URLSearchParams(location.search);
+    if(q.get('lock')) localStorage.removeItem(KEY);
+    else if(q.get('unlock')) localStorage.setItem(KEY, q.get('unlock'));
+    if(localStorage.getItem(KEY)===TOKEN){
+      var el=document.getElementById('scrimpaused');
+      if(el) el.remove();
+    }
+  }catch(e){ /* stay locked */ }
+})();
+</script>
+
 <header>
   <div class="hrow">
     <div>
@@ -195,7 +257,7 @@
       <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
       <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
       <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits, shows you the confidence, and you confirm (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
-      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below, choose a map, and press <b>Start map</b>. A replay code is optional and stays private.</div>
+      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below and press <b>Save scrim</b> — the floating panel opens, and the map, bans and capture all happen there so you never alt-tab out of the game.</div>
       <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — use the side radios or <b>Swap teams</b> to set which team is on the left. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Save</span></div><b>Finish + save</b> — the map is saved privately in this browser. Review, export, or import scrims under the scrim panel.</div>
     </div>
@@ -232,36 +294,34 @@
       <datalist id="teamnames"></datalist>
       <label class="f">Date<input type="date" id="scdate"></label>
       <label class="f">Notes<input type="text" id="scnotes" placeholder="optional"></label>
+      <label class="f" style="flex:0 0 auto;align-self:flex-end" title="Some teams scrim with hero bans and some do not. Turn this on and a ban control appears while capturing each map.">
+        <input type="checkbox" id="scbans"> this scrim uses hero bans</label>
     </div>
     <div class="row" style="margin-bottom:8px">
       <button id="scsave">Save scrim</button>
     </div>
-    <div class="row" style="margin-bottom:8px">
-      <label class="f">Mode<select id="scrimmode"></select></label>
-      <label class="f">Replay code <span class="status">(optional)</span><input type="text" id="scrimcode" placeholder="paste code or leave blank"></label>
-    </div>
-    <div class="row" style="margin-bottom:8px;align-items:flex-start">
-      <label class="f" style="display:block;width:100%">Map<div id="scrimmapbtns" class="row" style="margin-top:6px"></div></label>
-      <input type="hidden" id="scrimmapidx">
-    </div>
-    <div class="row" style="margin-bottom:8px">
-      <button id="scstart">Start map</button>
-    </div>
+
+    <!-- Adding and starting a map lives in the pop-out panel, not here. This
+         page is what is done BEFORE the game: share the screen, calibrate, name
+         the scrim. Everything done during one - pick the map, note the bans,
+         capture, finish, pick the next - is done while watching Overwatch, and
+         a control on this page is a control that costs an alt-tab. The page's
+         own "Start map" also ran before bans had anywhere to be entered on this
+         surface, so it could start a map with the draft unrecorded. -->
     <div class="row" style="margin-bottom:6px">
       <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
       <button id="detectsides" class="ghost">Detect sides</button><span class="wip" title="Experimental — reads player names off the HUD with OCR and matches them against known rosters. May fail on custom UI colors or unfamiliar rosters.">WIP</span>
     </div>
+    <!-- Who we are playing, worked out from the HUD names. Hidden until there
+         is something to say; never blocks capture. -->
+    <div id="oppbox" class="row" style="display:none;margin-bottom:6px;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="opplabel"></span>
+      <span id="oppdetail" class="status"></span>
+      <button id="oppwrong" class="ghost" type="button" style="display:none">Not them</button>
+      <button id="oppname" class="ghost" type="button" style="display:none">Name them</button>
+    </div>
     <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
       <h2>Scrim maps (saved in this browser)</h2>
-      <div class="row" style="margin-bottom:8px">
-        <button id="scrimpscrbtn" class="ghost">Import session from screenshot…</button><span class="wip" title="Experimental — OCRs an Overwatch end-of-session screenshot to pre-fill map codes and scores. Verify every row in the review dialog.">WIP</span>
-        <span class="status">(or paste an image)</span>
-        <input id="scrimpscr" type="file" accept="image/*" style="display:none">
-      </div>
-      <div id="scrimqueue" style="display:none;margin-bottom:8px">
-        <h3 style="margin-bottom:6px">Session queue</h3>
-        <div id="scrimqueuelist"></div>
-      </div>
       <div id="scrimmaplist" class="status">Pick or create a scrim — its maps will appear here.</div>
       <div class="row" style="margin-top:10px">
         <button id="screxport" class="ghost">Export scrims</button>
@@ -374,11 +434,21 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/replaycode.js"></script><script src="engine/heroes.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
        toast, uiModal, uiConfirm} = OWDBUtil;
+// LEAGUE_DATA/CODE_INDEX: data.json's parsed body, kept by loadTeamNames()
+// (rather than re-fetched) so the league-code block (engine/session.js) can
+// classify a replay code against the real feed. CODE_INDEX starts as the
+// empty-feed index so classifyCode() is always safe to call before load
+// completes. Declared up here, not next to loadTeamNames() below, because
+// tests/test_capture_scrim.py extracts a slice of this script that runs
+// under plain Node without engine/session.js loaded — this line must not
+// fall inside that slice (it did once; see git history) or the extraction
+// throws on the top-level OWDBSession reference before any test runs.
+let LEAGUE_DATA=null, CODE_INDEX=OWDBSession.buildCodeIndex({});
 const PAD=2;
 let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45;
 let HERO_ICON={};
@@ -398,8 +468,10 @@ const SCRIM_MAPS=[
   {name:"Blizzard World",cat:"Hybrid"},{name:"Eichenwalde",cat:"Hybrid"},{name:"Hollywood",cat:"Hybrid"},
   {name:"King's Row",cat:"Hybrid"},{name:"Midtown",cat:"Hybrid"},{name:"Numbani",cat:"Hybrid"},{name:"Paraiso",cat:"Hybrid"},
   {name:"Colosseo",cat:"Push"},{name:"Esperanca",cat:"Push"},{name:"New Queen Street",cat:"Push"},{name:"Runasapi",cat:"Push"},
-  {name:"New Junk City",cat:"Flashpoint"},{name:"Suravasa",cat:"Flashpoint"},
-  {name:"Anubis",cat:"Clash"},{name:"Hanaoka",cat:"Clash"}];
+  {name:"New Junk City",cat:"Flashpoint"},{name:"Suravasa",cat:"Flashpoint"}];
+// Clash (Anubis, Hanaoka) is deliberately absent: it is no longer played
+// competitively, so offering it in a scrim picker is noise. Re-add the two
+// entries here if it returns to the pool.
 
 const HAS_CAPTURE = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 if(!HAS_CAPTURE){
@@ -420,33 +492,73 @@ async function loadRefs(){
   try{ HERO_ICON=await (await fetch('hero_icons.json',{cache:'no-store'})).json(); }catch(e){ HERO_ICON={}; }
   try{ LOCAL_REFS=await idbGetAll('refs'); for(const rec of LOCAL_REFS){ const t=refTemplate(rec); if(t) REFS.push(t); }
     for(const h of await idbGetAll('heroes')) CUSTOM_HEROES[h.g]={name:h.name, role:h.role};
-    const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; }catch(e){}
+    const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned';
+    // No picker to populate: the grid reads heroCatalog() every render, so a
+    // hero learned mid-scrim is bannable immediately.
+    renderBans(); }catch(e){}
 }
 
 // ---------- load FACEIT team names for autocomplete ----------
 let LEAGUE_TEAMS=[], FACEIT_ROSTERS={};
+// CODE_FEED: 'loading' | 'ready' | 'failed' | 'empty'. The league-code block is
+// only meaningful once data.json is parsed AND actually carries codes - an empty
+// CODE_INDEX classifies every code as "not a league match", which is exactly the
+// wrong answer. Anything other than 'ready' means UNVERIFIABLE, never "safe".
+//
+// 'empty' is its own state because a feed that loads cleanly with zero codes is
+// indistinguishable from one that simply has no match for this code, and the
+// consequences differ completely. CI always publishes a populated feed; a local
+// checkout ships an empty one. Trusting it silently waves every league code
+// through - which is what a real code did during verification.
+let CODE_FEED='loading';
+function codeFeedWarn(){
+  const el=document.getElementById('ctxwarn'); if(!el) return;
+  if(CODE_FEED==='failed'){
+    el.textContent='League-code check unavailable — data.json did not load, so league matches cannot be detected.';
+  } else if(CODE_FEED==='empty'){
+    el.textContent='League-code check unavailable — data.json carries no codes (a local checkout ships an empty feed; CI publishes the real one).';
+  }
+}
+// Every team the feed knows, and their rosters keyed by lowercased name.
+//
+// `team_rosters` is the ACCUMULATED squad for every team in the league - 159 of
+// them - while `rosters` is per coded match and reaches 19. This was built from
+// `rosters` alone, which predates team_rosters, and it showed twice in the
+// field: the team autocomplete offered no Master-division teams at all, and
+// faceitRoster() could not find a team that had never played a coded match -
+// including the operator's own, which quietly disabled half of side detection.
+//
+// team_rosters wins where a team is in both: it is the whole squad across the
+// season, so it matches a lineup that a single match's five cannot.
+function indexLeagueTeams(d){
+  d=d||{};
+  const names=new Set(), rosters={};
+  const add=t=>{ if(!t||!t.name||!t.players) return;
+    names.add(t.name);
+    const k=t.name.trim().toLowerCase();
+    if(!rosters[k]) rosters[k]=t; };
+  const tr=d.team_rosters||{}; for(const tid in tr) add(tr[tid]);
+  const per=d.rosters||{}; for(const mid in per){ const m=per[mid]||{}; for(const tid in m) add(m[tid]); }
+  for(const c of (d.codes||[])){ if(c.team_a) names.add(c.team_a); if(c.team_b) names.add(c.team_b); }
+  return { names:[...names].sort(), rosters };
+}
 async function loadTeamNames(){
   try{
     const d=await (await fetch('data.json',{cache:'no-store'})).json();
-    const seen=new Set();
-    FACEIT_ROSTERS={};
-    for(const mid in (d.rosters||{})){
-      const match=d.rosters[mid];
-      for(const tid in match){
-        const t=match[tid];
-        if(t && t.name && t.players){
-          seen.add(t.name);
-          const key=t.name.trim().toLowerCase();
-          FACEIT_ROSTERS[key]=t;
-        }
-      }
-    }
-    for(const c of (d.codes||[])){
-      if(c.team_a){seen.add(c.team_a);} if(c.team_b){seen.add(c.team_b);}
-    }
-    LEAGUE_TEAMS=[...seen].sort();
+    LEAGUE_DATA=d;
+    CODE_INDEX=OWDBSession.buildCodeIndex(d);
+    CODE_FEED = CODE_INDEX.codes.size ? 'ready' : 'empty';
+    codeFeedWarn();
+    const idx=indexLeagueTeams(d);
+    FACEIT_ROSTERS=idx.rosters;
+    LEAGUE_TEAMS=idx.names;
     const dl=document.getElementById('teamnames'); if(dl) dl.innerHTML=LEAGUE_TEAMS.map(t=>`<option value="${esc(t)}">`).join('');
-  }catch(e){ FACEIT_ROSTERS={}; }
+  }catch(e){
+    // Loud, not silent: index.html surfaces the same failure via feedError, and
+    // the scrim page must not be quieter about it - here the cost of a silent
+    // failure is a league match saved as a private scrim.
+    FACEIT_ROSTERS={}; CODE_FEED='failed'; codeFeedWarn();
+  }
 }
 function faceitRoster(teamName){
   const key=(teamName||'').trim().toLowerCase();
@@ -465,17 +577,288 @@ async function buildLearnedRosters(){
 // normName/simScore/affinity/confidentOrientation and the
 // AUTO_SIDE_MARGIN/STRONG_NAME_SCORE/MIN_STRONG_NAMES constants live in
 // engine/names.js now (shared with index.html).
+// ---------- opponent identification (phase 2) ----------
+// OUR_TEAM: which league team is ours, so one side of the HUD can be recognised
+// as us. Asked once and remembered; without it the opponent is still
+// identified, only the side is left manual.
+const OUR_TEAM_KEY='owdb_our_team';
+function ourTeamName(){ return localStorage.getItem(OUR_TEAM_KEY)||''; }
+function setOurTeamName(n){ if(n) localStorage.setItem(OUR_TEAM_KEY,n); else localStorage.removeItem(OUR_TEAM_KEY); }
+// Remember it the first time a scrim names it, so it is typed once and never
+// again. This store had NO writer until 2026-08-18, which is why side
+// detection never fired in the field: ourSide() was always handed an empty
+// roster and abstained, every time.
+function rememberOurTeam(n){ n=(n||'').trim(); if(n) setOurTeamName(n); }
+
+// The HUD names we have confirmed are us, learned from the sides the operator
+// set by hand. Kept apart from the league feed on purpose: a scrim team need
+// not be a league team at all, and stand-ins and alt accounts never appear in
+// the feed however good it is.
+const OUR_ROSTER_KEY='owdb_our_roster';
+function loadOurRoster(){
+  try{ const a=JSON.parse(localStorage.getItem(OUR_ROSTER_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; } }
+function learnOurRoster(names){
+  const have=loadOurRoster();
+  (names||[]).forEach(n=>{ n=(n||'').trim();
+    if(n && !have.some(h=>h.toLowerCase()===n.toLowerCase())) have.push(n); });
+  try{ localStorage.setItem(OUR_ROSTER_KEY, JSON.stringify(have)); }catch(e){}
+  return have; }
+// What an auto-created scrim starts with as "our team": whatever we already
+// know, so the name is typed once ever rather than once per scrim.
+function newScrimTeamUs(){ return ourTeamName()||''; }
+// The same answer for the SETUP FORM. "+ new scrim..." clears every field, and
+// clearing this one threw away the one thing we already knew - which is exactly
+// how the field bug showed up. An existing scrim always keeps what it was saved
+// with: it may have been played as a different team, or named before this was
+// ever remembered.
+function scrimFormTeamUs(s){ return (s&&s.team_us) || newScrimTeamUs(); }
+// Why side detection gave up, in the operator's terms. Two causes, two fixes:
+// either nothing has ever said which team is ours (the common one, and the one
+// the old message never mentioned), or we know the roster and still could not
+// match it - a bad read or a stand-in, where re-reading may well work.
+function sideFailureHint(haveOurRoster){
+  return haveOurRoster
+    ? 'could not tell which side is yours from the HUD names — pick the left team above, then Snapshot again'
+    : 'nothing has said which team is yours — fill in "Our team" on this scrim, or pick the left team above and it will be remembered from now on'; }
+// The names on our side of a finished map. Learning is deliberately tied to
+// FINISHING rather than to the side radio changing: a swap would teach it the
+// opposing five as well, both sides would then match us, and ourSide() -
+// which refuses to guess when both overlap - would abstain for good. By the
+// time a map is saved the operator has had the whole map to notice a wrong
+// side, so the assignment is evidence rather than a keystroke.
+//
+// leftTeam is the radio's value: 'us' when OUR team is on the left of the HUD,
+// 'them' when theirs is. Empty means unconfirmed, and unconfirmed teaches
+// nothing.
+function ourNamesFromSnaps(snaps, leftTeam){
+  if(leftTeam!=='us' && leftTeam!=='them') return [];
+  const key = leftTeam==='them' ? 'bPlayers' : 'aPlayers';
+  const out=[];
+  (snaps||[]).forEach(s=>((s&&s[key])||[]).forEach(n=>{
+    n=(n||'').trim(); if(n && out.indexOf(n)===-1) out.push(n); }));
+  return out; }
+// Who counts as us: the league roster for our team if we have one, widened by
+// everything learned from manual picks. Union, so a stand-in never displaces
+// the squad.
+function ourRosterNames(){
+  const name=ourTeamName()||(activeScrim&&activeScrim.team_us)||'';
+  const out=[], seen={};
+  faceitRoster(name).concat(loadOurRoster()).forEach(n=>{
+    const k=(n||'').trim().toLowerCase(); if(!k||seen[k]) return; seen[k]=1; out.push(n); });
+  return out; }
+// What the Player column says for one slot. The HUD read IS the answer: a
+// scrim opponent is often a mix with no roster anywhere, and those five names
+// are the whole reason the column exists. A canonical spelling only ever
+// REPLACES a read that provably matches it - it never fills in a slot we could
+// not read, so a blank cell always means "nothing was read here" rather than
+// "read, but not vouched for". That distinction is what makes a wrong name
+// visible instead of silently plausible.
+//
+// Matching goes through normSet, the same expansion identification uses, so
+// the name shown against a hero agrees with the team the tool says we are
+// playing. "i XYPHER |" is a real read - the stray glyphs are the neighbouring
+// plate's border - and normalising it whole matches nothing.
+function slotPlayerLabel(raw, known){
+  const s=String(raw==null?'':raw).trim();
+  if(!s) return '';
+  const keys=OWDBOpponents.normSet([s]);
+  for(const n of (known||[])){
+    const k=OWDBOpponents.norm(n);
+    if(k && keys.indexOf(k)!==-1) return n; }
+  return s; }
+// Aliases are smurf accounts learned per team. Local only, and deliberately
+// never included in a shared scout - that would leak the mapping between a
+// player's main and their alts.
+const ALIAS_KEY='owdb_team_aliases';
+function loadAliases(){ try{ return JSON.parse(localStorage.getItem(ALIAS_KEY)||'{}'); }catch(e){ return {}; } }
+function saveAliases(a){ try{ localStorage.setItem(ALIAS_KEY, JSON.stringify(a)); }catch(e){} }
+
+// The league index, aliases folded in, rebuilt from whatever feed we have.
+function teamIndex(){
+  return OWDBOpponents.indexWithAliases(
+    OWDBOpponents.buildTeamIndex(LEAGUE_DATA||{}), loadAliases()); }
+
+async function idbOpponents(){ return idbGetAll('opponents'); }
+function idbPutOpponent(o){ return idbPutIn('opponents',o); }
+
+// resolveScrimIdentity(names) — everything we can say about who is playing,
+// from the ten HUD names. Never throws and never blocks: an unidentified side
+// is simply "Opponent", which is a valid answer for a scrim against a mix.
+async function resolveScrimIdentity(names){
+  const idx=teamIndex();
+  const out={ left:null, right:null, ourSide:null, opponent:null, opponentSide:null };
+  if(!names) return out;
+  out.left=OWDBOpponents.identifyTeam(names.a, idx);
+  out.right=OWDBOpponents.identifyTeam(names.b, idx);
+
+  // Which side are we? Prefer our own roster; fall back to "one side resolved
+  // to the team we said is ours".
+  const ours=ourRosterNames();
+  out.ourSide=OWDBOpponents.ourSide(names.a, names.b, ours);
+  if(!out.ourSide){
+    const mine=(ourTeamName()||'').trim().toLowerCase();
+    if(mine){
+      if(out.left && !out.left.ambiguous && (out.left.name||'').toLowerCase()===mine) out.ourSide='left';
+      else if(out.right && !out.right.ambiguous && (out.right.name||'').toLowerCase()===mine) out.ourSide='right';
+    }
+  }
+  out.opponentSide = out.ourSide==='left' ? 'right' : out.ourSide==='right' ? 'left' : null;
+
+  // The opponent: a league team if one side resolved, otherwise a group we
+  // remember locally, otherwise a new one.
+  const oppNames = out.opponentSide==='right' ? names.b : out.opponentSide==='left' ? names.a : null;
+  const oppTeam  = out.opponentSide==='right' ? out.right : out.opponentSide==='left' ? out.left : null;
+  if(oppNames){
+    if(oppTeam && !oppTeam.ambiguous && oppTeam.team_id){
+      out.opponent={ kind:'league_team', team_id:oppTeam.team_id, label:oppTeam.name,
+                     matched:oppTeam.matched, unmatched:oppTeam.unmatched||[] };
+    } else {
+      const groups=await idbOpponents();
+      const hit=OWDBOpponents.findLocalGroup(oppNames, groups.filter(g=>g.kind==='local_group'));
+      if(hit){ out.opponent={ kind:'local_group', group:hit.group, matched:hit.matched,
+                              times_played:hit.group.times_played||1 }; }
+      else { out.opponent={ kind:'new_group', names:OWDBOpponents.normSet(oppNames) }; }
+    }
+  }
+  return out;
+}
+
+// commitScrimIdentity(res, names) — persist what we resolved. Learning the
+// aliases and counting the meeting only happen for an identification the
+// operator has NOT corrected; correctScrimOpponent() below is the undo.
+async function commitScrimIdentity(res, names){
+  if(!res || !res.opponent || !activeScrim) return null;
+  const o=res.opponent;
+  if(o.kind==='league_team'){
+    if(o.unmatched && o.unmatched.length){
+      saveAliases(OWDBOpponents.learnAliases(loadAliases(), o.team_id, o.unmatched)); }
+    activeScrim.opponent_team_id=o.team_id;
+    if(!activeScrim.opponent) activeScrim.opponent=o.label||'';
+  } else if(o.kind==='local_group'){
+    const oppNames = res.opponentSide==='right' ? names.b : names.a;
+    OWDBOpponents.mergeIntoGroup(o.group, oppNames);
+    o.group.updated_at=new Date().toISOString();
+    await idbPutOpponent(o.group);
+    activeScrim.opponent_id=o.group.id;
+    if(!activeScrim.opponent && o.group.label) activeScrim.opponent=o.group.label;
+  } else if(o.kind==='new_group'){
+    const oppNames = res.opponentSide==='right' ? names.b : names.a;
+    const g=OWDBOpponents.newLocalGroup(oppNames);
+    await idbPutOpponent(g);
+    activeScrim.opponent_id=g.id;
+    res.opponent={ kind:'local_group', group:g, matched:g.roster_names.length, times_played:1 };
+  }
+  activeScrim.updated_at=new Date().toISOString();
+  await idbPutScrim(activeScrim);
+  return res.opponent;
+}
+
+// The operator says "not them". Discards any alias this team holds for a player
+// in THIS read, so a wrong guess cannot permanently widen its roster.
+//
+// It takes the whole side's names, not just the ones that failed to match. Once
+// an alt has been learned it matches, so a later "not them" would report
+// nothing unmatched and quietly discard nothing — leaving the bad alias
+// attached forever. "These five are not that team" is the claim, so all five
+// are what gets removed.
+async function correctScrimOpponent(teamId, sideNames){
+  if(!teamId) return;
+  const store=loadAliases();
+  const said=OWDBOpponents.normSet(sideNames);
+  const keep=(store[teamId]||[]).filter(n=>said.indexOf(n)===-1);
+  if(keep.length) store[teamId]=keep; else delete store[teamId];
+  saveAliases(store);
+  if(activeScrim){ delete activeScrim.opponent_team_id; await idbPutScrim(activeScrim); }
+}
+
 async function detectScrimSides(){
-  const c=selectedCode(); if(!c) return {left:null, source:null};
   const names=await readHudNames(); if(!names) return {left:null, source:null};
   if(session) session.players=names;
-  const learned=await buildLearnedRosters();
-  const usKey=(c.team_a||'').trim().toLowerCase(), themKey=(c.team_b||'').trim().toLowerCase();
-  let left=confidentOrientation(names.a,names.b,learned[usKey]||[],learned[themKey]||[]);
-  if(left) return {left, source:'learned'};
-  left=confidentOrientation(names.a,names.b,faceitRoster(c.team_a),faceitRoster(c.team_b));
-  if(left) return {left, source:'FACEIT'};
-  return {left:null, source:null}; }
+  const res=await resolveScrimIdentity(names);
+  res._names=names;                      // kept so "Not them" can re-group them
+  if(res.ourSide){
+    await commitScrimIdentity(res, names);
+    LAST_IDENTITY=res; renderOpponent(res);
+    return {left: res.ourSide==='left'?'a':'b', source:'roster', identity:res};
+  }
+  // No idea which side is us, but the opponent may still be identifiable -
+  // record nothing yet and let the operator set the side.
+  LAST_IDENTITY=res; renderOpponent(res);
+  return {left:null, source:null, identity:res}; }
+let LAST_IDENTITY=null;
+
+// renderOpponent(res) — say who we worked out we are playing, and offer the two
+// corrections that matter: "not them" for a wrong team, and naming a group we
+// only know by its players. Silent when there is nothing to report, because an
+// unidentified opponent is a normal outcome, not an error to nag about.
+function renderOpponent(res){
+  const box=document.getElementById('oppbox'); if(!box) return;
+  const label=document.getElementById('opplabel'), detail=document.getElementById('oppdetail');
+  const wrong=document.getElementById('oppwrong'), name=document.getElementById('oppname');
+  const o=res&&res.opponent;
+  if(!o){ box.style.display='none'; return; }
+  box.style.display='';
+  wrong.style.display='none'; name.style.display='none';
+  if(o.kind==='league_team'){
+    label.innerHTML='vs <b>'+esc(o.label||'league team')+'</b>';
+    // Say how sure we are. Below five, the rest are very likely smurfs - which
+    // the tool has just learned, so next time reads as a full match.
+    detail.textContent = o.matched>=5 ? 'all 5 players matched'
+      : o.matched+' of 5 matched'+(o.unmatched&&o.unmatched.length?' · learned '+o.unmatched.length+' alt account'+(o.unmatched.length===1?'':'s'):'');
+    wrong.style.display='';
+  } else if(o.kind==='local_group'){
+    const g=o.group||{}; const n=g.times_played||1;
+    label.innerHTML='vs <b>'+esc(g.label||'Opponent')+'</b>';
+    detail.textContent = g.label ? (n>1?'played them '+n+' times':'first time')
+      : 'not a league team — '+(n>1?'you have played them '+n+' times':'first time');
+    name.style.display='';
+  } else if(o.kind==='new_group'){
+    label.innerHTML='vs <b>Opponent</b>';
+    detail.textContent='not a league team — remembered, so they are recognised next time';
+    name.style.display='';
+  }
+}
+
+// The operator says the identified team is wrong. Undo everything that
+// identification wrote, then fall back to remembering them as a group so the
+// work is not simply lost.
+async function onOpponentWrong(){
+  const res=LAST_IDENTITY; if(!res||!res.opponent) return;
+  const o=res.opponent;
+  const names=res.opponentSide==='left' ? (res._names&&res._names.a) : (res._names&&res._names.b);
+  // Pass the whole side, not o.unmatched: an alias already learned matches, so
+  // unmatched would be empty and the bad alias would survive the correction.
+  if(o.kind==='league_team'){ await correctScrimOpponent(o.team_id, names||[]); }
+  if(names&&names.length){
+    const g=OWDBOpponents.newLocalGroup(names);
+    await idbPutOpponent(g);
+    if(activeScrim){ activeScrim.opponent_id=g.id; delete activeScrim.opponent_team_id;
+      activeScrim.updated_at=new Date().toISOString(); await idbPutScrim(activeScrim); }
+    LAST_IDENTITY={...res, opponent:{kind:'local_group', group:g, times_played:1}};
+  } else { LAST_IDENTITY={...res, opponent:null}; }
+  renderOpponent(LAST_IDENTITY);
+  toast('opponent cleared — remembered as a separate group','ok');
+}
+
+// Name a group we only know by its five players. The name sticks to the group,
+// so every past and future scrim against them shows it.
+async function onOpponentName(){
+  const res=LAST_IDENTITY; if(!res||!res.opponent) return;
+  const g=res.opponent.group; if(!g) return;
+  const v=await uiModal({title:'Name this opponent', collect:true, escapeValue:null,
+    bodyHtml:'<p class="status">They are not a league team, so they are remembered by their players. A name is optional — it just makes them easier to find.</p>'
+      +'<label class="f">Name<input type="text" id="oppnameinput" placeholder="e.g. Korean team, Talon academy"></label>',
+    actions:[{label:'Save', value:'save'},{label:'Cancel', value:null, ghost:true}]});
+  const label=v&&v.fields&&(v.fields.oppnameinput||'').trim();
+  if(!label) return;
+  g.label=label; g.updated_at=new Date().toISOString();
+  await idbPutOpponent(g);
+  if(activeScrim && !activeScrim.opponent){ activeScrim.opponent=label; await idbPutScrim(activeScrim); }
+  await renderScrimPanel();
+  renderOpponent(LAST_IDENTITY);
+  toast('saved — every scrim against them shows this name','ok');
+}
 async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
   if(s._detecting) return false;
   s._detecting=true;
@@ -485,8 +868,15 @@ async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) ret
       document.querySelectorAll('input[name=side]').forEach(r=>{ r.checked=(r.value===val); });
       onSideChange(); s.sideResolved=true;
       snapMsg(`sides auto-detected (${res.source}) \u2014 ${val==='us'?'us':'them'} on left`, false); return true; }
-    snapMsg('could not auto-detect sides \u2014 pick the left team above, then Snapshot again', true); return false;
-  }catch(e){ snapMsg('side detection failed \u2014 set the left team manually, then Snapshot again', true); return false; }
+    snapMsg(sideFailureHint(ourRosterNames().length>0), true); return false;
+  }catch(e){
+    // Say WHY. This handler swallowed the reason, and twice in one session
+    // that cost real time: a failed OCR load and a matcher fault both arrived
+    // as the same eight words with the exception discarded.
+    console.error('side detection failed:', e);
+    const why=(e&&e.message)?' ('+e.message+')':'';
+    snapMsg('side detection failed'+why+' — set the left team manually, then Snapshot again', true);
+    return false; }
   finally{ s._detecting=false; } }
 
 // ---------- selected code ----------
@@ -505,7 +895,7 @@ const vid=document.getElementById('vid'), ov=document.getElementById('ov'), octx
 // index.html releases its live-scouting claim (a system scrims don't have),
 // so onStop is null here and releaseClaim on index.html.
 const frames=OWDBFrames.make({doc:document, video:vid, onStop:null});
-const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
+const {ensureWork, grabFrame, grayCanvas, cellGrayPadded, nameRow, nameCanvas, codeCanvas, detectContentRect, stopCapture, togglePreview, readyForCapture}=frames;
 let boxes=JSON.parse(localStorage.getItem('owdb_cap_boxes')||'{}'), drawMode=null, dragS=null, dragC=null;
 // autoCalibrate/boxesFromStrips/scoreBoxes/pickBox/commitCal/renderCalPreview/
 // clearCalPreview/retryCal/enterFsCal/calMsg/calOk/drawOverlay/fitOverlay now
@@ -520,9 +910,9 @@ const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCal
 // ocrWorker now live in engine/refs.js (shared with index.html). REF_W/REF_H/
 // PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON and
 // _ocrWorker/_ocrLoading stay page-level globals - see engine/refs.js's
-// header for why, and for why this page's own readScoreboard()/
-// ocrTextFromImage() (further down) still reconfigure the shared worker's
-// pageseg_mode per call instead of that living in the shared module.
+// header for why, and for why this page's own readScoreboard() (further down)
+// still reconfigures the shared worker's pageseg_mode per call instead of that
+// living in the shared module.
 const refs=OWDBRefs.make({doc:document});
 const {addRef, bestMatch, matchCrop, learnCrop, refTemplate, exportRefs, importRefs,
        clearLearnedRefs, heroCatalog, heroName, heroSlug, heroPortrait, onlyLostKnown, ocrWorker}=refs;
@@ -565,6 +955,7 @@ async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMed
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Screen share was cancelled or blocked \u2014 click <b>Share my screen</b> to try again, and pick your whole screen.</span>';
     toast('Screen share failed: '+esc(err&&err.message?err.message:String(err)),'bad',7000); } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
+  setReadoutsVisible(!!session);
   document.getElementById('autocal').disabled=!vid.srcObject;
   document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
@@ -583,7 +974,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   const steps=[
     {t:'Share screen', done:!!vid.srcObject, hint:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) \u2014 auto-calibrate needs the full frame.'},
     {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:fv?'<b>Click Auto-calibrate</b> \u2014 it finds the 10 hero portraits, shows the confidence, then <b>Use these boxes</b> to confirm.':'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
-    {t:'Start scrim map', done:!!activeScrimMap, hint:fv?'Pick or create a scrim, choose a map, and press <b>Start map</b> \u2014 a replay code is optional and stays private.':'Set up the scrim and press <b>Start map</b> in step 2.'},
+    {t:'Start scrim map', done:!!activeScrimMap, hint:fv?'Save the scrim to open the floating panel, then choose the map and press <b>Start</b> there \u2014 a replay code is optional and stays private.':'Choose the map in the floating panel and press <b>Start</b>.'},
     {t:'Capture &amp; save', done:!!(session&&session.snaps.length), hint:fv?'Press <b>Snapshot</b> to read the comp, <b>Next round</b> as it advances, then <b>Finish + save</b> \u2014 it stays private on this browser.':'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b> \u2014 it stays private on this browser.'}];
   const cur=steps.findIndex(s=>!s.done);
   if(cur<0) _firstVisit=false;
@@ -612,8 +1003,8 @@ function tourDefs(){
     {t:'Auto-calibrate', target:'autocal',
       body:'Click <b>Auto-calibrate</b> \u2014 it finds the 10 hero portraits, then <b>review the result</b> and click <b>Use these boxes</b> to confirm. Nothing is saved until you do.',
       done:()=>!!(boxes.a&&boxes.b)},
-    {t:'Start a scrim map', target:'scstart',
-      body:'Pick or create a private scrim, choose a map, and press <b>Start map</b>. A replay code is optional and stays private \u2014 league codes are blocked.',
+    {t:'Start a scrim map', target:'scsave',
+      body:'Press <b>Save scrim</b> and the floating panel opens. Everything from there on happens in it \u2014 choose the map, note any bans, then <b>Start</b> \u2014 so you never alt-tab out of Overwatch. A replay code is optional and stays private; league codes are blocked.',
       done:()=>!!activeScrimMap},
     {t:'Capture the comps', target:'snap',
       body:'Press <b>Snapshot</b> as each comp appears and <b>Next round</b> as the game advances. Sides are set manually for scrims (there are no rosters to auto-detect against).',
@@ -637,19 +1028,54 @@ const {open:tourOpen, next:tourNext, prev:tourPrev, render:tourRender, tick:tour
 // index.html) - see that file's header for the bestMatch/importRefs
 // cosmetic-only-divergence finding and the ocrWorker real one.
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
+// Every canonical spelling a HUD read could resolve to: our squad, plus the
+// opposing squad when we identified them as a league team. A local group is
+// deliberately not included - it stores names already normalised (lowercase,
+// punctuation stripped), so "resolving" to one would replace a real read with
+// a worse-looking version of itself.
+function knownPlayerNames(){
+  const opp=(typeof LAST_IDENTITY!=='undefined'&&LAST_IDENTITY)?LAST_IDENTITY.opponent:null;
+  const theirs=(opp&&opp.kind==='league_team')?faceitRoster(opp.label):[];
+  return ourRosterNames().concat(theirs); }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
+// The two team read-outs keep whatever the last snapshot painted, so between
+// maps they showed the PREVIOUS map's comp sitting under the ban grid - stale
+// data wearing the appearance of live data. Emptied and hidden until a map is
+// running, on both surfaces: the page card has the same two columns.
+//
+// Hiding the wrapper, not just blanking the contents: an empty column under its
+// heading is still furniture on a panel that sits on top of the game. Showing
+// them again must NOT clear them - this runs from updateBtns(), which fires on
+// every state change including mid-capture.
+function setReadoutsVisible(on){
+  const els=[document.getElementById('outA'), document.getElementById('outB')];
+  if(typeof target!=='undefined' && target){ els.push(target.A, target.B); }
+  els.forEach(e=>{ if(!e) return;
+    if(!on) e.innerHTML='';
+    const box=e.parentElement; if(box) box.style.display = on?'':'none'; });
+}
 function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
+  const known=knownPlayerNames();
   for(const side of ['a','b']){ const b=bxs[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
+    // The ten HUD names, in slot order - read by detectScrimSides and kept on
+    // the session. They were already being saved per snapshot and paired into
+    // the finished map; only this readout dropped them.
+    const said=(session&&session.players&&session.players[side])||[];
     if(host){ const hd=document.createElement('div'); hd.className='hd'; hd.innerHTML='<span class="hdc">Hero</span><span class="hdc">Player</span><span class="hdc sc">Conf</span>'; host.appendChild(hd); }
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
       if(host){ const row=document.createElement('div'); row.className='slot';
-        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">\u2014</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+        const pn=slotPlayerLabel(said[i], known);
+        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">${pn?esc(pn):'\u2014'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 // refTemplate/addRef/learnCrop/heroCatalog now live in engine/refs.js
 // (shared with index.html).
 function refMsg(html,cls){ const e=document.getElementById('refpanel-msg'); if(e) e.innerHTML=cls?`<span class="${cls}">${html}</span>`:html; }
 function fixReads(){ const host=document.getElementById('refpanel');
+  // #refpanel lives inside the collapsed <details id="herocard">, so filling it
+  // without opening the section looks exactly like the button doing nothing -
+  // which is how "teach it a miss" was reported as broken.
+  const card=document.getElementById('herocard'); if(card) card.open=true;
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ host.innerHTML='<span class="warn">Share your screen and calibrate first.</span>'; return; }
   const frame=grabFrame(), cat=heroCatalog();
   const opts='<option value="">\u2014 correct hero\u2026 \u2014</option>'+cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('')+'<option value="__new__">\uff0b add a new hero\u2026</option>';
@@ -850,10 +1276,14 @@ function undo(){ if(!session||!session.history.length) return; const h=session.h
 // scrim_maps - it never touches 'maps', that store is index.html's) and
 // schema version (4, unchanged - see engine/idb.js for why touching it is
 // dangerous).
-const IDB_STORES={refs:'id', heroes:'g', scrims:'id', scrim_maps:'id'};
+// ALL_STORES, not this page's subset: onupgradeneeded fires once per version,
+// so whichever page opens the DB first would otherwise fix the version with
+// only its own stores and leave the other page throwing on every transaction.
+// See engine/idb.js's header.
+const IDB_STORES=OWDBIdb.ALL_STORES;
 const {getAll:idbGetAll, putIn:idbPutIn, clear:idbClear}=OWDBIdb;
-OWDBIdb.open(4, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadRefs() runs later, at the bottom of this script)
-function idb(){ return OWDBIdb.open(4, IDB_STORES); }
+OWDBIdb.open(OWDBIdb.SCHEMA_VERSION, IDB_STORES); // establish this page's schema config before any idbGetAll/idbPutIn/idbClear call below (loadRefs() runs later, at the bottom of this script)
+function idb(){ return OWDBIdb.open(OWDBIdb.SCHEMA_VERSION, IDB_STORES); }
 function idbPutScrim(rec){ return idbPutIn('scrims',rec); }
 function idbPutScrimMap(rec){ return idbPutIn('scrim_maps',rec); }
 async function idbDelScrimMap(id){ const db=await idb(); return new Promise(res=>{ const tx=db.transaction('scrim_maps','readwrite'); tx.objectStore('scrim_maps').delete(id); tx.oncomplete=res; }); }
@@ -876,14 +1306,14 @@ async function readScoreboard(frame){
     const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser' };
     if(sb){
       await w.setParameters({ tessedit_pageseg_mode:'6' });
-      const {data}=await w.recognize(scoreCanvas(frame,sb));
+      const {data}=await ocrRead(w, scoreCanvas(frame,sb));
       await w.setParameters({ tessedit_pageseg_mode:'7' });
       const lines=(data.text||'').split('\n').map(s=>s.replace(/\s+/g,' ').trim()).filter(Boolean);
       const parsed=Scoreboard.parse(lines);
       if(parsed.entries.length){ Scoreboard.assignTeams(parsed,{ dps:2, tank:1, support:2 });
         out.roles=parsed.roles; out.entries=parsed.entries; out.matchTime=parsed.matchTime; }
     }
-    if(sr){ const {data}=await w.recognize(scoreCanvas(frame,sr));
+    if(sr){ const {data}=await ocrRead(w, scoreCanvas(frame,sr));
       out.readout=Scoreboard.parseScoreReadout((data.text||'')); }
     return out;
   }catch(e){ console.warn('scoreboard read skipped:',e); return null; } }
@@ -892,14 +1322,45 @@ async function readScoreboard(frame){
 // existing fix for a real hang bug: a stalled Tesseract.createWorker() used
 // to hang this page's OCR forever with no escape but a reload). It does NOT
 // set tessedit_char_whitelist - this page reuses the shared worker for
-// readScoreboard()/ocrTextFromImage() below (full sentences, spaces,
-// dashes), which a HUD-gamertag-only whitelist would break; see
+// readScoreboard() below (full sentences, spaces, dashes), which a
+// HUD-gamertag-only whitelist would break; see
 // engine/refs.js's header for the full reasoning. _ocrLoadFailed/
 // _ocrLoadError are new here (index.html already had them) - purely so the
 // shared ocrWorker() has somewhere to write; nothing on this page reads them
 // yet, same as this page carrying calibration.js's boxKeys entries for boxes
 // index.html doesn't set.
 let _ocrWorker=null, _ocrLoading=null, _ocrLoadFailed=false, _ocrLoadError=null;
+// Every OCR read goes through ocrRead(). ocrWorker()'s load timeout
+// (engine/refs.js) only covers getting the worker; a recognize() that stalls
+// after that hangs its caller forever with no error to report - and because
+// tesseract.js runs one job at a time per worker, every other read sharing
+// that worker queues behind it and hangs too. The first version of this fix
+// lived inside index.html's ocrNames() alone, which left the replay-code
+// read - added later, on the same cached worker - able to wedge it anyway.
+// So: race a deadline, and on any failure throw the worker away rather than
+// let the next read stack up behind a dead job; the next ocrWorker() call
+// then builds a fresh one.
+//
+// The silence is the point. A caller can only name a reason for an error
+// that actually arrives: scrim.html's ensureSideResolved() catch was written
+// to say WHY a detection failed and could not, for a read that never
+// returned.
+//
+// Kept byte-identical on both capture pages - tools/capture_divergence.py
+// counts it as shared, and it belongs in engine/refs.js with the rest of the
+// worker lifecycle (_ocrWorker/_ocrLoading are already written there) once
+// the ctx plumbing is worth the churn to two test modules.
+const OCR_READ_TIMEOUT_MS=8000;
+async function ocrRead(w, cv){
+  try{
+    return await Promise.race([w.recognize(cv),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]);
+  }catch(e){
+    try{ w.terminate(); }catch(_){}
+    _ocrWorker=null; _ocrLoading=null;
+    throw e;
+  }
+}
 async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return null;
   const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
@@ -907,12 +1368,16 @@ async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return nul
     // ocrNames() and engine/frames.js nameRow() for why.
     const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      const {data}=await w.recognize(nameCanvas(frame,cell,row));
+      const {data}=await ocrRead(w, nameCanvas(frame,cell,row));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       snapMsg('reading HUD names… '+(++done)+'/10'); } }
   return out; }
 async function finishScrimMap(c){
   const sideId=(document.querySelector('input[name=side]:checked')||{}).value||'';
+  // The map is done and the operator lived with this side assignment, so the
+  // names on our half of the HUD are now evidence of who we are. Learned here
+  // and nowhere else - see ourNamesFromSnaps for why not on the radio.
+  learnOurRoster(ourNamesFromSnaps(session.snaps, sideId));
   const leftLabel = sideId==='them' ? c.team_b : c.team_a;
   const rightLabel = sideId==='them' ? c.team_a : c.team_b;
   const observations=[];
@@ -935,18 +1400,25 @@ async function finishScrimMap(c){
     code:activeScrimMap.code||null, map_name:c.map, map_category:c.map_category, map_guid:null,
     side_a_team:leftLabel, side_b_team:rightLabel, winner_side, score, result,
     profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
-    captured_at:new Date().toISOString(), bans:[], observations, crops:session.crops||null,
+    captured_at:new Date().toISOString(), ...banState(), observations, crops:session.crops||null,
     scoreboard: sb, scrim:true };
   await idbPutScrimMap(rec);
   const wasQueued=activeScrimMap.queued;
   if(!wasQueued) activeScrim.map_no=(activeScrim.map_no||1)+1;
   await idbPutScrim(activeScrim);
   const done=session.snaps.length;
+  // The bans belonged to THAT map. Cleared here rather than at the next
+  // map's start, so the pre-map panel opens empty and ready for the draft
+  // that has not happened yet.
+  clearBans();
   session=null; activeScrimMap=null;
   await renderScrimMaps();
   toast('<b>'+esc(c.map||'map')+'</b> saved to scrim \u2014 '+done+' snapshot'+(done===1?'':'s')+' captured (private)','ok');
   updateBtns();
-  if(wasQueued){ const maps=await idbScrimMaps(); const next=maps.filter(m=>m.scrim_id===activeScrim.id&&m.queued&&m.map_no>rec.map_no).sort((a,b)=>a.map_no-b.map_no)[0]; if(next) startQueuedMap(next); }
+  // The session is gone, so the floating panel's rows are stale: rebuild it so
+  // it drops the live controls and offers the next map. Without this the panel
+  // keeps showing Snapshot for a map that has already been saved.
+  renderPipControls();
 }
 
 // ---------- Private scrim mode ----------
@@ -969,14 +1441,16 @@ async function renderScrimPanel(){
   const scrims=await idbScrims();
   const sel=document.getElementById('scrimpick');
   const saved=localStorage.getItem('owdb_cap_scrim');
-  sel.innerHTML='<option value="">\uff0b new scrim\u2026</option>'+scrims.map(s=>`<option value="${esc(s.id)}">${esc(s.team_us||'us')} vs ${esc(s.opponent||'opponent')}${s.date?' \u00B7 '+esc(s.date):''}</option>`).join('');
+  sel.innerHTML='<option value="">\uff0b new scrim\u2026</option>'+scrims.map(s=>`<option value="${esc(s.id)}">${esc(scrimLabel(s))}</option>`).join('');
   if(saved && scrims.some(s=>s.id===saved)){ sel.value=saved; activeScrim=scrims.find(s=>s.id===saved); }
   else activeScrim=null;
   fillScrimForm();
+  renderBans();
   renderScrimMaps();
 }
 function fillScrimForm(){ const s=activeScrim||{};
-  document.getElementById('scus').value=s.team_us||''; document.getElementById('scopp').value=s.opponent||'';
+  document.getElementById('scus').value=scrimFormTeamUs(s); document.getElementById('scopp').value=s.opponent||'';
+  document.getElementById('scbans').checked=!!s.uses_bans;
   document.getElementById('scdate').value=s.date||''; document.getElementById('scnotes').value=s.notes||''; }
 async function onScrimPick(){
   const id=document.getElementById('scrimpick').value;
@@ -985,91 +1459,317 @@ async function onScrimPick(){
   if(activeScrim) localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   fillScrimForm(); renderScrimMaps(); updateBtns();
 }
+// ensureScrim(): opening the scrim tool means a scrim block is already in
+// progress, so capturing the first map must not wait on paperwork. Team names
+// are metadata the operator can add whenever - and phase 2 resolves the
+// opponent off the HUD automatically - so they must never stand between
+// someone and their first Snapshot. An unnamed block is labelled by its date.
+async function ensureScrim(){
+  if(activeScrim) return activeScrim;
+  activeScrim={ id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    created_at:new Date().toISOString(), map_no:1,
+    team_us:newScrimTeamUs(), opponent:'', date:new Date().toISOString().slice(0,10),
+    notes:'', auto_created:true, updated_at:new Date().toISOString() };
+  await idbPutScrim(activeScrim);
+  localStorage.setItem('owdb_cap_scrim', activeScrim.id);
+  await renderScrimPanel();
+  return activeScrim;
+}
+// ---------- replay code off the screen ----------
+// The code Overwatch prints on the HUD banner, read on demand. Geometry and
+// validation live in engine/replaycode.js; this is the browser half - grab a
+// frame, crop, hand it to the shared OCR worker, and put the result through
+// the gate.
+//
+// The worker is SHARED with the name and scoreboard reads, and engine/refs.js's
+// header records why no character whitelist is set globally: readScoreboard()
+// needs full sentences and a code-only whitelist would break it. So both
+// parameters are set here and restored immediately after - a whitelist left in
+// place would not throw, it would quietly corrupt the next scoreboard read.
+//
+// Measured 12/12 correct with zero wrong reads over the ground-truth frames
+// (tools/real_frame_eval/). Zero WRONG is the number that matters: a crop that
+// clips a glyph can still yield six valid Crockford characters, which no gate
+// here can detect - see that README for the guard that was tried and rejected.
+// Why the last read failed, so the operator is told what actually went wrong
+// rather than being sent to re-calibrate a calibration that is already good.
+// The side-detection hunt cost an evening to three wrong guesses because the
+// failure was a single swallowed message; this is that lesson applied.
+// Contrast levels to try, in one pass each. NO SINGLE LEVEL WORKS: the code
+// plate is semi-transparent, so what is behind it decides whether a boost
+// sharpens the glyphs or saturates them away. A hard 1.9 boost read all twelve
+// screenshot frames and returned an EMPTY crop on the first live one, where 1.0
+// read it perfectly.
+//
+// Taking the answer only when the passes AGREE is also the guard that was
+// missing: a crop clipping a glyph can yield six valid characters that are the
+// wrong code, which foldCode cannot detect - but it is unlikely to yield the
+// SAME wrong code under different preprocessing.
+const CODE_CONTRASTS=[1.0, 1.45, 1.9];
+let LAST_CODE_READ={why:null, raw:null, box:null};
+async function readReplayCode(){
+  LAST_CODE_READ={why:null, raw:null, box:null};
+  if(!vid.srcObject){ LAST_CODE_READ.why='share your screen first'; return null; }
+  if(!boxes.a){ LAST_CODE_READ.why='calibrate first — the code is found relative to the left team portraits'; return null; }
+  const box=OWDBReplayCode.codeBox(boxes.a);
+  if(!box){ LAST_CODE_READ.why='the calibration box has no size'; return null; }
+  LAST_CODE_READ.box=box;
+  try{
+    const w=await ocrWorker();
+    const frame=grabFrame();
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
+    const seen=[], raws=[];
+    for(const contrast of CODE_CONTRASTS){
+      const cv=codeCanvas(frame, box, contrast);
+      const {data}=await ocrRead(w, cv);
+      const raw=(data&&data.text||'').replace(/\s+/g,'');
+      raws.push(contrast+':'+(raw||'-'));
+      const one=OWDBReplayCode.foldCode(raw);
+      if(one && seen.indexOf(one)===-1) seen.push(one);
+      try{ if(!one) console.log('[owdb] replay-code crop x'+contrast, box, cv.toDataURL()); }catch(e){}
+    }
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    LAST_CODE_READ.raw=raws.join(' | ');
+    if(seen.length===1) return seen[0];
+    if(seen.length>1){
+      LAST_CODE_READ.why='the passes disagreed ('+seen.join(' vs ')+') — not recording a guess';
+      return null;
+    }
+    LAST_CODE_READ.why='no pass produced a six-character code — read '+LAST_CODE_READ.raw;
+    return null;
+  }catch(e){
+    LAST_CODE_READ.why='OCR failed: '+((e&&e.message)||String(e));
+    console.error('[owdb] replay-code read failed:', e);
+    return null;
+  }
+}
+function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
+
+// ---------- hero bans ----------
+// Bans are optional per scrim: some teams play them, some do not, and a ban
+// control on a scrim that never bans is just noise. Stored per MAP rather than
+// per scrim, because a block can change its mind partway through and because
+// "what shifted when Sombra was banned" is a per-map question.
+// What the panel's next-map row was last set to. It is rebuilt from scratch
+// on every renderPipControls(), so without this a mode choice would be lost
+// the moment anything else on the panel changed.
+let LAST_MODE='', LAST_CODE='';
+let MAP_BANS = [];
+// "This map was played with no bans" — a fact, not the absence of one. An
+// empty list alone cannot say it: it is equally what a map nobody recorded
+// bans for looks like, and the viewer's ban denominator has to tell those
+// apart or it counts unrecorded maps as evidence that nothing was banned.
+let MAP_BANS_NONE = false;
+function banState(){ return {bans:MAP_BANS.slice(), no_bans:!!(MAP_BANS_NONE && !MAP_BANS.length)}; }
+function setNoBans(){ MAP_BANS=[]; MAP_BANS_NONE=true; }
+function clearBans(){ MAP_BANS=[]; MAP_BANS_NONE=false; }
+function usesBans(){ return !!(activeScrim && activeScrim.uses_bans); }
+// Pure: the ban list after clicking hero g. A grid of buttons carries no
+// remove affordance of its own, so the button IS the undo - without that a
+// misclick is only fixable from the chip row underneath, which is exactly the
+// fiddliness the grid replaced the dropdown to be rid of.
+function withBanToggled(bans, g, name, by){
+  const list=bans||[];
+  const i=list.findIndex(b=>b.g===g);
+  if(i!==-1){ const out=list.slice(); out.splice(i,1); return out; }
+  return list.concat([{g, n:name||g, by:by||null}]);
+}
+// The picker itself: the in-game hero select, in a 360px panel. Three role
+// blocks in play order, alphabetical inside each, portraits from the icon set
+// that already ships. Pure and document-free on purpose - it is rendered into
+// the pop-out panel, which is a SEPARATE DOCUMENT, so it can never reach for
+// elements by id on the main page.
+function banGridHtml(catalogue, bans){
+  const gone={}; (bans||[]).forEach(b=>{ gone[b.g]=1; });
+  return OWDBHeroes.byRole(catalogue||[]).map(grp=>
+    `<div class="bangrp"><span class="banrole">${esc(grp.role)}</span><div class="bangrid">`
+    + grp.heroes.map(h=>
+        `<button type="button" class="banbtn${gone[h.g]?' banned':''}" data-g="${esc(h.g)}"`
+        + ` title="${esc(h.n)}">${heroPortrait(h.n)||'<span class="banph"></span>'}`
+        + `<span class="banname">${esc(h.n)}</span></button>`).join('')
+    + '</div></div>').join('');
+}
+// The chip markup for a map's bans. Pure, and deliberately separate from
+// renderBans(): the capture overlay is a SEPARATE DOCUMENT (a popped-out
+// window), so the same markup has to be rendered into the page's card AND into
+// the panel, and neither can be built by something that reaches for elements by
+// id on the main page.
+function banChipsHtml(bans){
+  if(!bans||!bans.length) return '<span class="status faint">none recorded</span>';
+  return bans.map((b,i)=>
+    `<span class="chip">${esc(b.n||heroName(b.g)||b.g)}${b.by?` <span class="faint">${esc(b.by)}</span>`:''}`
+    +`<button class="ghost banx" data-i="${i}" title="Remove" style="padding:0 5px;line-height:1">×</button></span>`).join('');
+}
+// Paint those chips into any container, in any document, and wire removal.
+function renderBansInto(box){
+  if(!box) return;
+  box.innerHTML = banChipsHtml(MAP_BANS);
+  box.querySelectorAll('.banx').forEach(btn=>{
+    btn.onclick=()=>{ MAP_BANS.splice(+btn.dataset.i,1); renderBans(); }; });
+}
+// The whole picker - by-line, "no bans", grid, chips - built into any
+// container in any document. ONE renderer for both surfaces: the panel's row
+// and the page's card show the same control, so a ban set on either is set
+// everywhere and there is no second UI to keep in step.
+function renderBanPickerInto(box, d){
+  if(!box) return;
+  box.innerHTML='';
+  const by=d.createElement('select');
+  by.innerHTML='<option value="">by either</option><option value="us">by us</option>'
+    + '<option value="them">by them</option>';
+  by.title='Who banned it — applies to the next hero you click';
+  box.appendChild(by);
+  const none=d.createElement('button'); none.type='button';
+  none.textContent='no bans this map';
+  none.className=(MAP_BANS_NONE && !MAP_BANS.length)?'on':'ghost';
+  none.title='Record that this map was played with no bans at all';
+  none.onclick=()=>{ if(MAP_BANS_NONE && !MAP_BANS.length) clearBans(); else setNoBans(); renderBans(); };
+  box.appendChild(none);
+  const grid=d.createElement('div'); grid.style.cssText='width:100%';
+  grid.innerHTML=banGridHtml(heroCatalog(), MAP_BANS);
+  grid.querySelectorAll('.banbtn').forEach(b=>{
+    b.onclick=()=>{ const g=b.dataset.g;
+      MAP_BANS=withBanToggled(MAP_BANS, g, heroName(g)||g, by.value||null);
+      MAP_BANS_NONE=false;                 // a ban and "no bans" cannot both be true
+      renderBans(); }; });
+  box.appendChild(grid);
+  const chips=d.createElement('div'); chips.className='row';
+  chips.style.cssText='gap:4px;flex-wrap:wrap;margin-top:4px;width:100%';
+  box.appendChild(chips); renderBansInto(chips);
+}
+// The bans live in the pop-out panel only. Rebuilding its rows IS rendering
+// them - the panel's prow-bans row reads MAP_BANS as it draws - so this stays
+// as the one call every ban change goes through rather than being inlined at
+// each site.
+function renderBans(){
+  if(typeof renderPipControls==='function') renderPipControls();
+}
+// scrimLabel(): what an unnamed block is called in the picker, so it does not
+// read as a scrim against a team literally called "opponent".
+function scrimLabel(s){
+  if(s.team_us||s.opponent) return (s.team_us||'us')+' vs '+(s.opponent||'opponent');
+  return 'Scrim'+(s.date?' · '+s.date:'');
+}
 async function saveScrim(){
   const team_us=(document.getElementById('scus').value||'').trim();
   const opponent=(document.getElementById('scopp').value||'').trim();
   if(!team_us&&!opponent){ toast('enter at least one team name first','warn'); return; }
   if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
+  // Typed once, remembered for good: this is the store that had no writer.
+  rememberOurTeam(team_us);
   Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
     date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
+    uses_bans:!!document.getElementById('scbans').checked,
     updated_at:new Date().toISOString()});
   await idbPutScrim(activeScrim);
   localStorage.setItem('owdb_cap_scrim', activeScrim.id);
-  await renderScrimPanel(); updateBtns();
+  await renderScrimPanel(); updateBtns(); renderBans();
   toast('scrim saved \u2014 pick a map to start capturing','ok');
+  // The panel is where the whole scrim happens - map, bans, capture, finish -
+  // so it opens here rather than waiting to be asked for. This runs inside the
+  // Save click, which is what satisfies the browser's user-gesture rule for
+  // requestWindow(); no arming is needed.
+  popout();
 }
-async function startScrimMap(){
-  if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
-  const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
-  const code=(document.getElementById('scrimcode').value||'').trim();
-  activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1, queued:false};
-  document.getElementById('scrimcode').value=code;
-  startScrimSession(scrimPseudoCode());
-  toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
-}
-function startQueuedMap(m){
-  if(!activeScrim){ toast('create / pick a scrim first','warn'); return; }
+// Close out this scrim's capture. Deliberately NOT a "finish" in the sense of
+// sealing the record: the scrim stays in the picker, stays editable, and can be
+// reopened and added to. All this ends is the capture session, so the next
+// scrim starts from a clean panel instead of quietly inheriting this one.
+//
+// Only reachable between maps - the panel does not render the button while a
+// map runs, which is why there is no "finish the current map first" to say.
+// The guard below is belt and braces for the keyboard/console paths.
+async function endScrimCapture(){
   if(session){ toast('finish the current map first','warn'); return; }
-  activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
-  document.getElementById('scrimcode').value=m.code||'';
-  startScrimSession(scrimPseudoCode());
-  toast('<b>'+esc(m.map_name)+'</b> started from queue'+(m.code?' \u00B7 '+esc(m.code):'')+' \u2014 capture, then Finish + save','ok');
+  if(!SCRIM_MAP_COUNT){ toast('capture a map first','warn'); return; }
+  const name=activeScrim?scrimLabel(activeScrim):'scrim';
+  activeScrim=null; activeScrimMap=null;
+  clearBans();
+  localStorage.removeItem('owdb_cap_scrim');
+  await renderScrimPanel(); await renderScrimMaps(); updateBtns(); renderBans();
+  toast('<b>'+esc(name)+'</b> capture closed — the scrim is still editable from the picker','ok');
 }
-function buildScrimMapOptions(){
-  const modes=[...new Set(SCRIM_MAPS.map(m=>m.cat))];
-  const sel=document.getElementById('scrimmode');
-  sel.innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
-  sel.onchange=onScrimModeChange;
-  sel.value=modes[0];
-  onScrimModeChange();
-}
-function onScrimModeChange(){
-  const mode=document.getElementById('scrimmode').value;
-  const host=document.getElementById('scrimmapbtns');
-  host.innerHTML='';
-  SCRIM_MAPS.forEach((m,i)=>{
-    if(m.cat!==mode) return;
-    const b=document.createElement('button'); b.className='mk'; b.textContent=m.name; b.dataset.idx=i;
-    b.onclick=()=>selectScrimMap(i,b);
-    host.appendChild(b);
-  });
-  const first=host.querySelector('button');
-  if(first) selectScrimMap(+first.dataset.idx, first);
-}
-function selectScrimMap(idx, btn){
-  document.getElementById('scrimmapidx').value=idx;
-  if(btn){
-    Array.from(document.getElementById('scrimmapbtns').children).forEach(b=>{
-      b.style.background=''; b.style.color=''; b.style.borderColor=''; b.style.fontWeight='';
-    });
-    btn.style.background='var(--accent)'; btn.style.color='#0b1020'; btn.style.borderColor='var(--accent)'; btn.style.fontWeight='700';
+
+// scrimDate(): the session date used to judge whether a replay code has
+// been wiped by a patch. Falls back to today when the operator hasn't set
+// the scrim's date field yet (a code entered before the field is filled in
+// still needs a sane classification).
+function scrimDate(){ return (document.getElementById('scdate').value||'').trim() || new Date().toISOString().slice(0,10); }
+// refuseIfLeagueCode(): the league-code block. A league match's replay code
+// must never be recorded as a scrim - see engine/session.js's header. Used
+// at every point a code can start a scrim capture; returns true (and shows
+// the redirect modal) when the save was refused.
+async function refuseIfLeagueCode(code){
+  if(!code) return false;
+  // Feed not ready => the answer is UNVERIFIABLE, not "not a league match".
+  // Returning false here would fail open: with an empty CODE_INDEX every code
+  // looks like a scrim, and a league map would be recorded privately instead
+  // of being published. The user may still proceed, but never unknowingly.
+  if(CODE_FEED!=='ready'){
+    const why = CODE_FEED==='loading'
+      ? `The league match feed is still loading, so <b>${esc(code)}</b> cannot be checked yet. `
+        + `Wait a moment and try again, or start anyway if you are sure this is a scrim.`
+      : CODE_FEED==='empty'
+        ? `The league match feed loaded but carries no codes, so <b>${esc(code)}</b> cannot be checked. `
+          + `A local checkout ships an empty <code>data.json</code>; the published site has the real one. `
+          + `If this is a league match, capture it in League capture instead so it gets published.`
+        : `The league match feed failed to load, so <b>${esc(code)}</b> cannot be checked. `
+          + `If this is a league match, capture it in League capture instead so it gets published.`;
+    const go=await uiModal({title:'League codes cannot be checked right now',
+      bodyHtml:why,
+      actions:[{label:'Start anyway', value:'go'},{label:'Cancel', value:null, ghost:true}]});
+    return go!=='go';
   }
+  const cls=OWDBSession.classifyCode(code, CODE_INDEX, scrimDate());
+  if(!cls.league) return false;
+  const act=await uiModal({title:'That is a league match',
+    bodyHtml:`Code <b>${esc(code)}</b> is a ${esc(cls.division||'league')} match. `
+      + `League maps belong in League capture so they get published \u2014 `
+      + `recording it here would keep it private in this browser only.`,
+    actions:[{label:'Open League capture', value:'nav'},{label:'Cancel', value:null, ghost:true}]});
+  if(act==='nav') location.href='index.html';
+  return true;
 }
+// Start a map from the panel. The only start path there is: the page has no
+// map controls at all now, so there is nothing to mirror onto and nothing that
+// can disagree about what is running.
+//
+// The code is optional and comes from the panel's own field. Bans are NOT
+// cleared here - they are picked on the pre-map screen, before this runs, and
+// clearing on start is exactly what would eat them.
+async function startMapNamed(name, code){
+  const m=SCRIM_MAPS.find(x=>x.name===name);
+  if(!m){ toast('pick a map','warn'); return; }
+  if(session){ toast('finish the current map first','warn'); return; }
+  await ensureScrim();
+  code=(code||'').trim();
+  if(await refuseIfLeagueCode(code)) return;
+  activeScrimMap={map_name:m.name, map_category:m.cat, code, map_no:activeScrim.map_no||1, queued:false};
+  startScrimSession(scrimPseudoCode());
+  renderBans();
+  snapMsg(m.name+' started — Snapshot each comp');
+  toast('<b>'+esc(m.name)+'</b> started'+(code?' · '+esc(code):'')+' — capture, then Finish + save','ok');
+}
+
+// A sub-map captured in an EARLIER round is spent; the panel dims it so the
+// operator picks the right one by sight. Same rule as index.html.
+function usedSubmaps(snaps, currentRound){
+  const used=new Set();
+  for(const s of (snaps||[])){ if(s&&s.sub&&s.round!==currentRound) used.add(s.sub); }
+  return used;
+}
+
+// How many maps this scrim has actually captured. The panel's "Finish scrim
+// capture" reads it: closing out a scrim that captured nothing leaves an empty
+// record behind and throws away the setup that went into it.
+let SCRIM_MAP_COUNT=0;
 async function renderScrimMaps(){
   const host=document.getElementById('scrimmaplist'); if(!host) return;
-  const qhost=document.getElementById('scrimqueuelist');
-  const qwrap=document.getElementById('scrimqueue');
-  if(!activeScrim){ host.textContent='Pick or create a scrim \u2014 its maps will appear here.'; if(qwrap) qwrap.style.display='none'; return; }
+  if(!activeScrim){ SCRIM_MAP_COUNT=0; host.textContent='Pick or create a scrim — its maps will appear here.'; renderPipControls(); return; }
   const all=await idbScrimMaps();
-  const queue=all.filter(m=>m.scrim_id===activeScrim.id&&m.queued).sort((a,b)=>a.map_no-b.map_no);
   const maps=all.filter(m=>m.scrim_id===activeScrim.id&&!m.queued).sort((a,b)=>b.captured_at.localeCompare(a.captured_at));
-  if(qhost){
-    if(queue.length){
-      qwrap.style.display='block';
-      qhost.innerHTML='';
-      queue.forEach(m=>{
-        const row=document.createElement('div'); row.className='cap';
-        const scoreStr=m.score?` \u00B7 ${m.score.us}-${m.score.them}`:'';
-        const resStr=m.result?(m.result==='win'?' \u00B7 Win':(m.result==='loss'?' \u00B7 Loss':' \u00B7 Draw')):'';
-        row.innerHTML=`<span><b style="color:var(--fg)">${esc(m.map_name||'?')}</b> <span class="status">${esc(m.map_category||'')}${scoreStr}${resStr}</span>`+
-          `${m.code?'<br><span class="status">'+esc(m.code)+'</span>':''}</span>`+
-          `<span class="capbtns"><button class="ghost scout">scout</button><button class="ghost del">delete</button></span>`;
-        row.querySelector('.del').onclick=async()=>{ await idbDelScrimMap(m.id); renderScrimMaps(); };
-        row.querySelector('.scout').onclick=()=>startQueuedMap(m);
-        qhost.appendChild(row);
-      });
-    } else { qwrap.style.display='none'; if(qhost) qhost.innerHTML=''; }
-  }
+  SCRIM_MAP_COUNT=maps.length;
+  renderPipControls();          // the finish-scrim button keys off the count
   if(!maps.length){ host.textContent='No maps captured under this scrim yet.'; return; }
   host.innerHTML='';
   maps.forEach(m=>{
@@ -1188,71 +1888,11 @@ function parseScrimSessionText(text){
     row.score.us=us; row.score.them=them;
     row.result=result==='victory'||result==='win'?'win':(result==='defeat'||result==='loss'?'loss':(result==='draw'?'draw':null)); }
   return Array.from(byCode.values()); }
-async function ocrTextFromImage(file){
-  const w=await ocrWorker(); await w.setParameters({ tessedit_pageseg_mode:'6' });
-  const {data}=await w.recognize(file); let text=data.text||'';
-  // If the first pass found nothing mappable, try sparse-text mode which can pick up
-  // disjoint UI text. If maps were already found, stay with the cleaner reading.
-  if(!bestMapMatch(text)){
-    await w.setParameters({ tessedit_pageseg_mode:'11' });
-    const {data:d11}=await w.recognize(file);
-    const lines6=text.split('\n').map(s=>s.trim()).filter(Boolean);
-    const seen=new Set(lines6);
-    const lines11=(d11.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
-    for(const l of lines11) if(!seen.has(l)) lines6.push(l);
-    text=lines6.join('\n'); }
-  await w.setParameters({ tessedit_pageseg_mode:'7' });
-  return text; }
-async function importSessionFromScreenshot(file){
-  if(!file) return;
-  const team_us=(document.getElementById('scus').value||'').trim();
-  const opponent=(document.getElementById('scopp').value||'').trim();
-  if(!team_us||!opponent){ toast('enter Our team and Opponent first','warn'); return; }
-  const ocrText=await ocrTextFromImage(file);
-  let rows=parseScrimSessionText(ocrText);
-  if(!rows.length){
-    const debug=await uiModal({title:'No map rows recognized', bodyHtml:`<p class="status">Tesseract saw the text below. Edit it so each map line ends with <b>us - them</b> (e.g. <code>Ilios 3 - 2</code>), then click Parse.</p><textarea id="rawocr" rows="10" style="width:100%;background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px;font:13px/1.45 monospace">${esc(ocrText)}</textarea>`, collect:true, escapeValue:null,
-      actions:[{label:'Cancel',value:null,ghost:true},{label:'Parse',value:true}]});
-    if(!debug||!debug.value) return;
-    rows=parseScrimSessionText(debug.fields.rawocr||'');
-    if(!rows.length){ toast('still no map rows found after editing','warn'); return; }
-  }
-  const bodyHtml=`<div class="status" style="margin-bottom:10px">Found ${rows.length} map row${rows.length===1?'':'s'}.</div>`+rows.map((r,i)=>`
-    <div class="row" style="align-items:flex-start;margin-bottom:8px">
-      <label class="f">Map<input type="text" id="map_${i}" value="${esc(r.map_name)}"></label>
-      <label class="f">Code<input type="text" id="code_${i}" value="${esc(r.code||'')}"></label>
-      <label class="f">Us<input type="number" id="us_${i}" value="${r.score.us}" style="width:60px"></label>
-      <label class="f">Them<input type="number" id="them_${i}" value="${r.score.them}" style="width:60px"></label>
-      <label class="f">Result<select id="res_${i}"><option value=""></option><option value="win"${r.result==='win'?' selected':''}>Win</option><option value="loss"${r.result==='loss'?' selected':''}>Loss</option><option value="draw"${r.result==='draw'?' selected':''}>Draw</option></select></label>
-    </div>`).join('')+`<details style="margin-top:12px"><summary class="cardsum">Debug OCR text</summary><textarea rows="6" readonly style="width:100%;margin-top:8px;background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px;font:12px/1.45 monospace">${esc(ocrText)}</textarea></details>`;
-  const review=await uiModal({title:'Review imported session', bodyHtml, collect:true, escapeValue:null,
-    actions:[{label:'Cancel',value:null,ghost:true},{label:'Import',value:true}]});
-  if(!review||!review.value) return;
-  rows.forEach((r,i)=>{
-    const editedMap=review.fields[`map_${i}`]||r.map_name;
-    const map=SCRIM_MAPS.find(m=>m.name.toLowerCase()===(editedMap||'').trim().toLowerCase())||bestMapMatch(editedMap);
-    r.map_name=map?map.name:editedMap; r.map_category=map?map.cat:r.map_category;
-    r.code=(review.fields[`code_${i}`]||r.code||'').toUpperCase();
-    r.score.us=+review.fields[`us_${i}`] || r.score.us; r.score.them=+review.fields[`them_${i}`] || r.score.them;
-    r.result=review.fields[`res_${i}`] || r.result; });
-  if(!activeScrim) activeScrim={id:'scrim-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), created_at:new Date().toISOString(), map_no:1};
-  Object.assign(activeScrim,{team_us:team_us||'us', opponent:opponent||'opponent',
-    date:document.getElementById('scdate').value, notes:(document.getElementById('scnotes').value||'').trim(),
-    updated_at:new Date().toISOString()});
-  await idbPutScrim(activeScrim); localStorage.setItem('owdb_cap_scrim', activeScrim.id);
-  const startNo=activeScrim.map_no||1;
-  for(let i=0;i<rows.length;i++){
-    const r=rows[i]; const mapNo=startNo+i;
-    await idbPutScrimMap({ id:activeScrim.id+':'+mapNo, scrim_id:activeScrim.id, map_no:mapNo,
-      code:r.code||null, map_name:r.map_name, map_category:r.map_category, map_guid:null,
-      side_a_team:activeScrim.team_us, side_b_team:activeScrim.opponent,
-      winner_side:null, score:r.score, result:r.result,
-      profile:null, captured_at:null, bans:[], observations:[], crops:null, scoreboard:null,
-      scrim:true, queued:true }); }
-  activeScrim.map_no=startNo+rows.length; await idbPutScrim(activeScrim);
-  await renderScrimPanel();
-  toast('imported '+rows.length+' maps \u2014 click Scout on the first one','ok');
-}
+// The screenshot importer's UI is gone with the rest of the page's map
+// controls - importing a whole replay history is not something done while
+// watching Overwatch. parseScrimSessionText() and bestMapMatch() above are
+// deliberately KEPT: the replay-code OCR reads the same replay-history text
+// off the screen, and would otherwise be rebuilt from nothing.
 
 // ---------- pop-out overlay ----------
 // Mechanism now lives in engine/overlay.js (shared with index.html). This
@@ -1260,14 +1900,27 @@ async function importSessionFromScreenshot(file){
 // re-detect button, no sub-map dimming, no auto-fetch checkbox, Finish is
 // inline instead of a dedicated row) so they're passed in as ctx data, not
 // merged - see that module's header for why.
-const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
+// Sized to match index.html now that this panel carries the same rows plus a
+// next-map picker; the old 340x460 clipped the finish row once a Control map
+// added its sub-map buttons.
+const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
   labels:{off:'⇱ Floating overlay', on:'⇱ Overlay open'},
   toasts:{noDPIP:'Floating overlay needs Chrome/Edge 116+ (Document Picture-in-Picture).',
     autoPop:'Floating overlay opens on your next click or keypress — capture without alt-tab'},
   bodyStyle:c=>`margin:0;background:${c.bg};color:${c.fg};font:13px system-ui,sans-serif`,
   panelCss:c=>
     `#pinfo{padding:6px 10px 1px;color:${c.muted};font-size:11px}`+
+    `#pinfo .pmap{color:${c.fg};font-size:12.5px;font-weight:650}`+
+    `#pinfo .pteams{font-size:11.5px;margin-top:1px}`+
+    `#pinfo .pteams .tl{color:#5a9bd8;font-weight:650}#pinfo .pteams .tr{color:#e9694f;font-weight:650}`+
+    `#pinfo .pteams .q{color:${c.bad}}`+
     `#pmsg{padding:0 10px;min-height:15px;font-size:11.5px}`+
+    // Spent sub-map (captured in an earlier round) — dimmed so it is eliminated
+    // by sight, still clickable so a mis-pick stays fixable. Same as index.html.
+    `button.used{opacity:.4;text-decoration:line-through}`+
+    `select{padding:5px 6px;border:1px solid ${c.line2};background:${c.surface2};color:${c.fg};border-radius:6px;font-size:12px;max-width:130px}`+
+    `input.pcode{padding:5px 6px;border:1px solid ${c.line2};background:${c.surface2};`+
+      `color:${c.fg};border-radius:6px;font-size:12px;width:104px;text-transform:uppercase}`+
     `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
     `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
     `.prow.warn .lbl{color:${c.bad}}`+
@@ -1277,28 +1930,146 @@ const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
     `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
+    // The ban grid: the in-game hero select, shrunk to a panel. Tiles are a
+    // FIXED 44px, never fractional - the panel is resizable, and columns that
+    // stretch with it turned the portraits into billboards. Fixed tiles reflow
+    // into more columns instead, which is what makes the grid scannable.
+    //
+    // Same rules as the page's <style> block, in the panel's palette. Kept in
+    // step by tests/test_capture_scrim.py, which compares the two selector sets.
+    // The SIZES differ on purpose and that check allows it: this panel sits on
+    // top of the game and is read at a glance, so it runs denser than the page
+    // card, which has a whole browser window to spend.
+    `.bangrp{width:100%;margin-top:6px}`+
+    `.banrole{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;`+
+      `letter-spacing:.06em;color:${c.muted};font-weight:700}`+
+    `.bangrid{display:grid;grid-template-columns:repeat(auto-fill,44px);gap:5px;justify-content:start}`+
+    `.banbtn{padding:0;width:44px;border:1px solid ${c.line2};background:${c.surface2};`+
+      `border-radius:6px;overflow:hidden;cursor:pointer;display:block;color:${c.muted}}`+
+    `.banbtn:hover{border-color:${c.accent};color:${c.fg}}`+
+    `.banbtn .hp{width:44px;height:44px;margin:0;order:0;border-radius:0;display:block;object-fit:cover}`+
+    // Stands in for a portrait hero_icons.json has not caught up with, so the
+    // tile keeps its shape rather than collapsing to its name.
+    `.banph{display:block;width:44px;height:44px;background:${c.line}}`+
+    // Portraits alone are recognisable for the heroes you play and guesswork
+    // for the rest - and a ban is entered under time pressure, mid-draft. Two
+    // short lines, because "Wreckin..." is not a name.
+    `.banname{display:flex;align-items:center;justify-content:center;height:19px;padding:0 2px;`+
+      `font-size:8px;line-height:1.1;text-align:center;overflow:hidden;color:inherit}`+
+    // A banned hero reads as struck out of the pool, not merely selected -
+    // same visual language as the spent sub-maps above.
+    `.banbtn.banned{border-color:${c.bad};color:${c.bad}}`+
+    `.banbtn.banned .hp,.banbtn.banned .banph{opacity:.3;filter:grayscale(1)}`+
     `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
-  middleHtml:'<div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-atk"></div>',
-  finishHtml:'',
+  // Every row id in `controls` must exist here: renderPipControls() looks each
+  // one up in the panel document and silently skips the ones it cannot find.
+  middleHtml:'<div id="prow-next"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-bans"></div><div id="prow-atk"></div>',
+  finishHtml:'<div id="prow-endscrim"></div><div id="prow-finish"></div>',
+  // Which team is on which side is the one thing this panel exists to tell the
+  // operator, and it was the one thing it did not say. Named columns (below)
+  // plus this line, matching index.html.
+  slotLabels:()=>{ if(!session) return {left:'Left', right:'Right'};
+    const {leftName,rightName}=sideNames(); return {left:leftName, right:rightName}; },
   tick:el=>{ const c=selectedCode();
-    el.textContent=session?`${c?c.code:''} · R${session.round} · ${session.snaps.length} snaps`:''; },
+    // What to DO, not what is absent. This screen is the whole pre-map step:
+    // the map, and the bans if the scrim uses them.
+    if(!session){ el.innerHTML='<div class="pmap">Select the map'+(usesBans()?', and any bans':'')+' ▾</div>'; return; }
+    const {leftName,rightName}=sideNames();
+    const unsure=!session.sideResolved;
+    el.innerHTML=`<div>${c&&c.code&&c.code!=='SCRIM'?esc(c.code)+' · ':''}R${session.round} · ${session.snaps.length} snaps</div>`+
+      `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
+      `<div class="pteams${unsure?' unsure':''}"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span>`+
+      `${unsure?' <span class="q">— unconfirmed</span>':''}</div>`; },
   controls:[
+    // Next map, entered from the panel. A scrim is a series of maps, and
+    // having to alt-tab back to the page between every one of them was the
+    // single most jarring thing about the flow: the panel is where the
+    // operator already is, so the whole loop (pick map -> capture -> finish ->
+    // pick next map) now closes here. Only shown when no map is running.
+    {id:'prow-next', render:(row,d,mk)=>{
+      row.innerHTML='';
+      if(session){ row.className='prow'; return; }
+      row.className='prow';
+      const l=d.createElement('span'); l.className='lbl'; l.textContent='Next map'; row.appendChild(l);
+      const mode=d.createElement('select'), map=d.createElement('select');
+      const modes=[...new Set(SCRIM_MAPS.map(m=>m.cat))];
+      mode.innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+      const fillMaps=()=>{ map.innerHTML=SCRIM_MAPS.filter(m=>m.cat===mode.value)
+        .map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''); };
+      // Remembered across renders so the panel reopens on whatever was last in
+      // mind rather than resetting to Control. It used to read this off the
+      // main page's dropdown, which no longer exists.
+      mode.value=LAST_MODE||modes[0]; fillMaps();
+      mode.onchange=()=>{ LAST_MODE=mode.value; fillMaps(); };
+      row.appendChild(mode); row.appendChild(map);
+      // The replay code, optional, and the only place one can be entered now
+      // that the page's field is gone. Left as free text rather than dropped
+      // entirely: without it every map is saved with no way back to the replay
+      // until the code-OCR work reads it off the screen.
+      const code=d.createElement('input');
+      code.type='text'; code.placeholder='code (optional)'; code.className='pcode';
+      code.value=LAST_CODE||'';
+      code.oninput=()=>{ LAST_CODE=code.value; };
+      row.appendChild(code);
+      // Read it off the screen rather than typing six random characters. The
+      // result lands in the field above where the operator can see it BEFORE
+      // pressing Start - which is the only check there is on this page, since
+      // a scrim has no feed to validate against and a clipped glyph can yield
+      // a well-formed wrong code.
+      mk(row,'⌘ Read code',async()=>{
+        const got=await readReplayCode();
+        if(got){ code.value=got; LAST_CODE=got; snapMsg('read '+got); }
+        else snapMsg(esc(codeReadProblem()), true);
+      },'');
+      mk(row,'▶ Start',()=>{ const c=code.value; LAST_CODE=''; startMapNamed(map.value, c); },'go');
+    }},
     {id:'prow-main', render:(main,d,mk)=>{
       main.className='prow'; main.innerHTML='';
+      if(!session) return;                       // nothing to press without a live map
       mk(main,'◉ Snapshot',()=>snapshot(false),'go');
-      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo); mk(main,'✓ Finish',()=>finishMap(),'fin');
+      mk(main,'Round ▸',nextRound); mk(main,'↶ Undo',undo);
+      const c=selectedCode();
+      if(c&&c.code&&c.code!=='SCRIM'){
+        mk(main,'⧉ Copy code',()=>{ try{navigator.clipboard.writeText(c.code);}catch(e){} snapMsg('copied '+c.code); });
+      }
     }},
+    // Side row — the no-alt-tab escape hatch when the read gets it backwards.
+    // Naming the swap target ("⇄ Winston's left") would be ambiguous, so the
+    // team names live in the info line and the column headers instead.
     {id:'prow-side', render:(side,d,mk)=>{
-      side.className='prow'+(session&&!session.sideResolved?' warn':''); side.innerHTML='';
-      const l=d.createElement('span'); l.className='lbl'; l.textContent=session&&!session.sideResolved?'Sides unconfirmed':'Sides'; side.appendChild(l);
+      side.innerHTML='';
+      if(!session){ side.className='prow'; return; }
+      side.className='prow'+(session.sideResolved?'':' warn');
+      if(!session.sideResolved){ const l=d.createElement('span'); l.className='lbl'; l.textContent='Sides unconfirmed'; side.appendChild(l); }
       mk(side,'⇄ Swap L/R',swapSides);
+      mk(side,'⟳ Re-detect',()=>{ if(session) session.sideResolved=false; ensureSideResolved(); });
     }},
     {id:'prow-sub', render:(sub,d,mk)=>{
       sub.innerHTML='';
       if(session&&session.submaps.length){ sub.className='prow'+(session.sub?'':' warn');
         const l=d.createElement('span'); l.className='lbl'; l.textContent=session.sub?'Sub-map':'Sub-map — pick one ▸'; sub.appendChild(l);
-        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':'')); }
+        const spent=usedSubmaps(session.snaps, session.round);
+        session.submaps.forEach(s=>mk(sub,s,()=>pickSub(s), session.sub===s?'on':(spent.has(s)?'used':''))); }
       else sub.className='prow';
+    }},
+    // Hero bans, entered from the panel. Bans are a per-MAP fact recorded while
+    // the map is running, and the operator is watching the game with the panel
+    // on top - so asking them to alt-tab back to the setup card to record one
+    // is asking them not to record it. Hidden entirely unless this scrim bans,
+    // for the same reason the card's own ban row is: a control for something
+    // the block never does is noise.
+    // The ban picker, on the PRE-MAP screen. Bans are settled during draft -
+    // before the map starts - and the panel is where the operator is, so this
+    // is where the whole map loop closes: pick map, pick bans, Start.
+    //
+    // It is deliberately NOT shown while a map runs. The old dropdown was, and
+    // that was the wrong moment: by then the draft is over and the panel needs
+    // its space for the two team read-outs.
+    {id:'prow-bans', render:(row,d,mk)=>{
+      row.innerHTML=''; row.className='prow';
+      if(!usesBans() || session) return;
+      const l=d.createElement('span'); l.className='lbl'; l.textContent='Bans this map'; row.appendChild(l);
+      renderBanPickerInto(row, d);
     }},
     {id:'prow-atk', render:(atk,d,mk)=>{
       atk.innerHTML='';
@@ -1313,6 +2084,29 @@ const overlay=OWDBOverlay.make({doc:document, width:340, height:460,
           b.onclick=()=>setAttacker(side); atk.appendChild(b); };
         mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
       else atk.className='prow';
+    }},
+    // Closing out the scrim, offered ONLY between maps. During a map the one
+    // thing to press is "Finish + save this map"; after it, the operator has a
+    // real choice - another map, or done - and this is where that choice
+    // belongs. Not being pressable mid-map is the guard: there is nothing to
+    // refuse and no dialog to write, because the button is simply not there.
+    //
+    // "Close capture", not "close the scrim": the scrim record stays fully
+    // editable and can be reopened from the scrim picker. This ends the
+    // CAPTURE session, nothing more.
+    {id:'prow-endscrim', render:(row,d,mk)=>{
+      row.className='prow'; row.innerHTML='';
+      // ...and not until something has actually been captured. Closing out an
+      // empty scrim leaves a record with nothing in it and throws away the
+      // setup that went into it.
+      if(session || !activeScrim || !SCRIM_MAP_COUNT) return;
+      mk(row,'■ Finish scrim capture',()=>endScrimCapture(),'');
+    }},
+    // Finish pinned to the bottom, as on index.html: it is the one commit
+    // action, so it is deliberately away from the buttons pressed every round.
+    {id:'prow-finish', render:(fin,d,mk)=>{
+      fin.className='prow'; fin.innerHTML='';
+      if(session) mk(fin,'✓ Finish + save this map',()=>finishMap(),'fin go');
     }},
   ],
 });
@@ -1378,22 +2172,20 @@ document.getElementById('tourNext').onclick=tourNext;
 setInterval(tourTick, 1500);   // advance the tour as each action completes
 document.getElementById('scsave').onclick=saveScrim;
 document.getElementById('scrimpick').onchange=onScrimPick;
-document.getElementById('scstart').onclick=startScrimMap;
 document.getElementById('detectsides').onclick=async()=>{
   if(!session){ snapMsg('start a map first',true); return; }
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ snapMsg('share your screen and calibrate first',true); return; }
   session.sideResolved=false; await ensureSideResolved(); };
+document.getElementById('scbans').onchange=async()=>{
+  if(activeScrim){ activeScrim.uses_bans=document.getElementById('scbans').checked;
+    await idbPutScrim(activeScrim); }
+  renderBans();
+};
+document.getElementById('oppwrong').onclick=onOpponentWrong;
+document.getElementById('oppname').onclick=onOpponentName;
 document.getElementById('screxport').onclick=exportScrims;
 document.getElementById('scimportbtn').onclick=()=>document.getElementById('scimport').click();
 document.getElementById('scimport').onchange=e=>{ const f=e.target.files[0]; if(f) importScrims(f); e.target.value=''; };
-document.getElementById('scrimpscrbtn').onclick=()=>document.getElementById('scrimpscr').click();
-document.getElementById('scrimpscr').onchange=e=>{ const f=e.target.files[0]; if(f) importSessionFromScreenshot(f); e.target.value=''; };
-document.addEventListener('paste', e=>{
-  const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
-  for(const item of items){ if(item.type.startsWith('image/')){ const f=item.getAsFile(); if(f){ e.preventDefault(); importSessionFromScreenshot(f); } break; } }
-});
-
-buildScrimMapOptions();
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owdb_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owdb_howto_closed', ht.open?'0':'1')); })();
 // Palette picker — shares owdb.palette with the dashboard (same origin).

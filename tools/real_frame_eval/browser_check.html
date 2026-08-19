@@ -42,15 +42,17 @@ function selectedCode() { return null; }
 function clearCalPreview() {} function drawOverlay() {} function updateBtns() {}
 function renderCalPreview() {} function setStageHint() {}
 
+// Two sets, and the difference matters. The 2026-07-15 frames are replay/
+// spectator captures whose HUD geometry does NOT match a live share (see the
+// AUTO_STRIPS note in README.md). The 2026-08-18 ones are real live captures
+// from the operator's own machine, title bar and all - those are the ones to
+// trust for anything about placement. Both are gitignored, so a fresh clone
+// has neither.
 const FRAMES = [
-  '/screenshots/Screenshot 2026-07-15 200028.png',
+  '/screenshots/Screenshot 2026-08-18 234927.png',
+  '/screenshots/Screenshot 2026-08-18 234953.png',
+  '/screenshots/Screenshot 2026-08-18 235003.png',
   '/screenshots/Screenshot 2026-07-15 231525.png',
-  '/screenshots/Screenshot 2026-07-15 231549.png',
-  '/screenshots/Screenshot 2026-07-15 231604.png',
-  '/screenshots/Screenshot 2026-07-15 231629.png',
-  '/screenshots/Screenshot 2026-07-15 231639.png',
-  '/screenshots/Screenshot 2026-07-15 231647.png',
-  '/screenshots/Screenshot 2026-07-15 231657.png',
   '/screenshots/image.png',
 ];
 

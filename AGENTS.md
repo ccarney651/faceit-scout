@@ -26,7 +26,7 @@ connect.** Read it before deep work. Fast paths:
 | Ingest and the three data hazards | `ARCHITECTURE.md` §3 |
 | How `docs/index.html` is built | `ARCHITECTURE.md` §4 |
 | The capture pipeline | `ARCHITECTURE.md` §5-6 |
-| Scrims (currently paused) | `ARCHITECTURE.md` §7 |
+| Scrims | `ARCHITECTURE.md` §7 |
 | CI and the Cloudflare Worker | `ARCHITECTURE.md` §8 |
 | File formats crossing a boundary | `ARCHITECTURE.md` §9 |
 | Code wipes and season cutover | `ARCHITECTURE.md` §10 |
@@ -117,6 +117,15 @@ canonical and this copy is the bug.
 - **The capture pages' Content-Security-Policy lives in a `<meta>` tag**, so
   `curl -I` shows nothing. It has silently broken browser APIs before — check it
   first when something fails quietly in `docs/capture/`.
+- **pytest cannot see through a real browser.** It checks syntax and shape, not
+  behaviour against a live DOM, IndexedDB or CSP — a gap that has hidden live
+  bugs more than once. `tools/verify_capture_browser.js` closes most of it
+  (serve `docs/`, `npm install playwright-core`, then run it). Everything left
+  after that needs a human with Overwatch open: screen share, calibration,
+  portrait recognition, and the overlay over the game.
+- **Both capture pages must open IndexedDB with the same store list**
+  (`ALL_STORES` in `docs/capture/engine/idb.js`). Declaring only the stores a
+  page uses looks right and breaks the other page — see `ARCHITECTURE.md` §7.
 - **The capture pages share an engine under `docs/capture/engine/`.** A fix to
   calibration, hero recognition, the overlay or name matching belongs in the
   module, not in a page. The snapshot/review/finish cluster is still forked
@@ -172,20 +181,43 @@ canonical and this copy is the bug.
    watch where new scouts stall and remove the next friction. Remaining P2
    items: NA Advanced seeding (one line in `matches.txt`), and
    `--external-data` page splitting only if page weight grows.
+
    Shipped WITHOUT scrim mode, deliberately: the release branched at the last
    commit of the shared-engine extraction (scrim mode phase 0), so the engine
    and the attribution work went live while everything scrim-facing stayed on
    `scrim-mode`. That seam is reusable — phase 0 is a pure refactor plus fixes,
    and nothing above it is.
 
-2. **Ship scrim mode.** Scrim capture is currently **switched off in
-   production** — `docs/capture/scrim.html` renders an unconditional
-   `#scrimpaused` overlay that no script removes (commit `f2881cf`). Un-pausing
-   it means: graduating the four WIP-badged features (auto side-detection, the
-   scoreboard OCR read, the score-box read, screenshot import), bringing scrim
-   analytics to parity with league scouting, and **implementing the league-code
-   block that the page's help text already advertises but the code does not do**
-   — see `ARCHITECTURE.md` §7.
+2. **Scrim mode, phases 2–6.** Mind the split between what is BUILT and what is
+   IN PRODUCTION, because they differ:
+
+   - **Phase 0** (shared capture engine extraction) is built *and shipped* —
+     merged to `main` on 2026-08-18 with the player-attribution work.
+   - **Phase 1** (un-pause, session scaffold, league-code block, wipe-date
+     check, manual add) is built on `scrim-mode` and **not shipped**. In
+     production `docs/capture/scrim.html` still renders the unconditional
+     `#scrimpaused` overlay that no script removes (commit `f2881cf`), so
+     scrims remain switched off for everyone but this branch.
+   - Also built here, unshipped: phase 2a (opponent identification, confirmed
+     working in the field 2026-08-19) and phase 4's analysis half (the scrims
+     viewer at parity with league Scout).
+   - Also built here, unshipped: the **panel-first capture workflow** — the
+     page no longer starts maps, takes bans or imports sessions; everything
+     done during a scrim happens in the pop-out panel. And the **replay-code
+     reader** (`engine/replaycode.js`), which is the one piece that touches
+     `docs/capture/index.html` too, so it will ship with whatever merges next.
+
+   What remains, per `specs/2026-08-12-scrim-mode-design.md`: the rest of
+   opponent identification and roster search (2); the stats read plus a
+   workshop hero-glyph reference set (3); the viewer's Players tab (4); sync
+   and sharing (5); auto map detection (6). See `ARCHITECTURE.md` §7.
+
+   **Auto map detection (6) is now cheaper than it was**: the code reader can
+   already tell when the replay on screen is not the one being captured. It was
+   deliberately left on-demand rather than polling — see
+   `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would
+   cost and why it was declined.
+
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.
 4. **Statistical capture recommendations** — **delivered**. Iterate: the

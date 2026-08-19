@@ -61,6 +61,14 @@ crops/
 # opencode agent workspace (its own plugins + node_modules)
 .opencode/
 
+# playwright-core for tools/verify_capture_browser.js. Deliberately NOT a repo
+# dependency - it is installed ad hoc to run the browser harness and must never
+# be committed (a `git add -A` swept it in once).
+/node_modules/
+
+# Agent worktrees are their own git repositories; committing one embeds a repo.
+.claude/worktrees/
+
 # OverPy toolchain for the scrim workshop code (tools/scrim_code/)
 tools/scrim_code/node_modules/
 # Generated paste-ready workshop text (rebuilt via `npm run build`)

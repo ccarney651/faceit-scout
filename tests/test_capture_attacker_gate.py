@@ -46,7 +46,7 @@ def _run(body: str) -> object:
 # --- nextAttackerState -------------------------------------------------
 
 def test_non_phased_map_never_gates() -> None:
-    """Control/Flashpoint/Push/Clash have no attacker concept at all."""
+    """Control/Flashpoint/Push have no attacker concept at all."""
     got = _run("return nextAttackerState(false, 'a', 5);")
     assert got == {"attacker": None, "confirmed": True}
 

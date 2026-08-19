@@ -73,6 +73,29 @@ Shipped and verified live since the 2026-08-01 audit (all six carry tests; the
 
 ### P1 — Known gaps (FEATURES.md §5)
 
+- **"Teach it a miss" does not work — root cause still unknown.** Reported by
+  the operator on 2026-08-13 and re-confirmed in-game on 2026-08-14 *after* a
+  fix that turned out to be incomplete. Deprioritised by the operator ("I don't
+  care about hero correction"), so this is a record, not a queued task.
+
+  **What was fixed and is not the cause:** `#refpanel` sits inside
+  `<details id="herocard">`, which starts collapsed, and `fixReads()` populated
+  it without opening the section — so the button looked dead. Both pages now
+  open it. That was a genuine bug and it is gone, but it was not the operator's
+  symptom.
+
+  **What is verified working**, so the search can skip it: `learnCrop()` returns
+  a 3072-byte crop, `addRef()` stores the record in IndexedDB, the "N learned"
+  counter increments, and the panel renders ten hero dropdowns. All checked in a
+  real browser.
+
+  **So the fault is downstream of storing a ref** — most likely that a learned
+  template does not actually beat the built-in one on the next read. Start at
+  `bestMatch()`/`matchCrop()` in `docs/capture/engine/refs.js` and at how
+  `LOCAL_REFS`/`REFS` are ordered and scored, not at the UI. Note this cannot be
+  reproduced headlessly: a synthetic frame teaches nothing meaningful, so it
+  needs a live frame and the operator.
+
 - **Map-name verification is stubbed.** The OCR hook returns `None`, so map
   mismatch reads "not checked". Open question: is the map name reliably on the
   observer HUD at all? If not, close as impossible rather than fake it. Not a

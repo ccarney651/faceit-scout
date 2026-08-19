@@ -660,6 +660,8 @@ logic is owned once:
 | `engine/frames.js` | Screen share, frame grab, greyscale canvases, HUD name-row location and name crops; `ctx.onStop` is the page-specific teardown hook |
 | `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
 | `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
+| `engine/replaycode.js` | The replay code on the HUD banner: its Crockford Base32 alphabet, where it sits relative to the calibrated portrait strip, and whether a read is a code at all |
+| `engine/heroes.js` | Which role each hero plays, and `byRole()` for grouping a catalogue by it. The ONE copy of the role table — `docs/scrims.html` imports it too, which is that page's only external script |
 | `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
 
 **The module contract is a UMD IIFE plus `make(ctx)` for anything stateful.**
@@ -705,7 +707,7 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 | --- | --- |
 | `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, each with a co-located `*.test.js` |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`, `heroes.js`, `replaycode.js`. `names.js`, `session.js`, `opponents.js`, `frames.js`, `heroes.js` and `replaycode.js` have a co-located `*.test.js`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
 | `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |
@@ -740,7 +742,7 @@ silently blocked every same-origin script.** `style-src`, `img-src`, and
 src="scoreboard.js">` never loaded in production — `window.Scoreboard` was
 undefined on both pages the whole time, with no console error pointing at the
 CSP. Adding `'self'` was a prerequisite for the engine extraction below, since
-every `engine/*.js` file is loaded the same same-origin way.
+every `engine/*.js` file is loaded the same-origin way.
 
 **The page is not an artifact and may use a CDN.** Unlike `docs/index.html`,
 which must stay self-contained, this page links `docs/theme.css` directly and
@@ -770,14 +772,6 @@ on league capture.
 
 The private, browser-local side channel for scrim data, and the separate page that reads it.
 
-> **Current state: scrim capture is switched off in production.**
-> `docs/capture/scrim.html` renders an unconditional full-screen overlay
-> (`#scrimpaused`, `z-index: 999999`) reading "Scrims are paused", and no script
-> ever removes it. This was deliberate — commit `f2881cf`, "Capture:
-> control-panel-only flow, pause scrims, drop scoreboard capture". Everything
-> below describes machinery that is built and reachable in the code but not
-> currently usable by anyone. Un-pausing it is the roadmap's next major item.
-
 ### What it does
 
 Scrims are private practice matches, and their compositions must never become
@@ -787,10 +781,28 @@ is readable only by the person who recorded it.
 
 ### How it works
 
-**Storage is one IndexedDB database, `owscout-capture`, at schema version 4.**
-Both capture pages open it with an explicit version and create the stores they
-need: `docs/capture/index.html` owns `maps`, `refs`, and `heroes`;
-`docs/capture/scrim.html` adds `scrims` and `scrim_maps`.
+**Storage is one IndexedDB database, `owscout-capture`, at schema version 5.**
+Both capture pages open it with an explicit version and **both create every
+store**, from the single `ALL_STORES` map in `docs/capture/engine/idb.js`:
+`maps` (league captures), `refs` (learned hero portraits), `heroes` (custom
+heroes), `scrims` and `scrim_maps`.
+
+**Each page must not declare only the stores it uses**, however natural that
+looks. `onupgradeneeded` fires once per version, so whichever page opens the
+database first would create its own stores and fix the version, leaving the
+other page's stores uncreated and every transaction on them throwing
+*"One of the specified object stores was not found"*. It is symmetric: league
+page first kills scrim capture, scrim page first kills league capture. The bug
+predates the engine extraction — `main` at `7e7bde2` fails identically — and was
+survivable only while scrim capture was paused, since nobody reached the scrim
+stores. Un-pausing scrims made the normal path (a new contributor opening the
+league page first) a broken one.
+
+Version 5 exists to heal databases created before that fix: a browser that only
+ever opened one capture page sits at v4 with half the stores, and without a
+version change `onupgradeneeded` would never fire again to add the rest. The
+upgrade only ever **adds** stores, so existing records — learned hero refs above
+all, which are hand-taught and irreplaceable — are untouched.
 
 **`docs/scrims.html` is the one scrims viewer**, reached from the League/Scrims
 toggle in the top bar. It works because `docs/capture/` and `docs/` are the same
@@ -800,14 +812,19 @@ triggering an upgrade.
 
 **Scrim records store hero GUIDs, not names.** Hero names and roles are not part
 of the league data payload, so `docs/scrims.html` resolves GUIDs by fetching
-`docs/capture/refs.json` for names, then inferring each hero's role from its own
-small `ROLE_MAP` table, because `refs.json` carries names only.
+`docs/capture/refs.json` for names, then inferring each hero's role from
+`ROLE_MAP`, because `refs.json` carries names only. That table now lives in
+`docs/capture/engine/heroes.js` and is imported by both this page and the
+capture page's ban picker — it is the page's only external script, and it is
+there so a new hero is registered in ONE place rather than two.
+`tests/test_scrims_viewer.py` fails if it disagrees with
+`faceit_sync/subroles.py`.
 
 ### Files
 
 | File | Responsibility |
 | --- | --- |
-| `docs/capture/scrim.html` | Scrim capture — currently behind the pause overlay |
+| `docs/capture/scrim.html` | Scrim capture |
 | `docs/scrims.html` | The one scrims viewer; read-only consumer of the IndexedDB |
 | `tools/scrim_code/` | OverPy source for the in-game Workshop scrim helper |
 | `tests/test_capture_scrim.py` | Session-text parsing, map filtering, side detection, script validity |
@@ -833,17 +850,39 @@ unused `HERO_BY_GUID` map plus the `guid` payload field it read, and both were
 removed. `docs/scrims.html` is the single viewer, and the private side stays
 separate.
 
-**The advertised league-code block is not implemented.** The page's own help
-text says "league codes are blocked", and the replay-code field at `#scrimcode`
-is described as optional and private — but there is no validation anywhere in
-`docs/capture/scrim.html` that checks an entered code against the known league
-codes in `docs/capture/data.json`. The guarantee is currently moot, since the
-page is paused, but **it must be built before scrims are un-paused**, or a league
-map recorded as a scrim would silently stay private instead of being published.
+**The league-code block lives in `docs/capture/engine/session.js`.**
+`buildCodeIndex()` turns `docs/capture/data.json`'s `codes` array into a
+lookup keyed by normalized code; `classifyCode()` checks an entered code
+against that index and against `data.json`'s `code_wipe_date` to say whether
+it's a live league code and, if so, which division. `docs/capture/scrim.html`
+calls this at every point a code can start a scrim capture
+(`refuseIfLeagueCode()`), and on a match shows a modal naming the division and
+offering to jump to League capture instead of letting the save proceed. A
+league map's replay code can no longer be recorded as a private scrim.
 
-**Four features on the page carry `WIP` badges** and are not trustworthy yet:
-auto side-detection, the scoreboard OCR read, the score-box read, and
-screenshot-session import.
+**Three features still carry `WIP` badges**: auto side-detection, the scoreboard
+OCR read, and the score-box read. Side detection has since worked end to end in
+the field (2026-08-19, all ten slots), but one confirmed run is not a track
+record and the badge stays until it has several. The other two are scoped to
+phase 3 of `specs/2026-08-12-scrim-mode-design.md`.
+
+**The scrim workflow lives in the pop-out panel, not on the page.** The page is
+setup — share the screen, calibrate, name the scrim — and pressing *Save scrim*
+opens the panel. From there the whole loop closes without an alt-tab: choose the
+map and its optional replay code, note the bans on a role-grouped hero grid,
+capture, *Finish + save*, then either the next map or *Finish scrim capture*
+(offered only between maps, and only once a map has been saved). The page has no
+map, ban or import controls at all; anything it offered during a scrim was a
+control that cost an alt-tab, and its own *Start map* predated the ban picker
+and could begin a map with the draft unrecorded.
+
+**Two functions are deliberately kept without a caller**:
+`parseScrimSessionText()` in `scrim.html` and `buildScaffold()` in
+`engine/session.js`. Both were the screenshot importer's, whose UI was removed
+with the rest of the page's map controls — importing a whole replay history is
+not something done mid-game. They read and league-annotate replay-history text,
+which is exactly what the planned replay-code OCR needs, so they are reserved
+rather than deleted. Their tests still run.
 
 ## 8. Infrastructure and CI
 

@@ -1,0 +1,923 @@
+{
+ "demo": true,
+ "note": "These scrims never happened \u2014 the teams and players are real FACEIT League entrants, the results are invented.",
+ "scrims": [
+  {
+   "id": "demo-s1",
+   "team_us": "Ragnarok",
+   "date": "@@MINUS1@@",
+   "created_at": "@@MINUS1@@T19:00:00Z",
+   "notes": "",
+   "opponent": "FXHND",
+   "opponent_team_id": "866c944c-b9a0-4c27-bc69-11a4a16310a5",
+   "uses_bans": true
+  },
+  {
+   "id": "demo-s2",
+   "team_us": "Ragnarok",
+   "date": "@@MINUS3@@",
+   "created_at": "@@MINUS3@@T19:00:00Z",
+   "notes": "",
+   "opponent": "GoaTricks",
+   "opponent_team_id": "a3a50171-bb27-4c59-b132-74a45ec9d453",
+   "uses_bans": true
+  },
+  {
+   "id": "demo-s3",
+   "team_us": "Ragnarok",
+   "date": "@@MINUS8@@",
+   "created_at": "@@MINUS8@@T19:00:00Z",
+   "notes": "",
+   "opponent_id": "demo-opp-mix",
+   "uses_bans": false
+  },
+  {
+   "id": "demo-s4",
+   "team_us": "Ragnarok",
+   "date": "@@MINUS26@@",
+   "created_at": "@@MINUS26@@T19:00:00Z",
+   "notes": "",
+   "uses_bans": false
+  }
+ ],
+ "scrim_maps": [
+  {
+   "id": "demo-s1:1",
+   "scrim_id": "demo-s1",
+   "map_no": 1,
+   "map_name": "Ilios",
+   "map_category": "Control",
+   "code": null,
+   "score": {
+    "us": 2,
+    "them": 1
+   },
+   "result": "win",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": "Lighthouse",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000200",
+      "0x02E00000000001EC",
+      "0x02E000000000013B",
+      "0x02E000000000031C"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": "Lighthouse",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000042",
+      "0x02E0000000000200",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": "Ruins",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": "Ruins",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000042",
+      "0x02E0000000000200",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": [
+    {
+     "g": "0x02E000000000028D",
+     "n": "Ramattra",
+     "by": "us"
+    },
+    {
+     "g": "0x02E0000000000009",
+     "n": "Winston",
+     "by": "them"
+    }
+   ]
+  },
+  {
+   "id": "demo-s1:2",
+   "scrim_id": "demo-s1",
+   "map_no": 2,
+   "map_name": "King's Row",
+   "map_category": "Hybrid",
+   "code": null,
+   "score": {
+    "us": 3,
+    "them": 2
+   },
+   "result": "win",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000028D",
+      "0x02E0000000000042",
+      "0x02E000000000012E",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000028D",
+      "0x02E0000000000042",
+      "0x02E000000000012E",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": [
+    {
+     "g": "0x02E0000000000200",
+     "n": "Ashe",
+     "by": "us"
+    },
+    {
+     "g": "0x02E0000000000009",
+     "n": "Winston",
+     "by": null
+    }
+   ]
+  },
+  {
+   "id": "demo-s1:3",
+   "scrim_id": "demo-s1",
+   "map_no": 3,
+   "map_name": "Colosseo",
+   "map_category": "Push",
+   "code": null,
+   "score": {
+    "us": 1,
+    "them": 2
+   },
+   "result": "loss",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1400,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1400,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": [
+    {
+     "g": "0x02E000000000028D",
+     "n": "Ramattra",
+     "by": "us"
+    },
+    {
+     "g": "0x02E00000000001EC",
+     "n": "Sojourn",
+     "by": "them"
+    }
+   ]
+  },
+  {
+   "id": "demo-s2:1",
+   "scrim_id": "demo-s2",
+   "map_no": 1,
+   "map_name": "Dorado",
+   "map_category": "Escort",
+   "code": null,
+   "score": {
+    "us": 2,
+    "them": 3
+   },
+   "result": "loss",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1400,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1400,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000042",
+      "0x02E0000000000200",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2400,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2400,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000042",
+      "0x02E0000000000200",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": [
+    {
+     "g": "0x02E000000000028D",
+     "n": "Ramattra",
+     "by": "us"
+    },
+    {
+     "g": "0x02E00000000001EC",
+     "n": "Sojourn",
+     "by": "them"
+    }
+   ]
+  },
+  {
+   "id": "demo-s2:2",
+   "scrim_id": "demo-s2",
+   "map_no": 2,
+   "map_name": "Dorado",
+   "map_category": "Escort",
+   "code": null,
+   "score": {
+    "us": 0,
+    "them": 0
+   },
+   "result": null,
+   "void": true,
+   "observations": [],
+   "scrim": true,
+   "bans": []
+  },
+  {
+   "id": "demo-s2:3",
+   "scrim_id": "demo-s2",
+   "map_no": 3,
+   "map_name": "Suravasa",
+   "map_category": "Flashpoint",
+   "code": null,
+   "score": {
+    "us": 3,
+    "them": 1
+   },
+   "result": "win",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000200",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "0x02E000000000031C"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": [
+    {
+     "g": "0x02E000000000028D",
+     "n": "Ramattra",
+     "by": "us"
+    },
+    {
+     "g": "0x02E00000000001EC",
+     "n": "Sojourn",
+     "by": "them"
+    }
+   ]
+  },
+  {
+   "id": "demo-s2:4",
+   "scrim_id": "demo-s2",
+   "map_no": 4,
+   "map_name": "Busan",
+   "map_category": "Control",
+   "code": null,
+   "score": {
+    "us": 2,
+    "them": 0
+   },
+   "result": "win",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": "Downtown",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": "Downtown",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000028D",
+      "0x02E0000000000042",
+      "0x02E000000000012E",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": "Sanctuary",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": "Sanctuary",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000028D",
+      "0x02E0000000000042",
+      "0x02E000000000012E",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "round_no": 3,
+     "sub_map": "MEKA Base",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "round_no": 3,
+     "sub_map": "MEKA Base",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000029",
+      "0x02E0000000000003",
+      "0x02E0000000000231",
+      "0x02E0000000000365"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": [
+    {
+     "g": "0x02E0000000000200",
+     "n": "Ashe",
+     "by": "us"
+    },
+    {
+     "g": "0x02E0000000000009",
+     "n": "Winston",
+     "by": "them"
+    }
+   ]
+  },
+  {
+   "id": "demo-s3:1",
+   "scrim_id": "demo-s3",
+   "map_no": 1,
+   "map_name": "Antarctic Peninsula",
+   "map_category": "Control",
+   "code": null,
+   "score": {
+    "us": 1,
+    "them": 2
+   },
+   "result": "loss",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": "Icebreaker",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000200",
+      "0x02E00000000001EC",
+      "0x02E000000000013B",
+      "0x02E000000000031C"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": "Icebreaker",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000029",
+      "0x02E0000000000003",
+      "0x02E0000000000231",
+      "0x02E0000000000365"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": "Labs",
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": "Labs",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2400,
+     "round_no": 2,
+     "sub_map": "Labs",
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000042",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2400,
+     "round_no": 2,
+     "sub_map": "Labs",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "round_no": 3,
+     "sub_map": "Sublevel",
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "round_no": 3,
+     "sub_map": "Sublevel",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000013E",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3400,
+     "round_no": 3,
+     "sub_map": "Sublevel",
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3400,
+     "round_no": 3,
+     "sub_map": "Sublevel",
+     "phase": null,
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000065",
+      "0x02E0000000000015",
+      "0x02E0000000000221",
+      "0x02E0000000000195"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": []
+  },
+  {
+   "id": "demo-s3:2",
+   "scrim_id": "demo-s3",
+   "map_no": 2,
+   "map_name": "Circuit Royal",
+   "map_category": "Escort",
+   "code": null,
+   "score": {
+    "us": 3,
+    "them": 3
+   },
+   "result": "draw",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000023B",
+      "0x02E0000000000200",
+      "0x02E00000000001EC",
+      "0x02E000000000013B",
+      "0x02E000000000031C"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000029",
+      "0x02E0000000000003",
+      "0x02E0000000000231",
+      "0x02E0000000000365"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "round_no": 2,
+     "sub_map": null,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000007A",
+      "0x02E0000000000029",
+      "0x02E0000000000003",
+      "0x02E0000000000231",
+      "0x02E0000000000365"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": []
+  },
+  {
+   "id": "demo-s4:1",
+   "scrim_id": "demo-s4",
+   "map_no": 1,
+   "map_name": "Runasapi",
+   "map_category": "Push",
+   "code": null,
+   "score": {
+    "us": 2,
+    "them": 1
+   },
+   "result": "win",
+   "void": false,
+   "observations": [
+    {
+     "side": "a",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000009",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E0000000000079"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "round_no": 1,
+     "sub_map": null,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000028D",
+      "0x02E0000000000042",
+      "0x02E0000000000200",
+      "0x02E000000000013B",
+      "0x02E0000000000221"
+     ]
+    }
+   ],
+   "scrim": true,
+   "bans": []
+  }
+ ],
+ "opponents": [
+  {
+   "id": "demo-opp-mix",
+   "kind": "local_group",
+   "team_id": null,
+   "label": "Korean scrim partner",
+   "roster_names": [
+    "haru",
+    "jinwoo",
+    "minseo",
+    "taeyang",
+    "yuna"
+   ],
+   "first_seen": "2026-07-01T19:00:00Z",
+   "times_played": 4
+  }
+ ]
+}

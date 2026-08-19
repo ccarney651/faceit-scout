@@ -129,7 +129,47 @@
       }
     }
     if (!best) return null;
-    return { y: best[0], h: best[1] - best[0] + 1 };
+    return { y: best[0], h: best[1] - best[0] + 1, t: T };
+  }
+
+  // findNameSpan(rgba, w, h, threshold) -> { x, w } | null
+  //
+  // Where the glyphs are within ONE cell's name band. The cell crop is padded
+  // by 5% of its width on each side, which on a tight HUD reaches into the
+  // NEIGHBOURING name plate and drags its border in - tesseract reads those
+  // bars as `|`, `i`, `§` or `}`, and they are what stopped clean reads
+  // matching a roster. Measured over twelve real frames, live and archived:
+  // padding gives 75/120 exact reads with 57 stray characters, cropping to the
+  // glyph run gives 110/120 with 2, and no frame got worse.
+  //
+  // A run touching the very edge is that border - UNLESS it is wide, because a
+  // name like CHEESEBURGER genuinely fills its cell and must not be clipped.
+  function findNameSpan(rgba, w, h, threshold) {
+    if (!w || !h || !rgba || rgba.length < w * h * 4) return null;
+    var t = threshold || 200, on = new Uint8Array(w), x, y;
+    for (y = 0; y < h; y++) {
+      for (x = 0; x < w; x++) {
+        var i = ((y * w + x) << 2);
+        var g = (0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2]);
+        if (g > t) on[x] = 1;
+      }
+    }
+    var runs = [], st = -1;
+    for (x = 0; x <= w; x++) {
+      if (x < w && on[x]) { if (st < 0) st = x; }
+      else if (st >= 0) { runs.push([st, x]); st = -1; }
+    }
+    var EDGE = 2, WIDE = 6;
+    runs = runs.filter(function (r) {
+      var touches = r[0] <= EDGE || r[1] >= w - EDGE;
+      return !touches || (r[1] - r[0]) > WIDE;
+    });
+    if (!runs.length) return null;
+    var lo = w, hi = 0;
+    runs.forEach(function (r) { if (r[0] < lo) lo = r[0]; if (r[1] > hi) hi = r[1]; });
+    var pad = 4;
+    lo = Math.max(0, lo - pad); hi = Math.min(w, hi + pad);
+    return { x: lo, w: hi - lo };
   }
 
   function make(ctx) {
@@ -198,7 +238,21 @@
       // exact extent.
       var pad = Math.max(2, Math.round(found.h * 0.25));
       var y = Math.max(0, y0 + found.y - pad);
-      return { y: y, h: Math.min(fh - y, found.h + 2 * pad) };
+      return { y: y, h: Math.min(fh - y, found.h + 2 * pad), t: found.t };
+    }
+
+    // Pixels of one cell's name band, for findNameSpan. Sampled at native
+    // resolution from the cell alone - the span is meaningless across cells.
+    function cellNameSpan(frame, cell, sy, sh, t) {
+      var x0 = Math.max(0, Math.round(cell.x)), x1 = Math.min(frame.width, Math.round(cell.x + cell.w));
+      var y0 = Math.max(0, Math.round(sy)), y1 = Math.min(frame.height, Math.round(sy + sh));
+      if (x1 - x0 < 8 || y1 - y0 < 4) return null;
+      var cv = ctx.doc.createElement('canvas');
+      cv.width = x1 - x0; cv.height = y1 - y0;
+      var cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(frame, x0, y0, cv.width, cv.height, 0, 0, cv.width, cv.height);
+      var span = findNameSpan(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height, t);
+      return span ? { x: x0 + span.x, w: span.w } : null;
     }
 
     // Without a row, the name bar is assumed to sit at ~48-90% of each portrait
@@ -214,6 +268,14 @@
       var padX = Math.max(4, Math.round(cell.w * 0.05));
       var sx = Math.max(0, cell.x - padX), sw = cell.w + 2 * padX, sc = 6;
       var sy = row ? row.y : cell.y + cell.h * 0.48, sh = row ? row.h : cell.h * 0.42;
+      // With a row in hand, crop to the GLYPHS rather than to the padded cell:
+      // the pad reaches into the neighbouring plate and its border reads as
+      // stray characters. Falls back to the padded cell when nothing is found,
+      // so an unreadable slot is no worse off than before.
+      if (row) {
+        var span = cellNameSpan(frame, cell, sy, sh, row.t);
+        if (span) { sx = span.x; sw = span.w; }
+      }
       var cv = ctx.doc.createElement('canvas');
       cv.width = Math.max(1, Math.round(sw * sc)); cv.height = Math.max(1, Math.round(sh * sc));
       var cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
@@ -231,6 +293,35 @@
     // letterbox / pillarbox (odd aspect ratios / resolutions), capped at 20%
     // per edge. Does NOT strip a window title bar (it isn't black) - share
     // the whole screen for that.
+    // The replay-code crop: upscale hard, then push contrast, exactly as
+    // nameCanvas does for HUD names. The code sits on a semi-transparent plate
+    // over arbitrary game art - the same problem, and contrast is what solved
+    // it there (15/90 reads to 77/90).
+    //
+    // The contrast level is the CALLER'S, because no single one works. A hard
+    // boost rescued the screenshot frames and destroyed a live one - the plate
+    // is semi-transparent, so what sits behind it decides whether a boost
+    // sharpens the glyphs or saturates them away. readReplayCode tries several
+    // and takes them only when they agree; see there.
+    function codeCanvas(frame, box, contrast) {
+      var sc = 6;
+      contrast = contrast || 1.0;
+      var cv = ctx.doc.createElement('canvas');
+      cv.width = Math.max(1, Math.round(box.w * sc));
+      cv.height = Math.max(1, Math.round(box.h * sc));
+      var cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+      cx.drawImage(frame, box.x, box.y, box.w, box.h, 0, 0, cv.width, cv.height);
+      var im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
+      for (var i = 0; i < d.length; i += 4) {
+        var g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        g = (g - 128) * contrast + 140; g = g < 0 ? 0 : g > 255 ? 255 : g;
+        d[i] = d[i + 1] = d[i + 2] = g;
+      }
+      cx.putImageData(im, 0, 0);
+      return cv;
+    }
+
     function detectContentRect() {
       var W = ctx.video.videoWidth, H = ctx.video.videoHeight;
       if (!W) return { x: 0, y: 0, w: W, h: H };
@@ -280,6 +371,7 @@
       cellGrayPadded: cellGrayPadded,
       nameRow: nameRow,
       nameCanvas: nameCanvas,
+      codeCanvas: codeCanvas,
       detectContentRect: detectContentRect,
       stopCapture: stopCapture,
       togglePreview: togglePreview,
@@ -287,7 +379,7 @@
     };
   }
 
-  var Mod = { make: make, findNameRow: findNameRow };
+  var Mod = { make: make, findNameRow: findNameRow, findNameSpan: findNameSpan };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBFrames = Mod;

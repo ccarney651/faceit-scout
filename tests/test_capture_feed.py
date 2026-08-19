@@ -153,6 +153,50 @@ def test_rosters_are_keyed_by_match_for_included_codes_only(
     assert set(payload["rosters"]) == {c["match_id"] for c in payload["codes"]}
 
 
+def test_team_rosters_cover_every_team_not_just_coded_matches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Scrim opponent identification needs every team, not the coded few.
+
+    `rosters` is keyed by match and only covers post-wipe coded games, which is
+    right for attributing a capture. Identifying a scrim opponent matches ten
+    HUD names against the whole league: on the real database that is 159 teams
+    against about 8 reachable through `rosters`, so a per-match feed would leave
+    almost every opponent unidentifiable.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    # A team whose only match predates the wipe and carries no code: invisible
+    # to `rosters`, and exactly the kind of opponent a scrim runs into.
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO teams VALUES('t3','Charlie')")
+    con.execute("INSERT INTO championships VALUES('c-old','S9 EMEA Master Central - Regular Season')")
+    con.execute("INSERT INTO matches VALUES('mt-old','c-old','2020-01-01T20:00:00Z','t3','t1')")
+    con.execute("INSERT INTO games VALUES('mt-old',1,'m1','Control',NULL)")
+    con.execute("INSERT INTO round_players VALUES('mt-old',1,'t3','p2','Tank')")
+    con.execute("INSERT INTO players VALUES('p2','oldnick','OldGameName')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    tr = payload["team_rosters"]
+    assert "t3" in tr, "a team with no coded game is missing from team_rosters"
+    assert tr["t3"]["name"] == "Charlie"
+    assert [p["game_name"] for p in tr["t3"]["players"]] == ["OldGameName"]
+
+    # And it is genuinely wider than the per-match feed it supplements.
+    reachable_via_rosters = {tid for m in payload["rosters"].values() for tid in m}
+    assert set(tr) > reachable_via_rosters, (
+        "team_rosters is no wider than rosters - the whole point is the teams "
+        "that have no live coded match"
+    )
+
+
 def test_lineups_are_keyed_per_game_and_carry_roles(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -239,3 +283,31 @@ def test_a_missing_faceit_role_is_null_not_invented(
     payload = json.loads(out.read_text(encoding="utf-8"))
     roles = {p["id"]: p["role"] for p in payload["lineups"]["mt-em:1"]["t1"]["players"]}
     assert roles["p1"] is None
+
+
+def test_team_rosters_accumulate_a_squad_across_matches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Subs and stand-ins must accumulate, not be per-match.
+
+    A season's substitutes are precisely the names that still identify a lineup
+    when two players are on smurf accounts, so the roster has to be the union.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO players VALUES('p9','subnick','SubPlayer')")
+    # Same team t1, a different match, a player who appeared only there.
+    con.execute("INSERT INTO round_players VALUES('mt-ne',1,'t1','p9','Damage')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    names = {p["game_name"] for p in payload["team_rosters"]["t1"]["players"]}
+    assert {"GameName#1234", "SubPlayer"} <= names, (
+        f"t1's roster did not accumulate across matches: {names}"
+    )
