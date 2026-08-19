@@ -1312,3 +1312,24 @@ def test_no_code_is_recorded_without_the_operator_seeing_it() -> None:
     assert "readReplayCode" not in src, (
         "starting a map reads a code the operator never saw"
     )
+
+
+def test_the_code_is_read_at_several_geometries_not_just_contrasts() -> None:
+    """The contrast ladder cannot see a crop in the wrong place.
+
+    A shifted crop is shifted identically at every contrast level, so all
+    three passes agree and the read rule accepts on agreement. Measured over
+    twelve real frames, that let 54 well-formed six-character codes through
+    once the calibration strip was off by more than about 2% - codes that
+    belong to no game, attributing a whole map's comps to the wrong match.
+    Reading at several strip geometries and requiring all of them to agree
+    scored zero wrong on the same frames.
+
+    Full numbers: tools/real_frame_eval/README.md.
+    """
+    src = _extract(("async function readReplayCode(", "// ---------- hero bans"))
+    assert "PROBES" in src and "probeStrip(" in src, (
+        "the read no longer varies the geometry - the contrast ladder alone "
+        "cannot catch a mis-placed crop"
+    )
+    assert "answers.length" in src, "a probe that read nothing must not be treated as agreement"

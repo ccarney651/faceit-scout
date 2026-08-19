@@ -94,8 +94,50 @@
     };
   }
 
+  // Reading the same code through several GEOMETRIES, not just several
+  // contrast levels.
+  //
+  // codeBox is fractions of the strip, so the crop is exactly as right as the
+  // strip is - and the strip is not always auto-calibrate's. calMsg tells a
+  // scout to drag the boxes by hand when calibration scores low, and a
+  // non-16:9 scout is pushed down that same path, because AUTO_STRIPS
+  // mis-sizes and the calibration sweep only searches translation.
+  //
+  // Measured (tools/real_frame_eval/README.md): reads stay correct within
+  // about +/-2% of strip error on every axis, and OUTSIDE that they come back
+  // WRONG rather than refusing - 54 well-formed six-character codes belonging
+  // to no game. The contrast ladder cannot see this. A shifted crop is shifted
+  // identically at every contrast level, so all three passes agree, and
+  // agreement is what the read rule accepts on. Contrast catches noise; this
+  // is geometry.
+  //
+  // A second geometry does see it. Each probe moves ONE axis. The first
+  // attempt moved all three at once and failed both ways: it displaced
+  // further than any single axis, refusing 3 of 12 good reads, while its 1%
+  // of strip HEIGHT was about one pixel - too small to disturb a vertically
+  // clipped crop, which let H6R64B through as HARAAR. dy therefore steps
+  // twice as far as dx: a strip is ~7x wider than tall, so equal percentages
+  // are unequal pixels.
+  var PROBES = [
+    { dx: 0, dy: 0, s: 1 },       // the strip as calibrated - the answer, if the rest agree
+    { dx: -0.01 }, { dx: 0.01 },
+    { dy: -0.02 }, { dy: 0.02 },
+  ];
+
+  // Scale about the strip's CENTRE, then shift by fractions of its own size.
+  // Centre-scaling is the honest model of a hand-drag - a scout aims at the
+  // same five portraits and gets the extent a little wrong, nobody pins the
+  // top-left corner and stretches - and it keeps a scale probe from being a
+  // translation probe wearing a different name.
+  function probeStrip(a, p) {
+    var s = (p && p.s) || 1, dx = (p && p.dx) || 0, dy = (p && p.dy) || 0;
+    var cx = a.x + a.w / 2, cy = a.y + a.h / 2, w = a.w * s, h = a.h * s;
+    return { x: cx - w / 2 + dx * a.w, y: cy - h / 2 + dy * a.h, w: w, h: h };
+  }
+
   var Mod = {
     ALPHABET: ALPHABET, LEN: LEN, foldCode: foldCode, codeBox: codeBox,
+    PROBES: PROBES, probeStrip: probeStrip,
     OFFSETS: { DX: DX, DW: DW, DY: DY, DH: DH, PAD: PAD },
   };
 

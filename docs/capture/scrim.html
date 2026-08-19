@@ -1518,21 +1518,45 @@ async function readReplayCode(){
     const w=await ocrWorker();
     const frame=grabFrame();
     await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
-    const seen=[], raws=[];
-    for(const contrast of CODE_CONTRASTS){
-      const cv=codeCanvas(frame, box, contrast);
-      const {data}=await ocrRead(w, cv);
-      const raw=(data&&data.text||'').replace(/\s+/g,'');
-      raws.push(contrast+':'+(raw||'-'));
-      const one=OWDBReplayCode.foldCode(raw);
-      if(one && seen.indexOf(one)===-1) seen.push(one);
-      try{ if(!one) console.log('[owdb] replay-code crop x'+contrast, box, cv.toDataURL()); }catch(e){}
+    // Read the code at several GEOMETRIES as well as several contrasts, and
+    // take it only when every geometry agrees. The contrast ladder alone
+    // cannot catch a crop that is in the wrong place: it is wrong identically
+    // in all three images, so the passes agree on the same wrong code. That
+    // was measured, not supposed - 54 well-formed codes belonging to no game,
+    // once the strip was off by more than ~2%. See engine/replaycode.js
+    // PROBES and tools/real_frame_eval/README.md.
+    const answers=[], raws=[];
+    for(const probe of OWDBReplayCode.PROBES){
+      const pbox=OWDBReplayCode.codeBox(OWDBReplayCode.probeStrip(boxes.a, probe));
+      if(!pbox){ answers.push(null); continue; }
+      const seen=[];
+      for(const contrast of CODE_CONTRASTS){
+        const cv=codeCanvas(frame, pbox, contrast);
+        const {data}=await ocrRead(w, cv);
+        const raw=(data&&data.text||'').replace(/\s+/g,'');
+        raws.push(contrast+':'+(raw||'-'));
+        const one=OWDBReplayCode.foldCode(raw);
+        if(one && seen.indexOf(one)===-1) seen.push(one);
+        try{ if(!one) console.log('[owdb] replay-code crop x'+contrast, pbox, cv.toDataURL()); }catch(e){}
+      }
+      answers.push(seen.length===1 ? seen[0] : null);
     }
     await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
     LAST_CODE_READ.raw=raws.join(' | ');
-    if(seen.length===1) return seen[0];
-    if(seen.length>1){
-      LAST_CODE_READ.why='the passes disagreed ('+seen.join(' vs ')+') — not recording a guess';
+    const agreed=answers.filter(function(a){ return a!==null; });
+    const distinct=agreed.filter(function(a,i){ return agreed.indexOf(a)===i; });
+    if(distinct.length===1 && agreed.length===answers.length) return distinct[0];
+    if(distinct.length>1){
+      // Nudging the box moved the answer, so the box is not on the code.
+      // Name that, because it is fixable and the operator is the only one who
+      // can fix it.
+      LAST_CODE_READ.why='the code read differently when the crop was nudged ('
+        +distinct.join(' vs ')+') — the calibration looks off, re-run Auto-calibrate';
+      return null;
+    }
+    if(distinct.length===1){
+      LAST_CODE_READ.why='only some crops could read a code ('+distinct[0]
+        +') — not recording it on one reading';
       return null;
     }
     LAST_CODE_READ.why='no pass produced a six-character code — read '+LAST_CODE_READ.raw;
