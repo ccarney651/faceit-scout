@@ -812,8 +812,13 @@ triggering an upgrade.
 
 **Scrim records store hero GUIDs, not names.** Hero names and roles are not part
 of the league data payload, so `docs/scrims.html` resolves GUIDs by fetching
-`docs/capture/refs.json` for names, then inferring each hero's role from its own
-small `ROLE_MAP` table, because `refs.json` carries names only.
+`docs/capture/refs.json` for names, then inferring each hero's role from
+`ROLE_MAP`, because `refs.json` carries names only. That table now lives in
+`docs/capture/engine/heroes.js` and is imported by both this page and the
+capture page's ban picker — it is the page's only external script, and it is
+there so a new hero is registered in ONE place rather than two.
+`tests/test_scrims_viewer.py` fails if it disagrees with
+`faceit_sync/subroles.py`.
 
 ### Files
 

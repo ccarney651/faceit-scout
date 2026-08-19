@@ -198,13 +198,25 @@ canonical and this copy is the bug.
      production `docs/capture/scrim.html` still renders the unconditional
      `#scrimpaused` overlay that no script removes (commit `f2881cf`), so
      scrims remain switched off for everyone but this branch.
-   - Also built here, unshipped: phase 2a (opponent identification) and phase
-     4's analysis half (the scrims viewer at parity with league Scout).
+   - Also built here, unshipped: phase 2a (opponent identification, confirmed
+     working in the field 2026-08-19) and phase 4's analysis half (the scrims
+     viewer at parity with league Scout).
+   - Also built here, unshipped: the **panel-first capture workflow** — the
+     page no longer starts maps, takes bans or imports sessions; everything
+     done during a scrim happens in the pop-out panel. And the **replay-code
+     reader** (`engine/replaycode.js`), which is the one piece that touches
+     `docs/capture/index.html` too, so it will ship with whatever merges next.
 
    What remains, per `specs/2026-08-12-scrim-mode-design.md`: the rest of
    opponent identification and roster search (2); the stats read plus a
    workshop hero-glyph reference set (3); the viewer's Players tab (4); sync
    and sharing (5); auto map detection (6). See `ARCHITECTURE.md` §7.
+
+   **Auto map detection (6) is now cheaper than it was**: the code reader can
+   already tell when the replay on screen is not the one being captured. It was
+   deliberately left on-demand rather than polling — see
+   `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would
+   cost and why it was declined.
 
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.
