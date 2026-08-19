@@ -105,6 +105,15 @@ canonical and this copy is the bug.
     web root — anything there is published to owdb.io.
 11. **`wrangler deploy` is run by the human.** A commit to
     `infra/upload-worker/worker.js` is not live until someone deploys it.
+12. **Never unlock one scrim page without the other.** `docs/capture/scrim.html`
+    records scrims, `docs/scrims.html` reads them; either alone is half a
+    feature.
+13. **The scrim lock must fail closed.** The overlay is static markup and the
+    gate only removes it, so any failure leaves the page locked.
+14. **Never trust a replay code read through a hand-dragged calibration box.**
+    Past ~±2% of strip error the read returns a well-formed *wrong* code, not a
+    failure. The probes in `engine/replaycode.js` refuse there now; the
+    sensitivity itself remains.
 
 ## Gotchas
 
@@ -115,14 +124,39 @@ canonical and this copy is the bug.
   assertions in `owdb/tests/test_context.py`. Fixture matches that must stay
   alive derive their dates from `LATEST_KNOWN_WIPE` — never hard-code one.
 - **The capture pages' Content-Security-Policy lives in a `<meta>` tag**, so
-  `curl -I` shows nothing. It has silently broken browser APIs before — check it
-  first when something fails quietly in `docs/capture/`.
+  `curl -I` shows nothing. It has silently broken browser APIs *three* times:
+  tesseract's `blob:` worker, `scoreboard.js` (never loaded in production for
+  months), and `heroes.js` on `docs/scrims.html`, which took the entire viewer
+  down. `tests/test_page_csp_permits_own_scripts.py` now checks every page under
+  `docs/` against its own policy, so a new script on an old page is caught the
+  day it lands — but only for `<script src>`. Workers, styles and connections are
+  still on you; check the policy first when something fails quietly.
+- **Every OCR read goes through `ocrRead()`.** `ocrWorker()`'s timeout only covers
+  *loading* tesseract; a `recognize()` that stalls afterwards never returns, and
+  because tesseract runs one job at a time per worker it takes every other read
+  down with it. `ocrRead` races a deadline and discards the wedged worker. Do not
+  call `w.recognize()` directly — a test fails if you do.
+- **The replay-code crop is only as right as the calibration strip, and the
+  contrast ladder cannot tell you when it isn't.** `codeBox()` is fractions of
+  `boxes.a`. Measured over twelve real frames: past roughly ±2% of strip error the
+  read does not fail, it returns a well-formed six-character code belonging to
+  another game — 54 times. A mis-placed crop is mis-placed *identically* at every
+  contrast level, so all three passes agree and agreement is what the rule accepts
+  on. The fix is a second geometry, not a fourth contrast: `PROBES` in
+  `engine/replaycode.js` reads at five crop positions and takes the code only when
+  all five agree. If you touch the offsets or the probes, re-run
+  `tools/real_frame_eval/code_strip_tolerance.py` **and**
+  `code_strip_guard_check.py` — the latter exists because the first probe set was
+  only ever tested against errors on the axis it probed, which flattered it.
 - **pytest cannot see through a real browser.** It checks syntax and shape, not
   behaviour against a live DOM, IndexedDB or CSP — a gap that has hidden live
-  bugs more than once. `tools/verify_capture_browser.js` closes most of it
-  (serve `docs/`, `npm install playwright-core`, then run it). Everything left
-  after that needs a human with Overwatch open: screen share, calibration,
-  portrait recognition, and the overlay over the game.
+  bugs more than once, most recently a CSP that blocked `docs/scrims.html`'s only
+  external script and left the whole viewer blank. `tools/verify_capture_browser.js`
+  closes most of it: serve `docs/`, `npm install --no-save playwright-core
+  tesseract.js` (both, in one command — separate `--no-save` installs prune each
+  other), then run it. 129 checks. Everything left needs a human with Overwatch
+  open: screen share, calibration, portrait recognition, the overlay over the
+  game.
 - **Both capture pages must open IndexedDB with the same store list**
   (`ALL_STORES` in `docs/capture/engine/idb.js`). Declaring only the stores a
   page uses looks right and breaks the other page — see `ARCHITECTURE.md` §7.
@@ -182,41 +216,49 @@ canonical and this copy is the bug.
    items: NA Advanced seeding (one line in `matches.txt`), and
    `--external-data` page splitting only if page weight grows.
 
-   Shipped WITHOUT scrim mode, deliberately: the release branched at the last
-   commit of the shared-engine extraction (scrim mode phase 0), so the engine
-   and the attribution work went live while everything scrim-facing stayed on
-   `scrim-mode`. That seam is reusable — phase 0 is a pure refactor plus fixes,
-   and nothing above it is.
+   The 2026-08-18 release shipped without scrim mode deliberately, branching at
+   the last commit of the shared-engine extraction so the engine and the
+   attribution work went live while everything scrim-facing stayed behind. Scrim
+   mode has since merged (2026-08-19) and ships locked; see priority 2. That
+   seam is still worth remembering — phase 0 was a pure refactor plus fixes, and
+   splitting a release along one is cheaper than it looks.
 
-2. **Scrim mode, phases 2–6.** Mind the split between what is BUILT and what is
-   IN PRODUCTION, because they differ:
+2. **Scrim mode, phases 2–6.** Phases 0, 1, 2a and phase 4's analysis half are
+   **shipped to `main`** (2026-08-19) — the branch is merged and deleted. What
+   went live: the shared capture engine, the un-paused session scaffold, the
+   league-code block, opponent identification, the panel-first capture workflow,
+   the hero-grid ban picker, player names against heroes, the replay-code reader,
+   and the scrims viewer at parity with league Scout. All were confirmed live by
+   the operator against a real scrim captured end to end, which was the merge
+   gate.
 
-   - **Phase 0** (shared capture engine extraction) is built *and shipped* —
-     merged to `main` on 2026-08-18 with the player-attribution work.
-   - **Phase 1** (un-pause, session scaffold, league-code block, wipe-date
-     check, manual add) is built on `scrim-mode` and **not shipped**. In
-     production `docs/capture/scrim.html` still renders the unconditional
-     `#scrimpaused` overlay that no script removes (commit `f2881cf`), so
-     scrims remain switched off for everyone but this branch.
-   - Also built here, unshipped: phase 2a (opponent identification, confirmed
-     working in the field 2026-08-19) and phase 4's analysis half (the scrims
-     viewer at parity with league Scout).
-   - Also built here, unshipped: the **panel-first capture workflow** — the
-     page no longer starts maps, takes bans or imports sessions; everything
-     done during a scrim happens in the pop-out panel. And the **replay-code
-     reader** (`engine/replaycode.js`), which is the one piece that touches
-     `docs/capture/index.html` too, so it will ship with whatever merges next.
+   **Both scrim pages ship LOCKED.** The feature is finished enough to merge and
+   not to open, so `#scrimpaused` is back on `docs/capture/scrim.html` and
+   `docs/scrims.html` with a gate in front of it: static overlay, a script that
+   only ever removes it, `?unlock=scrimbeta` to open (persists per browser),
+   `?lock=1` to close. There is deliberately no localhost exemption — see
+   invariants 12 and 13. Opening it to the public is a decision, not a cleanup
+   task.
 
    What remains, per `specs/2026-08-12-scrim-mode-design.md`: the rest of
-   opponent identification and roster search (2); the stats read plus a
-   workshop hero-glyph reference set (3); the viewer's Players tab (4); sync
-   and sharing (5); auto map detection (6). See `ARCHITECTURE.md` §7.
+   opponent identification and roster search (2); the stats read plus a workshop
+   hero-glyph reference set (3); the viewer's Players tab (4); sync and sharing
+   (5); auto map detection (6). See `ARCHITECTURE.md` §7.
 
    **Auto map detection (6) is now cheaper than it was**: the code reader can
    already tell when the replay on screen is not the one being captured. It was
    deliberately left on-demand rather than polling — see
-   `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would
-   cost and why it was declined.
+   `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would cost
+   and why it was declined.
+
+   **Not covered anywhere: aspect ratios other than 16:9.** `AUTO_STRIPS`
+   expresses the HUD as fractions of the frame, and auto-calibrate's sweep
+   searches translation only, so it cannot correct a scale error. The failure is
+   loud rather than silent — calibration scores low and says so, naming 16:9 —
+   but the operator is then told to drag the boxes by hand, which is exactly the
+   case the replay-code reader is least safe in. No non-16:9 HUD frame exists in
+   `screenshots/`; the operator has only 16:9 monitors, so this needs a
+   screenshot from someone else before anything can be claimed.
 
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.

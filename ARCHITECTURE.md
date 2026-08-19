@@ -768,6 +768,36 @@ on that page only; `ocrWorker` — the scrim page never got the league page's
 OCR load timeout, so a stuck load could hang forever on scrim capture but not
 on league capture.
 
+**Every OCR read goes through `ocrRead()`, which has its own deadline.** Moving
+`ocrWorker()` into the shared engine fixed the *load* hang above; it did not fix
+the *read* hang, and the two are separate. A `recognize()` that stalls after the
+worker is up never returns, and because tesseract.js processes one job at a time
+per worker, every other read sharing that worker queues behind it and hangs too.
+The guard for this existed inside `index.html`'s `ocrNames()` loop alone, which
+left five reads unprotected — the scrim page's HUD names and both scoreboard
+crops, and *both* pages' replay-code read, all added after the guard was written.
+`ocrRead()` races an 8s deadline and, on any failure, terminates the worker and
+clears the cache so the next call builds a fresh one. It is kept byte-identical
+on both pages. The silence was the point: `ensureSideResolved()` was rewritten to
+say *why* a detection failed, and it can only name an error that arrives.
+
+**The replay-code read varies the crop geometry, not just the contrast.**
+`codeBox()` is fractions of the calibrated strip, which is why it survives every
+resolution tested — and it makes the strip the only thing holding the read up.
+Measured over twelve real frames (`tools/real_frame_eval/README.md`), a strip off
+by more than roughly ±2% on any axis does not produce a failed read; it produces
+a **wrong** one, 54 times: `TJDE6W` read as `YTJDE6` as the crop slides left,
+takes a spurious leading glyph and drops the trailing one. The contrast ladder
+cannot see this, because a mis-placed crop is mis-placed identically in all three
+images, so the passes agree and agreement is what the rule accepts on. Contrast
+catches noise; this is geometry. `PROBES` in `engine/replaycode.js` reads at five
+crop positions — the strip as calibrated, dx ±1%, dy ±2% — and takes the code
+only when all five agree: zero wrong across every error measured, at a cost of
+one refusal in twelve on a good strip. `dy` steps twice as far as `dx` because a
+strip is about seven times wider than it is tall, so equal percentages are wildly
+unequal pixels; at ±1% of height the vertical probe was one pixel and let
+`H6R64B` through as `HARAAR`.
+
 ## 7. Scrims
 
 The private, browser-local side channel for scrim data, and the separate page that reads it.
@@ -838,6 +868,25 @@ league dashboard. The only link is the same-origin IndexedDB read by
 hero-name resolution.
 
 ### Gotchas
+
+**Both scrim pages ship locked, and they lock together.** Scrim mode merged to
+`main` on 2026-08-19 finished but not open, so `#scrimpaused` is back on
+`docs/capture/scrim.html` and `docs/scrims.html` — this time with a gate. The
+overlay is static markup in the body and the gate script only ever *removes* it:
+`?unlock=scrimbeta` writes a token to `localStorage` and opens the page,
+`?lock=1` clears it. That direction is the design. A syntax error, a CSP block or
+localStorage being unavailable all leave the page locked, whereas a gate that
+*added* the overlay would open the page on any failure — and shipping an
+unfinished capture tool to everyone is the outcome worth engineering against.
+
+There is no localhost exemption, deliberately: a dev bypass would make the state
+that ships the one state nothing ever exercises, and
+`tools/verify_capture_browser.js` serves over `127.0.0.1`. Ten of its checks
+cover the gate in both directions on both pages — locked to a first-time
+visitor, opens with the token, persists without repeating it, re-locks, and
+rejects a wrong token. It is a soft gate, not a security boundary: the token is
+readable in the page, nothing behind it is secret, and it writes only to the
+visitor's own browser. The point is that nobody arrives by accident.
 
 **Never bump the IndexedDB schema version from `docs/scrims.html`.** It is a
 read-only consumer. Opening with a higher version would trigger an upgrade
@@ -1251,6 +1300,19 @@ Rules that must not be broken, each with the failure mode it prevents.
     GitHub Pages web root, so anything added there is published to owdb.io.
 11. **`wrangler deploy` is run by a human.** A change committed to
     `infra/upload-worker/worker.js` is not live until someone deploys it.
+12. **Never unlock one scrim page without the other.** `docs/capture/scrim.html`
+    records scrims and `docs/scrims.html` reads them; opening either alone ships
+    half a feature — a tool whose captures nobody can see, or a viewer with
+    nothing to show.
+13. **The scrim lock must fail closed.** The `#scrimpaused` overlay is static
+    markup and the gate script only ever *removes* it, so a syntax error, a
+    blocked script or localStorage being unavailable all leave the page locked.
+    A gate that added the overlay instead would open the page on any failure.
+14. **Never trust a replay code read through a hand-dragged calibration box.**
+    The crop is fractions of that box, and beyond roughly ±2% of strip error the
+    read does not fail — it returns a well-formed code belonging to another
+    game. The geometry probes in `engine/replaycode.js` now refuse instead, but
+    the underlying sensitivity has not gone away.
 
 ## 13. Testing map
 
@@ -1286,8 +1348,10 @@ that package's safety net.
 | Dashboard export and self-containment | `tests/test_export.py` |
 | Dashboard pure logic | `tests/test_dashboard_logic.py` |
 | Assets | `tests/test_team_logos.py`, `tests/test_snapshot_download.py` |
-| Browser capture app | the `tests/test_capture_*.py` family — CSP, OCR, onboarding, attribution, observations, sub-maps, controls, filters, publish preview |
-| Scrims | `tests/test_capture_scrim.py` |
+| Browser capture app | the `tests/test_capture_*.py` family — CSP, OCR, onboarding, attribution, observations, sub-maps, controls, filters, publish preview; plus `tests/test_capture_scrim_ocr_read.py` (the read deadline) |
+| Every page's own CSP | `tests/test_page_csp_permits_own_scripts.py` — fails if a page loads a script its own policy forbids |
+| Scrims | `tests/test_capture_scrim.py`, including the lock gate |
+| Replay-code geometry | `docs/capture/engine/replaycode.test.js`; measured, not unit-tested, by `tools/real_frame_eval/code_strip_tolerance.py` and `code_strip_guard_check.py` |
 | This document | `tests/test_docs_links.py` |
 | Capture pipeline and analysis | `owdb/tests/` — matching, comps, swaps, integrity, refs, codes, context, contribute, scout, derive |
 
