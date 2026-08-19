@@ -2,14 +2,18 @@
 
 Extracts the pure functions and runs them under Node, the same way
 tests/test_capture_scrim.py does for the capture app. The viewer keeps its
-analysis inline rather than in an engine module because its CSP allows only
-inline scripts (`script-src 'unsafe-inline'`, no `'self'`), so there is nothing
-to import.
+analysis inline rather than in an engine module for historical reasons: its
+CSP allowed only inline scripts (`script-src 'unsafe-inline'`, no `'self'`),
+so there was nothing to import. The ban-picker work then added a real
+`<script src>` for `capture/engine/heroes.js` without widening the policy,
+which blocked the file and took the whole page down with it - so `'self'` is
+now allowed, and pinned by a test at the bottom of this module.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -745,3 +749,30 @@ def test_a_map_played_with_no_bans_counts_as_evidence() -> None:
 def test_a_voided_map_never_counts_however_its_bans_were_recorded() -> None:
     n = _run("return bannedMaps([{id:'a', bans:[], no_bans:true, void:true}]).length;")
     assert n == 0
+
+
+# --- the page's own CSP must permit the scripts it loads -------------------
+
+def test_every_script_the_viewer_loads_is_allowed_by_its_own_csp() -> None:
+    """A <script src> under `script-src 'unsafe-inline'` never loads.
+
+    This page's CSP deliberately had no `'self'` while everything it ran was
+    inline (see this module's docstring). The ban-picker work then gave it
+    `capture/engine/heroes.js` without widening the policy, so the browser
+    blocked the file, `OWDBHeroes is not defined` threw at the top of the
+    inline script, and the whole viewer rendered an empty shell - nav, tabs
+    and all. It is the same failure that once stopped `scoreboard.js` loading
+    in production for months, and it is invisible to `curl -I`, because the
+    policy lives in a <meta http-equiv> tag.
+    """
+    html = APP.read_text(encoding="utf-8")
+    csp = re.search(r'http-equiv="Content-Security-Policy"[^>]*content="([^"]*)"', html)
+    assert csp, "the viewer lost its CSP"
+    script_src = re.search(r"script-src([^;]*)", csp.group(1))
+    assert script_src, "the CSP has no script-src, so default-src 'none' blocks every script"
+    local = [u for u in re.findall(r'<script[^>]*\ssrc="([^"]+)"', html)
+             if not re.match(r"https?:|//", u)]
+    if local:
+        assert "'self'" in script_src.group(1), (
+            f"{local} cannot load under script-src{script_src.group(1)}"
+        )

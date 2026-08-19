@@ -130,6 +130,27 @@ Entries before 2026-08-11 were reconstructed from git history.
   already drifted silently. `docs/scrims.html` gains its only external script.
 
 ### Fixed
+- **The scrims viewer rendered an empty shell.** Its CSP is
+  `script-src 'unsafe-inline'` with no `'self'` - correct while every line it
+  ran was inline, and wrong the moment it gained an external script (the
+  `engine/heroes.js` extraction above). The browser blocked the file,
+  `OWDBHeroes is not defined` threw at the top of the inline script, and the
+  page stopped before it defined a single tab: no nav, no content, on every
+  tab and both the demo and real data. The policy now allows `'self'`, and a
+  test fails if any page loads a script its own CSP forbids. Same shape as the
+  `scoreboard.js` block found earlier this month, and invisible to `curl -I`
+  for the same reason - the policy is a `<meta http-equiv>` tag.
+- **A stalled OCR read hung the capture pages with nothing to show for it.**
+  `ocrWorker()`'s deadline only covers *loading* the engine; a `recognize()`
+  that stalls after that never returns, and because tesseract.js runs one job
+  at a time per worker, every other read sharing it queues behind and hangs
+  too. The guard existed inside the league page's `ocrNames()` alone, so the
+  scrim page's four reads - HUD names, both scoreboard crops, the replay code -
+  and the league page's own replay-code read had no deadline at all. All of
+  them now go through one helper that times out and discards the wedged
+  worker. This is what let a failure stay silent: the scrim page's side
+  detection is written to say *why* it failed, and could say nothing for an
+  error that never arrived.
 - **The scrim panel never said who was on which hero.** It read the ten HUD
   names, saved them with every snapshot and paired them into the finished map -
   and then printed a hardcoded em-dash in all ten Player cells, so the one
