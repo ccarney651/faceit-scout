@@ -212,7 +212,7 @@
       <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
       <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
       <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits, shows you the confidence, and you confirm (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
-      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below, choose a map, and press <b>Start map</b>. A replay code is optional and stays private.</div>
+      <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below and press <b>Save scrim</b> — the floating panel opens, and the map, bans and capture all happen there so you never alt-tab out of the game.</div>
       <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — use the side radios or <b>Swap teams</b> to set which team is on the left. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Save</span></div><b>Finish + save</b> — the map is saved privately in this browser. Review, export, or import scrims under the scrim panel.</div>
     </div>
@@ -256,26 +256,13 @@
       <button id="scsave">Save scrim</button>
     </div>
 
-    <!-- Everything below belongs to ONE MAP, not to the scrim. A scrim is a
-         series of maps and each map has its own replay code; grouping the code
-         with the scrim's own fields above read as "one code per scrim", which
-         is wrong. The records have always been per-map (scrim_maps.code) - this
-         boundary makes the markup say what the data already does. -->
-    <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
-      <h3 style="margin:0 0 2px;font-size:13px">Add a map to this scrim</h3>
-      <p class="status" style="margin:0 0 8px">Each map has its own replay code — add them one at a time, or import a whole session from your replay-history screenshot below.</p>
-      <div class="row" style="margin-bottom:8px">
-        <label class="f">Mode<select id="scrimmode"></select></label>
-        <label class="f">Replay code for this map <span class="status">(optional)</span><input type="text" id="scrimcode" placeholder="paste this map's code or leave blank"></label>
-      </div>
-      <div class="row" style="margin-bottom:8px;align-items:flex-start">
-        <label class="f" style="display:block;width:100%">Map<div id="scrimmapbtns" class="row" style="margin-top:6px"></div></label>
-        <input type="hidden" id="scrimmapidx">
-      </div>
-      <div class="row" style="margin-bottom:8px">
-        <button id="scstart">Start map</button>
-      </div>
-    </div>
+    <!-- Adding and starting a map lives in the pop-out panel, not here. This
+         page is what is done BEFORE the game: share the screen, calibrate, name
+         the scrim. Everything done during one - pick the map, note the bans,
+         capture, finish, pick the next - is done while watching Overwatch, and
+         a control on this page is a control that costs an alt-tab. The page's
+         own "Start map" also ran before bans had anywhere to be entered on this
+         surface, so it could start a map with the draft unrecorded. -->
     <div class="row" style="margin-bottom:6px">
       <span class="status">Left team on the HUD:</span><span id="sideradios" class="row"></span>
       <button id="detectsides" class="ghost">Detect sides</button><span class="wip" title="Experimental — reads player names off the HUD with OCR and matches them against known rosters. May fail on custom UI colors or unfamiliar rosters.">WIP</span>
@@ -290,19 +277,6 @@
     </div>
     <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
       <h2>Scrim maps (saved in this browser)</h2>
-      <div class="row" style="margin-bottom:8px">
-        <button id="scrimpscrbtn" class="ghost">Import session from screenshot…</button><span class="wip" title="Experimental — OCRs an Overwatch end-of-session screenshot to pre-fill map codes and scores. Verify every row in the review dialog.">WIP</span>
-        <span class="status">(or paste an image)</span>
-        <input id="scrimpscr" type="file" accept="image/*" style="display:none">
-      </div>
-      <div id="scrimqueue" style="display:none;margin-bottom:8px">
-        <h3 style="margin-bottom:6px">Session queue</h3>
-        <div id="scrimqueuelist"></div>
-        <div class="row" style="margin-top:8px">
-          <button id="scrimaddhand" class="ghost">+ add a map by hand</button>
-          <button id="scrimstartsession">Start session</button>
-        </div>
-      </div>
       <div id="scrimmaplist" class="status">Pick or create a scrim — its maps will appear here.</div>
       <div class="row" style="margin-top:10px">
         <button id="screxport" class="ghost">Export scrims</button>
@@ -339,15 +313,6 @@
       <span class="status" id="atklbl">Attacking now</span>
       <span id="atkbtns" class="row"></span>
       <span class="status faint" id="atkhint">— click the team on attack (as the HUD shows)</span>
-    </div>
-    <!-- Bans, shown only when this scrim uses them. Some teams scrim with hero
-         bans and some do not, so this is off by default and never nags. -->
-    <div id="banrow" style="display:none;margin-top:8px">
-      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="status">Hero bans</span>
-        <span class="status faint">— for the next map you start</span>
-      </div>
-      <div id="banpicker" class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"></div>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
       <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Swap teams</button>
@@ -449,12 +414,6 @@ const MAP_ALIASES={antarctica:"antarctic peninsula",lijiang:"lijiang tower"};
 function submapsFor(m){ if(!m) return []; let k=m.trim().toLowerCase(); k=MAP_ALIASES[k]||k; return CONTROL_SUBMAPS[k]||[]; }
 
 let activeScrim=null, activeScrimMap=null;
-// SCAFFOLD: rows read from the replay-history screenshot (or added by hand),
-// annotated by engine/session.js's buildScaffold, pending review in
-// #scrimqueuelist. Nothing here is saved until "Start session" - see
-// startScaffoldSession(). Safe as a plain [] literal at top level (no
-// external reference), unlike LEAGUE_DATA/CODE_INDEX above.
-let SCAFFOLD=[];
 const SCRIM_MAPS=[
   {name:"Ilios",cat:"Control"},{name:"Lijiang Tower",cat:"Control"},{name:"Nepal",cat:"Control"},
   {name:"Oasis",cat:"Control"},{name:"Antarctic Peninsula",cat:"Control"},{name:"Samoa",cat:"Control"},{name:"Busan",cat:"Control"},
@@ -906,9 +865,9 @@ const {autoCalibrate, boxesFromStrips, scoreBoxes, pickBox, commitCal, renderCal
 // ocrWorker now live in engine/refs.js (shared with index.html). REF_W/REF_H/
 // PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON and
 // _ocrWorker/_ocrLoading stay page-level globals - see engine/refs.js's
-// header for why, and for why this page's own readScoreboard()/
-// ocrTextFromImage() (further down) still reconfigure the shared worker's
-// pageseg_mode per call instead of that living in the shared module.
+// header for why, and for why this page's own readScoreboard() (further down)
+// still reconfigures the shared worker's pageseg_mode per call instead of that
+// living in the shared module.
 const refs=OWDBRefs.make({doc:document});
 const {addRef, bestMatch, matchCrop, learnCrop, refTemplate, exportRefs, importRefs,
        clearLearnedRefs, heroCatalog, heroName, heroSlug, heroPortrait, onlyLostKnown, ocrWorker}=refs;
@@ -970,7 +929,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   const steps=[
     {t:'Share screen', done:!!vid.srcObject, hint:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) \u2014 auto-calibrate needs the full frame.'},
     {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:fv?'<b>Click Auto-calibrate</b> \u2014 it finds the 10 hero portraits, shows the confidence, then <b>Use these boxes</b> to confirm.':'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
-    {t:'Start scrim map', done:!!activeScrimMap, hint:fv?'Pick or create a scrim, choose a map, and press <b>Start map</b> \u2014 a replay code is optional and stays private.':'Set up the scrim and press <b>Start map</b> in step 2.'},
+    {t:'Start scrim map', done:!!activeScrimMap, hint:fv?'Save the scrim to open the floating panel, then choose the map and press <b>Start</b> there \u2014 a replay code is optional and stays private.':'Choose the map in the floating panel and press <b>Start</b>.'},
     {t:'Capture &amp; save', done:!!(session&&session.snaps.length), hint:fv?'Press <b>Snapshot</b> to read the comp, <b>Next round</b> as it advances, then <b>Finish + save</b> \u2014 it stays private on this browser.':'<b>Snapshot</b> each comp (or <b>Pop out overlay</b> for no alt-tab), then <b>Finish + save</b> \u2014 it stays private on this browser.'}];
   const cur=steps.findIndex(s=>!s.done);
   if(cur<0) _firstVisit=false;
@@ -999,8 +958,8 @@ function tourDefs(){
     {t:'Auto-calibrate', target:'autocal',
       body:'Click <b>Auto-calibrate</b> \u2014 it finds the 10 hero portraits, then <b>review the result</b> and click <b>Use these boxes</b> to confirm. Nothing is saved until you do.',
       done:()=>!!(boxes.a&&boxes.b)},
-    {t:'Start a scrim map', target:'scstart',
-      body:'Pick or create a private scrim, choose a map, and press <b>Start map</b>. A replay code is optional and stays private \u2014 league codes are blocked.',
+    {t:'Start a scrim map', target:'scsave',
+      body:'Press <b>Save scrim</b> and the floating panel opens. Everything from there on happens in it \u2014 choose the map, note any bans, then <b>Start</b> \u2014 so you never alt-tab out of Overwatch. A replay code is optional and stays private; league codes are blocked.',
       done:()=>!!activeScrimMap},
     {t:'Capture the comps', target:'snap',
       body:'Press <b>Snapshot</b> as each comp appears and <b>Next round</b> as the game advances. Sides are set manually for scrims (there are no rosters to auto-detect against).',
@@ -1318,8 +1277,8 @@ async function readScoreboard(frame){
 // existing fix for a real hang bug: a stalled Tesseract.createWorker() used
 // to hang this page's OCR forever with no escape but a reload). It does NOT
 // set tessedit_char_whitelist - this page reuses the shared worker for
-// readScoreboard()/ocrTextFromImage() below (full sentences, spaces,
-// dashes), which a HUD-gamertag-only whitelist would break; see
+// readScoreboard() below (full sentences, spaces, dashes), which a
+// HUD-gamertag-only whitelist would break; see
 // engine/refs.js's header for the full reasoning. _ocrLoadFailed/
 // _ocrLoadError are new here (index.html already had them) - purely so the
 // shared ocrWorker() has somewhere to write; nothing on this page reads them
@@ -1384,7 +1343,6 @@ async function finishScrimMap(c){
   // it drops the live controls and offers the next map. Without this the panel
   // keeps showing Snapshot for a map that has already been saved.
   renderPipControls();
-  if(wasQueued){ const maps=await idbScrimMaps(); const next=maps.filter(m=>m.scrim_id===activeScrim.id&&m.queued&&m.map_no>rec.map_no).sort((a,b)=>a.map_no-b.map_no)[0]; if(next) startQueuedMap(next); }
 }
 
 // ---------- Private scrim mode ----------
@@ -1446,6 +1404,10 @@ async function ensureScrim(){
 // control on a scrim that never bans is just noise. Stored per MAP rather than
 // per scrim, because a block can change its mind partway through and because
 // "what shifted when Sombra was banned" is a per-map question.
+// What the panel's next-map row was last set to. It is rebuilt from scratch
+// on every renderPipControls(), so without this a mode choice would be lost
+// the moment anything else on the panel changed.
+let LAST_MODE='', LAST_CODE='';
 let MAP_BANS = [];
 // "This map was played with no bans" — a fact, not the absence of one. An
 // empty list alone cannot say it: it is equally what a map nobody recorded
@@ -1529,14 +1491,11 @@ function renderBanPickerInto(box, d){
   chips.style.cssText='gap:4px;flex-wrap:wrap;margin-top:4px;width:100%';
   box.appendChild(chips); renderBansInto(chips);
 }
+// The bans live in the pop-out panel only. Rebuilding its rows IS rendering
+// them - the panel's prow-bans row reads MAP_BANS as it draws - so this stays
+// as the one call every ban change goes through rather than being inlined at
+// each site.
 function renderBans(){
-  const row=document.getElementById('banrow');
-  // Bans belong to the draft, which happens BEFORE the map starts - so the
-  // picker is shown between maps and hidden while one runs, on both surfaces.
-  if(row) row.style.display = (usesBans() && !session) ? '' : 'none';
-  if(usesBans() && !session) renderBanPickerInto(document.getElementById('banpicker'), document);
-  // Keep the panel's copy in step - a ban added on either surface must show on
-  // both, and the operator is usually looking at the panel.
   if(typeof renderPipControls==='function') renderPipControls();
 }
 // scrimLabel(): what an unnamed block is called in the picker, so it does not
@@ -1576,6 +1535,7 @@ async function saveScrim(){
 // The guard below is belt and braces for the keyboard/console paths.
 async function endScrimCapture(){
   if(session){ toast('finish the current map first','warn'); return; }
+  if(!SCRIM_MAP_COUNT){ toast('capture a map first','warn'); return; }
   const name=activeScrim?scrimLabel(activeScrim):'scrim';
   activeScrim=null; activeScrimMap=null;
   clearBans();
@@ -1624,39 +1584,25 @@ async function refuseIfLeagueCode(code){
   if(act==='nav') location.href='index.html';
   return true;
 }
-async function startScrimMap(){
-  await ensureScrim();
-  const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
-  const code=(document.getElementById('scrimcode').value||'').trim();
-  if(await refuseIfLeagueCode(code)) return;
-  // Bans are NOT cleared here: they are picked on the pre-map panel,
-  // before this runs. Clearing on start is what would eat them.
-  activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1, queued:false};
-  document.getElementById('scrimcode').value=code;
-  startScrimSession(scrimPseudoCode());
-  renderBans();   // after the session exists - the row keys off it
-  toast('<b>'+esc(m.name)+'</b> started'+(code?' \u00B7 '+esc(code):'')+' \u2014 capture, then Finish + save','ok');
-}
-// Start a map by NAME rather than by the page's dropdown index, so the floating
-// panel can start one without reaching into the main page's form. The panel's
-// selects are kept in step with the page below.
-async function startMapNamed(name){
+// Start a map from the panel. The only start path there is: the page has no
+// map controls at all now, so there is nothing to mirror onto and nothing that
+// can disagree about what is running.
+//
+// The code is optional and comes from the panel's own field. Bans are NOT
+// cleared here - they are picked on the pre-map screen, before this runs, and
+// clearing on start is exactly what would eat them.
+async function startMapNamed(name, code){
   const m=SCRIM_MAPS.find(x=>x.name===name);
   if(!m){ toast('pick a map','warn'); return; }
   if(session){ toast('finish the current map first','warn'); return; }
   await ensureScrim();
-  // Bans are NOT cleared here: they are picked on the pre-map panel,
-  // before this runs. Clearing on start is what would eat them.
-  activeScrimMap={map_name:m.name, map_category:m.cat, code:'', map_no:activeScrim.map_no||1, queued:false};
-  // Mirror onto the page so the two views never disagree about what is running.
-  const pm=document.getElementById('scrimmode'); if(pm&&pm.value!==m.cat){ pm.value=m.cat; onScrimModeChange(); }
-  const idx=SCRIM_MAPS.indexOf(m);
-  const pi=document.getElementById('scrimmapidx'); if(pi) pi.value=String(idx);
-  const pc=document.getElementById('scrimcode'); if(pc) pc.value='';
+  code=(code||'').trim();
+  if(await refuseIfLeagueCode(code)) return;
+  activeScrimMap={map_name:m.name, map_category:m.cat, code, map_no:activeScrim.map_no||1, queued:false};
   startScrimSession(scrimPseudoCode());
   renderBans();
   snapMsg(m.name+' started — Snapshot each comp');
-  toast('<b>'+esc(m.name)+'</b> started — capture, then Finish + save','ok');
+  toast('<b>'+esc(m.name)+'</b> started'+(code?' · '+esc(code):'')+' — capture, then Finish + save','ok');
 }
 
 // A sub-map captured in an EARLIER round is spent; the panel dims it so the
@@ -1667,73 +1613,17 @@ function usedSubmaps(snaps, currentRound){
   return used;
 }
 
-async function startQueuedMap(m){
-  await ensureScrim();
-  if(session){ toast('finish the current map first','warn'); return; }
-  if(await refuseIfLeagueCode(m.code)) return;
-  // Bans are NOT cleared here: they are picked on the pre-map panel,
-  // before this runs. Clearing on start is what would eat them.
-  activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
-  document.getElementById('scrimcode').value=m.code||'';
-  startScrimSession(scrimPseudoCode());
-  renderBans();   // after the session exists - the row keys off it
-  toast('<b>'+esc(m.map_name)+'</b> started from queue'+(m.code?' \u00B7 '+esc(m.code):'')+' \u2014 capture, then Finish + save','ok');
-}
-function buildScrimMapOptions(){
-  const modes=[...new Set(SCRIM_MAPS.map(m=>m.cat))];
-  const sel=document.getElementById('scrimmode');
-  sel.innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
-  sel.onchange=onScrimModeChange;
-  sel.value=modes[0];
-  onScrimModeChange();
-}
-function onScrimModeChange(){
-  const mode=document.getElementById('scrimmode').value;
-  const host=document.getElementById('scrimmapbtns');
-  host.innerHTML='';
-  SCRIM_MAPS.forEach((m,i)=>{
-    if(m.cat!==mode) return;
-    const b=document.createElement('button'); b.className='mk'; b.textContent=m.name; b.dataset.idx=i;
-    b.onclick=()=>selectScrimMap(i,b);
-    host.appendChild(b);
-  });
-  const first=host.querySelector('button');
-  if(first) selectScrimMap(+first.dataset.idx, first);
-}
-function selectScrimMap(idx, btn){
-  document.getElementById('scrimmapidx').value=idx;
-  if(btn){
-    Array.from(document.getElementById('scrimmapbtns').children).forEach(b=>{
-      b.style.background=''; b.style.color=''; b.style.borderColor=''; b.style.fontWeight='';
-    });
-    btn.style.background='var(--accent)'; btn.style.color='#0b1020'; btn.style.borderColor='var(--accent)'; btn.style.fontWeight='700';
-  }
-}
+// How many maps this scrim has actually captured. The panel's "Finish scrim
+// capture" reads it: closing out a scrim that captured nothing leaves an empty
+// record behind and throws away the setup that went into it.
+let SCRIM_MAP_COUNT=0;
 async function renderScrimMaps(){
   const host=document.getElementById('scrimmaplist'); if(!host) return;
-  const qhost=document.getElementById('scrimqueuelist');
-  const qwrap=document.getElementById('scrimqueue');
-  if(!activeScrim){ host.textContent='Pick or create a scrim \u2014 its maps will appear here.'; if(qwrap) qwrap.style.display='none'; return; }
+  if(!activeScrim){ SCRIM_MAP_COUNT=0; host.textContent='Pick or create a scrim — its maps will appear here.'; renderPipControls(); return; }
   const all=await idbScrimMaps();
-  const queue=all.filter(m=>m.scrim_id===activeScrim.id&&m.queued).sort((a,b)=>a.map_no-b.map_no);
   const maps=all.filter(m=>m.scrim_id===activeScrim.id&&!m.queued).sort((a,b)=>b.captured_at.localeCompare(a.captured_at));
-  if(qhost){
-    if(queue.length){
-      qwrap.style.display='block';
-      qhost.innerHTML='';
-      queue.forEach(m=>{
-        const row=document.createElement('div'); row.className='cap';
-        const scoreStr=m.score?` \u00B7 ${m.score.us}-${m.score.them}`:'';
-        const resStr=m.result?(m.result==='win'?' \u00B7 Win':(m.result==='loss'?' \u00B7 Loss':' \u00B7 Draw')):'';
-        row.innerHTML=`<span><b style="color:var(--fg)">${esc(m.map_name||'?')}</b> <span class="status">${esc(m.map_category||'')}${scoreStr}${resStr}</span>`+
-          `${m.code?'<br><span class="status">'+esc(m.code)+'</span>':''}</span>`+
-          `<span class="capbtns"><button class="ghost scout">scout</button><button class="ghost del">delete</button></span>`;
-        row.querySelector('.del').onclick=async()=>{ await idbDelScrimMap(m.id); renderScrimMaps(); };
-        row.querySelector('.scout').onclick=()=>startQueuedMap(m);
-        qhost.appendChild(row);
-      });
-    } else { qwrap.style.display='none'; if(qhost) qhost.innerHTML=''; }
-  }
+  SCRIM_MAP_COUNT=maps.length;
+  renderPipControls();          // the finish-scrim button keys off the count
   if(!maps.length){ host.textContent='No maps captured under this scrim yet.'; return; }
   host.innerHTML='';
   maps.forEach(m=>{
@@ -1852,138 +1742,11 @@ function parseScrimSessionText(text){
     row.score.us=us; row.score.them=them;
     row.result=result==='victory'||result==='win'?'win':(result==='defeat'||result==='loss'?'loss':(result==='draw'?'draw':null)); }
   return Array.from(byCode.values()); }
-async function ocrTextFromImage(file){
-  const w=await ocrWorker(); await w.setParameters({ tessedit_pageseg_mode:'6' });
-  const {data}=await w.recognize(file); let text=data.text||'';
-  // If the first pass found nothing mappable, try sparse-text mode which can pick up
-  // disjoint UI text. If maps were already found, stay with the cleaner reading.
-  if(!bestMapMatch(text)){
-    await w.setParameters({ tessedit_pageseg_mode:'11' });
-    const {data:d11}=await w.recognize(file);
-    const lines6=text.split('\n').map(s=>s.trim()).filter(Boolean);
-    const seen=new Set(lines6);
-    const lines11=(d11.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
-    for(const l of lines11) if(!seen.has(l)) lines6.push(l);
-    text=lines6.join('\n'); }
-  await w.setParameters({ tessedit_pageseg_mode:'7' });
-  return text; }
-async function importSessionFromScreenshot(file){
-  if(!file) return;
-  // No name gate here either: importing a session or starting one is capture
-  // work, and team names are metadata that can arrive at any point (phase 2
-  // fills the opponent in from the HUD).
-  await ensureScrim();
-  const ocrText=await ocrTextFromImage(file);
-  let rows=parseScrimSessionText(ocrText);
-  if(!rows.length){
-    const debug=await uiModal({title:'No map rows recognized', bodyHtml:`<p class="status">Tesseract saw the text below. Edit it so each map line ends with <b>us - them</b> (e.g. <code>Ilios 3 - 2</code>), then click Parse.</p><textarea id="rawocr" rows="10" style="width:100%;background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px;font:13px/1.45 monospace">${esc(ocrText)}</textarea>`, collect:true, escapeValue:null,
-      actions:[{label:'Cancel',value:null,ghost:true},{label:'Parse',value:true}]});
-    if(!debug||!debug.value) return;
-    rows=parseScrimSessionText(debug.fields.rawocr||'');
-    if(!rows.length){ toast('still no map rows found after editing','warn'); return; }
-  }
-  // Annotate with the league-code block (engine/session.js) and hand off to
-  // the review list - nothing is saved until "Start session".
-  SCAFFOLD=OWDBSession.buildScaffold(rows, CODE_INDEX, scrimDate());
-  renderScaffold(SCAFFOLD);
-  toast('found '+rows.length+' map row'+(rows.length===1?'':'s')+' \u2014 review below, then Start session','ok');
-}
-// Render the scaffolded session for review. League rows are refused outright;
-// dead-code rows are kept (the map was still played) but flagged as
-// uncapturable, since the replay they would be captured from no longer exists.
-function renderScaffold(rows){
-  const wrap=document.getElementById('scrimqueue');
-  const list=document.getElementById('scrimqueuelist');
-  if(!rows.length){ wrap.style.display='none'; return; }
-  wrap.style.display='';
-  const wipe=CODE_INDEX.wipeDate;
-  list.innerHTML=`<p class="status">${rows.length} map${rows.length===1?'':'s'} read`
-    + (wipe?` \u2014 codes valid until the next patch (last wipe ${esc(wipe)})`:'')
-    + `</p>`
-    + rows.map((r,i)=>{
-        const dis=r.league?'disabled':'';
-        const on=r.league?'':'checked';
-        const note=r.league
-          ? `<span class="warn">league match${r.division?` (${esc(r.division)})`:''}
-             \u2014 <a href="index.html">capture in League scout</a></span>`
-          : r.dead
-            ? `<span class="warn">code expired \u2014 replay unavailable</span>`
-            : r.score_suspect
-              ? `<span class="warn">score unreadable \u2014 set it after capturing</span>`
-              : '';
-        // A score OCR could not read reliably is shown as unknown, not as a
-        // confident 0-0: tesseract turns "2 - 0" into "2 - \u00a9" often enough
-        // that trusting the digits silently records the wrong result.
-        const sc=r.score_suspect ? '? \u2013 ?'
-               : (r.score?`${r.score.us}-${r.score.them}`:'');
-        return `<label class="row" style="gap:8px">
-          <input type="checkbox" data-i="${i}" ${on} ${dis}>
-          <b>${esc(r.map_name)}</b>
-          <span class="status">${esc(r.map_category||'')}</span>
-          <code>${esc(r.code||'\u2014')}</code>
-          <span class="status">${esc(sc)}</span>
-          <span class="status">${esc(r.result||'')}</span>
-          ${note}
-        </label>`;
-      }).join('');
-}
-// "+ add a map by hand": scrims are not restricted to a league map pool, so
-// every SCRIM_MAPS entry is offered (unlike the league-code block, which
-// only ever fires when a code is entered).
-async function addScaffoldMapByHand(){
-  const options=SCRIM_MAPS.map(m=>`<option value="${esc(m.name)}">${esc(m.name)} (${esc(m.cat)})</option>`).join('');
-  const r=await uiModal({title:'Add a map by hand', collect:true, escapeValue:null,
-    bodyHtml:`<label class="f">Map<select id="handmap">${options}</select></label>`
-      +`<label class="f">Code <span class="status">(optional)</span><input type="text" id="handcode" placeholder="optional"></label>`,
-    actions:[{label:'Cancel',value:null,ghost:true},{label:'Add',value:true}]});
-  if(!r||!r.value) return;
-  const map=SCRIM_MAPS.find(m=>m.name===r.fields.handmap); if(!map) return;
-  const code=(r.fields.handcode||'').trim().toUpperCase()||null;
-  const scaffolded=OWDBSession.buildScaffold(
-    [{map_name:map.name, map_category:map.cat, code, score:{us:0,them:0}, result:null}],
-    CODE_INDEX, scrimDate())[0];
-  SCAFFOLD.push(scaffolded);
-  renderScaffold(SCAFFOLD);
-}
-// "Start session": creates a scrim_map record (queued:true, same shape
-// startQueuedMap()/finishScrimMap() already expect) per checked row. League
-// rows are filtered out here too, not just left to the disabled checkbox -
-// the league-code block is a correctness guarantee (see engine/session.js's
-// header), not a UI nicety a user could route around by hand.
-async function startScaffoldSession(){
-  if(!SCAFFOLD.length){ toast('nothing to start \u2014 import a screenshot or add a map first','warn'); return; }
-  // No name gate here either: importing a session or starting one is capture
-  // work, and team names are metadata that can arrive at any point (phase 2
-  // fills the opponent in from the HUD).
-  await ensureScrim();
-  const checks=[...document.querySelectorAll('#scrimqueuelist input[type=checkbox]')];
-  const rows=checks.filter(cb=>cb.checked).map(cb=>SCAFFOLD[+cb.dataset.i]).filter(r=>r&&!r.league);
-  if(!rows.length){ toast('nothing checked to start','warn'); return; }
-  // Carry over whatever names have been typed so far, without requiring any:
-  // ensureScrim() has already created the block, and blanks stay blank rather
-  // than being filled with the placeholders "us" and "opponent", which would
-  // later be indistinguishable from a team genuinely named that.
-  Object.assign(activeScrim,{
-    team_us:(document.getElementById('scus').value||'').trim(),
-    opponent:(document.getElementById('scopp').value||'').trim(),
-    date:document.getElementById('scdate').value || activeScrim.date,
-    notes:(document.getElementById('scnotes').value||'').trim(),
-    updated_at:new Date().toISOString()});
-  await idbPutScrim(activeScrim); localStorage.setItem('owdb_cap_scrim', activeScrim.id);
-  const startNo=activeScrim.map_no||1;
-  for(let i=0;i<rows.length;i++){
-    const r=rows[i]; const mapNo=startNo+i;
-    await idbPutScrimMap({ id:activeScrim.id+':'+mapNo, scrim_id:activeScrim.id, map_no:mapNo,
-      code:r.code||null, map_name:r.map_name, map_category:r.map_category, map_guid:null,
-      side_a_team:activeScrim.team_us, side_b_team:activeScrim.opponent,
-      winner_side:null, score:r.score, result:r.result,
-      profile:null, captured_at:null, bans:[], observations:[], crops:null, scoreboard:null,
-      scrim:true, queued:true }); }
-  activeScrim.map_no=startNo+rows.length; await idbPutScrim(activeScrim);
-  SCAFFOLD=[];
-  await renderScrimPanel();
-  toast('started session \u2014 '+rows.length+' map'+(rows.length===1?'':'s')+' queued (private) \u2014 click Scout on the first one','ok');
-}
+// The screenshot importer's UI is gone with the rest of the page's map
+// controls - importing a whole replay history is not something done while
+// watching Overwatch. parseScrimSessionText() and bestMapMatch() above are
+// deliberately KEPT: the replay-code OCR reads the same replay-history text
+// off the screen, and would otherwise be rebuilt from nothing.
 
 // ---------- pop-out overlay ----------
 // Mechanism now lives in engine/overlay.js (shared with index.html). This
@@ -2010,6 +1773,8 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     // by sight, still clickable so a mis-pick stays fixable. Same as index.html.
     `button.used{opacity:.4;text-decoration:line-through}`+
     `select{padding:5px 6px;border:1px solid ${c.line2};background:${c.surface2};color:${c.fg};border-radius:6px;font-size:12px;max-width:130px}`+
+    `input.pcode{padding:5px 6px;border:1px solid ${c.line2};background:${c.surface2};`+
+      `color:${c.fg};border-radius:6px;font-size:12px;width:104px;text-transform:uppercase}`+
     `.prow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 8px}`+
     `.prow .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${c.muted};margin-right:2px}`+
     `.prow.warn .lbl{color:${c.bad}}`+
@@ -2060,7 +1825,9 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
   slotLabels:()=>{ if(!session) return {left:'Left', right:'Right'};
     const {leftName,rightName}=sideNames(); return {left:leftName, right:rightName}; },
   tick:el=>{ const c=selectedCode();
-    if(!session){ el.innerHTML='<div class="pmap">no map running — pick one below ▾</div>'; return; }
+    // What to DO, not what is absent. This screen is the whole pre-map step:
+    // the map, and the bans if the scrim uses them.
+    if(!session){ el.innerHTML='<div class="pmap">Select the map'+(usesBans()?', and any bans':'')+' ▾</div>'; return; }
     const {leftName,rightName}=sideNames();
     const unsure=!session.sideResolved;
     el.innerHTML=`<div>${c&&c.code&&c.code!=='SCRIM'?esc(c.code)+' · ':''}R${session.round} · ${session.snaps.length} snaps</div>`+
@@ -2083,13 +1850,22 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
       mode.innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
       const fillMaps=()=>{ map.innerHTML=SCRIM_MAPS.filter(m=>m.cat===mode.value)
         .map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join(''); };
-      // Carry the main page's current selection over, so the panel opens on
-      // whatever the operator last had in mind rather than resetting to Control.
-      const pageMode=document.getElementById('scrimmode');
-      mode.value=(pageMode&&pageMode.value)||modes[0]; fillMaps();
-      mode.onchange=fillMaps;
+      // Remembered across renders so the panel reopens on whatever was last in
+      // mind rather than resetting to Control. It used to read this off the
+      // main page's dropdown, which no longer exists.
+      mode.value=LAST_MODE||modes[0]; fillMaps();
+      mode.onchange=()=>{ LAST_MODE=mode.value; fillMaps(); };
       row.appendChild(mode); row.appendChild(map);
-      mk(row,'▶ Start',()=>startMapNamed(map.value),'go');
+      // The replay code, optional, and the only place one can be entered now
+      // that the page's field is gone. Left as free text rather than dropped
+      // entirely: without it every map is saved with no way back to the replay
+      // until the code-OCR work reads it off the screen.
+      const code=d.createElement('input');
+      code.type='text'; code.placeholder='code (optional)'; code.className='pcode';
+      code.value=LAST_CODE||'';
+      code.oninput=()=>{ LAST_CODE=code.value; };
+      row.appendChild(code);
+      mk(row,'▶ Start',()=>{ const c=code.value; LAST_CODE=''; startMapNamed(map.value, c); },'go');
     }},
     {id:'prow-main', render:(main,d,mk)=>{
       main.className='prow'; main.innerHTML='';
@@ -2164,7 +1940,10 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     // CAPTURE session, nothing more.
     {id:'prow-endscrim', render:(row,d,mk)=>{
       row.className='prow'; row.innerHTML='';
-      if(session || !activeScrim) return;
+      // ...and not until something has actually been captured. Closing out an
+      // empty scrim leaves a record with nothing in it and throws away the
+      // setup that went into it.
+      if(session || !activeScrim || !SCRIM_MAP_COUNT) return;
       mk(row,'■ Finish scrim capture',()=>endScrimCapture(),'');
     }},
     // Finish pinned to the bottom, as on index.html: it is the one commit
@@ -2237,7 +2016,6 @@ document.getElementById('tourNext').onclick=tourNext;
 setInterval(tourTick, 1500);   // advance the tour as each action completes
 document.getElementById('scsave').onclick=saveScrim;
 document.getElementById('scrimpick').onchange=onScrimPick;
-document.getElementById('scstart').onclick=startScrimMap;
 document.getElementById('detectsides').onclick=async()=>{
   if(!session){ snapMsg('start a map first',true); return; }
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ snapMsg('share your screen and calibrate first',true); return; }
@@ -2252,16 +2030,6 @@ document.getElementById('oppname').onclick=onOpponentName;
 document.getElementById('screxport').onclick=exportScrims;
 document.getElementById('scimportbtn').onclick=()=>document.getElementById('scimport').click();
 document.getElementById('scimport').onchange=e=>{ const f=e.target.files[0]; if(f) importScrims(f); e.target.value=''; };
-document.getElementById('scrimpscrbtn').onclick=()=>document.getElementById('scrimpscr').click();
-document.getElementById('scrimpscr').onchange=e=>{ const f=e.target.files[0]; if(f) importSessionFromScreenshot(f); e.target.value=''; };
-document.getElementById('scrimaddhand').onclick=addScaffoldMapByHand;
-document.getElementById('scrimstartsession').onclick=startScaffoldSession;
-document.addEventListener('paste', e=>{
-  const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
-  for(const item of items){ if(item.type.startsWith('image/')){ const f=item.getAsFile(); if(f){ e.preventDefault(); importSessionFromScreenshot(f); } break; } }
-});
-
-buildScrimMapOptions();
 (()=>{ const ht=document.getElementById('howto'); ht.open=localStorage.getItem('owdb_howto_closed')!=='1';
   ht.addEventListener('toggle',()=>localStorage.setItem('owdb_howto_closed', ht.open?'0':'1')); })();
 // Palette picker — shares owdb.palette with the dashboard (same origin).

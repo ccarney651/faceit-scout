@@ -20,6 +20,27 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-19
 
 ### Changed
+- **The capture panel is the scrim workflow; the page is setup only.** The page
+  could still add a map, start it, enter bans and import a session - and its
+  "Start map" ran before bans had anywhere to be entered on that surface, so a
+  map could begin with the draft unrecorded. Everything done DURING a scrim now
+  lives in the pop-out panel: choose the map, note the bans, capture, finish,
+  choose the next, close the scrim out. The page keeps what happens before the
+  game - share the screen, calibrate, name the scrim - and nothing else. That is
+  305 lines of markup and handlers gone from it.
+
+  The panel's next-map row gained an optional replay-code field, because
+  removing the page's field would otherwise have left no way to record one at
+  all. The screenshot importer's UI went too; `parseScrimSessionText` stays,
+  since the replay-code OCR reads the same replay-history text.
+
+- **The pre-map panel says what it is for.** It led with "no map running", which
+  names what is not happening. It now reads "Select the map, and any bans" - the
+  second half only when the scrim uses them.
+
+- **"Finish scrim capture" waits for a captured map.** Closing out a scrim with
+  nothing in it left an empty record and threw away the setup.
+
 - **Hero bans are picked from the capture panel, before the map starts.** They
   were entered from a 53-entry dropdown that only appeared *while a map was
   running* - after the draft they were meant to record. The panel now carries a

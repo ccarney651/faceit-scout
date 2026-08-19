@@ -43,7 +43,7 @@ def _pure_js() -> str:
         "const {normName,simScore,affinity,confidentOrientation}=module.exports;",
         _extract(
             ("const CONTROL_SUBMAPS=", "async function detectScrimSides()"),
-            ("function bestMapMatch(text)", "async function importSessionFromScreenshot(file)"),
+            ("function bestMapMatch(text)", "// The screenshot importer's UI is gone"),
         ),
     ])
 
@@ -251,12 +251,15 @@ def test_league_code_block_is_wired_into_every_code_entry_point() -> None:
     the calls themselves for that reason.
     """
     html = APP.read_text(encoding="utf-8").replace(" ", "")
-    # Both entry points that can start a capture from a replay code.
-    assert html.count("if(awaitrefuseIfLeagueCode(") >= 2, (
+    # The invariant rather than a count: the page's own start path and the
+    # screenshot importer are gone, so there is one start path today and
+    # counting them would only have to be edited again next time. Anything
+    # that begins capturing a map must ask first.
+    starts = html.count("activeScrimMap={map_name:")
+    assert starts >= 1, "no map start path found at all"
+    assert html.count("if(awaitrefuseIfLeagueCode(") >= starts, (
         "a code entry point no longer calls refuseIfLeagueCode"
     )
-    # The scaffold must not queue league rows in the first place.
-    assert "!r.league" in html, "scaffolded league rows are no longer filtered out"
 
 
 def test_league_code_block_treats_an_unloaded_feed_as_unverifiable() -> None:
@@ -377,8 +380,11 @@ def test_ui_modal_collects_textarea_fields() -> None:
     # of this guard matched the explanatory comment, so reverting the real
     # querySelectorAll still passed.
     assert "querySelectorAll('input,select,textarea')" in util.replace(" ", "")
-    html = APP.read_text(encoding="utf-8")
-    assert 'id="rawocr"' in html, "the textarea this guard exists for moved or was renamed"
+    # scrim.html's own OCR-edit textarea went with the screenshot importer, but
+    # index.html still edits raw OCR text this way and the selector is shared,
+    # so the guard stays anchored to the module.
+    idx = (APP.parent / "index.html").read_text(encoding="utf-8")
+    assert "collect:true" in idx, "nothing collects modal fields any more - is this guard still needed?"
 
 
 def test_capturing_never_waits_on_team_names() -> None:
@@ -400,8 +406,10 @@ def test_capturing_never_waits_on_team_names() -> None:
     assert "async function ensureScrim()" in html, (
         "ensureScrim() is what creates the block implicitly - it is gone"
     )
-    # Every entry point into capture must go through it.
-    assert html.replace(" ", "").count("awaitensureScrim();") >= 3, (
+    # Every entry point into capture must go through it. One path today, but
+    # tied to the count of start paths so a new one cannot skip it.
+    flat = html.replace(" ", "")
+    assert flat.count("awaitensureScrim();") >= flat.count("activeScrimMap={map_name:"), (
         "a capture entry point no longer creates the scrim block implicitly"
     )
 
@@ -444,7 +452,9 @@ def test_hero_bans_are_optional_per_scrim() -> None:
     """
     html = APP.read_text(encoding="utf-8")
     assert 'id="scbans"' in html, "no per-scrim bans toggle"
-    assert 'id="banrow"' in html, "no ban control"
+    # The control itself lives in the pop-out panel now - see
+    # test_the_panel_offers_the_ban_picker_between_maps.
+    assert "{id:'prow-bans'" in html, "no ban control"
     assert "uses_bans" in html, "the toggle is not persisted on the scrim"
     assert "function usesBans()" in html
 
@@ -1019,7 +1029,7 @@ def test_the_panel_can_close_out_a_scrim_only_between_maps() -> None:
     # map is being captured, so there is nothing to decline.
     row = _extract(("{id:'prow-endscrim'", "{id:'prow-finish'"))
     compact = "".join(row.split())
-    assert "if(session||!activeScrim)return;" in compact, (
+    assert "if(session||!activeScrim||!SCRIM_MAP_COUNT)return;" in compact, (
         "finish-scrim must not render while a map is being captured")
 
 
@@ -1178,3 +1188,67 @@ def test_showing_the_readouts_does_not_wipe_what_they_hold() -> None:
       setReadoutsVisible(true);
       return target.A.innerHTML;""")
     assert got == "live comp"
+
+
+# --- the panel is the workflow, the page is setup -------------------------
+# Everything done DURING a scrim moved to the pop-out panel: the operator is
+# watching Overwatch, and a control on the page is a control that costs an
+# alt-tab. The page keeps what is done before the game starts (share the
+# screen, calibrate, name the scrim) and nothing else.
+
+def test_the_page_cannot_start_a_map() -> None:
+    # It could, and it bypassed the ban picker entirely: the page's "Start map"
+    # ran before bans had anywhere to be entered on that surface.
+    html = APP.read_text(encoding="utf-8")
+    for gone in ('id="scstart"', 'id="scrimmode"', 'id="scrimmapbtns"',
+                 'id="scrimmapidx"', 'id="scrimcode"'):
+        assert gone not in html, f"{gone} still lets the page start a map"
+
+
+def test_the_page_has_no_ban_controls() -> None:
+    html = APP.read_text(encoding="utf-8")
+    for gone in ('id="banrow"', 'id="banpicker"'):
+        assert gone not in html, f"{gone} still puts bans on the page"
+
+
+def test_the_page_has_no_screenshot_importer() -> None:
+    html = APP.read_text(encoding="utf-8")
+    for gone in ('id="scrimpscrbtn"', 'id="scrimpscr"', 'id="scrimqueue"',
+                 'id="scrimaddhand"', 'id="scrimstartsession"'):
+        assert gone not in html, f"{gone} is still on the page"
+
+
+def test_the_replay_history_parser_survives_its_ui() -> None:
+    # The button went, the parsing did not: the replay-code OCR reads the same
+    # replay-history text off the screen, and would otherwise start from
+    # nothing. Its tests above still cover it.
+    html = APP.read_text(encoding="utf-8")
+    assert "function parseScrimSessionText(" in html
+    assert "function bestMapMatch(" in html
+
+
+def test_a_map_can_still_be_given_a_replay_code_from_the_panel() -> None:
+    # Removing the page's code field took away the only place a code could be
+    # entered. Without this every map would be saved with none until the
+    # code-OCR work lands, and there would be no way to add one afterwards.
+    row = _extract(("{id:'prow-next'", "{id:'prow-main'"))
+    assert "createElement('input')" in row, "the panel has nowhere to put a replay code"
+    assert "startMapNamed(" in row
+
+
+def test_the_panel_says_what_the_pre_map_screen_is_for() -> None:
+    html = APP.read_text(encoding="utf-8")
+    assert "no map running" not in html, "the panel still leads with what is NOT happening"
+    tick = _extract(("tick:el=>", "controls:["))
+    assert "bans" in tick.lower() and "map" in tick.lower(), (
+        "the pre-map panel does not say what it is for"
+    )
+
+
+def test_a_scrim_with_no_maps_cannot_be_closed_out() -> None:
+    # Closing out a scrim that captured nothing leaves an empty record and
+    # loses the setup. The button is not offered until a map has been saved.
+    row = _extract(("{id:'prow-endscrim'", "{id:'prow-finish'"))
+    assert "SCRIM_MAP_COUNT" in row, "finish-scrim is offered before any map exists"
+    src = _extract(("async function endScrimCapture()", "// scrimDate():"))
+    assert "SCRIM_MAP_COUNT" in src, "the guard is only in the rendering, not the action"
