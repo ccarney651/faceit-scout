@@ -274,6 +274,7 @@ button:disabled{opacity:.45;cursor:default}
       <div class="row" style="margin-top:8px">
         <select id="code" class="skel" disabled></select>
         <button id="copy" class="ghost" title="Copy the selected replay code into your clipboard">Copy</button>
+        <button id="readcode" class="ghost" title="Read the replay code off the screen and check it against this division's codes">Read code</button><span class="wip" title="Experimental — OCRs the code printed on the HUD banner. Checked against the feed, so a misread cannot select a code that does not exist.">WIP</span>
         <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
       </div>
       <div class="row" style="margin-top:8px">
@@ -612,6 +613,30 @@ async function readReplayCode(){
   }
 }
 
+// matchReadCode(read, codes) - what a code read off the screen corresponds to
+// in this division's feed.
+//
+// The feed is what makes the league read trustworthy where a scrim read is not:
+// here every code has a right answer available, so a one-character miss is
+// recoverable rather than silently wrong. Crockford excludes I/L/O precisely
+// because they are confusable with 1/0 and foldCode applies the published
+// folding; this catches what survives it.
+//
+// A TIE ABSTAINS. Two feed codes one character from the read means choosing
+// either could file the capture against the wrong match, which is the exact
+// failure this exists to prevent.
+function matchReadCode(read, codes){
+  if(!read) return {kind:'none', code:null};
+  const list=(codes||[]).map(c=>c.code).filter(Boolean);
+  if(list.indexOf(read)!==-1) return {kind:'exact', code:read};
+  const near=list.filter(c=>{
+    if(c.length!==read.length) return false;
+    let d=0; for(let i=0;i<c.length;i++) if(c[i]!==read[i]) d++;
+    return d===1;
+  });
+  if(near.length===1) return {kind:'near', code:near[0]};
+  return {kind:'none', code:null};
+}
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
@@ -636,6 +661,23 @@ document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); }
 document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
 document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };
 document.getElementById('code').onchange=onCode;
+// The wrong-match guard. Picking the wrong code from a dropdown of lookalike
+// six-character strings attributes every comp captured afterwards to the wrong
+// match, teams and players, and publishes it - with nothing to say it happened.
+// This asks the screen instead.
+document.getElementById('readcode').onclick=async()=>{
+  const got=await readReplayCode();
+  if(!got){ snapMsg('could not read the code off the screen — calibrate, then try again', true); return; }
+  const cs=currentCodes(), m=matchReadCode(got, cs);
+  if(m.kind==='none'){ snapMsg('screen says '+esc(got)+', which is not a code in this division — nothing changed', true); return; }
+  const cur=selectedCode();
+  if(cur && cur.code===m.code){ snapMsg('screen says '+esc(m.code)+' — matches what is selected'); return; }
+  const idx=cs.findIndex(c=>c.code===m.code);
+  const sel=document.getElementById('code');
+  sel.value=String(idx); onCode();
+  snapMsg((m.kind==='near'?'read '+esc(got)+', nearest code is ':'screen says ')
+      +esc(m.code)+' — selected it');
+};
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
 function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`${c.code} — copied`;} }
 document.getElementById('skip').onclick=nextCode;
