@@ -20,6 +20,14 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-19
 
 ### Fixed
+- **The scrim panel never said who was on which hero.** It read the ten HUD
+  names, saved them with every snapshot and paired them into the finished map -
+  and then printed a hardcoded em-dash in all ten Player cells, so the one
+  screen the operator watches during a scrim showed nothing it already knew.
+  The cell now shows the name read for that slot, replaced by a roster's own
+  spelling when the read matches one (ours, or the opponent's when they were
+  identified as a league team). A blank cell means nothing was read there -
+  a name is never invented to fill one.
 - **Scrim side detection died on a missing database store.** The `opponents`
   store was added during opponent identification and folded into an existing
   schema version, on the reasoning that the version had not shipped yet.

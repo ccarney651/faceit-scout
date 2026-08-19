@@ -857,3 +857,62 @@ def test_the_roster_lookup_is_case_insensitive() -> None:
 def test_teams_are_listed_once_and_sorted() -> None:
     names = _run_feed(f"return indexLeagueTeams({_FEED_FIXTURE}).names;")
     assert names == sorted(set(names)), "duplicates or unsorted names in the picker"
+
+
+# --- who is on which hero -------------------------------------------------
+# The panel read the ten HUD names all along and then threw them away at the
+# last step, printing a hardcoded em-dash in every Player cell. These cover the
+# helper that decides what a slot says.
+
+def _run_label(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    engine = (APP.parent / "engine" / "opponents.js").read_text(encoding="utf-8")
+    src = (engine + "\nvar OWDBOpponents=module.exports;\n" + _US_STUBS
+           + _extract(("const OUR_TEAM_KEY=", "const ALIAS_KEY="))
+           + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));")
+    tmp = Path("scrim_label_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        # encoding= explicitly: the fixtures here carry the punctuation OCR
+        # invents around a name plate, which the Windows default codepage
+        # mangles on the way back out of node.
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True, encoding="utf-8")
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_a_slot_shows_the_name_that_was_read_for_it() -> None:
+    # No roster in play at all: the read itself is the answer. Showing nothing
+    # because we cannot vouch for it is how this cell ended up blank.
+    assert _run_label("return slotPlayerLabel('SYNEX', []);") == "SYNEX"
+
+
+def test_a_read_that_matches_a_roster_shows_the_rosters_spelling() -> None:
+    # "i XYPHER |" is a real read - the stray glyphs are plate edges. It is
+    # matched exactly the way identification matches it, so what the panel
+    # shows agrees with who the tool decided we are playing.
+    assert _run_label("return slotPlayerLabel('i XYPHER |', ['GCB','XYPHER']);") == "XYPHER"
+
+
+def test_a_slot_nothing_could_be_read_for_stays_blank() -> None:
+    # Blank means "no name", and must not be dressed up as one.
+    assert _run_label("return slotPlayerLabel('', ['GCB']);") == ""
+    assert _run_label("return slotPlayerLabel(null, ['GCB']);") == ""
+
+
+def test_an_unrecognised_read_is_shown_as_read_not_dropped() -> None:
+    # The opponent is usually a mix with no roster anywhere. Their names are
+    # still the whole point of the column.
+    assert _run_label("return slotPlayerLabel('§ ASHBORN |}', ['GCB']);") == "§ ASHBORN |}"
+
+
+def test_the_panel_no_longer_hardcodes_an_em_dash_in_the_player_cell() -> None:
+    # The bug itself: readComp populated session.players, saved it per
+    # snapshot, paired it into the finished map - and printed a literal dash.
+    row = _extract(("function readComp(bx)", "// refTemplate/addRef/learnCrop"))
+    assert '<span class="cn pn">\u2014</span>' not in row, "the Player cell is hardcoded again"
+    assert "slotPlayerLabel(" in row, "readComp must ask what the slot's player is called"

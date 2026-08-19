@@ -620,6 +620,26 @@ function ourRosterNames(){
   faceitRoster(name).concat(loadOurRoster()).forEach(n=>{
     const k=(n||'').trim().toLowerCase(); if(!k||seen[k]) return; seen[k]=1; out.push(n); });
   return out; }
+// What the Player column says for one slot. The HUD read IS the answer: a
+// scrim opponent is often a mix with no roster anywhere, and those five names
+// are the whole reason the column exists. A canonical spelling only ever
+// REPLACES a read that provably matches it - it never fills in a slot we could
+// not read, so a blank cell always means "nothing was read here" rather than
+// "read, but not vouched for". That distinction is what makes a wrong name
+// visible instead of silently plausible.
+//
+// Matching goes through normSet, the same expansion identification uses, so
+// the name shown against a hero agrees with the team the tool says we are
+// playing. "i XYPHER |" is a real read - the stray glyphs are the neighbouring
+// plate's border - and normalising it whole matches nothing.
+function slotPlayerLabel(raw, known){
+  const s=String(raw==null?'':raw).trim();
+  if(!s) return '';
+  const keys=OWDBOpponents.normSet([s]);
+  for(const n of (known||[])){
+    const k=OWDBOpponents.norm(n);
+    if(k && keys.indexOf(k)!==-1) return n; }
+  return s; }
 // Aliases are smurf accounts learned per team. Local only, and deliberately
 // never included in a shared scout - that would leak the mapping between a
 // player's main and their alts.
@@ -980,14 +1000,29 @@ const {open:tourOpen, next:tourNext, prev:tourPrev, render:tourRender, tick:tour
 // index.html) - see that file's header for the bestMatch/importRefs
 // cosmetic-only-divergence finding and the ocrWorker real one.
 function slotClass(s){ return s>=0.75?'hi':s>=0.55?'mid':'lo'; }
+// Every canonical spelling a HUD read could resolve to: our squad, plus the
+// opposing squad when we identified them as a league team. A local group is
+// deliberately not included - it stores names already normalised (lowercase,
+// punctuation stripped), so "resolving" to one would replace a real read with
+// a worse-looking version of itself.
+function knownPlayerNames(){
+  const opp=(typeof LAST_IDENTITY!=='undefined'&&LAST_IDENTITY)?LAST_IDENTITY.opponent:null;
+  const theirs=(opp&&opp.kind==='league_team')?faceitRoster(opp.label):[];
+  return ourRosterNames().concat(theirs); }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
 function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
+  const known=knownPlayerNames();
   for(const side of ['a','b']){ const b=bxs[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
+    // The ten HUD names, in slot order - read by detectScrimSides and kept on
+    // the session. They were already being saved per snapshot and paired into
+    // the finished map; only this readout dropped them.
+    const said=(session&&session.players&&session.players[side])||[];
     if(host){ const hd=document.createElement('div'); hd.className='hd'; hd.innerHTML='<span class="hdc">Hero</span><span class="hdc">Player</span><span class="hdc sc">Conf</span>'; host.appendChild(hd); }
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h}; const r=bestMatch(cellGrayPadded(frame,cell),side);
       const ok=r.score>=0.5; out[side].push(ok?{name:r.name,guid:r.guid,score:r.score}:{name:'??',guid:null,score:r.score});
       if(host){ const row=document.createElement('div'); row.className='slot';
-        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">\u2014</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
+        const pn=slotPlayerLabel(said[i], known);
+        row.innerHTML=`<span class="hcell">${heroPortrait(r.name)}<span class="cn">${ok?r.name:'??'}</span></span><span class="cn pn">${pn?esc(pn):'\u2014'}</span><span class="sc ${slotClass(r.score)}">${r.score.toFixed(2)}</span>`; host.appendChild(row); } } }
   return out; }
 // refTemplate/addRef/learnCrop/heroCatalog now live in engine/refs.js
 // (shared with index.html).
