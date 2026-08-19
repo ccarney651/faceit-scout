@@ -277,6 +277,62 @@ def test_default_matches_mode_is_playoffs_when_playoffs_are_finished(tmp_path) -
     assert got == "playoffs"
 
 
+# --- the scouting match list ------------------------------------------------
+# Scouting a team means reading every league game it played, and a playoff run is
+# league play: same teams, same patch, same replay codes, and the most recent
+# form there is. The regular-season list alone stops at the end of the group
+# stage, so a team that just played eight bracket games shows stale comps and a
+# coverage row that ignores its most capturable replays.
+
+def test_league_matches_includes_finished_playoff_matches(tmp_path) -> None:
+    got = _run(
+        "return leagueMatches("
+        "[{id:'m1',finished_at:'2026-07-01'}],"
+        "[{id:'p1',status:'FINISHED',finished_at:'2026-08-09'}]).map(m=>m.id);",
+        tmp_path)
+    assert got == ["p1", "m1"]
+
+
+def test_league_matches_drops_unplayed_bracket_slots(tmp_path) -> None:
+    # Scheduled bracket entries carry no games and often no teams (TBD slots).
+    # Aggregating them would invent matches a team has not played.
+    got = _run(
+        "return leagueMatches([{id:'m1',finished_at:'2026-07-01'}],"
+        "[{id:'p1',status:'SCHEDULED',finished_at:null},"
+        "{id:'p2',status:'FINISHED',finished_at:'2026-08-09'}]).map(m=>m.id);",
+        tmp_path)
+    assert got == ["p2", "m1"]
+
+
+def test_league_matches_is_newest_first_across_both_sources(tmp_path) -> None:
+    # Recency windows ("last 10 matches") slice off the front, so the playoff
+    # games have to interleave by date, not sit in a block at either end.
+    got = _run(
+        "return leagueMatches("
+        "[{id:'r1',finished_at:'2026-06-01'},{id:'r2',finished_at:'2026-08-12'}],"
+        "[{id:'p1',status:'FINISHED',finished_at:'2026-08-09'}]).map(m=>m.id);",
+        tmp_path)
+    assert got == ["r2", "p1", "r1"]
+
+
+def test_league_matches_survives_a_division_with_no_playoffs(tmp_path) -> None:
+    # Most divisions have no playoff championship at all, so `playoffs` is
+    # simply absent from the division object.
+    got = _run(
+        "return leagueMatches([{id:'m1',finished_at:'2026-07-01'}],"
+        "undefined).map(m=>m.id);", tmp_path)
+    assert got == ["m1"]
+
+
+def test_league_matches_does_not_mutate_its_input(tmp_path) -> None:
+    # It runs on every division switch; sorting the caller's array in place
+    # would quietly reorder D().matches for everything else.
+    got = _run(
+        "const src=[{id:'a',finished_at:'2026-06-01'},{id:'b',finished_at:'2026-08-01'}];"
+        "leagueMatches(src, []); return src.map(m=>m.id);", tmp_path)
+    assert got == ["a", "b"]
+
+
 # --- playoffs bracket: column placement ------------------------------------
 # FACEIT double-elim playoff matches carry `group` (bracket leg: 1 = upper,
 # 2 = lower) and `round` (stage within it). The bracket columns are upper

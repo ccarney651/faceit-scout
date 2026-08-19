@@ -167,6 +167,22 @@ function defaultMatchesMode(playoffsList){
   return (playoffsList && playoffsList.length) ? 'playoffs' : 'played';
 }
 
+// Every league match a division has actually PLAYED: the regular season plus the
+// playoff bracket's finished matches, newest first. Playoff entries carry the
+// full match shape (games, maps, bans, rosters, replay codes), so a team read
+// built on this list - scouting coverage, comps, ban tendencies, replay-code
+// lookup - counts a team's bracket run instead of stopping at the group stage.
+// That run is both its most recent form and its most capturable replays.
+// Unplayed bracket slots are dropped: they hold no games, and a TBD slot has no
+// team to attribute anything to.
+//
+// Deliberately NOT the list behind standings, power rankings, or the division
+// summary counts - a playoff result must never move a regular-season table.
+function leagueMatches(matches, playoffs){
+  return [...(matches||[]), ...(playoffs||[]).filter(m=>m && m.status==='FINISHED')]
+    .sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
+}
+
 // Playoffs bracket: which column a real FACEIT match belongs in. Playoff
 // championships are double-elimination; FACEIT's `group` is the bracket leg
 // (1 = upper, 2 = lower) and `round` is the stage within it, so the column is
@@ -470,6 +486,23 @@ function capturableTeams(matches, captured, wipe){
 // game (~20), the push-style modes are short (~11).
 // Clash is absent: it is no longer played competitively, so it never appears
 // in league data and would only pad the mode lists.
+//
+// These stay flat per mode ON PURPOSE, and the alternative was measured rather
+// than assumed (2026-08-20). Per-game scores ARE in the data, so each game could
+// be weighted by its own length: Control and Flashpoint score in rounds, and an
+// escort/hybrid total above 3 means extra rounds were played. Doing that moves
+// per-game estimates by up to 3x - and changes the panel by nothing. Across all
+// five divisions the ranking moved 0-2 positions and the top three rows, the only
+// ones a scout acts on, were identical every time.
+//
+// The reason is structural, not a property of this season: the panel aggregates
+// to MAPS, and every map carries dozens of games, so game-level length averages
+// out before it reaches a row. Measured per-map mean length varies 0.3% (Control)
+// to 10.9% (Escort) while the games inside vary 3x. A map's rank is driven by how
+// often it is PLAYED and how little of it is captured, not by how long its games
+// run. Reach for real per-game weighting only if the panel ever ranks something
+// with few games behind it - a single match, a single team's play - where one
+// long game is no longer averaged away.
 const MODE_MINUTES={Control:14,Escort:20,Hybrid:20,Push:11,Flashpoint:11};
 // A map is "under-covered" until half its league play is captured, and maps
 // played fewer than this many times sit below the noise floor (one game on a

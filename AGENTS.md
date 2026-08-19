@@ -271,9 +271,25 @@ canonical and this copy is the bug.
 
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.
-4. **Statistical capture recommendations** — **delivered**. Iterate: the
-   per-mode length estimates are hardcoded guesses, and coverage counts
-   regular-season games only (playoff games are a known gap).
+4. **Statistical capture recommendations** — **delivered, and both known gaps
+   are now closed (2026-08-20).**
+
+   *Playoff games* were missing from every team-facing read, not just the
+   coverage counts: team scouting was built from the regular season alone, so a
+   team's comps, ban tendencies, replay-code links and coverage row stopped at
+   the group stage. `leagueMatches()` now supplies the full played history
+   (regular season + finished bracket) to those reads, and a Combined view
+   merges `playoffs` at all. Standings, power rankings and League meta stay
+   regular-season by design — see the comment on `leagueMatches` in `pure.js`.
+
+   *The per-mode length estimates* stay hardcoded, deliberately, now with a
+   measurement behind them instead of a shrug. Weighting each game by its own
+   score (rounds for Control/Flashpoint, extra rounds for escort/hybrid totals
+   above 3) shifts per-game estimates up to 3x and moves the panel 0-2 positions,
+   with an identical top three in all five divisions: the panel aggregates to
+   maps, and dozens of games per map average the variation away. Full reasoning
+   sits on `MODE_MINUTES`. Revisit only if a panel ever ranks something with few
+   games behind it.
 
 ### Audience
 

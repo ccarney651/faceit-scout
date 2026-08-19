@@ -53,6 +53,13 @@ function mergeDivisions(v){
   const ds=v.divisions.map(cid=>DIVS[cid]);
   const matches=[].concat(...ds.map(d=>d.matches));
   const upcoming=[].concat(...ds.map(d=>d.upcoming||[]));
+  // Merged like every other per-division list. The Playoffs TAB still declines a
+  // Combined view (three brackets are not one bracket, see renderPlayoffs), but
+  // everything else that reads playoff matches needs them here: without this,
+  // MATCHES_ALL on a Combined view holds no playoff game at all, so the capture
+  // work-list misses every live bracket code and findMatch cannot resolve a
+  // playoff match page.
+  const playoffs=[].concat(...ds.map(d=>d.playoffs||[]));
   const teams=[].concat(...ds.map(d=>d.teams));
   const team_names=[...new Set([].concat(...ds.map(d=>d.team_names)))].sort();
   const sum={championship:v.label, region:v.region};
@@ -68,7 +75,7 @@ function mergeDivisions(v){
     return {by_map:Object.values(bm).sort((a,b)=>b.games-a.games),
       total_games:ds.reduce((a,d)=>a+((get(d)||{}).total_games||0),0),
       atk_first_wins:ds.reduce((a,d)=>a+((get(d)||{}).atk_first_wins||0),0)}; };
-  return {summary:sum, teams, team_names, matches, upcoming,
+  return {summary:sum, teams, team_names, matches, upcoming, playoffs,
     attacking_first:mergePanel(d=>d.attacking_first),
     attacking_first_extra:mergePanel(d=>d.attacking_first_extra)};
 }
@@ -168,11 +175,13 @@ function wrCell(wins,games){
 
 /* recency: matches newest-first (recency is measured in matches ≈ how a season is counted).
    Recomputed whenever the active division changes. */
-let MATCHES_RECENT=[];
+let MATCHES_RECENT=[];   // regular season only, newest first - the league-meta universe, so its counts agree with the header summary and the standings
+let MATCHES_ALL=[];      // every match actually PLAYED, finished playoff games included (leagueMatches) - what scouting a TEAM reads
 let MATCHES_MODE='played';   // Matches tab: 'played' | 'upcoming' | 'playoffs'
 let MATCHES_MODE_SET=false;  // whether the user (or a deep link) has explicitly chosen a mode this session — once true, defaultMatchesMode() no longer overrides it on re-render
 function recomputeDivision(){
   MATCHES_RECENT=[...D().matches].sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);});
+  MATCHES_ALL=leagueMatches(D().matches, D().playoffs);
   SCOUT_TEAM=D().team_names[0]||null; SCOUT_N=null;
   const tn=D().team_names;
   SIM_A=tn[0]||null; SIM_B=tn[1]||tn[0]||null; SIM_FIRST='A'; SIM_TREE={};
@@ -187,7 +196,10 @@ const dateRange=(ms)=>{const w=ms.map(m=>m.finished_at).filter(Boolean).sort();r
 let DIV_BAN_BASE=null;
 function divBanBaseline(){
   if(DIV_BAN_BASE) return DIV_BAN_BASE;
-  DIV_BAN_BASE=divBanBaseFrom(D().matches);
+  // Same universe as the team ban counts it is the baseline FOR (MATCHES_ALL),
+  // or a team's playoff bans would be measured against a field that never
+  // played the bracket.
+  DIV_BAN_BASE=divBanBaseFrom(MATCHES_ALL);
   return DIV_BAN_BASE;
 }
 // A team's ban counts -> lift rows vs a baseline share map. Drops n<minN (a lone
@@ -1110,7 +1122,7 @@ function teamCompareCard(team, opp, agg, scout, effSummary, roster){
   }
   // Bans — lift vs the shared division baseline: "what they ban MORE than the field."
   card.appendChild(el(`<h4>Bans vs division avg</h4>`));
-  card.appendChild(el(banLiftList(banLiftRows(agg.bans, divBanBaseline().all, 2, agg.bansGk, codeLookup(MATCHES_RECENT, team, CODE_WIPE)))));
+  card.appendChild(el(banLiftList(banLiftRows(agg.bans, divBanBaseline().all, 2, agg.bansGk, codeLookup(MATCHES_ALL, team, CODE_WIPE)))));
   // Comps (capture analytics)
   if(scout && scout.scout){
     const s=scout.scout;
@@ -1256,7 +1268,7 @@ function renderOverview(){
   // Only teams with a live replay actually available are listed — a team that
   // never played, or whose only codes were wiped before capture, has nothing a
   // scout could run.
-  const capturable=capturableTeams((D().matches||[]).concat(D().playoffs||[]), CAPTURED, CODE_WIPE);
+  const capturable=capturableTeams(MATCHES_ALL, CAPTURED, CODE_WIPE);
   const cap=zeroCaptureTeams(tn, ocs).filter(n=>capturable.has(n));
   const capCount=tn.filter(n=>capturable.has(n)).length;
   if(cap.length){
@@ -1302,7 +1314,7 @@ function renderOverview(){
   // code left to capture. Finished playoff games count as league play here too
   // (the same union the queue uses) — a live playoff code is the freshest
   // capture target on the site.
-  const recs=mapCoverage((D().matches||[]).concat(D().playoffs||[]), CAPTURED, CODE_WIPE);
+  const recs=mapCoverage(MATCHES_ALL, CAPTURED, CODE_WIPE);
   if(recs.length){
     const rc=el(`<div class="card mt20"></div>`);
     rc.appendChild(el(`<p class="eyebrow">Capture recommendations · ${recs.length} map${recs.length===1?'':'s'} under-covered</p>`));
@@ -1403,12 +1415,12 @@ function renderOverview(){
 }
 
 function scoutData(team,lim){
-  const mine=MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team);
+  const mine=MATCHES_ALL.filter(m=>m.f1===team||m.f2===team);
   const used=recent(mine,lim), a=aggregate(used,team), {from,to}=dateRange(used);
   return {team,used:used.length,total:mine.length,from,to,matches:used,...a};
 }
 
-const teamTotalMatches=(team)=> MATCHES_RECENT.filter(m=>m.f1===team||m.f2===team).length;
+const teamTotalMatches=(team)=> MATCHES_ALL.filter(m=>m.f1===team||m.f2===team).length;
 
 
 /* ================================= PREP SHEET (the night-before one-pager) */
@@ -1557,14 +1569,14 @@ function renderScoutBody(t){
   const w=el(`<div class="scout-main"></div>`);
   const side=el(`<div class="scout-side"></div>`);
   // Resolves every gk-tracked evidence row in this function to its replay
-  // code(s); built from MATCHES_RECENT (unwindowed), not t.matches, so it
+  // code(s); built from MATCHES_ALL (unwindowed), not t.matches, so it
   // also covers Counter-scout's matchups below, which come from a separate,
   // unwindowed owdb source (see the design doc). Declared here, at the
   // top of the function, because Counter-scout (which needs it) renders
   // before the aggregated evidence tables do, and const isn't hoisted.
   // CODE_WIPE marks pre-wipe entries `dead` so codesCell/the popover can
   // label them "code wiped" instead of offering a copy chip that won't load.
-  const lookup=codeLookup(MATCHES_RECENT, t.team, CODE_WIPE);
+  const lookup=codeLookup(MATCHES_ALL, t.team, CODE_WIPE);
   const matchW=t.results.filter(r=>r.won).length;
   const form=t.results.slice(0,7).map(r=>`<b class="${r.won?'w':'l'}" title="${esc(r.opp)} ${esc(r.series)}">${r.won?'W':'L'}</b>`).join('');
   const head=el(`<div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between"></div>`);
@@ -1575,7 +1587,7 @@ function renderScoutBody(t){
   const _hsc=((DATA.owdb_comps||{})[t.team]||{}).scout, capMaps=(_hsc&&_hsc.games)||0;
   // Coverage is all-time (captures aren't windowed), so its denominator must be
   // all-time maps played too - windowing it (t.games) could show capMaps > total.
-  const _allMaps=MATCHES_RECENT.filter(m=>m.f1===t.team||m.f2===t.team)
+  const _allMaps=MATCHES_ALL.filter(m=>m.f1===t.team||m.f2===t.team)
     .reduce((s,m)=>s+m.games.filter(g=>g.map).length,0);
   head.appendChild(el(`<div style="text-align:right"><div><span title="matches won / played">${pill(`${matchW}/${t.results.length} matches`,winVar(pctOf(matchW,t.results.length)))}</span> <span title="maps won / played">${pill(`${t.gwins}/${t.games} maps`,winVar(pctOf(t.gwins,t.games)))}</span> <span title="maps with captured comps (scouted)">${pill(`${capMaps}/${_allMaps} scouted`,capMaps?'var(--accent)':'var(--faint)')}</span></div>`+
     `<div class="wl" style="margin-top:6px;justify-content:flex-end">${form||'<span class="faint">no maps</span>'}</div></div>`));
@@ -3054,12 +3066,10 @@ function renderMatches(){
     });
   }
   function drawPlayed(q){
-    // MATCHES_RECENT is newest-first (regular season). Finished playoff matches
-    // join the list tagged — the Played tab reads as one full season history,
-    // and their cards deep-link to the same match pages as the bracket.
-    let shown=MATCHES_RECENT.concat((D().playoffs||[]).filter(m=>m.status==='FINISHED'))
-      .sort((a,b)=>{const x=a.finished_at||'',y=b.finished_at||'';return x===y?0:(x<y?1:-1);})
-      .filter(m=>!q||hay(m).includes(q));
+    // MATCHES_ALL is that union already (regular season + finished playoff
+    // matches, newest first), so the Played tab reads as one full season history
+    // and the cards deep-link to the same match pages as the bracket.
+    let shown=MATCHES_ALL.filter(m=>!q||hay(m).includes(q));
     if(sort.value==='old') shown=[...shown].reverse();
     if(!shown.length){ list.appendChild(el(`<p class="note">No played matches${q?' match your search':''}.</p>`)); return; }
     const grid=el(`<div class="matches-grid"></div>`);

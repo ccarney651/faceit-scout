@@ -17,6 +17,29 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-20
+
+### Fixed
+- **Scouting a team now reads its playoff run.** Team-facing panels were built
+  from the regular season alone, so the moment the bracket started, a team's
+  comps, ban tendencies, replay-code links and scouting-coverage row stopped at
+  the end of the group stage - hiding 150 finished matches and 431 replay codes
+  league-wide, which are both the most recent form there is and the freshest
+  capture targets on the site. They now read every match a team has actually
+  played. Standings, power rankings and the League meta panel are deliberately
+  unchanged: a playoff result must not move a regular-season table, and the meta
+  panel's counts stay comparable with the header summary.
+
+  On a Combined view the effect was total rather than partial - the merged view
+  never carried the bracket at all, so no playoff game reached the capture
+  work-list and a playoff match page could not be opened from one.
+
+  Measured on the current season: EMEA Master went from 2 teams with a live
+  capture target to 8, and every division gained under-covered maps that had
+  been invisible.
+
+---
+
 ## 2026-08-19
 
 ### Added
