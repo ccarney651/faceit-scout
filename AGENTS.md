@@ -194,6 +194,15 @@ canonical and this copy is the bug.
   per-season constant each: `CURRENT_SEASON` in `infra/upload-worker/worker.js`
   and `CONTRIB_DIR` in `owdb/contribute.py`. At the cutover, follow
   `specs/2026-08-10-season10-cutover-design.md` rather than improvising.
+- **Coverage expands at the S10 cutover, not before** — §5 of that design.
+  Target: EMEA + NA Master/Expert/Advanced, SA Master, OCE Master; Open and
+  Intermediate deliberately excluded. Only three divisions are actually
+  missing (NA Advanced, SA Master, OCE Master) = +37% data, page 8.7 → 11.9 MB.
+  The SA/OCE region support is a four-line code change that is **inert until a
+  SA/OCE championship exists**, so land it early and keep it off the cutover
+  critical path. Size divisions with the validated formulas in that section —
+  Master is `n(n-1)/2` exactly, every other tier is 7.43 matches/team, Open is
+  3.16 — rather than re-estimating.
 - **`mypy` covers `faceit_sync` only.** `owdb` is not in the must-stay-clean
   contract and currently reports two errors in `owdb/contribute.py`. Its tests
   are its safety net.

@@ -55,6 +55,8 @@ all already decoupled from where the static site is served.
 | Archive shape | One frozen static export per past season, at its own path (`docs/s9/index.html`, ...), linked from a small static `docs/archive.html` index; never regenerated after creation | Cheapest correct option — a true point-in-time snapshot, no new season-switcher UI/JS logic in the live dashboard app. |
 | Captures | Season-scoped directories: `data/captures/s9/`, `data/captures/s10/`, ... | A team's S9 comp must never silently feed S10 scouting — rosters and metas both change. Existing flat files get `git mv`'d into `data/captures/s9/` at cutover for a uniform scheme (no flat-file special case going forward). |
 | Cutover mechanism | Manual, documented runbook (in `CLAUDE.md`), not an automated script | Quarterly cadence, and this is the *first* cutover ever run — automating an unrehearsed process guesses at the wrong abstraction. Revisit as a script only if manual execution proves error-prone after being run for real. |
+| Coverage at cutover (added 2026-08-20) | Expand to EMEA + NA **Master/Expert/Advanced**, plus **SA Master** and **OCE Master** | The season boundary is the only free moment to change coverage: `matches.txt` is being rewritten anyway (runbook step 3), and seeding a division mid-season means back-crawling a live schedule. Operator's chosen scope. |
+| Open and Intermediate | **Not ingested** | Open is 129 teams in EMEA alone and the lowest scouting value in the league; S10's new Intermediate sits between Advanced and Open and inherits that. Excluding both is what keeps the page under 12 MB — see the sizing section. |
 
 ## Changes
 
@@ -104,10 +106,78 @@ One-time, by hand, once S9 is fully finished:
 2. `git mv data/captures/*.json data/captures/s9/`.
 3. Add S10 championship IDs to `matches.txt`; comment out the S9 blocks
    (existing convention — see the `HELD` comment style already in the file).
+   This is where coverage changes — see Section 5. Seed **NA Advanced,
+   SA Master and OCE Master** alongside the existing divisions, one room URL
+   each. Do NOT seed Open or Intermediate.
+3a. Verify the region code change from Section 5 is already merged (it is
+   inert until these seeds land, so it should have shipped well before now).
+   After the first crawl, confirm SA and OCE appear in the region switcher and
+   that neither gets a spurious "Combined" view.
 4. Build the frozen archive (Section 2 above).
 5. Update `update.yml`: live export gets `--season s10`; merge step's `--dir`
    becomes `data/captures/s10`.
 6. Update `worker.js`'s `CURRENT_SEASON` constant; `wrangler deploy`.
+
+
+### 5. Coverage expansion (added 2026-08-20)
+
+The cutover is when coverage changes, because it is the only moment when it is
+cheap. `matches.txt` is already being rewritten at step 3, and seeding a
+division mid-season means back-crawling a schedule that is still moving.
+
+**Target scope:** EMEA Master/Expert/Advanced, NA Master/Expert/Advanced,
+SA Master, OCE Master.
+
+**Only three divisions are actually missing** — EMEA M/E/A and NA M/E are
+already ingested:
+
+| division | regular | playoffs | matches | games | basis |
+|---|---|---|---|---|---|
+| NA Advanced | 342 | 62 | 404 | 1,454 | ~46 teams — the one real estimate here |
+| SA Master | 66 | 10 | 76 | 274 | 12 teams, exact: round robin is n(n-1)/2 |
+| OCE Master | 28 | 6 | 34 | 122 | 8 teams, exact |
+| | | | **514** | **1,850** | |
+
+Measured against S9: 1,404 → 1,918 matches, 5,054 → 6,904 games, 167 → ~233
+teams. **1.37x**, and `docs/index.html` goes 8.7 MB → **11.9 MB**. That is
+comfortable; `--external-data` page splitting stays unnecessary. It would not
+be if Open were included, which is the main reason it is not.
+
+**Sizing formulas, validated against the live DB** — use these rather than
+re-estimating:
+
+- **Master is a single round robin**: `n(n-1)/2` matches, exact. 16 teams
+  predicts 120, and both EMEA and NA Master measure exactly 120.
+- **Every other tier is Swiss**, but the format label does not predict cost:
+  Expert and Advanced both measure **7.43 matches per team**, the same as
+  round-robin Master. Rounds played drives it, not format.
+- **Open is the exception at 3.16 matches/team** (measured, EMEA Open: 110
+  teams / 348 matches), and only ~85% of registered teams play at all.
+- **3.6 games per match**, stable everywhere. **~1.76 KB of `index.html` per
+  game** — the page is almost entirely inlined match data.
+
+**Region support is a code change, and it should land BEFORE cutover day.**
+Adding SA and OCE touches four places: the `REGIONS` tuple
+(`faceit_sync/export.py`), the `--region` choices (`faceit_sync/cli.py`), the
+`want_region` prefix test in `export.py` (currently `startswith("e")` /
+`startswith("n")`, which needs generalizing rather than extending), and the
+docstring listing valid regions. `_region_of` already matches whole words, so
+`"S10 SA Master Central"` classifies with no change, and the view builder is
+already generic over `REGIONS x TIERS`. The "Combined" view correctly does not
+appear for a region with a single division.
+
+Landing this early is deliberate: the change is **inert until a SA or OCE
+championship exists in the DB**, so it can be written, tested and merged
+without waiting, which takes it off the cutover-day critical path.
+
+**The blocker is seeds, not code.** Each new division needs one FACEIT match
+room URL to bootstrap the keyless crawler. Those must be collected by the
+operator once S10 rooms exist; nothing can be seeded before then.
+
+**Expect Advanced to shrink.** Intermediate sits between Advanced and Open, so
+it will siphon teams out of the bottom of Advanced. The same scope will capture
+fewer teams in S10 than it would have in S9 — treat the NA Advanced estimate
+above as an upper bound.
 
 ## Testing
 
