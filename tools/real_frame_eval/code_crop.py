@@ -22,7 +22,8 @@ sys.path.insert(0, 'tools/real_frame_eval')
 from code_truth import strip_a
 
 SCALE = 6
-CONTRAST = 1.9        # harder than the name crops' 1.5: fewer, larger glyphs
+CONTRASTS = [1.0, 1.45, 1.9]   # mirrors CODE_CONTRASTS in the pages: no single
+                               # level works, the plate is semi-transparent
 MID = 140
 
 DEFAULTS = {'DX': 1.079, 'DW': 0.127, 'DY': -0.495, 'DH': 0.198, 'PAD': 0.35}
@@ -49,7 +50,7 @@ def stem_of(frame_path):
     return pathlib.Path(frame_path).stem.split()[-1]
 
 
-def render(frame_path, out_dir, o=None):
+def render(frame_path, out_dir, o=None, contrast=None):
     img = Image.open(frame_path).convert('RGB')
     a = strip_a(img.size)
     if a is None:
@@ -58,10 +59,11 @@ def render(frame_path, out_dir, o=None):
     crop = img.crop((bx, by, bx + bw, by + bh)).resize(
         (bw * SCALE, bh * SCALE), Image.LANCZOS)
     g = np.asarray(crop.convert('L')).astype(np.int16)
-    g = np.clip((g - 128) * CONTRAST + MID, 0, 255).astype(np.uint8)
+    g = np.clip((g - 128) * (CONTRASTS[-1] if contrast is None else contrast) + MID, 0, 255).astype(np.uint8)
     out_dir = pathlib.Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / (stem_of(frame_path) + '.png')
+    suffix = '' if contrast is None else f'@{contrast}'
+    out = out_dir / (stem_of(frame_path) + suffix + '.png')
     Image.fromarray(g).save(out)
     return out
 

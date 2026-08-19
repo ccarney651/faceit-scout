@@ -286,3 +286,27 @@ a cut glyph.
 What is relied on instead: the league page validates every read against the
 feed, where a wrong code matches nothing; and the scrim page never records a
 code the operator has not seen in the panel field first.
+
+### One contrast level does not exist
+
+The plate the code sits on is **semi-transparent**, so what is behind it decides
+whether a contrast boost sharpens the glyphs or saturates them away. Measured on
+one live crop (`SZDPQQ`, Ilios):
+
+| contrast | read |
+| --- | --- |
+| 1.0 | `SZDPQQ` |
+| 1.45 | *empty* |
+| 1.9 | *empty* |
+
+1.9 is what read all twelve screenshot frames. It returned an empty crop on the
+first live one. Both facts are real; neither level is right.
+
+So the pages run a **ladder** — 1.0, 1.45, 1.9 — and take the answer only when
+the passes that produced a code agree. Over the frame set that is 12/12 correct
+with zero wrong, and it *rescues* two frames that 1.0 alone could not read.
+
+Agreement is also the guard that the edge-ink idea failed to provide. A crop
+clipping a glyph can yield six valid characters that are the wrong code, which
+`foldCode` cannot detect — but it is unlikely to yield the *same* wrong code
+under three different preprocessings, and a disagreement refuses outright.

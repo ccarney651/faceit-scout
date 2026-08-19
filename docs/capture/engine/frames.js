@@ -298,12 +298,14 @@
     // over arbitrary game art - the same problem, and contrast is what solved
     // it there (15/90 reads to 77/90).
     //
-    // These constants are duplicated in tools/real_frame_eval/code_crop.py,
-    // which is what the crop offsets were swept against. THEY MUST MATCH: the
-    // parity check compares rectangles, and a different contrast curve would
-    // still be two different images through the same box.
-    function codeCanvas(frame, box) {
+    // The contrast level is the CALLER'S, because no single one works. A hard
+    // boost rescued the screenshot frames and destroyed a live one - the plate
+    // is semi-transparent, so what sits behind it decides whether a boost
+    // sharpens the glyphs or saturates them away. readReplayCode tries several
+    // and takes them only when they agree; see there.
+    function codeCanvas(frame, box, contrast) {
       var sc = 6;
+      contrast = contrast || 1.0;
       var cv = ctx.doc.createElement('canvas');
       cv.width = Math.max(1, Math.round(box.w * sc));
       cv.height = Math.max(1, Math.round(box.h * sc));
@@ -313,7 +315,7 @@
       var im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
       for (var i = 0; i < d.length; i += 4) {
         var g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        g = (g - 128) * 1.9 + 140; g = g < 0 ? 0 : g > 255 ? 255 : g;
+        g = (g - 128) * contrast + 140; g = g < 0 ? 0 : g > 255 ? 255 : g;
         d[i] = d[i + 1] = d[i + 2] = g;
       }
       cx.putImageData(im, 0, 0);

@@ -1419,6 +1419,17 @@ async function ensureScrim(){
 // rather than being sent to re-calibrate a calibration that is already good.
 // The side-detection hunt cost an evening to three wrong guesses because the
 // failure was a single swallowed message; this is that lesson applied.
+// Contrast levels to try, in one pass each. NO SINGLE LEVEL WORKS: the code
+// plate is semi-transparent, so what is behind it decides whether a boost
+// sharpens the glyphs or saturates them away. A hard 1.9 boost read all twelve
+// screenshot frames and returned an EMPTY crop on the first live one, where 1.0
+// read it perfectly.
+//
+// Taking the answer only when the passes AGREE is also the guard that was
+// missing: a crop clipping a glyph can yield six valid characters that are the
+// wrong code, which foldCode cannot detect - but it is unlikely to yield the
+// SAME wrong code under different preprocessing.
+const CODE_CONTRASTS=[1.0, 1.45, 1.9];
 let LAST_CODE_READ={why:null, raw:null, box:null};
 async function readReplayCode(){
   LAST_CODE_READ={why:null, raw:null, box:null};
@@ -1429,20 +1440,27 @@ async function readReplayCode(){
   LAST_CODE_READ.box=box;
   try{
     const w=await ocrWorker();
-    const cv=codeCanvas(grabFrame(), box);
+    const frame=grabFrame();
     await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
-    const {data}=await w.recognize(cv);
-    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
-    const raw=(data&&data.text||'').replace(/\s+/g,'');
-    LAST_CODE_READ.raw=raw;
-    const got=OWDBReplayCode.foldCode(raw);
-    if(!got){
-      LAST_CODE_READ.why = raw ? ('read "'+raw+'", which is not a six-character code') : 'the crop came back empty';
-      // The crop is the thing to look at when this happens, and it is otherwise
-      // invisible - it lives for one call inside a canvas nobody can see.
-      try{ console.log('[owdb] replay-code crop', box, cv.toDataURL()); }catch(e){}
+    const seen=[], raws=[];
+    for(const contrast of CODE_CONTRASTS){
+      const cv=codeCanvas(frame, box, contrast);
+      const {data}=await w.recognize(cv);
+      const raw=(data&&data.text||'').replace(/\s+/g,'');
+      raws.push(contrast+':'+(raw||'-'));
+      const one=OWDBReplayCode.foldCode(raw);
+      if(one && seen.indexOf(one)===-1) seen.push(one);
+      try{ if(!one) console.log('[owdb] replay-code crop x'+contrast, box, cv.toDataURL()); }catch(e){}
     }
-    return got;
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    LAST_CODE_READ.raw=raws.join(' | ');
+    if(seen.length===1) return seen[0];
+    if(seen.length>1){
+      LAST_CODE_READ.why='the passes disagreed ('+seen.join(' vs ')+') — not recording a guess';
+      return null;
+    }
+    LAST_CODE_READ.why='no pass produced a six-character code — read '+LAST_CODE_READ.raw;
+    return null;
   }catch(e){
     LAST_CODE_READ.why='OCR failed: '+((e&&e.message)||String(e));
     console.error('[owdb] replay-code read failed:', e);
