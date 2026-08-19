@@ -951,6 +951,7 @@ async function share(){ try{ const st=await navigator.mediaDevices.getDisplayMed
   }catch(err){ document.getElementById('calhint').innerHTML='<span class="warn">Screen share was cancelled or blocked \u2014 click <b>Share my screen</b> to try again, and pick your whole screen.</span>';
     toast('Screen share failed: '+esc(err&&err.message?err.message:String(err)),'bad',7000); } }
 function updateBtns(){ const ready=!!vid.srcObject&&boxes.a&&boxes.b&&selectedCode();
+  setReadoutsVisible(!!session);
   document.getElementById('autocal').disabled=!vid.srcObject;
   document.getElementById('stopcap').disabled=!vid.srcObject; document.getElementById('hidep').disabled=!vid.srcObject;
   document.getElementById('setL').disabled=!vid.srcObject; document.getElementById('setR').disabled=!vid.srcObject;
@@ -1033,6 +1034,22 @@ function knownPlayerNames(){
   const theirs=(opp&&opp.kind==='league_team')?faceitRoster(opp.label):[];
   return ourRosterNames().concat(theirs); }
 let target={A:document.getElementById('outA'),B:document.getElementById('outB')};
+// The two team read-outs keep whatever the last snapshot painted, so between
+// maps they showed the PREVIOUS map's comp sitting under the ban grid - stale
+// data wearing the appearance of live data. Emptied and hidden until a map is
+// running, on both surfaces: the page card has the same two columns.
+//
+// Hiding the wrapper, not just blanking the contents: an empty column under its
+// heading is still furniture on a panel that sits on top of the game. Showing
+// them again must NOT clear them - this runs from updateBtns(), which fires on
+// every state change including mid-capture.
+function setReadoutsVisible(on){
+  const els=[document.getElementById('outA'), document.getElementById('outB')];
+  if(typeof target!=='undefined' && target){ els.push(target.A, target.B); }
+  els.forEach(e=>{ if(!e) return;
+    if(!on) e.innerHTML='';
+    const box=e.parentElement; if(box) box.style.display = on?'':'none'; });
+}
 function readComp(bx){ const bxs=bx||boxes; if(!bxs.a||!bxs.b) return null; ensureWork(); const frame=grabFrame(); const out={a:[],b:[]};
   const known=knownPlayerNames();
   for(const side of ['a','b']){ const b=bxs[side], host=(side==='a'?target.A:target.B); if(host) host.innerHTML='';
@@ -2003,28 +2020,31 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
     // The ban grid: the in-game hero select, shrunk to a panel. Tiles are a
-    // FIXED 52px, never fractional - the panel is resizable, and columns that
+    // FIXED 44px, never fractional - the panel is resizable, and columns that
     // stretch with it turned the portraits into billboards. Fixed tiles reflow
     // into more columns instead, which is what makes the grid scannable.
     //
     // Same rules as the page's <style> block, in the panel's palette. Kept in
     // step by tests/test_capture_scrim.py, which compares the two selector sets.
+    // The SIZES differ on purpose and that check allows it: this panel sits on
+    // top of the game and is read at a glance, so it runs denser than the page
+    // card, which has a whole browser window to spend.
     `.bangrp{width:100%;margin-top:6px}`+
     `.banrole{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;`+
       `letter-spacing:.06em;color:${c.muted};font-weight:700}`+
-    `.bangrid{display:grid;grid-template-columns:repeat(auto-fill,52px);gap:5px;justify-content:start}`+
-    `.banbtn{padding:0;width:52px;border:1px solid ${c.line2};background:${c.surface2};`+
+    `.bangrid{display:grid;grid-template-columns:repeat(auto-fill,44px);gap:5px;justify-content:start}`+
+    `.banbtn{padding:0;width:44px;border:1px solid ${c.line2};background:${c.surface2};`+
       `border-radius:6px;overflow:hidden;cursor:pointer;display:block;color:${c.muted}}`+
     `.banbtn:hover{border-color:${c.accent};color:${c.fg}}`+
-    `.banbtn .hp{width:52px;height:52px;margin:0;order:0;border-radius:0;display:block;object-fit:cover}`+
+    `.banbtn .hp{width:44px;height:44px;margin:0;order:0;border-radius:0;display:block;object-fit:cover}`+
     // Stands in for a portrait hero_icons.json has not caught up with, so the
     // tile keeps its shape rather than collapsing to its name.
-    `.banph{display:block;width:52px;height:52px;background:${c.line}}`+
+    `.banph{display:block;width:44px;height:44px;background:${c.line}}`+
     // Portraits alone are recognisable for the heroes you play and guesswork
     // for the rest - and a ban is entered under time pressure, mid-draft. Two
     // short lines, because "Wreckin..." is not a name.
-    `.banname{display:flex;align-items:center;justify-content:center;height:21px;padding:0 3px;`+
-      `font-size:8.5px;line-height:1.1;text-align:center;overflow:hidden;color:inherit}`+
+    `.banname{display:flex;align-items:center;justify-content:center;height:19px;padding:0 2px;`+
+      `font-size:8px;line-height:1.1;text-align:center;overflow:hidden;color:inherit}`+
     // A banned hero reads as struck out of the pool, not merely selected -
     // same visual language as the spent sub-maps above.
     `.banbtn.banned{border-color:${c.bad};color:${c.bad}}`+

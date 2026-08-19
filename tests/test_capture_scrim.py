@@ -1053,9 +1053,22 @@ def test_the_ban_grid_tiles_are_a_fixed_size() -> None:
     # The panel is resizable, and fractional columns made the portraits grow
     # with it - a hero select the size of the window is harder to scan, not
     # easier. Fixed tiles reflow into more columns instead of inflating.
+    import re
     css = APP.read_text(encoding="utf-8").replace(" ", "")
     assert "repeat(6,1fr)" not in css, "ban tiles stretch with the panel again"
-    assert "repeat(auto-fill,52px)" in css
+    cols = re.findall(r"grid-template-columns:repeat\(auto-fill,(\d+)px\)", css)
+    assert len(cols) == 2, "both stylesheets must set a fixed tile width"
+
+
+def test_the_panel_tiles_are_smaller_than_the_pages() -> None:
+    # The panel sits on top of the game and is read at a glance between maps;
+    # the page card has a whole browser window to spend. Same grid, denser
+    # where space is scarce - which is why the parity check compares selector
+    # sets rather than values.
+    import re
+    css = APP.read_text(encoding="utf-8").replace(" ", "")
+    page, panel = re.findall(r"grid-template-columns:repeat\(auto-fill,(\d+)px\)", css)
+    assert int(panel) < int(page), "the panel's ban tiles are no denser than the page's"
 
 
 def test_the_ban_grid_is_styled_on_the_page_as_well_as_the_panel() -> None:
@@ -1099,3 +1112,69 @@ def test_every_ban_grid_class_shares_the_ban_prefix() -> None:
     for cls in re.findall(r'class="([a-z ]+)"', grid):
         for one in cls.split():
             assert one.startswith("ban"), f"grid class {one!r} sits outside the .ban prefix"
+
+
+# --- the pre-map screen shows nothing stale -------------------------------
+
+_READOUT_STUBS = """
+function box(){ return {style:{}, innerHTML:'x'}; }
+var PAGE={outA:{innerHTML:'stale'}, outB:{innerHTML:'stale'}};
+PAGE.outA.parentElement=box(); PAGE.outB.parentElement=box();
+var document={ getElementById:function(id){ return PAGE[id]||null; } };
+var target={ A:{innerHTML:'stale'}, B:{innerHTML:'stale'} };
+target.A.parentElement=box(); target.B.parentElement=box();
+"""
+
+
+def _run_readouts(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    src = (_READOUT_STUBS + _extract(("function setReadoutsVisible(", "function readComp(bx)"))
+           + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));")
+    tmp = Path("scrim_readout_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True, encoding="utf-8")
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_between_maps_the_team_readouts_are_emptied() -> None:
+    # They hold whatever the last snapshot painted, so on the pre-map screen
+    # they showed the PREVIOUS map's comp underneath the ban grid - stale data
+    # wearing the appearance of live data.
+    got = _run_readouts("""
+      setReadoutsVisible(false);
+      return [target.A.innerHTML, target.B.innerHTML,
+              PAGE.outA.innerHTML, PAGE.outB.innerHTML];""")
+    assert got == ["", "", "", ""], "a finished map's comp is still on screen"
+
+
+def test_between_maps_the_team_panels_are_hidden_not_just_blank() -> None:
+    # An empty column under its heading is still furniture on a panel that
+    # sits on top of the game.
+    got = _run_readouts("""
+      setReadoutsVisible(false);
+      return [target.A.parentElement.style.display, PAGE.outA.parentElement.style.display];""")
+    assert got == ["none", "none"]
+
+
+def test_starting_a_map_brings_the_readouts_back() -> None:
+    got = _run_readouts("""
+      setReadoutsVisible(false); setReadoutsVisible(true);
+      return [target.A.parentElement.style.display, PAGE.outB.parentElement.style.display];""")
+    assert got == ["", ""]
+
+
+def test_showing_the_readouts_does_not_wipe_what_they_hold() -> None:
+    # It runs from updateBtns, which fires on every state change - including
+    # mid-capture, where clearing the current comp would blank the panel the
+    # operator is reading.
+    got = _run_readouts("""
+      target.A.innerHTML='live comp';
+      setReadoutsVisible(true);
+      return target.A.innerHTML;""")
+    assert got == "live comp"
