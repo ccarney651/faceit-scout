@@ -152,22 +152,27 @@
      from the live palette, in the pop-out panel's generated stylesheet - because
      the panel is a separate document with no access to this one. Written only
      there at first, which left the page's tiles wearing the page's default
-     button padding: a 52px portrait inside a button with 9px of padding and a
-     22px .hp rule fighting it. Keep the two in step. */
-  .bangrp{width:100%;margin-top:5px}
-  .bangrp .lbl{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;
-    letter-spacing:.04em;color:var(--muted)}
+     button padding. tests/test_capture_scrim.py compares the two selector sets,
+     which is the only thing keeping them in step; every class here starts with
+     `ban` so that one prefix finds all of them. */
+  .bangrp{width:100%;margin-top:6px}
+  .banrole{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--muted);font-weight:700}
   .bangrid{display:grid;grid-template-columns:repeat(auto-fill,52px);gap:5px;justify-content:start}
   .banbtn{padding:0;width:52px;border:1px solid var(--line2);background:var(--surface2);
-    border-radius:6px;overflow:hidden;cursor:pointer;display:block;text-align:center}
-  .banbtn:hover{border-color:var(--accent)}
+    border-radius:6px;overflow:hidden;cursor:pointer;display:block;color:var(--muted)}
+  .banbtn:hover{border-color:var(--accent);color:var(--fg)}
   .banbtn .hp{width:52px;height:52px;margin:0;border-radius:0;display:block;object-fit:cover}
   .banph{display:block;width:52px;height:52px;background:var(--line)}
-  .bnm{display:block;font-size:8.5px;line-height:1.2;padding:2px 2px 3px;color:var(--muted);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .banbtn.banned{border-color:var(--bad)}
+  /* Two short lines rather than one ellipsised one: "Wrecking Ball" and
+     "Junker Queen" are real heroes and "Wreckin..." is not a name. Fixed
+     height so every tile in a row ends level whether it wrapped or not.
+     Colour is inherited from the tile, so the banned state tints the name
+     without a rule of its own. */
+  .banname{display:flex;align-items:center;justify-content:center;height:21px;padding:0 3px;
+    font-size:8.5px;line-height:1.1;text-align:center;overflow:hidden;color:inherit}
+  .banbtn.banned{border-color:var(--bad);color:var(--bad)}
   .banbtn.banned .hp,.banbtn.banned .banph{opacity:.3;filter:grayscale(1)}
-  .banbtn.banned .bnm{color:var(--bad)}
   .slot{align-items:center}
   .slot .hp{margin-right:6px}
   .hd{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center}
@@ -1452,11 +1457,11 @@ function withBanToggled(bans, g, name, by){
 function banGridHtml(catalogue, bans){
   const gone={}; (bans||[]).forEach(b=>{ gone[b.g]=1; });
   return OWDBHeroes.byRole(catalogue||[]).map(grp=>
-    `<div class="bangrp"><span class="lbl">${esc(grp.role)}</span><div class="bangrid">`
+    `<div class="bangrp"><span class="banrole">${esc(grp.role)}</span><div class="bangrid">`
     + grp.heroes.map(h=>
         `<button type="button" class="banbtn${gone[h.g]?' banned':''}" data-g="${esc(h.g)}"`
         + ` title="${esc(h.n)}">${heroPortrait(h.n)||'<span class="banph"></span>'}`
-        + `<span class="bnm">${esc(h.n)}</span></button>`).join('')
+        + `<span class="banname">${esc(h.n)}</span></button>`).join('')
     + '</div></div>').join('');
 }
 // The chip markup for a map's bans. Pure, and deliberately separate from
@@ -2001,24 +2006,29 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     // FIXED 52px, never fractional - the panel is resizable, and columns that
     // stretch with it turned the portraits into billboards. Fixed tiles reflow
     // into more columns instead, which is what makes the grid scannable.
-    `.bangrp{width:100%;margin-top:5px}.bangrp .lbl{display:block;margin-bottom:3px}`+
+    //
+    // Same rules as the page's <style> block, in the panel's palette. Kept in
+    // step by tests/test_capture_scrim.py, which compares the two selector sets.
+    `.bangrp{width:100%;margin-top:6px}`+
+    `.banrole{display:block;margin-bottom:3px;font-size:10px;text-transform:uppercase;`+
+      `letter-spacing:.06em;color:${c.muted};font-weight:700}`+
     `.bangrid{display:grid;grid-template-columns:repeat(auto-fill,52px);gap:5px;justify-content:start}`+
     `.banbtn{padding:0;width:52px;border:1px solid ${c.line2};background:${c.surface2};`+
-      `border-radius:6px;overflow:hidden;cursor:pointer;display:block;text-align:center}`+
-    `.banbtn:hover{border-color:${c.accent}}`+
+      `border-radius:6px;overflow:hidden;cursor:pointer;display:block;color:${c.muted}}`+
+    `.banbtn:hover{border-color:${c.accent};color:${c.fg}}`+
     `.banbtn .hp{width:52px;height:52px;margin:0;order:0;border-radius:0;display:block;object-fit:cover}`+
     // Stands in for a portrait hero_icons.json has not caught up with, so the
     // tile keeps its shape rather than collapsing to its name.
     `.banph{display:block;width:52px;height:52px;background:${c.line}}`+
     // Portraits alone are recognisable for the heroes you play and guesswork
-    // for the rest - and a ban is entered under time pressure, mid-draft.
-    `.bnm{display:block;font-size:8.5px;line-height:1.2;padding:2px 2px 3px;color:${c.muted};`+
-      `white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`+
+    // for the rest - and a ban is entered under time pressure, mid-draft. Two
+    // short lines, because "Wreckin..." is not a name.
+    `.banname{display:flex;align-items:center;justify-content:center;height:21px;padding:0 3px;`+
+      `font-size:8.5px;line-height:1.1;text-align:center;overflow:hidden;color:inherit}`+
     // A banned hero reads as struck out of the pool, not merely selected -
     // same visual language as the spent sub-maps above.
-    `.banbtn.banned{border-color:${c.bad}}`+
+    `.banbtn.banned{border-color:${c.bad};color:${c.bad}}`+
     `.banbtn.banned .hp,.banbtn.banned .banph{opacity:.3;filter:grayscale(1)}`+
-    `.banbtn.banned .bnm{color:${c.bad}}`+
     `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
   // Every row id in `controls` must exist here: renderPipControls() looks each
   // one up in the panel document and silently skips the ones it cannot find.

@@ -1066,3 +1066,36 @@ def test_the_ban_grid_is_styled_on_the_page_as_well_as_the_panel() -> None:
     page_css = html[html.index("<style>"):html.index("</style>")]
     assert ".banbtn" in page_css, "the ban grid is unstyled on the page card"
     assert ".bangrid" in page_css
+
+
+def test_the_page_and_panel_ban_stylesheets_stay_in_step() -> None:
+    """These rules exist twice and must not drift.
+
+    The panel is a separate document and builds its stylesheet in JS from the
+    live palette; the page card is styled by the page's own <style>. There is
+    no mechanism keeping them equal, so this is it. It is not theoretical: the
+    tiles shipped once with no page-side rules at all, and a class named
+    outside the `.ban` prefix went unstyled in a tool that selected on it.
+    """
+    import re
+    html = APP.read_text(encoding="utf-8")
+    page = html[html.index("<style>"):html.index("</style>")]
+    start = html.index("panelCss:c=>")
+    panel = html[start:html.index("middleHtml:", start)]
+    selectors = lambda s: set(re.findall(r"\.ban[a-z]*", s))
+    assert selectors(page) == selectors(panel), (
+        f"ban styling differs between page and panel: "
+        f"page-only {sorted(selectors(page) - selectors(panel))}, "
+        f"panel-only {sorted(selectors(panel) - selectors(page))}"
+    )
+
+
+def test_every_ban_grid_class_shares_the_ban_prefix() -> None:
+    # So a single prefix finds all of them - the parity check above, and any
+    # tool that has to pull these rules out of the page, select on `.ban`.
+    html = APP.read_text(encoding="utf-8")
+    grid = _extract(("function banGridHtml(", "// The chip markup for a map's bans."))
+    import re
+    for cls in re.findall(r'class="([a-z ]+)"', grid):
+        for one in cls.split():
+            assert one.startswith("ban"), f"grid class {one!r} sits outside the .ban prefix"
