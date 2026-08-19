@@ -39,13 +39,25 @@ CODES = {
 
 # size -> the TEAM 1 five-portrait strip (x, y, w, h)
 STRIPS = {
+    # The July frames sit at a DIFFERENT HUD position from the live tool: their
+    # portrait strip starts at x=57, where AUTO_STRIPS would put it at x=129 -
+    # rendering the auto box on one of them cuts the first portrait in half.
+    # Whatever produced them (a different UI scale, a different build), they
+    # cannot constrain geometry expressed against auto-calibrate's box, so they
+    # are kept for reading accuracy but excluded from the geometry fit.
     (2557, 1438): (57, 97, 700, 111),
-    # Fitted on 234927 by cropping and comparing against the fullscreen strip
-    # until it frames the same HUD region: portrait top down to the bottom of
-    # the health/ult bar. A first attempt stopped at the name row, which looks
-    # plausible on its own but is a different region, so the code offsets -
-    # being fractions of the strip - would not have transferred.
-    (2559, 1439): (127, 123, 660, 105),
+    # THE LIVE CONVENTION. Not hand-measured: this is what auto-calibrate
+    # actually produces, confirmed by reading boxes.a out of a real capture
+    # session on a 2560x1440 share - (129.536, 119.808, 660.224, 97.2), which
+    # is AUTO_STRIPS' fractions with no sweep correction applied.
+    #
+    # It matters that these are different numbers from a hand measurement of
+    # the same HUD. The offsets are fractions OF THIS BOX, so fitting them
+    # against a strip the tool never produces fits them to nothing: measured
+    # against the 2557x1438 convention the code is 0.198 strip-heights tall,
+    # measured against this one it is 0.237. The first eval scored 12/12
+    # through a rectangle that does not occur in the field.
+    (2559, 1439): (129.536, 119.808, 660.224, 97.2),
 }
 
 

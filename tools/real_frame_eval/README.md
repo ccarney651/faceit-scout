@@ -233,8 +233,30 @@ Twelve frames with hand-verified codes, two window modes, five distinct codes.
 
 | offsets | correct | no-read | wrong |
 | --- | --- | --- | --- |
-| provisional (eyeballed, PAD 0.35) | 9/12 | 3 | 0 |
-| fitted (`code_offsets.json`, PAD 0.10) | **12/12** | 0 | **0** |
+| provisional (eyeballed) | 9/12 | 3 | 0 |
+| fitted against a HAND-MEASURED strip | 12/12 | 0 | 0 — **and it failed in the field** |
+| fitted against the strip auto-calibrate really produces | **12/12** | 0 | **0** |
+
+### The middle row is the lesson
+
+The second fit scored a perfect 12/12 offline and then read nothing at all on a
+live capture. The offsets are fractions **of the calibration box**, and the box
+they were fitted against was hand-measured — not the one `auto-calibrate` hands
+over. Reading `boxes.a` out of a real session gives
+`(129.536, 119.808, 660.224, 97.2)`, which is `AUTO_STRIPS`' fractions
+unmodified. Against that box the same code is 0.217 strip-heights tall; against
+the hand-measured one it is 0.198.
+
+So the offline score was measuring a rectangle that does not occur in the field.
+**When fitting anything expressed relative to a calibration box, get the box out
+of a live session first** — `console.log(JSON.stringify(boxes.a))` — rather than
+measuring the HUD by eye.
+
+The 2557×1438 frames sit at a *different* HUD position again (strip at x=57,
+where `AUTO_STRIPS` would put it at x=129; rendering the auto box on one cuts the
+first portrait in half). They are kept for reading accuracy but excluded from the
+geometry fit, since they cannot constrain offsets expressed against a box they
+do not match.
 
 The three provisional failures were all one mode: tesseract inventing a leading
 character out of the mottled plate edge, giving seven characters. `foldCode`

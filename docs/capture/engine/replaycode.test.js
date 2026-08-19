@@ -66,13 +66,17 @@ test('the crop sits above the strip and to its right', () => {
   assert.ok(box.y + box.h < a.y, 'the code is above the portrait strip');
 });
 
-test('the crop lands on the known code position for a real frame', () => {
-  // TJDE6W on Screenshot 2026-07-15 231525.png (2557x1438), measured.
-  const box = R.codeBox({ x: 57, y: 97, w: 700, h: 111 });
-  assert.ok(box.x <= 812 && box.x + box.w >= 812 + 89,
-    `the crop must contain x=812..901, got ${box.x}..${box.x + box.w}`);
-  assert.ok(box.y <= 42 && box.y + box.h >= 42 + 22,
-    `the crop must contain y=42..64, got ${box.y}..${box.y + box.h}`);
+test('the crop lands on the code, using the strip auto-calibrate really produces', () => {
+  // boxes.a read out of a live capture session on a 2560x1440 share, where the
+  // code SZDPQQ occupies roughly x=838..938, y=67..90. Deliberately NOT a
+  // hand-measured strip: the first version of this test used one, passed, and
+  // the crop still missed in the field, because the offsets are fractions of
+  // whatever box auto-calibrate hands over.
+  const box = R.codeBox({ x: 129.536, y: 119.808, w: 660.224, h: 97.2 });
+  assert.ok(box.x <= 838 && box.x + box.w >= 938,
+    `the crop must contain x=838..938, got ${box.x}..${box.x + box.w}`);
+  assert.ok(box.y <= 67 && box.y + box.h >= 90,
+    `the crop must contain y=67..90, got ${box.y}..${box.y + box.h}`);
 });
 
 test('a missing or malformed strip yields no box rather than NaNs', () => {

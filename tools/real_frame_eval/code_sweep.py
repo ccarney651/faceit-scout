@@ -36,10 +36,16 @@ WORK = pathlib.Path('code_sweep_work')
 # the levers are how wide the box is and how much margin it carries. Vertical
 # placement was already landing the text band centred on every frame.
 GRID = {
-    'PAD': [0.10, 0.15, 0.20, 0.25, 0.35],
-    'DW': [0.115, 0.127, 0.139],
-    'DX': [1.069, 1.079, 1.089],
+    'PAD': [0.10, 0.18, 0.26],
+    'DW': [0.139, 0.151, 0.163],
+    'DX': [1.063, 1.073, 1.083],
+    'DY': [-0.563, -0.543, -0.523],
+    'DH': [0.217, 0.237, 0.257],
 }
+
+# Only frames whose HUD sits where auto-calibrate expects it can constrain
+# offsets expressed against auto-calibrate's box - see code_truth.STRIPS.
+FIT_SIZES = {(2559, 1439)}
 
 
 def candidates():
@@ -60,6 +66,9 @@ def main():
         d = WORK / f'c{i:03d}'
         n = 0
         for f in frames:
+            from PIL import Image
+            if Image.open(f).size not in FIT_SIZES:
+                continue
             if render(f, d, o):
                 n += 1
         if n:

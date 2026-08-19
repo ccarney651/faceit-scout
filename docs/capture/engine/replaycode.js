@@ -66,11 +66,20 @@
   // straddled the portrait bottom, the name and the health bar the moment the
   // window mode changed; that is the mistake this avoids.
   //
-  // Fitted by tools/real_frame_eval/code_sweep.py - do not hand-edit.
-  var DX = 1.089;      // left edge, in strip widths right of the strip's left edge
-  var DW = 0.127;      // width, in strip widths
-  var DY = -0.495;     // top edge, in strip heights below the strip's top (negative = above)
-  var DH = 0.198;      // height, in strip heights
+  // Fitted by tools/real_frame_eval/code_sweep.py against the strip
+  // AUTO-CALIBRATE ACTUALLY PRODUCES - do not hand-edit.
+  //
+  // The first fit was made against a hand-measured strip and was worthless in
+  // the field: it scored 12/12 offline through a rectangle the tool never
+  // produces. Read boxes.a out of a real session and it is AUTO_STRIPS'
+  // fractions, a different box from the one that was measured - so the same
+  // code is 0.198 strip-heights tall by one convention and 0.217 by the other.
+  // Offsets are fractions OF THE BOX; fit them against the wrong box and they
+  // are fitted to nothing.
+  var DX = 1.073;      // left edge, in strip widths right of the strip's left edge
+  var DW = 0.139;      // width, in strip widths
+  var DY = -0.523;     // top edge, in strip heights below the strip's top (negative = above)
+  var DH = 0.217;      // height, in strip heights
   var PAD = 0.10;      // extra margin, in multiples of the box's own size
 
   function codeBox(a) {
