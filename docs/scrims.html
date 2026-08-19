@@ -213,6 +213,7 @@ tbody tr:hover{background:var(--surface2)}
   </div>
 </div>
 <main id="content"><div class="loading">Reading scrims from this browser…</div></main>
+<script src="capture/engine/heroes.js"></script>
 <script>
 // ---------- tiny helpers ----------
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
@@ -221,29 +222,14 @@ const dshort = (s)=> s? String(s).slice(0,10) : '?';
 let GUID_TO_NAME = {};
 let HERO_ROLE = {};
 
-// ---------- hero role inference (refs.json gives name only, not role) ----------
-// Names must match refs.json EXACTLY — it is what captures write. This table had
-// drifted to display spellings ("D.Va", "Soldier: 76", "Lifeweaver") that refs
-// never uses, so those heroes silently fell out of every role split, and ten
-// 2026 heroes were missing outright.
-//
-// The authoritative seats live in faceit_sync/subroles.py; the three roles here
-// are its seats collapsed (Hitscan + Flex DPS = Damage, Main + Flex Support =
-// Support). This page has no build step, so the copy is unavoidable — but
-// tests/test_scrims_viewer.py fails if it ever disagrees with that table again.
-const ROLE_MAP = {
-  tank: ['D.Mon','DVa','Domina','Doomfist','Hazard','Junker Queen','Mauga','Orisa','Ramattra','Reinhardt','Roadhog','Sigma','Winston','Wrecking Ball','Zarya'],
-  damage: ['Anran','Ashe','Bastion','Cassidy','Echo','Emre','Freja','Genji','Hanzo','Junkrat','Mei','Pharah','Reaper','Shion','Sierra','Sojourn','Soldier 76','Sombra','Symmetra','Torbjorn','Tracer','Vendetta','Venture','Widowmaker'],
-  support: ['Ana','Baptiste','Brigitte','Illari','Jetpack Cat','Juno','Kiriko','LifeWeaver','Lucio','Mercy','Mizuki','Moira','Wuyang','Zenyatta']
-};
-function inferRole(name){
-  if(!name) return null;
-  const n = name.toLowerCase();
-  for(const [role,heroes] of Object.entries(ROLE_MAP)){
-    if(heroes.some(h => h.toLowerCase()===n)) return role.charAt(0).toUpperCase()+role.slice(1);
-  }
-  return null;
-}
+// ---------- hero roles ----------
+// ROLE_MAP and inferRole live in capture/engine/heroes.js, loaded above: the
+// capture page's ban picker groups by role too, and a second hand-kept copy of
+// this table would be a second chance for it to drift from
+// faceit_sync/subroles.py - which the first copy had already done silently.
+// This page is otherwise self-contained; that one script tag is the exception,
+// and it is a plain data module with no DOM or IndexedDB reach.
+const {ROLE_MAP, inferRole} = OWDBHeroes;
 
 // ---------- IndexedDB ----------
 function openDB(){
@@ -788,8 +774,14 @@ function mapBans(map){
   return (map.bans||[]).filter(b=> b && b.g);
 }
 
+// Maps where bans were RECORDED — the denominator every ban rate divides by.
+// Two things count: a map with bans on it, and a map the operator explicitly
+// marked as played without any. The second is why `no_bans` exists at all: an
+// empty list on its own is indistinguishable from a map nobody recorded bans
+// for, so both used to be excluded, and every rate was computed against too
+// small a pool.
 function bannedMaps(maps){
-  return (maps||[]).filter(m=> !m.void && mapBans(m).length);
+  return (maps||[]).filter(m=> !m.void && (mapBans(m).length || m.no_bans));
 }
 
 // Heroes banned most often, optionally by one side only. The denominator is

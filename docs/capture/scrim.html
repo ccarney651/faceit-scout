@@ -320,13 +320,9 @@
     <div id="banrow" style="display:none;margin-top:8px">
       <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
         <span class="status">Hero bans</span>
-        <select id="banhero" style="width:auto"><option value="">＋ add a ban…</option></select>
-        <select id="banby" style="width:auto" title="Who banned it — leave as 'either' if you did not note it">
-          <option value="">by either</option><option value="us">by us</option><option value="them">by them</option>
-        </select>
-        <span class="status faint">— bans apply to this map</span>
+        <span class="status faint">— for the next map you start</span>
       </div>
-      <div id="banchips" class="row" style="margin-top:6px;gap:4px;flex-wrap:wrap"></div>
+      <div id="banpicker" class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap"></div>
     </div>
     <div class="row" style="margin-top:10px;align-items:center;gap:10px">
       <button id="swapsides" class="ghost" type="button" title="Flip which team is on the left/blue side of the HUD"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3.5 5h9M3.5 5l2-2M3.5 5l2 2M12.5 11h-9M12.5 11l-2-2M12.5 11l-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Swap teams</button>
@@ -403,7 +399,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/heroes.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -468,7 +464,9 @@ async function loadRefs(){
   try{ LOCAL_REFS=await idbGetAll('refs'); for(const rec of LOCAL_REFS){ const t=refTemplate(rec); if(t) REFS.push(t); }
     for(const h of await idbGetAll('heroes')) CUSTOM_HEROES[h.g]={name:h.name, role:h.role};
     const rc=document.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned';
-    fillBanPicker(); }catch(e){}
+    // No picker to populate: the grid reads heroCatalog() every render, so a
+    // hero learned mid-scrim is bannable immediately.
+    renderBans(); }catch(e){}
 }
 
 // ---------- load FACEIT team names for autocomplete ----------
@@ -1325,13 +1323,17 @@ async function finishScrimMap(c){
     code:activeScrimMap.code||null, map_name:c.map, map_category:c.map_category, map_guid:null,
     side_a_team:leftLabel, side_b_team:rightLabel, winner_side, score, result,
     profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
-    captured_at:new Date().toISOString(), bans:MAP_BANS.slice(), observations, crops:session.crops||null,
+    captured_at:new Date().toISOString(), ...banState(), observations, crops:session.crops||null,
     scoreboard: sb, scrim:true };
   await idbPutScrimMap(rec);
   const wasQueued=activeScrimMap.queued;
   if(!wasQueued) activeScrim.map_no=(activeScrim.map_no||1)+1;
   await idbPutScrim(activeScrim);
   const done=session.snaps.length;
+  // The bans belonged to THAT map. Cleared here rather than at the next
+  // map's start, so the pre-map panel opens empty and ready for the draft
+  // that has not happened yet.
+  clearBans();
   session=null; activeScrimMap=null;
   await renderScrimMaps();
   toast('<b>'+esc(c.map||'map')+'</b> saved to scrim \u2014 '+done+' snapshot'+(done===1?'':'s')+' captured (private)','ok');
@@ -1403,12 +1405,38 @@ async function ensureScrim(){
 // per scrim, because a block can change its mind partway through and because
 // "what shifted when Sombra was banned" is a per-map question.
 let MAP_BANS = [];
+// "This map was played with no bans" — a fact, not the absence of one. An
+// empty list alone cannot say it: it is equally what a map nobody recorded
+// bans for looks like, and the viewer's ban denominator has to tell those
+// apart or it counts unrecorded maps as evidence that nothing was banned.
+let MAP_BANS_NONE = false;
+function banState(){ return {bans:MAP_BANS.slice(), no_bans:!!(MAP_BANS_NONE && !MAP_BANS.length)}; }
+function setNoBans(){ MAP_BANS=[]; MAP_BANS_NONE=true; }
+function clearBans(){ MAP_BANS=[]; MAP_BANS_NONE=false; }
 function usesBans(){ return !!(activeScrim && activeScrim.uses_bans); }
-function fillBanPicker(){
-  const sel=document.getElementById('banhero'); if(!sel) return;
-  const cat=heroCatalog().slice().sort((a,b)=>(a.n||'').localeCompare(b.n||''));
-  sel.innerHTML='<option value="">＋ add a ban…</option>'
-    + cat.map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('');
+// Pure: the ban list after clicking hero g. A grid of buttons carries no
+// remove affordance of its own, so the button IS the undo - without that a
+// misclick is only fixable from the chip row underneath, which is exactly the
+// fiddliness the grid replaced the dropdown to be rid of.
+function withBanToggled(bans, g, name, by){
+  const list=bans||[];
+  const i=list.findIndex(b=>b.g===g);
+  if(i!==-1){ const out=list.slice(); out.splice(i,1); return out; }
+  return list.concat([{g, n:name||g, by:by||null}]);
+}
+// The picker itself: the in-game hero select, in a 360px panel. Three role
+// blocks in play order, alphabetical inside each, portraits from the icon set
+// that already ships. Pure and document-free on purpose - it is rendered into
+// the pop-out panel, which is a SEPARATE DOCUMENT, so it can never reach for
+// elements by id on the main page.
+function banGridHtml(catalogue, bans){
+  const gone={}; (bans||[]).forEach(b=>{ gone[b.g]=1; });
+  return OWDBHeroes.byRole(catalogue||[]).map(grp=>
+    `<div class="bangrp"><span class="lbl">${esc(grp.role)}</span><div class="bangrid">`
+    + grp.heroes.map(h=>
+        `<button type="button" class="banbtn${gone[h.g]?' banned':''}" data-g="${esc(h.g)}"`
+        + ` title="${esc(h.n)}">${heroPortrait(h.n)||`<span class="bantxt">${esc(h.n)}</span>`}</button>`).join('')
+    + '</div></div>').join('');
 }
 // The chip markup for a map's bans. Pure, and deliberately separate from
 // renderBans(): the capture overlay is a SEPARATE DOCUMENT (a popped-out
@@ -1428,23 +1456,46 @@ function renderBansInto(box){
   box.querySelectorAll('.banx').forEach(btn=>{
     btn.onclick=()=>{ MAP_BANS.splice(+btn.dataset.i,1); renderBans(); }; });
 }
+// The whole picker - by-line, "no bans", grid, chips - built into any
+// container in any document. ONE renderer for both surfaces: the panel's row
+// and the page's card show the same control, so a ban set on either is set
+// everywhere and there is no second UI to keep in step.
+function renderBanPickerInto(box, d){
+  if(!box) return;
+  box.innerHTML='';
+  const by=d.createElement('select');
+  by.innerHTML='<option value="">by either</option><option value="us">by us</option>'
+    + '<option value="them">by them</option>';
+  by.title='Who banned it — applies to the next hero you click';
+  box.appendChild(by);
+  const none=d.createElement('button'); none.type='button';
+  none.textContent='no bans this map';
+  none.className=(MAP_BANS_NONE && !MAP_BANS.length)?'on':'ghost';
+  none.title='Record that this map was played with no bans at all';
+  none.onclick=()=>{ if(MAP_BANS_NONE && !MAP_BANS.length) clearBans(); else setNoBans(); renderBans(); };
+  box.appendChild(none);
+  const grid=d.createElement('div'); grid.style.cssText='width:100%';
+  grid.innerHTML=banGridHtml(heroCatalog(), MAP_BANS);
+  grid.querySelectorAll('.banbtn').forEach(b=>{
+    b.onclick=()=>{ const g=b.dataset.g;
+      MAP_BANS=withBanToggled(MAP_BANS, g, heroName(g)||g, by.value||null);
+      MAP_BANS_NONE=false;                 // a ban and "no bans" cannot both be true
+      renderBans(); }; });
+  box.appendChild(grid);
+  const chips=d.createElement('div'); chips.className='row';
+  chips.style.cssText='gap:4px;flex-wrap:wrap;margin-top:4px;width:100%';
+  box.appendChild(chips); renderBansInto(chips);
+}
 function renderBans(){
   const row=document.getElementById('banrow');
-  if(row) row.style.display = (usesBans() && session) ? '' : 'none';
-  renderBansInto(document.getElementById('banchips'));
+  // Bans belong to the draft, which happens BEFORE the map starts - so the
+  // picker is shown between maps and hidden while one runs, on both surfaces.
+  if(row) row.style.display = (usesBans() && !session) ? '' : 'none';
+  if(usesBans() && !session) renderBanPickerInto(document.getElementById('banpicker'), document);
   // Keep the panel's copy in step - a ban added on either surface must show on
   // both, and the operator is usually looking at the panel.
   if(typeof renderPipControls==='function') renderPipControls();
 }
-function addBan(){
-  const sel=document.getElementById('banhero'), by=document.getElementById('banby');
-  const g=sel.value; if(!g) return;
-  if(!MAP_BANS.some(b=>b.g===g)){
-    MAP_BANS.push({g, n:heroName(g)||g, by:(by&&by.value)||null});
-  }
-  sel.value=''; renderBans();
-}
-
 // scrimLabel(): what an unnamed block is called in the picker, so it does not
 // read as a scrim against a team literally called "opponent".
 function scrimLabel(s){
@@ -1464,9 +1515,32 @@ async function saveScrim(){
     updated_at:new Date().toISOString()});
   await idbPutScrim(activeScrim);
   localStorage.setItem('owdb_cap_scrim', activeScrim.id);
-  await renderScrimPanel(); updateBtns();
+  await renderScrimPanel(); updateBtns(); renderBans();
   toast('scrim saved \u2014 pick a map to start capturing','ok');
+  // The panel is where the whole scrim happens - map, bans, capture, finish -
+  // so it opens here rather than waiting to be asked for. This runs inside the
+  // Save click, which is what satisfies the browser's user-gesture rule for
+  // requestWindow(); no arming is needed.
+  popout();
 }
+// Close out this scrim's capture. Deliberately NOT a "finish" in the sense of
+// sealing the record: the scrim stays in the picker, stays editable, and can be
+// reopened and added to. All this ends is the capture session, so the next
+// scrim starts from a clean panel instead of quietly inheriting this one.
+//
+// Only reachable between maps - the panel does not render the button while a
+// map runs, which is why there is no "finish the current map first" to say.
+// The guard below is belt and braces for the keyboard/console paths.
+async function endScrimCapture(){
+  if(session){ toast('finish the current map first','warn'); return; }
+  const name=activeScrim?scrimLabel(activeScrim):'scrim';
+  activeScrim=null; activeScrimMap=null;
+  clearBans();
+  localStorage.removeItem('owdb_cap_scrim');
+  await renderScrimPanel(); await renderScrimMaps(); updateBtns(); renderBans();
+  toast('<b>'+esc(name)+'</b> capture closed — the scrim is still editable from the picker','ok');
+}
+
 // scrimDate(): the session date used to judge whether a replay code has
 // been wiped by a patch. Falls back to today when the operator hasn't set
 // the scrim's date field yet (a code entered before the field is filled in
@@ -1512,7 +1586,8 @@ async function startScrimMap(){
   const mi=document.getElementById('scrimmapidx').value, m=SCRIM_MAPS[+mi]; if(!m){ toast('pick a map','warn'); return; }
   const code=(document.getElementById('scrimcode').value||'').trim();
   if(await refuseIfLeagueCode(code)) return;
-  MAP_BANS=[];
+  // Bans are NOT cleared here: they are picked on the pre-map panel,
+  // before this runs. Clearing on start is what would eat them.
   activeScrimMap={map_name:m.name, map_category:m.cat, code:code||'', map_no:activeScrim.map_no||1, queued:false};
   document.getElementById('scrimcode').value=code;
   startScrimSession(scrimPseudoCode());
@@ -1527,7 +1602,8 @@ async function startMapNamed(name){
   if(!m){ toast('pick a map','warn'); return; }
   if(session){ toast('finish the current map first','warn'); return; }
   await ensureScrim();
-  MAP_BANS=[];
+  // Bans are NOT cleared here: they are picked on the pre-map panel,
+  // before this runs. Clearing on start is what would eat them.
   activeScrimMap={map_name:m.name, map_category:m.cat, code:'', map_no:activeScrim.map_no||1, queued:false};
   // Mirror onto the page so the two views never disagree about what is running.
   const pm=document.getElementById('scrimmode'); if(pm&&pm.value!==m.cat){ pm.value=m.cat; onScrimModeChange(); }
@@ -1552,7 +1628,8 @@ async function startQueuedMap(m){
   await ensureScrim();
   if(session){ toast('finish the current map first','warn'); return; }
   if(await refuseIfLeagueCode(m.code)) return;
-  MAP_BANS=[];
+  // Bans are NOT cleared here: they are picked on the pre-map panel,
+  // before this runs. Clearing on start is what would eat them.
   activeScrimMap={map_name:m.map_name, map_category:m.map_category, code:m.code||'', map_no:m.map_no, queued:true};
   document.getElementById('scrimcode').value=m.code||'';
   startScrimSession(scrimPseudoCode());
@@ -1899,11 +1976,29 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     `.pt{padding:4px 10px}.pt h3{margin:0 0 3px;font-size:10px;color:${c.muted};text-transform:uppercase}`+
     `.slot{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid ${c.line};font-size:12px}.slot:first-of-type{border-top:0}`+
     `.hp{width:20px;height:20px;border-radius:3px;margin-right:auto;order:-1;flex:none;object-fit:cover}`+
+    // The ban grid: the in-game hero select, shrunk to a 360px panel. Six
+    // 26px portraits per row fits every role block without a scrollbar, and
+    // the role heading is what makes a hero findable at a glance - the reason
+    // this replaced a 53-entry dropdown.
+    `.bangrp{width:100%;margin-top:3px}.bangrp .lbl{display:block;margin-bottom:2px}`+
+    `.bangrid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}`+
+    `.banbtn{padding:0;border:1px solid ${c.line2};background:${c.surface2};border-radius:5px;`+
+      `line-height:0;overflow:hidden;cursor:pointer}`+
+    `.banbtn .hp{width:100%;height:auto;aspect-ratio:1;margin:0;order:0;border-radius:4px;display:block}`+
+    // hero_icons.json is optional and can lag a new hero. Without this the
+    // button would be an empty 26px square - the cells are line-height:0 so
+    // the portraits sit flush, which makes bare text invisible.
+    `.bantxt{display:block;font-size:8px;line-height:1.15;padding:4px 1px;color:${c.muted};`+
+      `overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`+
+    // A banned hero reads as struck out of the pool, not merely selected -
+    // same visual language as the spent sub-maps above.
+    `.banbtn.banned{border-color:${c.bad};background:${c.bad}}`+
+    `.banbtn.banned .hp{opacity:.35;filter:grayscale(1)}`+
     `.sc{font-size:11px}.hi{color:${c.good}}.mid{color:${c.mid}}.lo{color:${c.bad}}.warn{color:${c.bad}}.ok{color:${c.good}}`,
   // Every row id in `controls` must exist here: renderPipControls() looks each
   // one up in the panel document and silently skips the ones it cannot find.
   middleHtml:'<div id="prow-next"></div><div id="prow-main"></div><div id="prow-side"></div><div id="prow-sub"></div><div id="prow-bans"></div><div id="prow-atk"></div>',
-  finishHtml:'<div id="prow-finish"></div>',
+  finishHtml:'<div id="prow-endscrim"></div><div id="prow-finish"></div>',
   // Which team is on which side is the one thing this panel exists to tell the
   // operator, and it was the one thing it did not say. Named columns (below)
   // plus this line, matching index.html.
@@ -1976,23 +2071,18 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
     // is asking them not to record it. Hidden entirely unless this scrim bans,
     // for the same reason the card's own ban row is: a control for something
     // the block never does is noise.
+    // The ban picker, on the PRE-MAP screen. Bans are settled during draft -
+    // before the map starts - and the panel is where the operator is, so this
+    // is where the whole map loop closes: pick map, pick bans, Start.
+    //
+    // It is deliberately NOT shown while a map runs. The old dropdown was, and
+    // that was the wrong moment: by then the draft is over and the panel needs
+    // its space for the two team read-outs.
     {id:'prow-bans', render:(row,d,mk)=>{
       row.innerHTML=''; row.className='prow';
-      if(!(usesBans() && session)) return;
-      const l=d.createElement('span'); l.className='lbl'; l.textContent='Bans'; row.appendChild(l);
-      const hero=d.createElement('select'), by=d.createElement('select');
-      hero.innerHTML='<option value="">＋ ban…</option>'
-        + heroCatalog().slice().sort((a,b)=>(a.n||'').localeCompare(b.n||''))
-            .map(h=>`<option value="${esc(h.g)}">${esc(h.n)}</option>`).join('');
-      by.innerHTML='<option value="">either</option><option value="us">us</option>'
-        + '<option value="them">them</option>';
-      hero.onchange=()=>{ const g=hero.value; if(!g) return;
-        if(!MAP_BANS.some(b=>b.g===g)) MAP_BANS.push({g, n:heroName(g)||g, by:by.value||null});
-        hero.value=''; renderBans(); };
-      row.appendChild(hero); row.appendChild(by);
-      const chips=d.createElement('div'); chips.className='row';
-      chips.style.cssText='gap:4px;flex-wrap:wrap;margin-top:4px';
-      row.appendChild(chips); renderBansInto(chips);
+      if(!usesBans() || session) return;
+      const l=d.createElement('span'); l.className='lbl'; l.textContent='Bans this map'; row.appendChild(l);
+      renderBanPickerInto(row, d);
     }},
     {id:'prow-atk', render:(atk,d,mk)=>{
       atk.innerHTML='';
@@ -2007,6 +2097,20 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:520,
           b.onclick=()=>setAttacker(side); atk.appendChild(b); };
         mkatk('a',leftName,'#5a9bd8'); mkatk('b',rightName,'#e9694f'); }
       else atk.className='prow';
+    }},
+    // Closing out the scrim, offered ONLY between maps. During a map the one
+    // thing to press is "Finish + save this map"; after it, the operator has a
+    // real choice - another map, or done - and this is where that choice
+    // belongs. Not being pressable mid-map is the guard: there is nothing to
+    // refuse and no dialog to write, because the button is simply not there.
+    //
+    // "Close capture", not "close the scrim": the scrim record stays fully
+    // editable and can be reopened from the scrim picker. This ends the
+    // CAPTURE session, nothing more.
+    {id:'prow-endscrim', render:(row,d,mk)=>{
+      row.className='prow'; row.innerHTML='';
+      if(session || !activeScrim) return;
+      mk(row,'■ Finish scrim capture',()=>endScrimCapture(),'');
     }},
     // Finish pinned to the bottom, as on index.html: it is the one commit
     // action, so it is deliberately away from the buttons pressed every round.
@@ -2083,7 +2187,6 @@ document.getElementById('detectsides').onclick=async()=>{
   if(!session){ snapMsg('start a map first',true); return; }
   if(!(boxes.a&&boxes.b&&vid.srcObject)){ snapMsg('share your screen and calibrate first',true); return; }
   session.sideResolved=false; await ensureSideResolved(); };
-document.getElementById('banhero').onchange=addBan;
 document.getElementById('scbans').onchange=async()=>{
   if(activeScrim){ activeScrim.uses_bans=document.getElementById('scbans').checked;
     await idbPutScrim(activeScrim); }

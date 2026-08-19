@@ -37,14 +37,17 @@ def _run(body: str) -> object:
 
 
 def _role_map() -> dict[str, list[str]]:
-    """The viewer's hero->role table, which sits outside the pure region."""
-    html = APP.read_text(encoding="utf-8")
-    start = html.index("const ROLE_MAP = {")
-    end = html.index("};", start) + 2
+    """The one hero->role table, now shared with the capture page's ban picker.
+
+    Read from docs/capture/engine/heroes.js rather than scraped out of this
+    page's markup: the viewer imports it from there, so that module is what
+    has to agree with subroles.py.
+    """
+    mod = APP.parent / "capture" / "engine" / "heroes.js"
     node = shutil.which("node")
     if not node:
         pytest.skip("node not available to read the role table")
-    src = html[start:end] + "\nconsole.log(JSON.stringify(ROLE_MAP));"
+    src = f"console.log(JSON.stringify(require({str(mod)!r}).ROLE_MAP));"
     proc = subprocess.run([node, "-e", src], capture_output=True, text=True)
     assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
     return json.loads(proc.stdout)
@@ -720,3 +723,25 @@ def test_an_undated_scrim_is_never_hidden_by_a_range() -> None:
     body = html[start:start + 800]
     assert "if(!d) return true" in body.replace(" ", "").replace("if(!d)returntrue", "if(!d) return true") \
         or "if(!d) return true" in body, "undated scrims are not explicitly kept"
+
+
+def test_a_map_played_with_no_bans_counts_as_evidence() -> None:
+    """`bans: []` alone cannot say "nothing was banned here".
+
+    It is equally what a map nobody recorded bans for looks like, which is why
+    the denominator used to exclude both. The capture page now records
+    `no_bans` explicitly when the operator says so, and that IS evidence: a map
+    played without bans belongs in the denominator, or every ban rate is
+    computed against too small a pool.
+    """
+    n = _run("""return bannedMaps([
+      {id:'a', bans:[{g:'0x01'}]},
+      {id:'b', bans:[], no_bans:true},
+      {id:'c', bans:[]}
+    ]).length;""")
+    assert n == 2, "a map explicitly played without bans is evidence; an unrecorded one is not"
+
+
+def test_a_voided_map_never_counts_however_its_bans_were_recorded() -> None:
+    n = _run("return bannedMaps([{id:'a', bans:[], no_bans:true, void:true}]).length;")
+    assert n == 0

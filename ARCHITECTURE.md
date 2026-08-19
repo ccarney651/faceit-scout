@@ -660,6 +660,7 @@ logic is owned once:
 | `engine/frames.js` | Screen share, frame grab, greyscale canvases, HUD name-row location and name crops; `ctx.onStop` is the page-specific teardown hook |
 | `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
 | `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
+| `engine/heroes.js` | Which role each hero plays, and `byRole()` for grouping a catalogue by it. The ONE copy of the role table — `docs/scrims.html` imports it too, which is that page's only external script |
 | `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
 
 **The module contract is a UMD IIFE plus `make(ctx)` for anything stateful.**
@@ -705,7 +706,7 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 | --- | --- |
 | `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`. `names.js` and `session.js` have a co-located `*.test.js`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`, `heroes.js`. `names.js`, `session.js`, `opponents.js`, `frames.js` and `heroes.js` have a co-located `*.test.js`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
 | `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |

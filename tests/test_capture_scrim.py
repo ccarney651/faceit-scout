@@ -451,20 +451,16 @@ def test_hero_bans_are_optional_per_scrim() -> None:
 
 def test_bans_are_recorded_per_map_not_per_scrim() -> None:
     """A block can start banning partway through, and "what shifted when this
-    hero was banned" is a per-map question."""
+    hero was banned" is a per-map question.
+
+    The reset moved: it used to happen when a map STARTED, which was safe only
+    while bans were entered mid-map. They are picked before Start now, so the
+    reset happens when a map finishes instead - see
+    test_starting_a_map_keeps_the_bans_chosen_for_it.
+    """
     html = APP.read_text(encoding="utf-8").replace(" ", "")
-    assert "bans:MAP_BANS.slice()" in html, "bans are not saved onto the map record"
-    # Reset per map, or the second map inherits the first map's bans.
-    assert html.count("MAP_BANS=[];") >= 2, "MAP_BANS is not reset when a map starts"
-
-
-def test_a_ban_can_record_who_banned_it() -> None:
-    """'They banned it' and 'it was banned on them' are different situations -
-    averaging them hides both, which is why the league Scout page splits them."""
-    html = APP.read_text(encoding="utf-8")
-    assert 'id="banby"' in html
-    for who in ('value="us"', 'value="them"'):
-        assert who in html, f"ban attribution is missing {who}"
+    assert "...banState()" in html, "bans are not saved onto the map record"
+    assert "clearBans();" in html, "MAP_BANS is never reset between maps"
 
 
 # ---------------------------------------------------------------------------
@@ -549,6 +545,7 @@ var MAP_BANS=[], session=null, SCRIM={uses_bans:false};
 function usesBans(){ return !!SCRIM.uses_bans; }
 function renderBans(){ CALLS.push('renderBans'); }
 function renderBansInto(box){ box.__chips=true; }
+function renderBanPickerInto(box,doc){ box.__picker=true; }
 function el(tag){ return { tagName:tag, className:'', innerHTML:'', textContent:'', value:'',
   children:[], style:{}, appendChild:function(c){ this.children.push(c); return c; },
   querySelectorAll:function(){ return []; } }; }
@@ -579,33 +576,30 @@ def test_the_panel_has_no_ban_row_when_the_scrim_does_not_use_bans() -> None:
     # Most scrims do not ban. A control for something the block never does is
     # noise on a panel that sits on top of the game.
     kids = _run_row("""
-      var row=el('div'); SCRIM.uses_bans=false; session={};
+      var row=el('div'); SCRIM.uses_bans=false; session=null;
       ROW.render(row,d,mk); return descend(row).length;""")
     assert kids == 0
 
 
-def test_the_panel_has_no_ban_row_before_a_map_is_running() -> None:
-    kids = _run_row("""
+def test_the_panel_offers_the_ban_picker_between_maps() -> None:
+    # Inverted from what this row used to do. Bans are settled during draft -
+    # before the map starts - so the pre-map screen is the only moment the
+    # control is any use. It used to appear only once the map was running,
+    # which is after the draft it was meant to record.
+    got = _run_row("""
       var row=el('div'); SCRIM.uses_bans=true; session=null;
+      ROW.render(row,d,mk);
+      return !!row.__picker;""")
+    assert got is True, "the pre-map panel must carry the ban picker"
+
+
+def test_the_panel_hides_the_ban_picker_while_a_map_runs() -> None:
+    # By then the draft is over, and the panel needs its space for the two
+    # team read-outs.
+    kids = _run_row("""
+      var row=el('div'); SCRIM.uses_bans=true; session={};
       ROW.render(row,d,mk); return descend(row).length;""")
-    assert kids == 0, "bans are recorded per map, so there is nothing to ban against yet"
-
-
-def test_the_ban_row_offers_every_hero_and_who_banned_it() -> None:
-    tags = _run_row("""
-      var row=el('div'); SCRIM.uses_bans=true; session={};
-      ROW.render(row,d,mk);
-      return descend(row).map(function(n){return n.tagName;});""")
-    assert tags.count("select") == 2, "a hero picker and a by-us/by-them picker"
-
-
-def test_the_ban_row_shows_the_bans_already_recorded() -> None:
-    chips = _run_row("""
-      var row=el('div'); SCRIM.uses_bans=true; session={};
-      MAP_BANS=[{g:'0x01',n:'Sombra'}];
-      ROW.render(row,d,mk);
-      return descend(row).filter(function(n){return n.__chips;}).length;""")
-    assert chips == 1, "the row must render the existing bans, not just an input"
+    assert kids == 0
 
 
 def test_every_panel_row_has_somewhere_to_render() -> None:
@@ -916,3 +910,134 @@ def test_the_panel_no_longer_hardcodes_an_em_dash_in_the_player_cell() -> None:
     row = _extract(("function readComp(bx)", "// refTemplate/addRef/learnCrop"))
     assert '<span class="cn pn">\u2014</span>' not in row, "the Player cell is hardcoded again"
     assert "slotPlayerLabel(" in row, "readComp must ask what the slot's player is called"
+
+
+# --- the panel's ban picker ------------------------------------------------
+# The dropdown was replaced by a role-grouped grid of portraits, in the panel,
+# on the pre-map screen: bans are settled during draft, and the panel is where
+# the operator already is.
+
+_BANGRID_STUBS = """
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function heroPortrait(n){ return '<img alt="'+esc(n)+'">'; }
+function heroName(g){ return ({r:'Reinhardt',g:'Genji',a:'Ana'})[g]||g; }
+var HEROES=[{g:'r',n:'Reinhardt'},{g:'g',n:'Genji'},{g:'a',n:'Ana'}];
+function heroCatalog(){ return HEROES; }
+"""
+
+
+def _run_bangrid(body: str) -> object:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the capture app's helpers")
+    engine = (APP.parent / "engine" / "heroes.js").read_text(encoding="utf-8")
+    src = (engine + "\nvar OWDBHeroes=module.exports;\n" + _BANGRID_STUBS
+           + _extract(("// ---------- hero bans ----------", "// scrimLabel():"))
+           + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));")
+    tmp = Path("scrim_bans_test_tmp.js")
+    tmp.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(tmp)], capture_output=True, text=True, encoding="utf-8")
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    finally:
+        tmp.unlink(missing_ok=True)
+    return json.loads(proc.stdout)
+
+
+def test_clicking_a_hero_bans_it() -> None:
+    assert _run_bangrid("return withBanToggled([], 'r', 'Reinhardt', null);") == [
+        {"g": "r", "n": "Reinhardt", "by": None}]
+
+
+def test_clicking_a_banned_hero_again_unbans_it() -> None:
+    # A grid of buttons has no "remove" affordance of its own, so the button
+    # itself has to be the undo - otherwise a misclick is only fixable from
+    # the chip row.
+    assert _run_bangrid("""
+        const one=withBanToggled([], 'r', 'Reinhardt', null);
+        return withBanToggled(one, 'r', 'Reinhardt', null);""") == []
+
+
+def test_a_ban_records_who_made_it() -> None:
+    assert _run_bangrid("return withBanToggled([], 'g', 'Genji', 'them');")[0]["by"] == "them"
+
+
+def test_the_grid_is_grouped_by_role_in_play_order() -> None:
+    html = _run_bangrid("return banGridHtml(heroCatalog(), []);")
+    assert html.index("Tank") < html.index("Damage") < html.index("Support")
+
+
+def test_the_grid_marks_what_is_already_banned() -> None:
+    # The panel is glanced at, not read. Which heroes are gone has to be
+    # visible in the grid itself, not only in the chip list under it.
+    html = _run_bangrid("return banGridHtml(heroCatalog(), [{g:'g',n:'Genji'}]);")
+    banned = [ln for ln in html.split("<button") if 'data-g="g"' in ln]
+    assert banned and "banned" in banned[0], "a banned hero must be marked in the grid"
+    other = [ln for ln in html.split("<button") if 'data-g="r"' in ln]
+    assert other and "banned" not in other[0]
+
+
+def test_no_bans_this_map_is_a_fact_not_an_empty_list() -> None:
+    # An empty ban list means "nobody recorded any". "We played this map with
+    # no bans" is different evidence and the viewer counts it differently.
+    assert _run_bangrid("MAP_BANS=[]; MAP_BANS_NONE=false; return banState();") == {"bans": [], "no_bans": False}
+    assert _run_bangrid("setNoBans(); return banState();") == {"bans": [], "no_bans": True}
+
+
+def test_banning_a_hero_cancels_no_bans() -> None:
+    assert _run_bangrid("""
+        setNoBans();
+        MAP_BANS=withBanToggled(MAP_BANS,'r','Reinhardt',null); MAP_BANS_NONE=false;
+        return banState();""") == {"bans": [{"g": "r", "n": "Reinhardt", "by": None}], "no_bans": False}
+
+
+def test_starting_a_map_keeps_the_bans_chosen_for_it() -> None:
+    # The whole point of moving the picker to the pre-map screen. All three
+    # map-start paths used to clear MAP_BANS, which would have eaten the input
+    # the moment Start was pressed.
+    html = APP.read_text(encoding="utf-8")
+    assigns = html.count("MAP_BANS=[]")
+    assert assigns == 2, (
+        "MAP_BANS is emptied somewhere other than setNoBans/clearBans - "
+        "a map start path is eating the bans picked before it")
+
+
+def test_a_ban_can_record_who_banned_it() -> None:
+    # The by-us/by-them picker applies to the next hero clicked, so it is set
+    # once for a whole draft rather than per ban.
+    assert _run_bangrid("return withBanToggled([], 'g', 'Genji', 'us');")[0]["by"] == "us"
+
+
+def test_the_panel_shows_the_ban_picker_not_a_dropdown() -> None:
+    row = _extract(("{id:'prow-bans'", "{id:'prow-atk'"))
+    assert "renderBanPickerInto(" in row, "the panel must render the shared picker"
+    assert "<option" not in row, "the 53-entry dropdown is what the grid replaced"
+
+
+def test_the_panel_can_close_out_a_scrim_only_between_maps() -> None:
+    # Not a refusal with a toast: the button is simply not rendered while a
+    # map is being captured, so there is nothing to decline.
+    row = _extract(("{id:'prow-endscrim'", "{id:'prow-finish'"))
+    compact = "".join(row.split())
+    assert "if(session||!activeScrim)return;" in compact, (
+        "finish-scrim must not render while a map is being captured")
+
+
+def test_closing_a_scrims_capture_leaves_the_scrim_editable() -> None:
+    # "Finish scrim capture" ends the capture session, it does not seal the
+    # record - the scrim stays in the picker and can be added to later.
+    src = _extract(("async function endScrimCapture()", "// scrimDate():"))
+    assert "owdb_cap_scrim" in src, "closing capture must drop the active-scrim pointer"
+    assert "idbPutScrim" not in src and "void" not in src, (
+        "closing capture must not write a finished/void flag onto the scrim")
+
+
+def test_a_hero_with_no_portrait_is_still_readable_in_the_grid() -> None:
+    # hero_icons.json is optional and can lag a new hero. A button whose only
+    # content is an <img> that never loads is an invisible button, and the
+    # grid's cells are deliberately line-height:0 to make the portraits flush.
+    html = _run_bangrid("""
+        heroPortrait=function(){ return ''; };
+        return banGridHtml([{g:'x',n:'Nohero'}], []);""")
+    assert "Nohero" in html
+    assert "bantxt" in html, "a portrait-less hero needs a visible text fallback"

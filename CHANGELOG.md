@@ -19,6 +19,39 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-08-19
 
+### Changed
+- **Hero bans are picked from the capture panel, before the map starts.** They
+  were entered from a 53-entry dropdown that only appeared *while a map was
+  running* - after the draft they were meant to record. The panel now carries a
+  role-grouped grid of hero portraits, laid out like the in-game hero select,
+  on the pre-map screen beside the map picker. Clicking a portrait bans it and
+  clicking it again undoes that, so a misclick is fixable where it happened.
+
+  Both surfaces render the same picker, so a ban set on either is set
+  everywhere. The map-start paths no longer clear the ban list - they used to,
+  which would have eaten every ban the moment Start was pressed - and it is
+  cleared when a map finishes instead.
+
+- **"No bans this map" is recorded as a fact.** An empty ban list could not say
+  it: that is equally what a map nobody recorded bans for looks like, so the
+  viewer excluded both from the denominator and every ban rate was computed
+  against too small a pool. A map explicitly played without bans now counts as
+  the evidence it is.
+
+- **The capture panel opens when a scrim is saved, and can close a scrim out.**
+  Saving a scrim pops the panel immediately - it runs inside the click, which is
+  what satisfies the browser's user-gesture rule - so the whole loop happens
+  there: pick map, pick bans, capture, finish, next map. "Finish scrim capture"
+  sits beside that loop and is rendered only between maps, so it is unreachable
+  mid-capture by construction rather than by a refusal. It ends the capture
+  session only: the scrim stays in the picker and stays editable.
+
+- **The hero role table has one copy again.** `ROLE_MAP` moved out of
+  `docs/scrims.html` into `docs/capture/engine/heroes.js`, which both pages now
+  load - the ban grid needs roles too, and a second hand-kept copy would be a
+  second chance to drift from `faceit_sync/subroles.py`. The first copy had
+  already drifted silently. `docs/scrims.html` gains its only external script.
+
 ### Fixed
 - **The scrim panel never said who was on which hero.** It read the ten HUD
   names, saved them with every snapshot and paired them into the finished map -
