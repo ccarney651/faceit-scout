@@ -365,23 +365,56 @@ identically at every contrast level, so all three passes agree, and agreement is
 exactly what the shipped rule accepts on. Contrast cannot see a mistake that is the
 same in all three images.
 
-A second *geometry* can. Reading at strip offsets {−1%, 0, +1%}, each still a full
-contrast ladder, and accepting only when all three agree (`code_strip_guard_sim.py`,
-simulated against the measured table — no tesseract needed to retry a value of d):
+A second *geometry* can, but not the first one tried. Reading at strip offsets
+{−1%, 0, +1%} — each still a full contrast ladder, accepted only when all three
+agree — scored zero wrong when simulated with `code_strip_guard_sim.py`.
+
+**That simulation was optimistic, and the way it was optimistic is the lesson.**
+It probed the same axis the error was on: a dx probe against a dx error. The
+scout's strip can be wrong on any axis and the guard is not told which. Checking
+the probes *blind* against every error (`code_strip_guard_check.py`, which applies
+the scout's error and then the page's fixed probes on top) the first scheme —
+three probes each moving dx, dy **and** scale together — failed in both directions
+at once:
+
+- it displaced further than any single axis, refusing 3 of 12 reads on a
+  perfectly good strip;
+- its 1% of strip *height* was about one pixel, too small to disturb a
+  vertically clipped crop, so two wrong codes still agreed across every probe
+  (`H6R64B` → `HARAAR` at dy −5%, `K3A6HZ` → `K3A6H7` at dy −3%).
+
+One axis per probe fixes both, and dy has to step further than dx because a strip
+is roughly seven times wider than it is tall, so equal percentages are wildly
+unequal pixels. The shipped set is `{0, dx ±1%, dy ±2%}` — five probes, each a
+contrast ladder, all five required to agree. Measured blind:
 
 ```
-axis     shipped: wrong reads      candidate: wrong reads    cost at a correct strip
-dx              23                        0                  none (12/12)
-dy               7                        0                  1 extra refusal in 12
-scale           24                        0                  none (12/12)
+scout's strip error   shipped rule            probe guard
+none                  12 ok  0 wrong          11 ok  0 wrong  1 refused
+dx -4%                 0 ok 10 wrong           0 ok  0 wrong 12 refused
+dx +3%                 0 ok  7 wrong           0 ok  0 wrong 12 refused
+dy -5%                 1 ok  2 wrong           0 ok  0 wrong 12 refused
+dy -3%                 8 ok  2 wrong           0 ok  0 wrong 12 refused
+dy +3%                 9 ok  1 wrong           7 ok  0 wrong  5 refused
+scale 0.97             3 ok  7 wrong           3 ok  0 wrong  9 refused
+scale 1.05             0 ok  5 wrong           0 ok  0 wrong 12 refused
+                      ------------------      -------------------------
+                      34 wrong                 0 wrong
 ```
 
-Zero wrong reads at every strip error measured, against 54. The cost is one refusal
-in twelve on one axis, and three times the OCR work for a button pressed by hand.
+Scale errors are caught with no scale probe: shrinking the strip about its centre
+also moves the code box horizontally, which is what the dx probes look at.
 
-**Not shipped yet** — this is the measurement, not the change. What it already
-settles is narrower and usable now: the code reader is trustworthy on a strip
-auto-calibrate produced, and should not be trusted on a hand-dragged one. The two
+The cost is one refusal in twelve on a correct strip, and five ladders instead of
+one for a button pressed by hand. A refusal now also says something useful —
+*the code read differently when the crop was nudged, re-run Auto-calibrate* —
+because a disagreement means the box is not on the code, which is the operator's
+to fix and nobody else's.
+
+Shipped in `engine/replaycode.js` (`PROBES`, `probeStrip`) and both capture pages.
+What it does not change: the reader is still only as good as the strip, and a
+hand-dragged strip is still worth re-calibrating rather than trusting. The two
 strip conventions in `code_truth.py` differ by 6–23% on the same HUD, an order of
-magnitude outside the ±2% envelope.
+magnitude outside the ±2% envelope — the guard now refuses there instead of
+inventing a code.
 

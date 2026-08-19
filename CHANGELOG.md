@@ -130,6 +130,21 @@ Entries before 2026-08-11 were reconstructed from git history.
   already drifted silently. `docs/scrims.html` gains its only external script.
 
 ### Changed
+- **The replay-code reader now checks the crop, not just the contrast.** It
+  reads the code at five crop geometries and records it only when all five
+  agree. A disagreement says so, and says what to do: *the code read
+  differently when the crop was nudged — re-run Auto-calibrate.*
+
+  The reason is a measured failure, not a precaution. The crop is positioned
+  relative to the calibration box, so it is exactly as right as that box is —
+  and the tool itself tells you to drag the boxes by hand when auto-calibrate
+  scores low. Over twelve real frames, a box off by more than about 2% did not
+  produce a failed read; it produced a **wrong** one, a well-formed six-character
+  code belonging to no game, 54 times. The three-contrast check could not see
+  it: a crop in the wrong place is wrong identically at every contrast, so the
+  passes agreed. A wrong code attributes a whole map's comps to another match
+  and looks exactly like a correct one. Zero wrong across the same frames now.
+
 - **Scrim mode is merged, and stays closed.** Everything built for scrims -
   panel-first capture, the hero-grid ban picker, player names against heroes,
   the replay-code reader - is now on the live site rather than a branch, but

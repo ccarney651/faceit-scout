@@ -83,3 +83,60 @@ test('a missing or malformed strip yields no box rather than NaNs', () => {
   assert.strictEqual(R.codeBox(null), null);
   assert.strictEqual(R.codeBox({ x: 0, y: 0, w: 0, h: 0 }), null);
 });
+
+// --- the geometry probes ---------------------------------------------------
+
+test('the centre probe is the strip itself', () => {
+  const a = { x: 129.536, y: 119.808, w: 660.224, h: 97.2 };
+  const p = R.probeStrip(a, R.PROBES[0]);
+  for (const k of ['x', 'y', 'w', 'h']) assert.ok(Math.abs(p[k] - a[k]) < 1e-9, k);
+});
+
+test('a probe scales about the strip centre, not its corner', () => {
+  // A scout aims at the same five portraits and gets the extent slightly
+  // wrong; nobody pins the top-left and stretches. Anchoring the corner would
+  // make a scale probe indistinguishable from a translation probe.
+  const a = { x: 100, y: 200, w: 600, h: 90 };
+  const p = R.probeStrip(a, { s: 0.9 });
+  assert.strictEqual(p.x + p.w / 2, a.x + a.w / 2);
+  assert.strictEqual(p.y + p.h / 2, a.y + a.h / 2);
+  assert.ok(p.w < a.w && p.h < a.h);
+});
+
+test('a probe shifts by fractions of the strip, so it scales with resolution', () => {
+  // Expressed in pixels it would be a different probe at 1080p than at 4K,
+  // and the tolerance it guards is measured in percent of the strip.
+  const small = { x: 0, y: 0, w: 100, h: 20 };
+  const big = { x: 0, y: 0, w: 1000, h: 200 };
+  assert.strictEqual(R.probeStrip(small, { dx: 0.01 }).x / small.w,
+                     R.probeStrip(big, { dx: 0.01 }).x / big.w);
+});
+
+test('every probe moves exactly one axis', () => {
+  // The first attempt moved all three at once. It displaced further than any
+  // single axis (refusing good reads) while moving too little vertically to
+  // disturb a clipped crop (passing wrong ones). One axis per probe is the
+  // measured fix - see tools/real_frame_eval/README.md.
+  for (const p of R.PROBES) {
+    const moved = ['dx', 'dy', 's'].filter(k => k === 's' ? (p.s !== undefined && p.s !== 1)
+                                                          : !!p[k]);
+    assert.ok(moved.length <= 1, 'probe moves ' + JSON.stringify(moved) + ': ' + JSON.stringify(p));
+  }
+});
+
+test('the probes bracket the strip on both axes', () => {
+  // A one-sided probe set cannot tell "correct" from "off in the direction I
+  // did not look".
+  const dxs = R.PROBES.map(p => p.dx || 0), dys = R.PROBES.map(p => p.dy || 0);
+  assert.ok(Math.min(...dxs) < 0 && Math.max(...dxs) > 0, 'dx is not bracketed');
+  assert.ok(Math.min(...dys) < 0 && Math.max(...dys) > 0, 'dy is not bracketed');
+});
+
+test('the vertical probe steps further than the horizontal one', () => {
+  // A strip is ~7x wider than tall, so equal PERCENTAGES are wildly unequal
+  // pixels. At 1% of height the vertical probe was about one pixel and let
+  // H6R64B through as HARAAR.
+  const dx = Math.max(...R.PROBES.map(p => Math.abs(p.dx || 0)));
+  const dy = Math.max(...R.PROBES.map(p => Math.abs(p.dy || 0)));
+  assert.ok(dy > dx, `dy probe ${dy} must exceed dx probe ${dx}`);
+});
