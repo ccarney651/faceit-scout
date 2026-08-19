@@ -1261,14 +1261,14 @@ async function readScoreboard(frame){
     const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser' };
     if(sb){
       await w.setParameters({ tessedit_pageseg_mode:'6' });
-      const {data}=await w.recognize(scoreCanvas(frame,sb));
+      const {data}=await ocrRead(w, scoreCanvas(frame,sb));
       await w.setParameters({ tessedit_pageseg_mode:'7' });
       const lines=(data.text||'').split('\n').map(s=>s.replace(/\s+/g,' ').trim()).filter(Boolean);
       const parsed=Scoreboard.parse(lines);
       if(parsed.entries.length){ Scoreboard.assignTeams(parsed,{ dps:2, tank:1, support:2 });
         out.roles=parsed.roles; out.entries=parsed.entries; out.matchTime=parsed.matchTime; }
     }
-    if(sr){ const {data}=await w.recognize(scoreCanvas(frame,sr));
+    if(sr){ const {data}=await ocrRead(w, scoreCanvas(frame,sr));
       out.readout=Scoreboard.parseScoreReadout((data.text||'')); }
     return out;
   }catch(e){ console.warn('scoreboard read skipped:',e); return null; } }
@@ -1285,6 +1285,37 @@ async function readScoreboard(frame){
 // yet, same as this page carrying calibration.js's boxKeys entries for boxes
 // index.html doesn't set.
 let _ocrWorker=null, _ocrLoading=null, _ocrLoadFailed=false, _ocrLoadError=null;
+// Every OCR read goes through ocrRead(). ocrWorker()'s load timeout
+// (engine/refs.js) only covers getting the worker; a recognize() that stalls
+// after that hangs its caller forever with no error to report - and because
+// tesseract.js runs one job at a time per worker, every other read sharing
+// that worker queues behind it and hangs too. The first version of this fix
+// lived inside index.html's ocrNames() alone, which left the replay-code
+// read - added later, on the same cached worker - able to wedge it anyway.
+// So: race a deadline, and on any failure throw the worker away rather than
+// let the next read stack up behind a dead job; the next ocrWorker() call
+// then builds a fresh one.
+//
+// The silence is the point. A caller can only name a reason for an error
+// that actually arrives: scrim.html's ensureSideResolved() catch was written
+// to say WHY a detection failed and could not, for a read that never
+// returned.
+//
+// Kept byte-identical on both capture pages - tools/capture_divergence.py
+// counts it as shared, and it belongs in engine/refs.js with the rest of the
+// worker lifecycle (_ocrWorker/_ocrLoading are already written there) once
+// the ctx plumbing is worth the churn to two test modules.
+const OCR_READ_TIMEOUT_MS=8000;
+async function ocrRead(w, cv){
+  try{
+    return await Promise.race([w.recognize(cv),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]);
+  }catch(e){
+    try{ w.terminate(); }catch(_){}
+    _ocrWorker=null; _ocrLoading=null;
+    throw e;
+  }
+}
 async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return null;
   const w=await ocrWorker(); const frame=grabFrame(); const out={a:[],b:[]}; let done=0;
   for(const side of ['a','b']){ const b=boxes[side];
@@ -1292,7 +1323,7 @@ async function readHudNames(){ if(!boxes.a||!boxes.b||!vid.srcObject) return nul
     // ocrNames() and engine/frames.js nameRow() for why.
     const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      const {data}=await w.recognize(nameCanvas(frame,cell,row));
+      const {data}=await ocrRead(w, nameCanvas(frame,cell,row));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       snapMsg('reading HUD names… '+(++done)+'/10'); } }
   return out; }
@@ -1445,7 +1476,7 @@ async function readReplayCode(){
     const seen=[], raws=[];
     for(const contrast of CODE_CONTRASTS){
       const cv=codeCanvas(frame, box, contrast);
-      const {data}=await w.recognize(cv);
+      const {data}=await ocrRead(w, cv);
       const raw=(data&&data.text||'').replace(/\s+/g,'');
       raws.push(contrast+':'+(raw||'-'));
       const one=OWDBReplayCode.foldCode(raw);

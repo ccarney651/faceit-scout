@@ -28,6 +28,7 @@ ocrNames() must.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -270,3 +271,20 @@ def test_a_healthy_recognize_call_reads_all_ten_names_normally() -> None:
     assert result["calls"] == 10
     assert result["a"] == ["Player1", "Player2", "Player3", "Player4", "Player5"]
     assert result["b"] == ["Player6", "Player7", "Player8", "Player9", "Player10"]
+
+
+def test_every_ocr_read_on_the_page_is_behind_the_deadline() -> None:
+    """readReplayCode() shares the worker ocrNames() guards, and wasn't guarded.
+
+    The deadline was written into ocrNames' own recognize loop, so the replay-
+    code read - added later, on the same cached worker - could still stall
+    forever, and a worker wedged there hangs the next side detection too. The
+    guard is now a named helper both go through; scrim.html has the same one
+    (tests/test_capture_scrim_ocr_read.py).
+    """
+    html = APP.read_text(encoding="utf-8")
+    guard = html.index("async function ocrRead(")
+    guard_end = html.index("\n}", guard)
+    outside = html[:guard] + html[guard_end:]
+    bare = re.findall(r"\bw\.recognize\(", outside)
+    assert not bare, f"{len(bare)} recognize() call(s) bypass the read deadline"

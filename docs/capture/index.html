@@ -626,7 +626,7 @@ async function readReplayCode(){
     const seen=[], raws=[];
     for(const contrast of CODE_CONTRASTS){
       const cv=codeCanvas(frame, box, contrast);
-      const {data}=await w.recognize(cv);
+      const {data}=await ocrRead(w, cv);
       const raw=(data&&data.text||'').replace(/\s+/g,'');
       raws.push(contrast+':'+(raw||'-'));
       const one=OWDBReplayCode.foldCode(raw);
@@ -920,7 +920,37 @@ let _ocrWorker=null, _ocrLoading=null, _ocrWarm=false, _ocrLoadFailed=false, _oc
 // the operator stares at "detecting sides…" with nothing to do but wait or
 // force Swap L/R. No-op once it's running; harmless if OCR is never used.
 function warmOcr(){ if(_ocrWarm||!readyForCapture()) return; _ocrWarm=true; ocrWorker().then(()=>{ _ocrLoadFailed=false; },()=>{}); }
+// Every OCR read goes through ocrRead(). ocrWorker()'s load timeout
+// (engine/refs.js) only covers getting the worker; a recognize() that stalls
+// after that hangs its caller forever with no error to report - and because
+// tesseract.js runs one job at a time per worker, every other read sharing
+// that worker queues behind it and hangs too. The first version of this fix
+// lived inside index.html's ocrNames() alone, which left the replay-code
+// read - added later, on the same cached worker - able to wedge it anyway.
+// So: race a deadline, and on any failure throw the worker away rather than
+// let the next read stack up behind a dead job; the next ocrWorker() call
+// then builds a fresh one.
+//
+// The silence is the point. A caller can only name a reason for an error
+// that actually arrives: scrim.html's ensureSideResolved() catch was written
+// to say WHY a detection failed and could not, for a read that never
+// returned.
+//
+// Kept byte-identical on both capture pages - tools/capture_divergence.py
+// counts it as shared, and it belongs in engine/refs.js with the rest of the
+// worker lifecycle (_ocrWorker/_ocrLoading are already written there) once
+// the ctx plumbing is worth the churn to two test modules.
 const OCR_READ_TIMEOUT_MS=8000;
+async function ocrRead(w, cv){
+  try{
+    return await Promise.race([w.recognize(cv),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]);
+  }catch(e){
+    try{ w.terminate(); }catch(_){}
+    _ocrWorker=null; _ocrLoading=null;
+    throw e;
+  }
+}
 async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
   // Restrict recognition to the charset HUD gamertags actually use - cuts
   // stray glyphs (border/icon bleed) from diluting simScore's fuzzy match
@@ -939,20 +969,7 @@ async function ocrNames(){ const frame=grabFrame(); const w=await ocrWorker();
     // nameCanvas falls back to the old fractions. See engine/frames.js.
     const row=nameRow(frame,b);
     for(let i=0;i<5;i++){ const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      let data;
-      try{
-        ({data}=await Promise.race([w.recognize(nameCanvas(frame,cell,row)),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR read timed out')),OCR_READ_TIMEOUT_MS))]));
-      }catch(e){
-        // tesseract.js processes jobs sequentially on one worker, so a stalled
-        // recognize() call likely wedges the worker itself, not just this one
-        // read - queuing later reads behind it would hang them too. Throw the
-        // whole worker away so the next ocrWorker() call starts a fresh one
-        // instead of stacking up behind a dead job.
-        try{ w.terminate(); }catch(_){}
-        _ocrWorker=null; _ocrLoading=null;
-        throw e;
-      }
+      const {data}=await ocrRead(w, nameCanvas(frame,cell,row));
       out[side].push((data.text||'').replace(/\s+/g,' ').trim());
       setDetectMsg('reading HUD names… '+(++done)+'/10'); ocrProgress(done/10); } }
   return out; }
