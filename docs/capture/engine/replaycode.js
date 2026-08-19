@@ -67,11 +67,11 @@
   // window mode changed; that is the mistake this avoids.
   //
   // Fitted by tools/real_frame_eval/code_sweep.py - do not hand-edit.
-  var DX = 1.079;      // left edge, in strip widths right of the strip's left edge
+  var DX = 1.089;      // left edge, in strip widths right of the strip's left edge
   var DW = 0.127;      // width, in strip widths
   var DY = -0.495;     // top edge, in strip heights below the strip's top (negative = above)
   var DH = 0.198;      // height, in strip heights
-  var PAD = 0.35;      // extra margin, in multiples of the box's own size
+  var PAD = 0.10;      // extra margin, in multiples of the box's own size
 
   function codeBox(a) {
     if (!a || !(a.w > 0) || !(a.h > 0)) return null;
