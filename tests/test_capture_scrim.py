@@ -217,22 +217,42 @@ def test_auto_side_returns_null_when_not_confident() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_scrim_pages_are_not_paused() -> None:
-    """Both pause overlays are gone and cannot silently come back.
+def test_scrim_pages_are_gated_and_fail_closed() -> None:
+    """Both scrim pages are locked to the public, and unlock only by script.
 
-    Two pages carried an unconditional full-screen #scrimpaused overlay that
-    no script removed (commit f2881cf): docs/capture/scrim.html blocked
-    capturing, docs/scrims.html blocked viewing. Phase 1 removes both; this
-    test is what stops either reappearing. It covers both files because an
-    earlier draft of this plan removed only the capture one, which would have
-    shipped scrims you could record but not read.
+    These pages carried an unconditional full-screen #scrimpaused overlay
+    (commit f2881cf) that no script removed; phase 1 deleted both so the
+    feature could be built. It is now finished enough to merge but not to
+    open, so the overlay is back - with a gate in front of it.
+
+    The direction matters. The overlay is STATIC MARKUP and the gate script
+    only ever removes it, so anything that goes wrong - a syntax error, a CSP
+    block, a browser with localStorage disabled - leaves the page locked. A
+    gate that added the overlay instead would fail open, and shipping an
+    unfinished capture tool to everyone is the failure worth avoiding.
     """
     viewer = APP.parents[1] / "scrims.html"
     assert viewer.exists(), "docs/scrims.html moved — update this guard"
+    gates = []
     for page in (APP, viewer):
         html = page.read_text(encoding="utf-8")
-        assert "scrimpaused" not in html, f"{page.name} still has the overlay"
-        assert "Scrims are paused" not in html, f"{page.name} still has the copy"
+        assert 'id="scrimpaused"' in html, f"{page.name} lost the lock overlay"
+        assert "Scrims are paused" in html, f"{page.name} lost the lock copy"
+        start = html.index("// ---- scrim lock ----")
+        gates.append(html[start:html.index("</script>", start)])
+        body = html.index("<body")
+        assert html.index('id="scrimpaused"') > body, "the overlay must be in the body"
+
+    assert gates[0] == gates[1], "the two pages' gates have drifted apart"
+    gate = gates[0]
+    assert "removeAttribute" in gate or "remove()" in gate, (
+        "the gate must REMOVE the overlay, never add it - see this test's docstring"
+    )
+    assert "scrimpaused" in gate
+
+    # A failure inside the gate must not take the lock with it.
+    assert "try" in gate and "catch" in gate, "a throwing gate must leave the page locked"
+
 
 
 def test_scrim_page_loads_the_session_engine_module() -> None:

@@ -195,6 +195,51 @@ tbody tr:hover{background:var(--surface2)}
 </style>
 </head>
 <body>
+<div id="scrimpaused" style="position:fixed;inset:0;z-index:999999;background:var(--bg);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div style="max-width:520px">
+    <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">owdb</div>
+    <h1 style="font-size:26px;margin:0 0 10px">Scrims are paused</h1>
+    <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 20px">Scrim tracking is paused while we finish it up. Head to the League capture tool to scout FACEIT maps instead.</p>
+    <a href="capture/index.html" style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:10px 18px;border-radius:4px;text-decoration:none">Open League capture →</a>
+  </div>
+</div>
+<script>
+// ---- scrim lock ----
+// Scrim capture is merged but not open. The overlay above is STATIC MARKUP;
+// this script only ever REMOVES it. That direction is the whole design: a
+// syntax error here, a CSP block, localStorage disabled, an exception - any
+// of it leaves the page locked. A gate that added the overlay instead would
+// fail open, and an unfinished capture tool reaching everyone is the outcome
+// worth engineering against.
+//
+// It is a soft gate, not a security boundary. The token is readable in this
+// file by anyone who looks; the point is that nobody arrives here by accident,
+// not that it cannot be bypassed. Nothing behind it is secret - it writes only
+// to the visitor's own browser.
+//
+// Unlock once per browser with ?unlock=scrimbeta (it persists), re-lock with
+// ?lock=1. There is deliberately NO localhost exemption: a dev bypass would
+// mean the state that ships is the one state nothing ever exercises, and
+// tools/verify_capture_browser.js serves over 127.0.0.1. One token, one code
+// path, checked in a browser.
+//
+// Kept byte-identical on docs/capture/scrim.html and docs/scrims.html - one
+// records scrims and the other reads them, so unlocking either alone ships
+// half a feature. A test compares them.
+(function(){
+  try{
+    var KEY='owdb_scrim_unlock', TOKEN='scrimbeta';
+    var q=new URLSearchParams(location.search);
+    if(q.get('lock')) localStorage.removeItem(KEY);
+    else if(q.get('unlock')) localStorage.setItem(KEY, q.get('unlock'));
+    if(localStorage.getItem(KEY)===TOKEN){
+      var el=document.getElementById('scrimpaused');
+      if(el) el.remove();
+    }
+  }catch(e){ /* stay locked */ }
+})();
+</script>
+
 <div class="topbar">
   <div class="topbar-in">
     <div class="toprow">

@@ -28,6 +28,10 @@ try {
 }
 
 const BASE = process.env.OWDB_BASE || 'http://127.0.0.1:8000';
+// Both scrim pages ship locked - merged, not open (see their "scrim lock"
+// block). Every navigation below unlocks first, or the overlay sits over the
+// controls these checks drive. The lock itself is checked in 1h.
+const UNLOCK = 'scrimbeta';
 const EXE = process.env.OWDB_CHROME || path.join(
   process.env.USERPROFILE || process.env.HOME,
   'AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe');
@@ -75,8 +79,8 @@ async function main() {
       .filter(n => typeof window[n] !== 'object'));
     check('scrim: every engine module loads (incl. Scoreboard)', sm.length === 0, 'missing: ' + sm.join(','));
     check('scrim: no console errors', errs.scrim.length === 0, errs.scrim.join(' | '));
-    check('scrim: pause overlay is gone',
-      await scrim.evaluate(() => !document.getElementById('scrimpaused')));
+    check('scrim: a plain load is locked',
+      await scrim.evaluate(() => !!document.getElementById('scrimpaused')));
 
     // The league-code block must never treat an unusable feed as "all clear".
     const feed = await scrim.evaluate(() => ({
@@ -123,8 +127,8 @@ async function main() {
       scaf[0].score.us === 11 && scaf[0].result === 'win', JSON.stringify(scaf[0]));
 
     const viewer = await open('/scrims.html', 'viewer');
-    check('viewer: pause overlay is gone',
-      await viewer.evaluate(() => !document.getElementById('scrimpaused')));
+    check('viewer: a plain load is locked',
+      await viewer.evaluate(() => !!document.getElementById('scrimpaused')));
     check('viewer: no console errors', errs.viewer.length === 0, errs.viewer.join(' | '));
     await ctx.close();
   }
@@ -263,7 +267,7 @@ async function main() {
     const p = await ctx.newPage();
     const netFail = [];
     p.on('requestfailed', r => netFail.push(r.url().slice(0, 80)));
-    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.goto(BASE + '/capture/scrim.html?unlock=' + UNLOCK, { waitUntil: 'load' });
     await p.waitForTimeout(1500);
 
     const ocr = await p.evaluate(async () => {
@@ -305,7 +309,7 @@ async function main() {
     const p = await ctx.newPage();
     const errs = [];
     p.on('pageerror', e => errs.push(e.message));
-    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.goto(BASE + '/capture/scrim.html?unlock=' + UNLOCK, { waitUntil: 'load' });
     await p.waitForTimeout(1500);
 
     const r = await p.evaluate(async () => {
@@ -451,7 +455,7 @@ async function main() {
     const v = await ctx.newPage();
     const verrs = [];
     v.on('pageerror', e => verrs.push(e.message));
-    await v.goto(BASE + '/scrims.html', { waitUntil: 'load' });
+    await v.goto(BASE + '/scrims.html?unlock=' + UNLOCK, { waitUntil: 'load' });
     await v.waitForTimeout(2500);
     const vr = await v.evaluate(() => {
       const cells = [...document.querySelectorAll('.covcell')].map(c => ({
@@ -495,7 +499,7 @@ async function main() {
     const perrs = [];
     p.on('pageerror', e => perrs.push(e.message));
     p.on('console', m => m.type() === 'error' && perrs.push('CONSOLE: ' + m.text()));
-    await p.goto(BASE + '/scrims.html?demo=1', { waitUntil: 'load' });
+    await p.goto(BASE + '/scrims.html?demo=1&unlock=' + UNLOCK, { waitUntil: 'load' });
     await p.waitForTimeout(2000);
 
     const ov = await p.evaluate(() => {
@@ -622,7 +626,7 @@ async function main() {
 
     // With no bans anywhere, the tab must not exist at all.
     const p2 = await ctx.newPage();
-    await p2.goto(BASE + '/scrims.html?demo=1', { waitUntil: 'load' });
+    await p2.goto(BASE + '/scrims.html?demo=1&unlock=' + UNLOCK, { waitUntil: 'load' });
     await p2.waitForTimeout(1500);
     const nav2 = await p2.evaluate(() => {
       DATA_ALL.maps.forEach(m => { m.bans = []; });
@@ -649,7 +653,7 @@ async function main() {
     const p = await ctx.newPage();
     const perrs = [];
     p.on('pageerror', e => perrs.push(e.message));
-    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.goto(BASE + '/capture/scrim.html?unlock=' + UNLOCK, { waitUntil: 'load' });
     await p.waitForTimeout(900);
 
     // requestWindow() needs a user gesture, so drive the real button.
@@ -753,7 +757,7 @@ async function main() {
       await p.waitForTimeout(1200);
     }
     const p = await ctx.newPage();
-    await p.goto(BASE + '/capture/scrim.html', { waitUntil: 'load' });
+    await p.goto(BASE + '/capture/scrim.html?unlock=' + UNLOCK, { waitUntil: 'load' });
     const got = await p.evaluate(async (want) => {
       const db = await new Promise(r => { const q = indexedDB.open('owscout-capture'); q.onsuccess = () => r(q.result); });
       return { v: db.version, stores: want.filter(n => db.objectStoreNames.contains(n)) };
@@ -814,6 +818,37 @@ async function main() {
       state.heroes.length === 1 && state.heroes[0].g === 'custom:d_mon', JSON.stringify(state.heroes));
     check('upgrade: raises no page errors', upErrs.length === 0, upErrs.join(' | '));
     await ctx.close();
+  }
+
+  // --- 1h. The scrim lock -------------------------------------------------
+  // Scrims are merged but closed to the public. This is the one check that
+  // sees the state everyone else gets, so it asserts the lock in both
+  // directions on BOTH pages - unlocking only the capture page would ship a
+  // tool that records scrims nobody can read, and unlocking only the viewer
+  // would ship an empty page.
+  {
+    for (const [label, path] of [['capture', '/capture/scrim.html'], ['viewer', '/scrims.html']]) {
+      const ctx = await browser.newContext();          // fresh profile = fresh localStorage
+      const p = await ctx.newPage();
+      const seen = async () => p.evaluate(() => !!document.getElementById('scrimpaused'));
+
+      await p.goto(BASE + path, { waitUntil: 'load' });
+      check(`lock: ${label} is locked to a first-time visitor`, await seen());
+
+      await p.goto(BASE + path + '?unlock=' + UNLOCK, { waitUntil: 'load' });
+      check(`lock: ${label} opens with the token`, !(await seen()));
+
+      await p.goto(BASE + path, { waitUntil: 'load' });
+      check(`lock: ${label} stays open without repeating the token`, !(await seen()));
+
+      await p.goto(BASE + path + '?lock=1', { waitUntil: 'load' });
+      check(`lock: ${label} can be re-locked`, await seen());
+
+      await p.goto(BASE + path + '?unlock=wrong', { waitUntil: 'load' });
+      check(`lock: ${label} rejects a wrong token`, await seen());
+
+      await ctx.close();
+    }
   }
 
   await browser.close();

@@ -130,6 +130,17 @@ Entries before 2026-08-11 were reconstructed from git history.
   already drifted silently. `docs/scrims.html` gains its only external script.
 
 ### Changed
+- **Scrim mode is merged, and stays closed.** Everything built for scrims -
+  panel-first capture, the hero-grid ban picker, player names against heroes,
+  the replay-code reader - is now on the live site rather than a branch, but
+  both scrim pages open behind a lock. Capture and viewer are gated together:
+  unlocking one alone would ship a tool that records scrims nobody can read.
+
+  The overlay is static markup and the gate script only ever removes it, so a
+  syntax error, a blocked script or a browser with localStorage off all leave
+  the page locked. It is a soft gate, not a security boundary - nothing behind
+  it is secret, and it writes only to your own browser.
+
 - **Registered the 2026-08-19 patch code wipe, dated the 18th.** Every replay
   code from before the patch is dead, so the site marks those maps lost to the
   wipe rather than offering them.
