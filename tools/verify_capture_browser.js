@@ -245,12 +245,19 @@ async function main() {
   }
 
   // --- 1d. The OCR pipeline, end to end ------------------------------------
-  // Screenshot import depends entirely on tesseract, loaded from a CDN through
-  // a strict CSP that has silently killed browser APIs twice in this project.
-  // Renders a replay-history-shaped image and runs it through the page's own
-  // ocrTextFromImage() - the real path, which sets the multi-line page-seg
-  // mode. (Calling recognize() directly inherits PSM 7, single line, and
-  // returns nothing; that is a harness mistake, not a bug.)
+  // Tesseract loads from a CDN through a strict CSP that has silently killed
+  // browser APIs three times in this project (the blob worker, scoreboard.js,
+  // and scrims.html's heroes.js). Nothing in pytest can see a <meta> CSP, so
+  // this is the only check that the OCR stack actually runs in a browser.
+  //
+  // It used to go through the screenshot importer's ocrTextFromImage(); that
+  // feature is gone (importing a whole replay history is not something done
+  // while watching Overwatch), so it now drives the path the live reads use:
+  // the shared ocrWorker(), the code alphabet and page-seg mode readReplayCode
+  // sets, and ocrRead()'s deadline. ACCURACY is not the subject here - a
+  // synthetic canvas is not an Overwatch HUD, and real-frame accuracy is
+  // measured by tools/real_frame_eval. What this proves is that the worker
+  // spawns, the wasm core and traineddata load, and a read returns.
   {
     const ctx = await browser.newContext();
     const p = await ctx.newPage();
@@ -261,28 +268,31 @@ async function main() {
 
     const ocr = await p.evaluate(async () => {
       const c = document.createElement('canvas');
-      c.width = 900; c.height = 260;
+      c.width = 600; c.height = 120;
       const g = c.getContext('2d');
       g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
-      g.fillStyle = '#fff'; g.font = '30px monospace';
-      ['ILIOS ABCD12 VICTORY 3 - 1', 'DORADO EFGH34 DEFEAT 2 - 3',
-       'BUSAN IJKL56 VICTORY 2 - 0'].forEach((t, i) => g.fillText(t, 20, 60 + i * 60));
-      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      g.fillStyle = '#fff'; g.font = 'bold 72px monospace';
+      g.fillText('7DNNF1', 30, 90);
       try {
-        const text = await ocrTextFromImage(blob);
-        return { ok: true, rows: parseScrimSessionText(text || ''), text: (text || '').slice(0, 200) };
+        const w = await ocrWorker();
+        await w.setParameters({ tessedit_pageseg_mode: '7',
+          tessedit_char_whitelist: OWDBReplayCode.ALPHABET });
+        const { data } = await ocrRead(w, c);
+        const raw = ((data && data.text) || '').replace(/\s+/g, '');
+        await w.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '' });
+        return { ok: true, raw, folded: OWDBReplayCode.foldCode(raw) };
       } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
     });
 
     check('ocr: the worker loads and reads an image', ocr.ok, ocr.error);
     check('ocr: no network request was blocked (CSP)', netFail.length === 0, netFail.join(' | '));
     if (ocr.ok) {
-      check('ocr: every map line is recovered', ocr.rows.length === 3,
-        ocr.rows.length + ' rows from: ' + JSON.stringify(ocr.text));
-      const names = ocr.rows.map(r => r.map_name);
-      check('ocr: map names resolve', ['Ilios', 'Dorado', 'Busan'].every(n => names.includes(n)), names.join(','));
-      const codes = ocr.rows.map(r => r.code).filter(Boolean);
-      check('ocr: replay codes are recovered', codes.length >= 2, codes.join(','));
+      check('ocr: the read returns text, not silence', !!ocr.raw, JSON.stringify(ocr.raw));
+      // foldCode is the gate every live read passes through. Six characters
+      // out of it means the alphabet and page-seg mode reached the worker;
+      // WHICH six is an accuracy question this fixture cannot ask.
+      check('ocr: the code alphabet reaches the worker',
+        !!ocr.folded, JSON.stringify(ocr.raw) + ' -> ' + JSON.stringify(ocr.folded));
     }
     await ctx.close();
   }
@@ -663,8 +673,11 @@ async function main() {
     check('panel: with no map running it offers the next one',
       idle.selects.length === 2 && idle.selects[0] >= 4 && idle.selects[1] >= 2 &&
       /Start/.test(idle.start), JSON.stringify(idle.selects) + ' ' + idle.start);
-    check('panel: it says no map is running rather than showing blank state',
-      /no map running/.test(idle.info), idle.info);
+    // The idle panel used to state the situation ("no map running"); it now
+    // states the next action instead. Either satisfies the point of this
+    // check, which is that the panel is never a blank box.
+    check('panel: idle, it points at the next action rather than showing blank state',
+      /select the map/i.test(idle.info), idle.info);
     check('panel: live controls are absent until a map is running',
       !idle.main && !idle.finish, idle.main + ' | ' + idle.finish);
 
