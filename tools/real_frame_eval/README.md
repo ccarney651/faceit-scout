@@ -223,3 +223,44 @@ the thing it is actually used on.
 - The whole crop result assumes calibration put the box on the portraits. It says
   nothing about what happens when calibration is grossly wrong — then the crop is
   meaningless, but so is hero recognition, and the page already says so.
+
+## Replay-code reading (2026-08-19)
+
+`code_truth.py` → `code_crop.py` → `code_eval.js`, swept by `code_sweep.py` and
+checked against the shipped module by `code_parity.js`.
+
+Twelve frames with hand-verified codes, two window modes, five distinct codes.
+
+| offsets | correct | no-read | wrong |
+| --- | --- | --- | --- |
+| provisional (eyeballed, PAD 0.35) | 9/12 | 3 | 0 |
+| fitted (`code_offsets.json`, PAD 0.10) | **12/12** | 0 | **0** |
+
+The three provisional failures were all one mode: tesseract inventing a leading
+character out of the mottled plate edge, giving seven characters. `foldCode`
+refused them, which is why WRONG stayed 0 — the fix belonged in the crop.
+
+### An edge-ink guard was tried and does not work
+
+19 of 45 swept geometries produced a *wrong* read — six valid Crockford
+characters, right length, wrong code. The worst is `TJDE6W` read as `8TDE6W` off
+a crop shifted left and narrowed. That is the failure the whole design is built
+to avoid, and `foldCode` cannot catch it: it is well-formed.
+
+The obvious guard — refuse when ink touches the crop's left or right edge, the
+way `findNameSpan` drops edge-touching glyph runs for HUD names — **was measured
+and rejected**. It does not separate the cases:
+
+| frame | right-edge ink | read |
+| --- | --- | --- |
+| `234953` | 0.350 | **correct** (`9962X3`) |
+| `231525` (clipped geometry) | 0.372 | **wrong** (`8TDE6W`) |
+
+`234953` has a bright diagonal of game art at the crop edge, not a clipped
+glyph, and any threshold catching the wrong read rejects that correct one.
+Do not re-try this without a signal that actually distinguishes background from
+a cut glyph.
+
+What is relied on instead: the league page validates every read against the
+feed, where a wrong code matches nothing; and the scrim page never records a
+code the operator has not seen in the panel field first.
