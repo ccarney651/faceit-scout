@@ -80,6 +80,15 @@
       return {
         bg: v('--bg'), surface2: v('--surface2'), fg: v('--fg'), muted: v('--muted'), line: v('--line'), line2: v('--line2'),
         accent: v('--accent'), onAccent: v('--on-accent'), good: v('--good'), mid: v('--mid'), bad: v('--bad'),
+        // Side colours. The panel labels the two teams by the HUD's blue/red,
+        // which the palette expresses as the tank/damage role tokens - taking
+        // them from here rather than restating the hex keeps the pop-out and
+        // the page saying the same blue.
+        tank: v('--tank'), damage: v('--damage'),
+        // Corner radii. The pop-out is a separate document and never loads
+        // theme.css, so the scale has to travel with the colours or the panel
+        // ends up the one surface still picking its own numbers.
+        rSm: v('--r-sm'), rMd: v('--r-md'),
       };
     }
 

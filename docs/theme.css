@@ -4,9 +4,19 @@
    (with fonts base64-embedded for that build only), because the exported
    dashboard must stay a single self-contained file — see
    tests/test_export.py::test_export_html_is_self_contained_and_valid.
-   Everything else (tables, chips, tags, pills, and every page-specific
-   component) stays defined per-page; it already reads these same custom
-   properties, so it re-themes automatically without being duplicated here. */
+
+   Three things live here:
+     1. Tokens — colour, type, radii. Every page reads these and nothing
+        restates their values; tests/test_ui_consistency.py fails a page that
+        hardcodes what a token already says.
+     2. Primitives — .card, .btn, the wordmark, the segmented toggle, the tab
+        nav.
+     3. Shared page furniture (foot of this file) — the shell, table, chip and
+        bar rules the dashboard and docs/scrims.html had both written out
+        byte-for-byte. Anything the two data pages agree on belongs here; a
+        second copy only decides which page gets the next fix.
+   Page-specific components stay in their page. They already read the tokens,
+   so they re-theme without being duplicated here. */
 
 @font-face{font-family:'Space Grotesk';font-weight:600;font-style:normal;font-display:swap;src:url('fonts/space-grotesk-600.woff2') format('woff2')}
 @font-face{font-family:'Space Grotesk';font-weight:700;font-style:normal;font-display:swap;src:url('fonts/space-grotesk-700.woff2') format('woff2')}
@@ -18,6 +28,27 @@
 :root{
   --font-display:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --font-body:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+
+  /* Corner radii. Four steps, declared once here and NOT repeated in the
+     palette blocks below — nothing about a corner is palette-dependent, and
+     a token the palette blocks don't redefine simply carries through.
+     Before this existed the pages had drifted to twelve different radii
+     (3,4,5,6,7,8,9,10,11,12,20,999px), which is not a design decision anyone
+     made; it is what happens when each component picks its own. Round to the
+     nearest step rather than adding a fifth.
+       --r-sm   controls and chips — buttons, inputs, tags, table cells.
+                Matches .btn and .card below, which set the squared-off look
+                the whole system is drawn around.
+       --r-md   panels and cards that float above the page
+       --r-lg   modals and the large floating surfaces
+       --r-pill fully-round: pills, badges, avatars */
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-pill:999px;
+
+  /* Breakpoints are NOT tokens — custom properties cannot be used in media
+     queries. The agreed set is 640px (phone) / 900px (tablet-ish) / 1500px
+     (max content width); see the shared mobile pass at the foot of this file
+     and keep page-specific queries on those numbers. */
+
   color-scheme:light;
   --bg:#f5f7fa; --surface:#ffffff; --surface2:#eef1f6; --fg:#171a20; --muted:#5c6674;
   --faint:#8b95a4; --line:#e3e8f0; --line2:#d6dce6;
@@ -43,7 +74,7 @@
 
 /* Violet palette — the post-redesign look (violet accent, warm-paper light
    mode). Explicit opt-in via data-palette="violet"; the default (no
-   data-palette, as on pages without the picker) is the Original palette above. */
+   data-palette) is the Original palette above. */
 :root[data-palette="violet"]{color-scheme:light;--bg:#f7f4ee;--surface:#fffdf9;--surface2:#f1ebdf;--fg:#241d17;--muted:#63594b;
   --faint:#94897a;--line:#e8e0d2;--line2:#d8ccb9;--accent:#7c3aed;--accent-bright:#6d28d9;--accent-weak:rgba(124,58,237,.10);--on-accent:#fff;
   --tank:#3f80c4;--damage:#d5563f;--support:#33a06a;--good:#1f9d61;--mid:#b8860b;--bad:#cf4b36;
@@ -65,8 +96,9 @@
 
 /* Original palette — the pre-redesign look (indigo accent, cool slate
    neutrals). This is the SITE DEFAULT: the palette-less :root blocks above
-   already carry these values, so pages without the picker (docs/scrims.html,
-   docs/capture/*.html) and the dashboard's no-preference state all get it.
+   already carry these values, so a page whose bootstrap has not run yet, and
+   the dashboard's no-preference state, both land here. All four pages carry
+   the picker as of 2026-08-20; docs/scrims.html was the last to get it.
    The explicit data-palette="original" blocks keep it selectable by name in
    the app's theme picker. Same token contract as the violet palette, so every
    component re-themes without any structural changes. */
@@ -205,12 +237,12 @@ h1,h2,h3,.section-h h2,.tile .n,.gsc,.pname,.cmp-name,.brand h1{font-family:var(
    --line/--surface/--accent and re-themes on its own; only the literal
    .card class needs its shape redefined here. */
 .card{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
-  border-radius:4px;padding:12px 14px;box-shadow:none}
+  border-radius:var(--r-sm);padding:12px 14px;box-shadow:none}
 
 /* buttons: outlined by default (matches the approved mockup); .primary is
    an available filled variant for a page's one standout CTA, opt-in. */
 .btn{cursor:pointer;font:inherit;font-weight:650;background:transparent;color:var(--accent-bright);
-  border:1px solid var(--accent);border-radius:4px;padding:8px 11px}
+  border:1px solid var(--accent);border-radius:var(--r-sm);padding:8px 11px}
 .btn:hover{background:var(--accent-weak)}
 .btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
 .btn.primary:hover{filter:brightness(1.06);background:var(--accent)}
@@ -228,7 +260,7 @@ h1,h2,h3,.section-h h2,.tile .n,.gsc,.pname,.cmp-name,.brand h1{font-family:var(
    League/Scrims switch and the Data/Capture switch, replacing the old
    separate .navcap/.navcapdim/.modebtns markup. */
 .sidebox{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
-.sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface2)}
+.sidetoggle{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:var(--surface2)}
 .sidetoggle a,.sidetoggle span{padding:6px 14px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap;color:var(--muted)}
 .sidetoggle span.on{background:var(--accent);color:var(--on-accent)}
 .sidetoggle a:hover{color:var(--fg);background:color-mix(in srgb,var(--accent) 10%,transparent)}
@@ -236,15 +268,108 @@ h1,h2,h3,.section-h h2,.tile .n,.gsc,.pname,.cmp-name,.brand h1{font-family:var(
 /* shared palette-picker <select>; the dashboard also wraps this in its own
    .themerow (adds the Light/Auto/Dark toggle beside it) but the bare class
    here is what capture/scrim pages use directly, no mode toggle. */
-.themepick{font:inherit;font-size:12px;font-weight:600;padding:4px 7px;border-radius:4px;
+.themepick{font:inherit;font-size:12px;font-weight:600;padding:4px 7px;border-radius:var(--r-sm);
   background:var(--surface2);border:1px solid var(--line);color:var(--fg)}
 .themepick:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 
 /* topbar tab nav — shared between the dashboard and scrims.html (capture
    pages use their own <header>, not a tab bar; harmless if unused there). */
 nav{display:flex;gap:2px;margin-top:10px}
-nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:4px 4px 0 0;
+nav button{border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:var(--r-sm) var(--r-sm) 0 0;
   cursor:pointer;font-size:13.5px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
 nav button:hover{color:var(--fg)}
 nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
 nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+
+/* ---- shared page furniture ---------------------------------------------
+   Everything below was written out byte-for-byte in BOTH
+   faceit_sync/dashboard/head.html and docs/scrims.html. Duplication is how
+   they drifted — .poolgrid ended up auto-fit/210px on one page and
+   auto-fill/240px on the other, and `thead th` gained a nowrap on one only —
+   so a rule the two data pages agree on now lives here once.
+   The capture pages do not use most of it (they have their own <header> and
+   no tab bar); unused rules cost nothing and keep the two families reading
+   from one source when they do converge. */
+.topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:min(1500px,96vw);margin:0 auto;padding:12px 18px 0}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+.toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
+.grid{display:grid;gap:10px}
+.cols-2{grid-template-columns:1fr 1fr}
+.cols-3{grid-template-columns:1fr 1fr 1fr}
+.cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
+.cols-auto{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+/* Self-contained rather than a .grid modifier: scrims.html applied it bare and
+   the dashboard applied it alongside .grid, which is how the two ended up with
+   different track sizes for the same hero-pool card. */
+.poolgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+/* Two-stage collapse on the documented breakpoints: three-and-four-up drop to
+   two across the tablet step, everything drops to one across the phone step.
+   These were 980/721 and 720 before — three more numbers doing the job of the
+   two the rest of the system already used. */
+@media (max-width:900px) and (min-width:641px){.cols-3,.cols-4{grid-template-columns:1fr 1fr}}
+@media (max-width:640px){.cols-2,.cols-3,.cols-4{grid-template-columns:1fr}}
+.section-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin:22px 2px 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.section-h h2{margin:0;font-size:14.5px;font-weight:650}
+.note{color:var(--muted);font-size:12.5px;margin:8px 2px 0}
+.tile .n{font-size:27px;font-weight:680;letter-spacing:-.02em}
+.tile .l{color:var(--muted);font-size:12px;margin-top:1px}
+.tile .sub{color:var(--faint);font-size:11.5px;margin-top:3px}
+/* Uniform vertical rhythm: section-level cards stack 14px apart; tight/small
+   offsets are one-off utilities rather than inline styles. */
+.stack>*+*{margin-top:14px}
+.mt8{margin-top:8px}
+.mt10{margin-top:10px}
+.mt14{margin-top:14px}
+/* tables */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:13.5px}
+/* nowrap on the header too — it had been added on the dashboard only, so the
+   same sortable table wrapped its headings on one page and not the other. */
+thead th{color:var(--faint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface);white-space:nowrap}
+thead th:hover{color:var(--fg)}
+thead th.sorted{color:var(--fg)}
+thead th .sar{margin-left:4px;font-size:8px;color:var(--accent);vertical-align:middle}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--surface2)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-lg)}
+.scroll table{font-size:13.5px}
+/* bars */
+.barrow{display:grid;grid-template-columns:minmax(110px,1.1fr) minmax(70px,2fr) 40px;align-items:center;gap:11px;padding:5px 2px}
+.barrow+.barrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.barrow .lab{font-size:13px;display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:9px;background:var(--surface2);border-radius:var(--r-sm);overflow:hidden}
+.fill{height:100%;border-radius:var(--r-sm);background:var(--accent);min-width:3px;transition:width .2s ease}
+.barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
+/* chips / badges */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
+  border-radius:var(--r-pill);background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+/* Mode heading over a run of map blocks - the same break the tables get. */
+.modeh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.role-Tank{color:var(--tank)}
+.role-Damage{color:var(--damage)}
+.role-Support{color:var(--support)}
+.pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:var(--r-sm)}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
+  padding:1px 6px;border-radius:var(--r-sm);background:var(--surface2);color:var(--faint)}
+
+/* Shared mobile pass. Both data pages had written this out identically; the
+   one place they had already drifted was `main`, where only the dashboard
+   carried the overflow-x:clip that keeps the sticky topbar working. 640px is
+   the phone step of the breakpoint set documented at the top of this file. */
+@media (max-width:640px){
+  main{padding:12px 10px 48px;overflow-x:clip}  /* reclaim gutters; clip (not hidden) keeps sticky working */
+  .topbar-in{padding:10px 10px 0}
+  nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  nav button{white-space:nowrap;padding:9px 10px;font-size:13px}
+  .card{padding:10px}
+  th,td{padding:6px 7px;font-size:12.5px}
+}

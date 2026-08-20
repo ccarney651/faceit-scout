@@ -386,7 +386,7 @@ tab of its own.
 | `faceit_sync/hero_icons.py`, `faceit_sync/hero_icons.json` | Hero portrait cache |
 | `faceit_sync/team_logos.py`, `faceit_sync/team_logos.json` | Team avatar cache |
 | `faceit_sync/subroles.py` | Hero sub-role classification used by the page |
-| `docs/theme.css` | The shared design tokens, mirrored from the dashboard copy |
+| `docs/theme.css` | Shared tokens, primitives and page furniture; mirrored from the dashboard copy |
 
 ### How it connects
 
@@ -421,6 +421,26 @@ non-editable install still has it); `docs/theme.css` is a tracked copy that
 two stay byte-identical. The dashboard cannot link the file — it must stay
 self-contained — so `_inline_theme_css()` embeds it with the fonts converted to
 base64 data URIs. Edit the shared tokens there; do not re-add a per-page copy.
+
+The file holds three things, and the distinction is what keeps the four pages
+one interface rather than four that resemble each other:
+
+| Layer | What | Rule |
+| --- | --- | --- |
+| Tokens | colour, type, `--r-sm/-md/-lg/-pill` | A page that restates a token's value is the bug. `--on-accent` is the ink for **any** saturated fill — accent, `--good`, `--mid` — which is why it is a near-black in every dark palette. |
+| Primitives | `.card`, `.btn`, `.prodname`, `.sidetoggle`, `.themepick`, `nav` | Use them; a page rolling its own button is how the two families ended up with different control sizes. |
+| Shared furniture | the shell, table, chip, tile and bar rules at the foot of the file | A rule both the dashboard and `docs/scrims.html` want lives here once. |
+
+`tests/test_ui_consistency.py` enforces all three, plus two rules the file
+cannot state itself: a selector may not be defined in both data pages (identical
+means it belongs in `theme.css`; different means the name is doing two jobs and
+needs splitting, as `.wl`/`.wld` did), and the two capture pages must style every
+shared selector identically. It reads `faceit_sync/dashboard/head.html`, never
+the generated `docs/index.html`.
+
+Breakpoints cannot be custom properties, so they are documented rather than
+tokenised: **640px** (phone) / **900px** (tablet) / **1500px** (max content
+width). The shared 640px mobile pass is at the foot of `theme.css`.
 
 **Hero portraits degrade silently.** `load_hero_icons()` returns an empty map
 when `faceit_sync/hero_icons.json` is missing, and the page then renders comps
@@ -1350,6 +1370,7 @@ that package's safety net.
 | Assets | `tests/test_team_logos.py`, `tests/test_snapshot_download.py` |
 | Browser capture app | the `tests/test_capture_*.py` family — CSP, OCR, onboarding, attribution, observations, sub-maps, controls, filters, publish preview; plus `tests/test_capture_scrim_ocr_read.py` (the read deadline) |
 | Every page's own CSP | `tests/test_page_csp_permits_own_scripts.py` — fails if a page loads a script its own policy forbids |
+| UI consistency across the four pages | `tests/test_ui_consistency.py` — token bypasses, the palette bootstrap, duplicated or colliding rules, capture-twin drift |
 | Scrims | `tests/test_capture_scrim.py`, including the lock gate |
 | Replay-code geometry | `docs/capture/engine/replaycode.test.js`; measured, not unit-tested, by `tools/real_frame_eval/code_strip_tolerance.py` and `code_strip_guard_check.py` |
 | This document | `tests/test_docs_links.py` |

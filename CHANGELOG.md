@@ -20,6 +20,38 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-20
 
 ### Fixed
+- **Text on a coloured fill is readable again in every palette.** Eight rules put
+  `#fff` on the accent fill, which is the light palette's answer written down and
+  then used everywhere. In the seven dark
+  palettes it failed WCAG AA outright - 1.93:1 on Teal, 2.11:1 on Overwatch,
+  3.08:1 on the default - and the worst of them was the "Open League capture"
+  button, the single largest element on both paused scrim pages. They read
+  `var(--on-accent)` now, which the palettes define as the accent's partner and
+  which measures 4.7-9.5:1. The same fix reached the W/L pips, where a 10px
+  white letter sat on raw `--good` at 2.54:1; the fill is darkened to carry it.
+
+  One of these was a typo rather than an oversight: the draft-simulator
+  probability bar asked for `color-mix(... var(--bad) 78%, #000 0%)`, and naming
+  both percentages makes them normalise - 78/(78+0) is 100% - so the darkening
+  it depended on had silently never happened.
+
+- **Icon buttons on the capture pages are one line again.** `.ticon` was
+  `display:block`, so all sixteen buttons that pair an icon with a label
+  (Refresh, Skip, Auto-calibrate, Control panel, Fullscreen, Exit, Fix reads)
+  stacked the icon above the text and stood twice as tall as their neighbours,
+  breaking the alignment of every row they sat in. Every use site already set
+  `vertical-align`, which does nothing to a block box.
+
+- **A palette chosen anywhere now applies on the scrims viewer.**
+  `docs/scrims.html` was the only themed page that never read the shared
+  `owdb.palette` key, so it stayed indigo while the other three re-themed. It
+  now has the same pre-paint bootstrap and picker as its capture-side twin.
+
+- **The modal viewport fix reached the League capture page.** `scrim.html` had
+  grown a max-height and a scrolling body so a tall dialog keeps its buttons
+  on screen; `index.html` never got it, and in a short browser window its
+  confirm buttons could sit below the fold.
+
 - **Scouting a team now reads its playoff run.** Team-facing panels were built
   from the regular season alone, so the moment the bracket started, a team's
   comps, ban tendencies, replay-code links and scouting-coverage row stopped at
@@ -37,6 +69,39 @@ Entries before 2026-08-11 were reconstructed from git history.
   Measured on the current season: EMEA Master went from 2 teams with a live
   capture target to 8, and every division gained under-covered maps that had
   been invisible.
+
+### Changed
+- **One design system instead of four that resembled each other.** The four
+  pages had drifted the way pages do when each keeps its own copy:
+
+  - Forty-two rules - the shell, the whole table and chip layer, the stat
+    tiles, the bar rows - were written out byte-for-byte in both the dashboard
+    and `docs/scrims.html`. They live in `docs/theme.css` once now. Two had
+    already drifted apart before the move (`.poolgrid` was auto-fit/210px on
+    one page and auto-fill/240px on the other; `thead th` had gained a nowrap
+    on one only), which is what duplication buys.
+  - `.wl` meant two different components: a row of filled W/L pips on the
+    dashboard, a coloured W-L-D count with a draw state on scrims. The scrims
+    one is `.wld` now - two components, two names.
+  - Corner radii were twelve different values across the four pages
+    (3,4,5,6,7,8,9,10,11,12,20,999px). There is a four-step scale now -
+    `--r-sm/-md/-lg/-pill` - and every page reads it, including the pop-out
+    control panel, which is a separate document and so gets the scale passed
+    in alongside the colours it already received.
+  - Breakpoints were six (640/680/720/820/900/980). Every media query is now on
+    the documented pair, 640px (phone) and 900px (tablet).
+  - The two capture pages are the same tool pointed at two competitions, but
+    their `button` was 6px/7-11px on one and 7px/9-13px on the other, so every
+    control changed size when an operator moved between them. Shared selectors
+    are identical.
+
+  `tests/test_ui_consistency.py` holds each of these as an invariant, so the
+  next copy-paste fails a test rather than surfacing months later.
+
+### Removed
+- Unreferenced CSS: an earlier draft-simulator layer (`.probbar`, `.simblock`,
+  `.simrow`, `.modelbl`, `.simnext` and children), `table.blocks tr.blk`, and
+  `.lock` on the League capture page. None was reachable from any consumer.
 
 ---
 

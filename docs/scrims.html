@@ -2,80 +2,33 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
+<script>
+// Apply the remembered palette before first paint (no flash). Shares the
+// dashboard's owdb.palette localStorage key (same origin) — pick a palette
+// on one page, it carries to the others. Palette-only: this page follows its
+// capture-side twin and stays dark, no light/dark override.
+(function(){try{
+  var p=localStorage.getItem('owdb.palette');
+  if(['violet','ocean','forest','sunset','teal','overwatch'].indexOf(p)>=0) document.documentElement.setAttribute('data-palette',p);
+  else document.documentElement.setAttribute('data-palette','original');
+}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>owdb · Private Scrims</title>
+<title>owdb &mdash; Private Scrims</title>
 <meta name="description" content="Private scrim tracking dashboard — browser-local, never published. Hero frequencies, map stats, and composition breakdowns from your scrim captures.">
 <meta name="theme-color" content="#0d1015">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="stylesheet" href="theme.css">
 <style>
-/* app shell */
-.topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
-  backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
-.topbar-in{max-width:min(1500px,96vw);margin:0 auto;padding:12px 18px 0}
-.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.brand h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
-.toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
-main{max-width:min(1500px,96vw);margin:0 auto;padding:20px 18px 72px}
-
-/* primitives */
-.grid{display:grid;gap:10px}
-.cols-2{grid-template-columns:1fr 1fr}
-.cols-3{grid-template-columns:1fr 1fr 1fr}
-.cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
-.cols-auto{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-@media(max-width:720px){.cols-2,.cols-3,.cols-4{grid-template-columns:1fr}}
-@media(max-width:980px) and (min-width:721px){.cols-3{grid-template-columns:1fr 1fr}.cols-4{grid-template-columns:1fr 1fr}}
-.section-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
-  margin:22px 2px 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
-.section-h h2{margin:0;font-size:14.5px;font-weight:650}
-.note{color:var(--muted);font-size:12.5px;margin:8px 2px 0}
-.stack>*+*{margin-top:14px}
-.mt8{margin-top:8px}.mt10{margin-top:10px}.mt14{margin-top:14px}
 
 /* tile stats */
 .tile{text-align:center}
-.tile .n{font-size:27px;font-weight:680;letter-spacing:-.02em}
-.tile .l{color:var(--muted);font-size:12px;margin-top:1px}
-.tile .sub{color:var(--faint);font-size:11.5px;margin-top:3px}
-
-/* table */
-table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:13.5px}
-thead th{color:var(--faint);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
-  cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface)}
-thead th:hover{color:var(--fg)}
-thead th.sorted{color:var(--fg)}
-thead th .sar{margin-left:4px;font-size:8px;color:var(--accent);vertical-align:middle}
-th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
-tbody tr:hover{background:var(--surface2)}
-.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
-.scroll table{font-size:13.5px}
-
-/* bars */
-.barrow{display:grid;grid-template-columns:minmax(110px,1.1fr) minmax(70px,2fr) 40px;align-items:center;gap:11px;padding:5px 2px}
-.barrow+.barrow{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
-.barrow .lab{font-size:13px;display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.track{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
-.fill{height:100%;border-radius:6px;background:var(--accent);min-width:3px;transition:width .2s ease}
-.barval{text-align:right;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
-
-/* chips */
-.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;
-  border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
-.pill{display:inline-block;font-size:12px;font-weight:650;padding:1px 8px;border-radius:7px}
-.wip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0b1020;background:var(--mid,#d3a02a);border-radius:5px;padding:1px 6px;vertical-align:1px}
-.tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
-  padding:1px 6px;border-radius:5px;background:var(--surface2);color:var(--faint)}
-
-/* mode headings */
-.modeh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--muted);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.wip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--on-accent);background:var(--mid);border-radius:var(--r-sm);padding:1px 6px;vertical-align:1px}
 .modeh:first-child{margin-top:4px}
 
 /* scrim cards */
-.scrim-card{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.scrim-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);margin-bottom:10px;overflow:hidden}
 .scrim-hd{cursor:pointer;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .scrim-hd:hover{background:var(--surface2)}
 .scrim-hd .sh-teams{font-weight:650;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -94,15 +47,15 @@ tbody tr:hover{background:var(--surface2)}
 
 /* practice coverage — what we have and haven't been playing */
 .covgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
-.covcell{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 10px;
+.covcell{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:9px 10px;
   border-left-width:3px}
 .covcell .covmode{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .covcell .covn{font-size:21px;font-weight:680;letter-spacing:-.02em;margin-top:2px}
 .covcell .covwhen{font-size:11.5px;color:var(--faint);margin-top:1px}
 /* Colour carries the same message as the text, never on its own: "never
    played" and "N days ago" already say it for anyone who cannot see the hue. */
-.cov-ok{border-left-color:var(--support,#4ac28a)}
-.cov-stale{border-left-color:var(--mid,#d3a02a)}
+.cov-ok{border-left-color:var(--support)}
+.cov-stale{border-left-color:var(--mid)}
 .cov-never{border-left-color:var(--line)}
 .cov-never .covn{color:var(--faint)}
 .covnote{margin:8px 2px 0;font-size:12.5px;color:var(--muted)}
@@ -118,18 +71,15 @@ tbody tr:hover{background:var(--surface2)}
 .rangebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px}
 .rangebar .rglab{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
 .rangebar select,.rangebar input[type=date]{background:var(--surface);color:var(--fg);
-  border:1px solid var(--line);border-radius:8px;padding:4px 8px;font:inherit;font-size:12.5px}
+  border:1px solid var(--line);border-radius:var(--r-md);padding:4px 8px;font:inherit;font-size:12.5px}
 .rangebar .rgdash{color:var(--faint);font-size:12px}
 .rangebar .rgcount{color:var(--muted);font-size:12px;margin-left:2px}
 
 /* opponent identity */
 .oppout{font-size:11px;font-weight:650;color:var(--accent);text-decoration:none;
-  border:1px solid var(--line);border-radius:6px;padding:0 5px;vertical-align:1px}
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:0 5px;vertical-align:1px}
 .oppout:hover{text-decoration:underline}
 .oppmeta{color:var(--faint);font-weight:400;font-size:12px}
-
-/* hero role colors */
-.role-Tank{color:var(--tank)}.role-Damage{color:var(--damage)}.role-Support{color:var(--support)}
 
   /* Section label inside a card. Was used before it was ever defined, so these
      headings have been rendering as unstyled body text. */
@@ -143,9 +93,12 @@ tbody tr:hover{background:var(--surface2)}
   .comprow .cchips{display:flex;gap:4px;flex-wrap:wrap;min-width:0}
   .comprow .cmeta{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--faint);
     white-space:nowrap;font-variant-numeric:tabular-nums}
-  .wl{font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums}
-  .wl .w{color:var(--good,#4ac28a)}.wl .l{color:var(--bad,#e56a6a)}.wl .d{color:var(--muted)}
-  .poolgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+  /* Named .wld, not .wl: the dashboard's .wl is a row of filled W/L pips, and
+     this is a coloured W-L-D count with a draw state the pips have no way to
+     show. Two components, two names — sharing one made the same record read
+     as two different things depending on which page you were on. */
+  .wld{font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .wld .w{color:var(--good)}.wld .l{color:var(--bad)}.wld .d{color:var(--muted)}
   .poolcard .ph{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
     margin-bottom:4px}
   .poolcard .barval{color:var(--fg)}
@@ -159,16 +112,16 @@ tbody tr:hover{background:var(--surface2)}
   .swaprow .arw{color:var(--faint)}
   .swaprow .cnt{font-size:11.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
   .kind{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
-    padding:1px 5px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
-  .kind.core{border-color:var(--mid,#d3a02a);color:var(--mid,#d3a02a)}
+    padding:1px 5px;border-radius:var(--r-sm);border:1px solid var(--line);color:var(--muted)}
+  .kind.core{border-color:var(--mid);color:var(--mid)}
   .segh{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
     color:var(--faint);margin:9px 0 2px}
   .segh:first-child{margin-top:0}
   @media(max-width:640px){.swaprow{grid-template-columns:1fr}}
 
 /* demo banner — must not be mistakable for real data */
-.demobar{border:1px solid var(--mid,#d3a02a);border-left-width:3px;border-radius:10px;
-  background:color-mix(in srgb,var(--mid,#d3a02a) 10%,transparent);
+.demobar{border:1px solid var(--mid);border-left-width:3px;border-radius:var(--r-md);
+  background:color-mix(in srgb,var(--mid) 10%,transparent);
   padding:9px 12px;margin:0 0 14px;font-size:13px;color:var(--fg)}
 .demobar a{color:var(--accent);font-weight:650;text-decoration:none;margin-left:8px;white-space:nowrap}
 .demobar a:hover{text-decoration:underline}
@@ -183,24 +136,15 @@ tbody tr:hover{background:var(--surface2)}
 /* loading */
 .loading{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
 
-@media(max-width:640px){
-  main{padding:12px 10px 48px}
-  .topbar-in{padding:10px 10px 0}
-  nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-  nav::-webkit-scrollbar{display:none}
-  nav button{white-space:nowrap;padding:9px 10px;font-size:13px}
-  .card{padding:10px}
-  th,td{padding:6px 7px;font-size:12.5px}
-}
 </style>
 </head>
 <body>
 <div id="scrimpaused" style="position:fixed;inset:0;z-index:999999;background:var(--bg);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
   <div style="max-width:520px">
-    <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">owdb</div>
+    <span class="prodname" style="justify-content:center;margin-bottom:10px"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">Private Scrims</span></span>
     <h1 style="font-size:26px;margin:0 0 10px">Scrims are paused</h1>
     <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 20px">Scrim tracking is paused while we finish it up. Head to the League capture tool to scout FACEIT maps instead.</p>
-    <a href="capture/index.html" style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:10px 18px;border-radius:4px;text-decoration:none">Open League capture →</a>
+    <a class="btn primary" href="capture/index.html" style="display:inline-block;text-decoration:none">Open League capture →</a>
   </div>
 </div>
 <script>
@@ -250,6 +194,15 @@ tbody tr:hover{background:var(--surface2)}
         </div>
       </div>
       <div class="sidebox">
+        <select id="palette" class="themepick" aria-label="Colour palette" title="Colour palette">
+          <option value="original">Original</option>
+          <option value="violet">Violet</option>
+          <option value="ocean">Ocean</option>
+          <option value="forest">Forest</option>
+          <option value="sunset">Sunset</option>
+          <option value="teal">Teal</option>
+          <option value="overwatch">Overwatch</option>
+        </select>
         <div class="sidetoggle"><a href="index.html">League</a><span class="on">Scrims</span></div>
         <div class="sidetoggle"><span class="on">Data</span><a href="capture/scrim.html">Capture</a></div>
       </div>
@@ -965,7 +918,7 @@ function wlHtml(f){
   if(f.losses) parts.push(`<span class="l">${f.losses}L</span>`);
   if(f.draws) parts.push(`<span class="d">${f.draws}D</span>`);
   // No result recorded is not 0-0: saying so would read as "they lost nothing".
-  return parts.length ? `<span class="wl">${parts.join(' ')}</span>`
+  return parts.length ? `<span class="wld">${parts.join(' ')}</span>`
                       : `<span class="cnt">no result</span>`;
 }
 
@@ -1548,6 +1501,15 @@ async function boot(){
 }
 
 window.addEventListener('hashchange', hashDispatch);
+
+// Palette picker — shares owdb.palette with the dashboard (same origin).
+(()=>{ const PALETTES=['original','violet','ocean','forest','sunset','teal','overwatch'];
+  const pal=document.getElementById('palette');
+  pal.value=document.documentElement.getAttribute('data-palette')||'original';
+  pal.onchange=()=>{ const v=PALETTES.indexOf(pal.value)>=0?pal.value:'original';
+    try{ localStorage.setItem('owdb.palette',v); }catch(e){}
+    document.documentElement.setAttribute('data-palette',v); }; })();
+
 boot().catch(err=>{
   document.getElementById('content').innerHTML = '<div class="note" style="padding:24px">Could not read scrim data ('+esc(err.message||err)+').</div>';
 });

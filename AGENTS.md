@@ -157,6 +157,20 @@ canonical and this copy is the bug.
   other), then run it. 129 checks. Everything left needs a human with Overwatch
   open: screen share, calibration, portrait recognition, the overlay over the
   game.
+- **`docs/theme.css` is the design system; a page that restates one of its
+  values is the bug.** Colour, type and corner radii are tokens, and the pages
+  had drifted by writing the answers down instead of reading them: `#fff` on
+  `background:var(--accent)` (correct in the light palette, 1.93:1 on Teal),
+  `#0b1020` where `var(--on-accent)` belongs, twelve different corner radii, and
+  forty-two rules copied byte-for-byte into both data pages. Rules:
+  `--on-accent` is the ink for **any** saturated fill (accent, `--good`,
+  `--mid`), which is why it is a near-black in every dark palette; corners come
+  from `--r-sm/-md/-lg/-pill`; a rule both data pages want goes in `theme.css`,
+  and a name that means two things gets two names. `tests/test_ui_consistency.py`
+  fails each of these, and it reads `faceit_sync/dashboard/head.html` rather than
+  the generated `docs/index.html`. **`docs/theme.css` and
+  `faceit_sync/dashboard/theme.css` must be copied in step** — nothing reconciles
+  them at build time, and `tests/test_export.py` fails if they differ.
 - **Both capture pages must open IndexedDB with the same store list**
   (`ALL_STORES` in `docs/capture/engine/idb.js`). Declaring only the stores a
   page uses looks right and breaks the other page — see `ARCHITECTURE.md` §7.
@@ -306,15 +320,18 @@ audiences if the analytics are strong enough.
 - **Do not overengineer unless expandability requires it.** The dashboard is
   modularised into concatenated static parts under `faceit_sync/dashboard/` —
   land new features in the right part file rather than growing one string.
-- **Shared design tokens and primitives live in `docs/theme.css`** — colours,
-  fonts, `.card`, `.btn`, the `.prodname` wordmark, `.sidetoggle`/`.sidebox`,
-  `nav`, `.eyebrow`. `docs/scrims.html` and `docs/capture/*.html` link it
-  directly; `docs/index.html` cannot (it must stay self-contained), so
+- **Shared design tokens, primitives and page furniture live in
+  `docs/theme.css`** — colours, fonts and the `--r-sm/-md/-lg/-pill` radius
+  scale; `.card`, `.btn`, the `.prodname` wordmark, `.sidetoggle`/`.sidebox`,
+  `nav`, `.eyebrow`; and the shell/table/chip/tile/bar layer both data pages
+  share. `docs/scrims.html` and `docs/capture/*.html` link it directly;
+  `docs/index.html` cannot (it must stay self-contained), so
   `faceit_sync/_dashboard.py` inlines the canonical copy at
   `faceit_sync/dashboard/theme.css` with fonts base64-embedded. Edit the shared
   set there and never re-add a per-page copy — that duplication is what caused
-  the pre-redesign inconsistency. Everything page-specific stays per-page and
-  re-themes automatically from these tokens.
+  the pre-redesign inconsistency, and it caused the 2026-08-20 drift too. Only
+  genuinely page-specific components stay per-page; they re-theme automatically
+  from these tokens. See the design-system gotcha above for what a test enforces.
 - **The dead native GUI was removed on 2026-08-08** (`owdb/gui.py`,
   `owdb_app.py`, the PyInstaller specs, `Scout app.cmd`). Do not resurrect it.
 - **`docs/scrims.html` is the single scrims viewer.** The two implementations
