@@ -1488,3 +1488,99 @@ def test_sparkline_flat_history_stays_centered(tmp_path) -> None:
     # point should land at the same y.
     ys = [p.split(',')[1] for p in got.split(' ')]
     assert len(set(ys)) == 1
+
+
+# --- player pages ----------------------------------------------------------
+# A player's season is assembled from two scans. The fixture builds divisions
+# out of one-game matches, because every claim under test is per game: which
+# team a player was on, whether that game was won, and when it happened.
+
+_PLAYER_FIX = """
+const stat=(n)=>({e:n,d:5,dmg:1000*n,heal:0,mit:100*n});
+// one match, one game, `nick` on `team` (omit nick for a game they sat out)
+const mk=(id,at,team,opp,map,cat,won,nick)=>({
+  id:id, finished_at:at, f1:team, f2:opp, winner_team:(won?team:opp),
+  games:[{game_no:1, map:map, map_category:cat, winner_team:(won?team:opp),
+    rosters:[
+      {team:team, players:(nick?[{nick:nick,role:'Tank',...stat(20)}]:[])},
+      {team:opp,  players:[]}]}]});
+const div=(label,teams,matches,playoffs)=>({
+  summary:{championship:label}, teams:teams, matches:matches,
+  playoffs:(playoffs||[])});
+"""
+
+
+def _prun(body: str, tmp_path) -> object:
+    """Run a player-page test body with the fixture builders in scope."""
+    return _run(_PLAYER_FIX + body, tmp_path)
+
+
+def test_player_games_include_playoff_games(tmp_path) -> None:
+    """Team-facing reads once stopped at the group stage (fixed 2026-08-20).
+    A player page reading div.matches directly would reintroduce exactly that."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],
+        [{id:'P1',status:'FINISHED',finished_at:'2026-07-25T00:00:00Z',
+          f1:'Alpha',f2:'Zeta',winner_team:'Alpha',
+          games:[{game_no:1,map:'Ilios',map_category:'Control',winner_team:'Alpha',
+            rosters:[{team:'Alpha',players:[{nick:'Blip',role:'Tank',e:20,d:5,dmg:20000,heal:0,mit:2000}]},
+                     {team:'Zeta',players:[]}]}]}])};
+      return playerGames('Blip', DIVS, {}).map(g=>g.matchId);
+    """, tmp_path)
+    assert got == ["P1", "M1"]          # newest first, playoff game present
+
+
+def test_player_games_skip_walkovers_and_other_players(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Nepal','Control',true,'Other'),
+        {id:'M3',finished_at:'2026-07-03T00:00:00Z',f1:'Alpha',f2:'Zeta',
+         winner_team:'Alpha',games:[{game_no:1,map:null,map_category:null,
+           winner_team:'Alpha',rosters:[]}]}
+      ],[])};
+      return playerGames('Blip', DIVS, {}).map(g=>g.map);
+    """, tmp_path)
+    assert got == ["Ilios"]
+
+
+def test_player_games_carry_opponent_result_and_hero(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',false,'Blip')],[])};
+      return playerGames('Blip', DIVS, {'M1:1':{Blip:'Winston'}})[0];
+    """, tmp_path)
+    assert got["team"] == "Alpha"
+    assert got["opponent"] == "Zeta"
+    assert got["won"] is False
+    assert got["hero"] == "Winston"
+    assert got["mode"] == "Control"
+    assert got["division"] == "EMEA Master"
+    assert got["stats"]["mit"] == 2000
+
+
+def test_player_games_hero_is_null_without_attribution(tmp_path) -> None:
+    """10.8% of players have any attributed game. A missing hero is the normal
+    case, not an error, and must not become the string 'undefined'."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerGames('Blip', DIVS, {})[0].hero;
+    """, tmp_path)
+    assert got is None
+
+
+def test_team_records_count_every_game_not_just_the_players(tmp_path) -> None:
+    """teamWr's whole purpose is to be the team's record, including games the
+    player sat out - otherwise it is the player's own number twice over."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Ilios','Control',false,null)
+      ],[])};
+      const r=teamRecords(DIVS);
+      return {alpha:r['m1|Alpha'].map.Ilios, zeta:r['m1|Zeta'].mode.Control};
+    """, tmp_path)
+    assert got["alpha"] == {"games": 2, "wins": 1}
+    assert got["zeta"] == {"games": 2, "wins": 1}

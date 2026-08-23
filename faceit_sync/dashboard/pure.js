@@ -670,3 +670,81 @@ function sparklinePoints(history, w, h) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
 }
+
+// ---- Player pages ---------------------------------------------------------
+// A player's season, across every division in the payload. Season-scoped on
+// purpose: the payload is exported --season, so "every division" IS the season,
+// and it is the only scope in which a mid-season team or division move can be
+// shown as one player rather than two.
+//
+// Every rate here refuses under a floor. Measured 2026-08-24: the median player
+// has 38 maps but only 3 per map and 8 per mode, and only 10.8% have any
+// captured hero attribution at all. A 3-game win rate reads to a coach as a
+// fact, so the pure layer returns null and lets the page say why.
+const PLAYER_MODE_MIN=5, PLAYER_MAP_MIN=5, PLAYER_HERO_MIN=5;
+
+function playerRate(wins, games, floor){
+  return games>=floor ? Math.round(100*wins/games) : null;
+}
+function _pbump(t, k, won){
+  if(k==null) return;
+  const c=t[k]||(t[k]={games:0,wins:0}); c.games++; if(won) c.wins++;
+}
+
+// Every game this player appeared in, newest first, flattened across divisions.
+// Playoff games come through leagueMatches — reading div.matches directly is the
+// bug fixed on 2026-08-20, where team reads silently stopped at the group stage.
+function playerGames(nick, divisions, pergame){
+  const out=[];
+  if(!nick||!divisions) return out;
+  Object.keys(divisions).forEach(cid=>{
+    const div=divisions[cid]||{};
+    const label=(div.summary&&div.summary.championship)||cid;
+    leagueMatches(div.matches, div.playoffs).forEach(m=>{
+      (m.games||[]).forEach(g=>{
+        if(!g.map) return;                       // walkover or unplayed slot
+        (g.rosters||[]).forEach(r=>{
+          const team=r&&r.team;
+          if(!team||team==='?') return;
+          const me=(r.players||[]).find(p=>p&&p.nick===nick);
+          if(!me) return;
+          const at=m.finished_at||'';
+          out.push({cid:cid, division:label, matchId:m.id, at:at, team:team,
+                    opponent:(m.f1===team?m.f2:m.f1)||null,
+                    map:g.map, mode:g.map_category||'Other',
+                    won:g.winner_team===team,
+                    stats:{e:me.e, d:me.d, dmg:me.dmg, heal:me.heal,
+                           mit:(me.mit==null?null:me.mit)},
+                    hero:((pergame||{})[m.id+':'+g.game_no]||{})[nick]||null});
+        });
+      });
+    });
+  });
+  return out.sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+}
+
+// Every team's own map and mode record, keyed "<cid>|<team>". This is what a
+// player's rate is shown against: they play with the same four teammates, so
+// their map record is largely the team's, and only the gap is a player signal.
+// It counts games the player sat out, which is the entire point.
+function teamRecords(divisions){
+  const out={};
+  if(!divisions) return out;
+  Object.keys(divisions).forEach(cid=>{
+    const div=divisions[cid]||{};
+    leagueMatches(div.matches, div.playoffs).forEach(m=>{
+      (m.games||[]).forEach(g=>{
+        if(!g.map) return;
+        (g.rosters||[]).forEach(r=>{
+          const team=r&&r.team;
+          if(!team||team==='?') return;
+          const k=cid+'|'+team, won=g.winner_team===team;
+          const rec=out[k]||(out[k]={mode:{},map:{}});
+          _pbump(rec.mode, g.map_category||'Other', won);
+          _pbump(rec.map, g.map, won);
+        });
+      });
+    });
+  });
+  return out;
+}
