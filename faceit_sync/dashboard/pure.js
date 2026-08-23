@@ -844,3 +844,48 @@ function playerHeroPool(nick, games, comps){
             wr:playerRate(c.wins, c.games, PLAYER_HERO_MIN)};
   }).sort((a,b)=>b.rounds-a.rounds||b.games-a.games||a.hero.localeCompare(b.hero));
 }
+
+// Merge per-map stat averages from several roster rows: a player who changed
+// team inside one division has one row per team. Means are re-weighted by each
+// row's own stat sample, and k/d is recomputed from the recovered totals rather
+// than averaged as a ratio of ratios — which would let a two-map row outvote a
+// forty-map one.
+function mergePlayerStats(rows){
+  const ok=(rows||[]).filter(r=>r&&r.games);
+  if(!ok.length) return null;
+  const n=ok.reduce((a,r)=>a+r.games,0);
+  const w=k=>ok.reduce((a,r)=>a+(r[k]||0)*r.games,0)/n;
+  const elims=w('elims'), deaths=w('deaths');
+  return {games:n,
+          elims:Math.round(elims*10)/10, deaths:Math.round(deaths*10)/10,
+          dmg:Math.round(w('dmg')), heal:Math.round(w('heal')), mit:Math.round(w('mit')),
+          kd:deaths>0?Math.round(100*elims/deaths)/100:null};
+}
+
+// One row per division a player appears in — never a blend. A Master damage
+// average and an Advanced one are different units, and the whole site refuses
+// that comparison already (efficiencyRatings z-scores inside a division).
+function playerDivisions(nick, divisions){
+  const out=[];
+  if(!nick||!divisions) return out;
+  Object.keys(divisions).forEach(cid=>{
+    const div=divisions[cid]||{};
+    const found=[];
+    (div.teams||[]).forEach(t=>{
+      (t.roster||[]).forEach(p=>{ if(p&&p.nick===nick) found.push({team:t.name, row:p}); });
+    });
+    if(!found.length) return;
+    found.sort((a,b)=>(a.row.last_seen||'').localeCompare(b.row.last_seen||''));
+    const last=found[found.length-1].row;
+    out.push({cid:cid,
+      division:(div.summary&&div.summary.championship)||cid,
+      teams:found.map(f=>f.team),
+      role:last.role||null,
+      gameName:last.game_name||null,
+      elo:(last.elo==null?null:last.elo),
+      lastSeen:last.last_seen||'',
+      games:found.reduce((a,f)=>a+(f.row.games||0),0),
+      stats:mergePlayerStats(found.map(f=>f.row.stats))});
+  });
+  return out.sort((a,b)=>b.games-a.games||a.division.localeCompare(b.division));
+}

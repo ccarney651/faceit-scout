@@ -1738,3 +1738,59 @@ def test_player_hero_pool_is_empty_without_captures(tmp_path) -> None:
       return playerHeroPool('Blip', playerGames('Blip',DIVS,{}), {});
     """, tmp_path)
     assert got == []
+
+
+def test_merge_player_stats_reweights_by_sample_and_recomputes_kd(tmp_path) -> None:
+    """k/d is a ratio of season totals, never a mean of two ratios - averaging
+    ratios lets a two-map row outvote a forty-map one."""
+    got = _prun("""
+      return mergePlayerStats([
+        {games:10, elims:20, deaths:10, dmg:1000, heal:0, mit:500, kd:2},
+        {games:30, elims:10, deaths:5,  dmg:2000, heal:0, mit:100, kd:2}]);
+    """, tmp_path)
+    assert got["games"] == 40
+    assert got["elims"] == 12.5          # (20*10 + 10*30) / 40
+    assert got["deaths"] == 6.3           # 6.25, rounded to 1dp as export.py stores it
+    assert got["dmg"] == 1750
+    assert got["kd"] == 2.0                # from the UNrounded 12.5 / 6.25
+
+
+def test_merge_player_stats_is_null_without_a_sample(tmp_path) -> None:
+    """Zeroed rows (data hazard A) are stored NULL, so a player can have maps
+    played and no stat sample at all."""
+    got = _prun("return mergePlayerStats([null, {games:0}]);", tmp_path)
+    assert got is None
+
+
+def test_player_divisions_keeps_a_cross_division_player_in_two_rows(tmp_path) -> None:
+    got = _prun("""
+      const row=(nick,g,seen,elo,st)=>({nick:nick,game_name:'Blip#1',games:g,
+        last_seen:seen, elo:elo, role:'Tank', current:true, stats:st});
+      const DIVS={
+        m1:div('EMEA Master',[{name:'Beta',roster:[
+              row('Blip',10,'2026-07-20T00:00:00Z',2100,{games:10,elims:10,deaths:5,dmg:6000,heal:0,mit:7000,kd:2})]}],[],[]),
+        m2:div('EMEA Expert',[{name:'Gamma',roster:[
+              row('Blip',4,'2026-06-10T00:00:00Z',1900,{games:4,elims:20,deaths:5,dmg:9000,heal:0,mit:8000,kd:4})]}],[],[])};
+      return playerDivisions('Blip', DIVS);
+    """, tmp_path)
+    assert [d["division"] for d in got] == ["EMEA Master", "EMEA Expert"]
+    assert got[0]["stats"]["dmg"] == 6000 and got[1]["stats"]["dmg"] == 9000
+    assert got[0]["elo"] == 2100
+
+
+def test_player_divisions_merges_two_teams_inside_one_division(tmp_path) -> None:
+    """A mid-season swap inside one division leaves two roster rows. They are
+    one division row - and elo comes from the most recent of them."""
+    got = _prun("""
+      const row=(g,seen,elo,st)=>({nick:'Blip',game_name:'Blip#1',games:g,
+        last_seen:seen, elo:elo, role:'Tank', current:true, stats:st});
+      const DIVS={m1:div('EMEA Master',[
+        {name:'Alpha',roster:[row(2,'2026-07-02T00:00:00Z',2000,{games:2,elims:20,deaths:5,dmg:8000,heal:0,mit:9000,kd:4})]},
+        {name:'Beta', roster:[row(2,'2026-07-20T00:00:00Z',2100,{games:2,elims:10,deaths:5,dmg:6000,heal:0,mit:7000,kd:2})]}],[],[])};
+      return playerDivisions('Blip', DIVS)[0];
+    """, tmp_path)
+    assert got["teams"] == ["Alpha", "Beta"]
+    assert got["games"] == 4
+    assert got["elo"] == 2100                 # the later roster row
+    assert got["stats"]["games"] == 4
+    assert got["stats"]["dmg"] == 7000        # (8000*2 + 6000*2) / 4
