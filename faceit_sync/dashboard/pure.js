@@ -807,3 +807,40 @@ function playerMapRecord(games, records){
   const bySize=(a,b)=>b.games-a.games||String(a.map||a.mode).localeCompare(String(b.map||b.mode));
   return {modes:modes.sort(bySize), maps:maps.sort(bySize)};
 }
+
+// A player's heroes, from two sources that must not be conflated. `rounds` and
+// `share` come from the capture pools and are factual at any sample size;
+// `games`/`wins`/`wr` come from per-game attribution joined to the result, and
+// the win rate refuses below PLAYER_HERO_MIN. A hero with a share and no win
+// rate is the EXPECTED row — 10.8% of players have any attribution at all.
+// Pools are read only from the teams the player actually played for: a pool is
+// matched by nick inside a team, so a same-nick entry elsewhere is not theirs.
+function playerHeroPool(nick, games, comps){
+  const mine={}, tally={};
+  (games||[]).forEach(g=>{
+    mine[g.team]=1;
+    if(g.hero) _pbump(tally, g.hero, g.won);
+  });
+  const pool={};
+  Object.keys(comps||{}).forEach(team=>{
+    if(!mine[team]) return;
+    const ps=(((comps[team]||{}).scout)||{}).players||[];
+    ps.forEach(p=>{
+      if(!p||p.player!==nick) return;
+      (p.heroes||[]).forEach(h=>{
+        if(!h||!h.hero) return;
+        pool[h.hero]=(pool[h.hero]||0)+(h.rounds||0);
+      });
+    });
+  });
+  const total=Object.keys(pool).reduce((a,h)=>a+pool[h],0);
+  const names={};
+  Object.keys(pool).forEach(h=>{ names[h]=1; });
+  Object.keys(tally).forEach(h=>{ names[h]=1; });
+  return Object.keys(names).map(h=>{
+    const rounds=pool[h]||0, c=tally[h]||{games:0,wins:0};
+    return {hero:h, rounds:rounds, share:total?Math.round(100*rounds/total):null,
+            games:c.games, wins:c.wins,
+            wr:playerRate(c.wins, c.games, PLAYER_HERO_MIN)};
+  }).sort((a,b)=>b.rounds-a.rounds||b.games-a.games||a.hero.localeCompare(b.hero));
+}

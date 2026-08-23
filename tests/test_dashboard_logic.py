@@ -1687,3 +1687,54 @@ def test_player_map_record_pools_the_teams_of_a_swapped_player(tmp_path) -> None
       return r.maps[0].teamGames;
     """, tmp_path)
     assert got == 2      # Alpha's one game plus Beta's one, not Zeta's two
+
+
+def test_player_hero_pool_reports_share_without_a_win_rate(tmp_path) -> None:
+    """The expected row at today's coverage: 10.8% of players have any
+    attribution at all and the median is 8 games across every hero they play."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[
+        {hero:'Winston',rounds:30},{hero:'D.Va',rounds:10}]}]}}};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,{'M1:1':{Blip:'Winston'}}), comps);
+    """, tmp_path)
+    assert [h["hero"] for h in got] == ["Winston", "D.Va"]
+    assert got[0]["share"] == 75 and got[0]["games"] == 1 and got[0]["wr"] is None
+    assert got[1]["share"] == 25 and got[1]["games"] == 0
+
+
+def test_player_hero_win_rate_appears_at_the_floor(tmp_path) -> None:
+    got = _prun("""
+      const ms=[]; for(let i=0;i<5;i++)
+        ms.push(mk('M'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Ilios','Control',i<4,'Blip'));
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const pg={}; for(let i=0;i<5;i++) pg['M'+i+':1']={Blip:'Winston'};
+      const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:50}]}]}}};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,pg), comps)[0];
+    """, tmp_path)
+    assert got["games"] == 5 and got["wins"] == 4 and got["wr"] == 80
+
+
+def test_player_hero_pool_ignores_pools_from_teams_they_never_played_for(tmp_path) -> None:
+    """Pools are matched by nick inside a team. A same-nick entry under a team
+    the player never played for is not their pool."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      const comps={
+        Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:10}]}]}},
+        Zeta: {scout:{players:[{player:'Blip',heroes:[{hero:'Sigma',rounds:99}]}]}}};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,{}), comps).map(h=>h.hero);
+    """, tmp_path)
+    assert got == ["Winston"]
+
+
+def test_player_hero_pool_is_empty_without_captures(tmp_path) -> None:
+    """89% of players. Empty, not an error, and not a zero-length share."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,{}), {});
+    """, tmp_path)
+    assert got == []
