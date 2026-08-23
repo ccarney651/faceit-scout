@@ -1584,3 +1584,42 @@ def test_team_records_count_every_game_not_just_the_players(tmp_path) -> None:
     """, tmp_path)
     assert got["alpha"] == {"games": 2, "wins": 1}
     assert got["zeta"] == {"games": 2, "wins": 1}
+
+
+def test_player_spells_are_chronological_across_a_mid_season_swap(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Nepal','Control',true,'Blip'),
+        mk('M3','2026-07-20T00:00:00Z','Beta','Zeta','Ilios','Control',true,'Blip')
+      ],[])};
+      return playerSpells(playerGames('Blip', DIVS, {}));
+    """, tmp_path)
+    assert [s["team"] for s in got["spells"]] == ["Alpha", "Beta"]
+    assert got["spells"][0]["games"] == 2
+    assert got["spells"][0]["firstSeen"] == "2026-07-01T00:00:00Z"
+    assert got["spells"][0]["lastSeen"] == "2026-07-02T00:00:00Z"
+    assert got["current"]["team"] == "Beta"
+
+
+def test_player_spells_span_divisions(tmp_path) -> None:
+    """17 of 1187 players moved division mid-season. The earlier division is a
+    spell, not a separate player."""
+    got = _prun("""
+      const DIVS={
+        m1:div('EMEA Master',[],[mk('M2','2026-07-20T00:00:00Z','Beta','Zeta','Ilios','Control',true,'Blip')],[]),
+        m2:div('EMEA Expert',[],[mk('M1','2026-06-10T00:00:00Z','Gamma','Delta','Numbani','Hybrid',true,'Blip')],[])};
+      return playerSpells(playerGames('Blip', DIVS, {})).spells
+               .map(s=>s.division+'/'+s.team);
+    """, tmp_path)
+    assert got == ["EMEA Expert/Gamma", "EMEA Master/Beta"]
+
+
+def test_player_spells_are_empty_for_an_unknown_nick(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerSpells(playerGames('Nobody', DIVS, {}));
+    """, tmp_path)
+    assert got["spells"] == []
+    assert got["current"] is None

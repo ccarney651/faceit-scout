@@ -748,3 +748,27 @@ function teamRecords(divisions){
   });
   return out;
 }
+
+// The teams a player actually played for, in order, with real first/last dates.
+// Derived from game chronology rather than roster[].last_seen, which knows only
+// the final date per (team, player) and so cannot date the start of a spell.
+function playerSpells(games){
+  const by={};
+  (games||[]).forEach(g=>{
+    const k=g.cid+'|'+g.team;
+    const s=by[k]||(by[k]={cid:g.cid, division:g.division, team:g.team,
+                           games:0, firstSeen:'', lastSeen:''});
+    s.games++;
+    const at=g.at||'';
+    if(at){
+      if(!s.firstSeen||at<s.firstSeen) s.firstSeen=at;
+      if(at>s.lastSeen) s.lastSeen=at;
+    }
+  });
+  const spells=Object.keys(by).map(k=>by[k]).sort((a,b)=>
+    (a.firstSeen||'').localeCompare(b.firstSeen||'') || a.team.localeCompare(b.team));
+  let cur=null;
+  spells.forEach(s=>{ if(!cur||(s.lastSeen||'')>(cur.lastSeen||'')) cur=s; });
+  return {spells:spells,
+          current:cur?{team:cur.team, division:cur.division, cid:cur.cid}:null};
+}
