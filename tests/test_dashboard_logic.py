@@ -1623,3 +1623,67 @@ def test_player_spells_are_empty_for_an_unknown_nick(tmp_path) -> None:
     """, tmp_path)
     assert got["spells"] == []
     assert got["current"] is None
+
+
+def test_player_map_record_refuses_below_the_floor_and_fires_at_it(tmp_path) -> None:
+    """Median per-map sample is 3 games. The floor is the feature: null under,
+    a number at, never a confident-looking figure from four games."""
+    got = _prun("""
+      const ms=[]; for(let i=0;i<4;i++)
+        ms.push(mk('K'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Kings Row','Hybrid',true,'Blip'));
+      for(let i=0;i<5;i++)
+        ms.push(mk('I'+i,'2026-07-1'+i+'T00:00:00Z','Alpha','Zeta','Ilios','Control',i<3,'Blip'));
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      const by={}; r.maps.forEach(m=>by[m.map]=m);
+      return {kings:by['Kings Row'], ilios:by['Ilios']};
+    """, tmp_path)
+    assert got["kings"]["games"] == 4 and got["kings"]["wr"] is None
+    assert got["ilios"]["games"] == 5 and got["ilios"]["wr"] == 60
+
+
+def test_player_mode_record_aggregates_maps_into_modes(tmp_path) -> None:
+    """Mode is the headline grain precisely because it clears the floor where
+    the individual maps do not."""
+    got = _prun("""
+      const ms=[];
+      ['Ilios','Nepal','Oasis'].forEach((mp,i)=>{
+        ms.push(mk('A'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta',mp,'Control',true,'Blip'));
+        ms.push(mk('B'+i,'2026-07-1'+i+'T00:00:00Z','Alpha','Zeta',mp,'Control',false,'Blip'));
+      });
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      return {modes:r.modes, mapWr:r.maps.map(m=>m.wr)};
+    """, tmp_path)
+    assert got["modes"][0] == {"mode": "Control", "games": 6, "wins": 3, "wr": 50,
+                               "teamGames": 6, "teamWr": 50}
+    assert got["mapWr"] == [None, None, None]      # 2 games each, all under the floor
+
+
+def test_player_map_record_shows_the_teams_rate_including_games_they_missed(tmp_path) -> None:
+    """A sub's divergence from their team is the one genuinely player-specific
+    read here, and it only exists if teamWr counts the games they sat out."""
+    got = _prun("""
+      const ms=[];
+      for(let i=0;i<5;i++)
+        ms.push(mk('P'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'));
+      for(let i=0;i<5;i++)
+        ms.push(mk('S'+i,'2026-07-1'+i+'T00:00:00Z','Alpha','Zeta','Ilios','Control',false,null));
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      return r.maps[0];
+    """, tmp_path)
+    assert got["games"] == 5 and got["wr"] == 100
+    assert got["teamGames"] == 10 and got["teamWr"] == 50
+
+
+def test_player_map_record_pools_the_teams_of_a_swapped_player(tmp_path) -> None:
+    got = _prun("""
+      const ms=[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-20T00:00:00Z','Beta','Zeta','Ilios','Control',false,'Blip')];
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      return r.maps[0].teamGames;
+    """, tmp_path)
+    assert got == 2      # Alpha's one game plus Beta's one, not Zeta's two

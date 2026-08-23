@@ -772,3 +772,38 @@ function playerSpells(games){
   return {spells:spells,
           current:cur?{team:cur.team, division:cur.division, cid:cur.cid}:null};
 }
+
+// A player's record by mode and by map, each row carrying the record of the
+// teams they played it for. Mode is the headline grain (median 8 games) and map
+// the drill-down (median 3) — which is why both floors exist and why the team's
+// rate sits in the same row: a player's map record is largely their team's.
+function playerMapRecord(games, records){
+  const pMode={}, pMap={}, srcMode={}, srcMap={}, mapMode={};
+  (games||[]).forEach(g=>{
+    const tk=g.cid+'|'+g.team;
+    _pbump(pMode, g.mode, g.won);
+    _pbump(pMap, g.map, g.won);
+    (srcMode[g.mode]||(srcMode[g.mode]={}))[tk]=1;
+    (srcMap[g.map]||(srcMap[g.map]={}))[tk]=1;
+    mapMode[g.map]=g.mode;
+  });
+  const teamSide=(src, key, kind)=>{
+    let n=0, w=0;
+    Object.keys(src[key]||{}).forEach(tk=>{
+      const c=((records||{})[tk]||{})[kind];
+      const e=c&&c[key];
+      if(e){ n+=e.games; w+=e.wins; }
+    });
+    return {teamGames:n, teamWr:n?Math.round(100*w/n):null};
+  };
+  const modes=Object.keys(pMode).map(k=>Object.assign(
+    {mode:k, games:pMode[k].games, wins:pMode[k].wins,
+     wr:playerRate(pMode[k].wins, pMode[k].games, PLAYER_MODE_MIN)},
+    teamSide(srcMode, k, 'mode')));
+  const maps=Object.keys(pMap).map(k=>Object.assign(
+    {map:k, mode:mapMode[k]||'Other', games:pMap[k].games, wins:pMap[k].wins,
+     wr:playerRate(pMap[k].wins, pMap[k].games, PLAYER_MAP_MIN)},
+    teamSide(srcMap, k, 'map')));
+  const bySize=(a,b)=>b.games-a.games||String(a.map||a.mode).localeCompare(String(b.map||b.mode));
+  return {modes:modes.sort(bySize), maps:maps.sort(bySize)};
+}
