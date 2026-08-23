@@ -1794,3 +1794,51 @@ def test_player_divisions_merges_two_teams_inside_one_division(tmp_path) -> None
     assert got["elo"] == 2100                 # the later roster row
     assert got["stats"]["games"] == 4
     assert got["stats"]["dmg"] == 7000        # (8000*2 + 6000*2) / 4
+
+
+def test_player_season_composes_the_whole_page(tmp_path) -> None:
+    got = _prun("""
+      const row=(g,seen,elo,st)=>({nick:'Blip',game_name:'Blip#1',games:g,
+        last_seen:seen, elo:elo, role:'Tank', current:true, stats:st});
+      const st={games:2,elims:20,deaths:5,dmg:8000,heal:0,mit:9000,kd:4};
+      const DIVS={m1:div('EMEA Master',
+        [{name:'Alpha',roster:[row(2,'2026-07-02T00:00:00Z',2000,st)]}],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+         mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Nepal','Control',false,'Blip')],[])};
+      const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:20}]}]}}};
+      return playerSeason('Blip', DIVS, comps, {'M1:1':{Blip:'Winston'}});
+    """, tmp_path)
+    assert got["found"] is True
+    assert got["gameName"] == "Blip#1"
+    assert got["current"]["team"] == "Alpha"
+    assert [t["team"] for t in got["teams"]] == ["Alpha"]
+    assert got["modes"][0]["mode"] == "Control" and got["modes"][0]["games"] == 2
+    assert got["modes"][0]["wr"] is None                 # 2 games, under the floor
+    assert [g["matchId"] for g in got["recent"]] == ["M2", "M1"]
+    assert got["heroes"][0]["hero"] == "Winston"
+    assert got["divisions"][0]["division"] == "EMEA Master"
+
+
+def test_player_season_is_found_from_a_roster_row_alone(tmp_path) -> None:
+    """A player on a roster whose games all fell to walkovers still has a page
+    - with an empty record, not a 'no such player' dead end."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',
+        [{name:'Alpha',roster:[{nick:'Blip',game_name:'Blip#1',games:0,
+          last_seen:'2026-07-02T00:00:00Z',elo:2000,role:'Tank',current:true,stats:null}]}],
+        [],[])};
+      return playerSeason('Blip', DIVS, {}, {});
+    """, tmp_path)
+    assert got["found"] is True
+    assert got["recent"] == [] and got["maps"] == []
+    assert got["divisions"][0]["stats"] is None
+
+
+def test_player_season_reports_an_unknown_nick_as_not_found(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerSeason('Nobody', DIVS, {}, {});
+    """, tmp_path)
+    assert got["found"] is False
+    assert got["current"] is None and got["teams"] == []

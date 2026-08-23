@@ -889,3 +889,23 @@ function playerDivisions(nick, divisions){
   });
   return out.sort((a,b)=>b.games-a.games||a.division.localeCompare(b.division));
 }
+
+// A player's whole season, ready to render. `found` is true if they appear on
+// any roster OR in any game: a player whose matches were all walkovers still has
+// a page, with an empty record rather than a dead end.
+function playerSeason(nick, divisions, comps, pergame){
+  const games=playerGames(nick, divisions, pergame);
+  const spells=playerSpells(games);
+  const record=playerMapRecord(games, teamRecords(divisions));
+  const divs=playerDivisions(nick, divisions);
+  return {found:!!(games.length||divs.length),
+          nick:nick,
+          gameName:(divs[0]&&divs[0].gameName)||null,
+          teams:spells.spells,
+          current:spells.current,
+          divisions:divs,
+          modes:record.modes,
+          maps:record.maps,
+          recent:games,
+          heroes:playerHeroPool(nick, games, comps)};
+}
