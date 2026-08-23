@@ -585,3 +585,34 @@ def test_hero_icon_cache_is_committed_and_usable() -> None:
     # A few well-known slugs, incl. the punctuation-stripped ones.
     for hero in ("dva", "wreckingball", "kiriko"):
         assert hero in icons, f"{hero} missing from the icon cache"
+
+
+def test_game_rosters_carry_mitigation(db: Database) -> None:
+    """A Tank's per-map stat line needs mitigation; the season card already shows
+    it, so a per-game table without it reads as a missing number rather than an
+    absent column."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+              ("em", "S9 EMEA Master Central - Regular Season", "ow2"))
+    _insert_match(db, "em", "m1", "FINISHED", "t1", "t2", "faction1", None,
+                  "2026-07-20T20:00:00Z", 1, ["faction1"])
+    c.execute("INSERT INTO players(id,nickname,game_name) VALUES('p1','Blip','Blip#1')")
+    c.execute(
+        "INSERT INTO round_players(match_id,game_no,team_id,player_id,role,elo_snapshot,"
+        "stats_captured,eliminations,deaths,assists,damage,healing,damage_mitigated) "
+        "VALUES('m1',1,'t1','p1','Tank',2000,1,20,5,3,8000,0,9000)")
+    db.conn.commit()
+
+    buf = io.StringIO()
+    export_html(db, buf)
+    data = json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+    rows = [p for div in data["divisions"].values()
+            for m in div["matches"] for g in m["games"]
+            for r in g["rosters"] for p in r["players"]]
+    assert rows, "fixture exported no per-game roster rows"
+    assert all("mit" in p for p in rows)
+    assert rows[0]["mit"] == 9000
