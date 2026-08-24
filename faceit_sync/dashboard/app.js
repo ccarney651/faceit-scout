@@ -326,6 +326,13 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
   // An <a> inside the team link (the capture icon) navigates on its own — don't
   // hijack it into the Scout page.
   if(t&&t.dataset.scout&&!e.target.closest('a')){ e.preventDefault(); gotoScout(t.dataset.scout); } });
+// A player name anywhere on the site is a link to their season. Season-scoped,
+// so no division has to be resolved first — the page finds them wherever they
+// played. Guarded against [data-scout] so a name inside a team link fires once.
+function playerLink(nick,extra){ return nick?`<span class="tlink" data-player="${esc(nick)}" title="${esc(nick)}’s season">${esc(nick)}</span>${extra||''}`:'<span class="faint">—</span>'; }
+document.addEventListener('click',e=>{ const t=e.target.closest('[data-player]');
+  if(t&&t.dataset.player&&!e.target.closest('a')&&!e.target.closest('[data-scout]')){
+    e.preventDefault(); gotoPlayer(t.dataset.player); } });
 // Playoff bracket nodes: a finished match card opens its detail page. Guarded
 // the same way matchCard's own onclick is — a team name (data-scout) or replay
 // chip inside the card wins, and a plain click opens the match.
@@ -412,10 +419,10 @@ function rosterHTML(m,g){
       if(!rows.length){ tbody.innerHTML=`<tr><td class="faint" colspan="5">—</td></tr>`; return; }
       rows.forEach(r=>{
         if(!r.cap){
-          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}<span>${esc(r.nick)}</span></td>`+
+          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}${playerLink(r.nick)}</td>`+
             `<td class="num faint" colspan="4">stats not captured (DC)</td></tr>`);
         } else {
-          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}<span>${esc(r.nick)}</span></td>`+
+          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}${playerLink(r.nick)}</td>`+
             `<td class="num">${nf(r.e)}</td><td class="num">${nf(r.dmg)}</td>`+
             `<td class="num">${nf(r.heal)}</td><td class="num">${nf(r.d)}</td></tr>`);
         }
@@ -939,6 +946,7 @@ const TABS=[
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
+let PLAYER_NICK = null;  // player page (#player=<nick>): the drill-in's subject
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 let MATCH_ID=null;          // match detail page: which match, within the active division
 let COMPARE_A=null, COMPARE_B=null; // team compare page: the two teams being compared
@@ -1003,6 +1011,20 @@ function gotoScout(team){
     }
   }
   SCOUT_TEAM=team; show('scout');
+}
+
+// The player's own primary division (most maps) becomes the active view, so the
+// header, the division select and any subsequent tab click stay coherent. The
+// page itself still spans every division they played in — a player is
+// season-scoped even though every other screen here is division-scoped.
+function gotoPlayer(nick){
+  const rows=playerDivisions(nick, DIVS);
+  if(rows.length){
+    const v=VIEWS.find(v=>v.divisions.length===1&&v.divisions[0]===rows[0].cid);
+    if(v){ CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+           const dsel=document.getElementById('division'); if(dsel) dsel.value=v.id; }
+  }
+  PLAYER_NICK=nick; show('playerdetail');
 }
 
 // Team compare shares the scout page's same-division discipline: a team only
@@ -1607,7 +1629,7 @@ function renderScoutBody(t){
       const th=topHeroByPlayer[p.nick];
       const av=faceitAvg(p), role=roleOf(p.role);
       return `<div class="seatrow" style="grid-template-columns:1fr 40px auto${dim?';opacity:.5':''}" title="${p.games} maps this season${av?' · '+av.games+' maps with stats':''}">`+
-      `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${esc(role||'—')}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
+      `<span class="nm"><b>${playerLink(p.nick)}</b><span class="tm">${esc(role||'—')}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
       `<span class="hs">${th?heroIconMedium(th):''}</span>`+
       `<span class="rec">${p.games} map${p.games===1?'':'s'}${av?` · ${av.games}m`:` ${p.stats?'<span class="faint"> · '+p.stats.kd+' k/d</span>':''}`}</span></div>`; };
     const rc=el(`<div class="card roster"></div>`);
@@ -2377,6 +2399,7 @@ function playerStatLine(role,s){ if(!s) return ''; const kd=s.kd!=null?`${s.kd} 
   if(role==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
   if(role==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
   return `${kd?kd+' · ':''}${nf(s.damage)} dmg · ${s.deaths} d`; }
+function renderPlayer(){ return el(`<div></div>`); }   // filled in next commit
 function renderPlayers(){
   const wrap=el(`<div></div>`);
   const cap=playerCaptures();
@@ -2419,7 +2442,7 @@ function renderPlayers(){
       const curP=ros.filter(p=>p.current), subP=ros.filter(p=>!p.current);
       const mkRow=(p,dim)=>{ const av=faceitAvg(p), hs=topHeroes(cap[t.name+'|'+p.nick],3), role=roleOf(p.role);
         return el(`<div class="seatrow"${dim?' style="opacity:.55"':''} title="${p.games} maps this season${av?' · '+av.kd+' k/d · '+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':''}">`+
-          `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${role?`<span class="dot bg-${esc(role||'')}" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>${esc(role)}`:'—'}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
+          `<span class="nm"><b>${playerLink(p.nick)}</b><span class="tm">${role?`<span class="dot bg-${esc(role||'')}" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>${esc(role)}`:'—'}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
           `<span class="hs">${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
           `<span class="rec">${av?playerStatLine(role,av)+` <span class="faint">· ${av.games}m</span>`:''}</span></div>`); };
       curP.forEach(p=>card.appendChild(mkRow(p,false)));
@@ -2476,7 +2499,7 @@ function renderPlayers(){
       const tb2=tb.querySelector('tbody');
       list.forEach(p=>{ const hs=topHeroes(p.cap,3);
         tb2.appendChild(el(`<tr>`+
-          `<td><b>${esc(p.nick)}</b><span class="tm" style="display:block;font-size:11px">${esc(p.team)}</span></td>`+
+          `<td><b>${playerLink(p.nick)}</b><span class="tm" style="display:block;font-size:11px">${esc(p.team)}</span></td>`+
           `<td class="num">${hs.length?hs.map(x=>heroIconSmall(x.hero)).join(''):'<span class="faint">—</span>'}</td>`+
           statCells(p)+`</tr>`)); });
       tb.querySelectorAll('th[data-k]').forEach(th=>{ th.onclick=()=>{ PLAYERS_ROLE_SORT=th.dataset.k; drawRole(); }; });
@@ -2511,7 +2534,7 @@ function renderPlayers(){
       const hs=topHeroes(p.cap,3);
       body2.appendChild(el(`<tr>`+
         `<td class="num faint">${i+1}</td>`+
-        `<td><b>${esc(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
+        `<td><b>${playerLink(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
         `<td><span class="tlink" data-scout="${esc(p.team)}" style="display:flex;align-items:center;gap:6px">${teamAvatar(p.team,20)}${esc(p.team)}${capBtn(p.team)}</span></td>`+
         `<td><span class="dot bg-${esc(p.role||'')}"></span> <span class="faint">${esc(p.role||'—')}</span></td>`+
         `<td class="num">${hs.length?hs.map(x=>heroIconSmall(x.hero)).join(''):'<span class="faint">—</span>'}</td>`+
@@ -3098,6 +3121,7 @@ function hashFor(id){
   if(id==='matchdetail'&&MATCH_ID) return 'match='+encodeURIComponent(MATCH_ID);
   if(id==='compare'&&COMPARE_A&&COMPARE_B) return 'compare='+encodeURIComponent(COMPARE_A+'|'+COMPARE_B);
   if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
+  if(id==='playerdetail'&&PLAYER_NICK) return 'player='+encodeURIComponent(PLAYER_NICK);
   return id;
 }
 // Browser back/forward: the hash is the source of truth for which screen we're
@@ -3163,6 +3187,15 @@ function hashDispatch(){
     if(!COMPARE_A&&!COMPARE_B){ show(TABS.some(t=>t.id===start)?start:'overview'); return; }
     show('compare'); return;
   }
+  if(start.startsWith('player=')){
+    const nick=start.slice(7);
+    // An unresolvable nick lands on the Players tab, never a blank page — the
+    // same way a stale #match= id lands on the match list.
+    if(!playerDivisions(nick, DIVS).length && !playerGames(nick, DIVS, {}).length){
+      show('players'); return;
+    }
+    gotoPlayer(nick); return;
+  }
   // 'playoffs' and 'sim' were their own tabs before this redesign; a link
   // bookmarked from before still needs to resolve to real content, not fall
   // through to Overview.
@@ -3172,7 +3205,7 @@ function hashDispatch(){
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 function show(id){
-  const navId = (id==='matchdetail'?'matches':(id==='compare'?'scout':id));   // drill-ins: no nav entry of their own - they hang off Matches / Teams
+  const navId = (id==='matchdetail'?'matches':(id==='compare'?'scout':(id==='playerdetail'?'players':id)));   // drill-ins: no nav entry of their own - they hang off Matches / Teams / Players
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
   const heroScout=document.getElementById('heroScout');
   if(heroScout) heroScout.classList.toggle('hidden', navId==='scout');   // already scouting on this tab - the button would just re-open it
@@ -3183,6 +3216,8 @@ function show(id){
     c.appendChild(renderMatchDetail(m));
   } else if(id==='compare'){
     c.appendChild(renderCompare());
+  } else if(id==='playerdetail'){
+    c.appendChild(renderPlayer());
   } else {
     c.appendChild(TABS.find(t=>t.id===id).render());
   }
