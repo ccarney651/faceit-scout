@@ -376,6 +376,17 @@ own view. The page has five tabs — Overview, Teams, Players, League meta,
 Matches — with hash routing; Playoffs is a mode *inside* the Matches tab, not a
 tab of its own.
 
+**Four drill-ins hang off those tabs**, each a non-nav screen reached by hash:
+`#match=<id>`, `#scout=<team>` / `#prep=<team>`, `#compare=<A>|<B>`, and
+`#player=<nick>`. The player page is the odd one out, deliberately: every other
+screen here is **division-scoped**, while it is **season-scoped**, aggregating
+every division in the payload. That is the only scope in which a player who
+changed team or division mid-season reads as one player rather than two.
+`gotoPlayer` sets the active view to the player's current division so the header
+and division select stay coherent, but the page itself spans them all. Its
+aggregation is pure — `playerSeason` and the five functions beneath it in
+`pure.js` — and every rate it shows refuses below a sample floor.
+
 ### Files
 
 | File | Responsibility |
@@ -1198,6 +1209,12 @@ It carries the divisions, rosters, maps, the merged comps, contributor lists,
 inlined team avatars and hero icons, the code-wipe date, the refresh endpoint,
 and a `built_at` timestamp so anyone can tell at a glance whether their
 contribution has landed.
+
+Per-game roster rows (`matches[].games[].rosters[].players[]`) carry
+`nick / role / cap / e / d / dmg / heal / mit`. `mit` was added on 2026-08-24 for
+the player page: without it a Tank's per-map table omits the stat their season
+card leads with. Like the other stat columns it is `null` on a zeroed row (data
+hazard A) rather than 0 — a missing measurement is not a measurement of zero.
 
 ## 10. Lifecycles and operations
 

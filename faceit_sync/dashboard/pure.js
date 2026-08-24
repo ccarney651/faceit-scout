@@ -670,3 +670,249 @@ function sparklinePoints(history, w, h) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
 }
+
+// ---- Player pages ---------------------------------------------------------
+// A player's season, across every division in the payload. Season-scoped on
+// purpose: the payload is exported --season, so "every division" IS the season,
+// and it is the only scope in which a mid-season team or division move can be
+// shown as one player rather than two.
+//
+// Every rate here refuses under a floor. Measured 2026-08-24: the median player
+// has 38 maps but only 3 per map and 8 per mode, and only 10.8% have any
+// captured hero attribution at all. A thin win rate reads to a coach as a fact,
+// so the pure layer returns null and lets the page say why.
+//
+// The hero floor is 3 rather than 5, set deliberately on 2026-08-24 after
+// looking at the live page. Captured attribution is the scarcest input here:
+// at 5 it showed a rate on 56 (player, hero) cells across 54 players, at 3 on
+// 113 across 71 — double the cells for a third more players. The cost is real
+// and is why the count is never optional beside the rate: of the 31 cells
+// sitting at exactly 3 games, 10 read 0% or 100%.
+const PLAYER_MODE_MIN=5, PLAYER_MAP_MIN=5, PLAYER_HERO_MIN=3;
+
+function playerRate(wins, games, floor){
+  return games>=floor ? Math.round(100*wins/games) : null;
+}
+function _pbump(t, k, won){
+  if(k==null) return;
+  const c=t[k]||(t[k]={games:0,wins:0}); c.games++; if(won) c.wins++;
+}
+
+// Every game this player appeared in, newest first, flattened across divisions.
+// Playoff games come through leagueMatches — reading div.matches directly is the
+// bug fixed on 2026-08-20, where team reads silently stopped at the group stage.
+function playerGames(nick, divisions, pergame){
+  const out=[];
+  if(!nick||!divisions) return out;
+  Object.keys(divisions).forEach(cid=>{
+    const div=divisions[cid]||{};
+    const label=(div.summary&&div.summary.championship)||cid;
+    leagueMatches(div.matches, div.playoffs).forEach(m=>{
+      (m.games||[]).forEach(g=>{
+        if(!g.map) return;                       // walkover or unplayed slot
+        (g.rosters||[]).forEach(r=>{
+          const team=r&&r.team;
+          if(!team||team==='?') return;
+          const me=(r.players||[]).find(p=>p&&p.nick===nick);
+          if(!me) return;
+          const at=m.finished_at||'';
+          out.push({cid:cid, division:label, matchId:m.id, at:at, team:team,
+                    opponent:(m.f1===team?m.f2:m.f1)||null,
+                    map:g.map, mode:g.map_category||'Other',
+                    won:g.winner_team===team,
+                    stats:{e:me.e, d:me.d, dmg:me.dmg, heal:me.heal,
+                           mit:(me.mit==null?null:me.mit)},
+                    hero:((pergame||{})[m.id+':'+g.game_no]||{})[nick]||null});
+        });
+      });
+    });
+  });
+  return out.sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+}
+
+// Every team's own map and mode record, keyed "<cid>|<team>". This is what a
+// player's rate is shown against: they play with the same four teammates, so
+// their map record is largely the team's, and only the gap is a player signal.
+// It counts games the player sat out, which is the entire point.
+function teamRecords(divisions){
+  const out={};
+  if(!divisions) return out;
+  Object.keys(divisions).forEach(cid=>{
+    const div=divisions[cid]||{};
+    leagueMatches(div.matches, div.playoffs).forEach(m=>{
+      (m.games||[]).forEach(g=>{
+        if(!g.map) return;
+        (g.rosters||[]).forEach(r=>{
+          const team=r&&r.team;
+          if(!team||team==='?') return;
+          const k=cid+'|'+team, won=g.winner_team===team;
+          const rec=out[k]||(out[k]={mode:{},map:{}});
+          _pbump(rec.mode, g.map_category||'Other', won);
+          _pbump(rec.map, g.map, won);
+        });
+      });
+    });
+  });
+  return out;
+}
+
+// The teams a player actually played for, in order, with real first/last dates.
+// Derived from game chronology rather than roster[].last_seen, which knows only
+// the final date per (team, player) and so cannot date the start of a spell.
+function playerSpells(games){
+  const by={};
+  (games||[]).forEach(g=>{
+    const k=g.cid+'|'+g.team;
+    const s=by[k]||(by[k]={cid:g.cid, division:g.division, team:g.team,
+                           games:0, firstSeen:'', lastSeen:''});
+    s.games++;
+    const at=g.at||'';
+    if(at){
+      if(!s.firstSeen||at<s.firstSeen) s.firstSeen=at;
+      if(at>s.lastSeen) s.lastSeen=at;
+    }
+  });
+  const spells=Object.keys(by).map(k=>by[k]).sort((a,b)=>
+    (a.firstSeen||'').localeCompare(b.firstSeen||'') || a.team.localeCompare(b.team));
+  let cur=null;
+  spells.forEach(s=>{ if(!cur||(s.lastSeen||'')>(cur.lastSeen||'')) cur=s; });
+  return {spells:spells,
+          current:cur?{team:cur.team, division:cur.division, cid:cur.cid}:null};
+}
+
+// A player's record by mode and by map, each row carrying the record of the
+// teams they played it for. Mode is the headline grain (median 8 games) and map
+// the drill-down (median 3) — which is why both floors exist and why the team's
+// rate sits in the same row: a player's map record is largely their team's.
+function playerMapRecord(games, records){
+  const pMode={}, pMap={}, srcMode={}, srcMap={}, mapMode={};
+  (games||[]).forEach(g=>{
+    const tk=g.cid+'|'+g.team;
+    _pbump(pMode, g.mode, g.won);
+    _pbump(pMap, g.map, g.won);
+    (srcMode[g.mode]||(srcMode[g.mode]={}))[tk]=1;
+    (srcMap[g.map]||(srcMap[g.map]={}))[tk]=1;
+    mapMode[g.map]=g.mode;
+  });
+  const teamSide=(src, key, kind)=>{
+    let n=0, w=0;
+    Object.keys(src[key]||{}).forEach(tk=>{
+      const c=((records||{})[tk]||{})[kind];
+      const e=c&&c[key];
+      if(e){ n+=e.games; w+=e.wins; }
+    });
+    return {teamGames:n, teamWr:n?Math.round(100*w/n):null};
+  };
+  const modes=Object.keys(pMode).map(k=>Object.assign(
+    {mode:k, games:pMode[k].games, wins:pMode[k].wins,
+     wr:playerRate(pMode[k].wins, pMode[k].games, PLAYER_MODE_MIN)},
+    teamSide(srcMode, k, 'mode')));
+  const maps=Object.keys(pMap).map(k=>Object.assign(
+    {map:k, mode:mapMode[k]||'Other', games:pMap[k].games, wins:pMap[k].wins,
+     wr:playerRate(pMap[k].wins, pMap[k].games, PLAYER_MAP_MIN)},
+    teamSide(srcMap, k, 'map')));
+  const bySize=(a,b)=>b.games-a.games||String(a.map||a.mode).localeCompare(String(b.map||b.mode));
+  return {modes:modes.sort(bySize), maps:maps.sort(bySize)};
+}
+
+// A player's heroes, from two sources that must not be conflated. `rounds` and
+// `share` come from the capture pools and are factual at any sample size;
+// `games`/`wins`/`wr` come from per-game attribution joined to the result, and
+// the win rate refuses below PLAYER_HERO_MIN. A hero with a share and no win
+// rate is the EXPECTED row — 10.8% of players have any attribution at all.
+// Pools are read only from the teams the player actually played for: a pool is
+// matched by nick inside a team, so a same-nick entry elsewhere is not theirs.
+function playerHeroPool(nick, games, comps){
+  const mine={}, tally={};
+  (games||[]).forEach(g=>{
+    mine[g.team]=1;
+    if(g.hero) _pbump(tally, g.hero, g.won);
+  });
+  const pool={};
+  Object.keys(comps||{}).forEach(team=>{
+    if(!mine[team]) return;
+    const ps=(((comps[team]||{}).scout)||{}).players||[];
+    ps.forEach(p=>{
+      if(!p||p.player!==nick) return;
+      (p.heroes||[]).forEach(h=>{
+        if(!h||!h.hero) return;
+        pool[h.hero]=(pool[h.hero]||0)+(h.rounds||0);
+      });
+    });
+  });
+  const total=Object.keys(pool).reduce((a,h)=>a+pool[h],0);
+  const names={};
+  Object.keys(pool).forEach(h=>{ names[h]=1; });
+  Object.keys(tally).forEach(h=>{ names[h]=1; });
+  return Object.keys(names).map(h=>{
+    const rounds=pool[h]||0, c=tally[h]||{games:0,wins:0};
+    return {hero:h, rounds:rounds, share:total?Math.round(100*rounds/total):null,
+            games:c.games, wins:c.wins,
+            wr:playerRate(c.wins, c.games, PLAYER_HERO_MIN)};
+  }).sort((a,b)=>b.rounds-a.rounds||b.games-a.games||a.hero.localeCompare(b.hero));
+}
+
+// Merge per-map stat averages from several roster rows: a player who changed
+// team inside one division has one row per team. Means are re-weighted by each
+// row's own stat sample, and k/d is recomputed from the recovered totals rather
+// than averaged as a ratio of ratios — which would let a two-map row outvote a
+// forty-map one.
+function mergePlayerStats(rows){
+  const ok=(rows||[]).filter(r=>r&&r.games);
+  if(!ok.length) return null;
+  const n=ok.reduce((a,r)=>a+r.games,0);
+  const w=k=>ok.reduce((a,r)=>a+(r[k]||0)*r.games,0)/n;
+  const elims=w('elims'), deaths=w('deaths');
+  return {games:n,
+          elims:Math.round(elims*10)/10, deaths:Math.round(deaths*10)/10,
+          dmg:Math.round(w('dmg')), heal:Math.round(w('heal')), mit:Math.round(w('mit')),
+          kd:deaths>0?Math.round(100*elims/deaths)/100:null};
+}
+
+// One row per division a player appears in — never a blend. A Master damage
+// average and an Advanced one are different units, and the whole site refuses
+// that comparison already (efficiencyRatings z-scores inside a division).
+function playerDivisions(nick, divisions){
+  const out=[];
+  if(!nick||!divisions) return out;
+  Object.keys(divisions).forEach(cid=>{
+    const div=divisions[cid]||{};
+    const found=[];
+    (div.teams||[]).forEach(t=>{
+      (t.roster||[]).forEach(p=>{ if(p&&p.nick===nick) found.push({team:t.name, row:p}); });
+    });
+    if(!found.length) return;
+    found.sort((a,b)=>(a.row.last_seen||'').localeCompare(b.row.last_seen||''));
+    const last=found[found.length-1].row;
+    out.push({cid:cid,
+      division:(div.summary&&div.summary.championship)||cid,
+      teams:found.map(f=>f.team),
+      role:last.role||null,
+      gameName:last.game_name||null,
+      elo:(last.elo==null?null:last.elo),
+      lastSeen:last.last_seen||'',
+      games:found.reduce((a,f)=>a+(f.row.games||0),0),
+      stats:mergePlayerStats(found.map(f=>f.row.stats))});
+  });
+  return out.sort((a,b)=>b.games-a.games||a.division.localeCompare(b.division));
+}
+
+// A player's whole season, ready to render. `found` is true if they appear on
+// any roster OR in any game: a player whose matches were all walkovers still has
+// a page, with an empty record rather than a dead end.
+function playerSeason(nick, divisions, comps, pergame){
+  const games=playerGames(nick, divisions, pergame);
+  const spells=playerSpells(games);
+  const record=playerMapRecord(games, teamRecords(divisions));
+  const divs=playerDivisions(nick, divisions);
+  return {found:!!(games.length||divs.length),
+          nick:nick,
+          gameName:(divs[0]&&divs[0].gameName)||null,
+          teams:spells.spells,
+          current:spells.current,
+          divisions:divs,
+          modes:record.modes,
+          maps:record.maps,
+          recent:games,
+          heroes:playerHeroPool(nick, games, comps)};
+}

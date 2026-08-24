@@ -326,6 +326,13 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-scout]');
   // An <a> inside the team link (the capture icon) navigates on its own — don't
   // hijack it into the Scout page.
   if(t&&t.dataset.scout&&!e.target.closest('a')){ e.preventDefault(); gotoScout(t.dataset.scout); } });
+// A player name anywhere on the site is a link to their season. Season-scoped,
+// so no division has to be resolved first — the page finds them wherever they
+// played. Guarded against [data-scout] so a name inside a team link fires once.
+function playerLink(nick,extra){ return nick?`<span class="tlink" data-player="${esc(nick)}" title="${esc(nick)}’s season">${esc(nick)}</span>${extra||''}`:'<span class="faint">—</span>'; }
+document.addEventListener('click',e=>{ const t=e.target.closest('[data-player]');
+  if(t&&t.dataset.player&&!e.target.closest('a')&&!e.target.closest('[data-scout]')){
+    e.preventDefault(); gotoPlayer(t.dataset.player); } });
 // Playoff bracket nodes: a finished match card opens its detail page. Guarded
 // the same way matchCard's own onclick is — a team name (data-scout) or replay
 // chip inside the card wins, and a plain click opens the match.
@@ -412,10 +419,10 @@ function rosterHTML(m,g){
       if(!rows.length){ tbody.innerHTML=`<tr><td class="faint" colspan="5">—</td></tr>`; return; }
       rows.forEach(r=>{
         if(!r.cap){
-          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}<span>${esc(r.nick)}</span></td>`+
+          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}${playerLink(r.nick)}</td>`+
             `<td class="num faint" colspan="4">stats not captured (DC)</td></tr>`);
         } else {
-          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}<span>${esc(r.nick)}</span></td>`+
+          tbody.insertAdjacentHTML('beforeend',`<tr><td class="pname">${portrait(r.hero)}${playerLink(r.nick)}</td>`+
             `<td class="num">${nf(r.e)}</td><td class="num">${nf(r.dmg)}</td>`+
             `<td class="num">${nf(r.heal)}</td><td class="num">${nf(r.d)}</td></tr>`);
         }
@@ -939,6 +946,7 @@ const TABS=[
 ];
 
 let SCOUT_TEAM = null;   // set per division by recomputeDivision()
+let PLAYER_NICK = null;  // player page (#player=<nick>): the drill-in's subject
 let SCOUT_PREP=false;       // scout tab: full detail vs the condensed prep sheet
 let MATCH_ID=null;          // match detail page: which match, within the active division
 let COMPARE_A=null, COMPARE_B=null; // team compare page: the two teams being compared
@@ -1003,6 +1011,20 @@ function gotoScout(team){
     }
   }
   SCOUT_TEAM=team; show('scout');
+}
+
+// The player's own primary division (most maps) becomes the active view, so the
+// header, the division select and any subsequent tab click stay coherent. The
+// page itself still spans every division they played in — a player is
+// season-scoped even though every other screen here is division-scoped.
+function gotoPlayer(nick){
+  const rows=playerDivisions(nick, DIVS);
+  if(rows.length){
+    const v=VIEWS.find(v=>v.divisions.length===1&&v.divisions[0]===rows[0].cid);
+    if(v){ CURRENT_VIEW=v.id; recomputeDivision(); updateHeader();
+           const dsel=document.getElementById('division'); if(dsel) dsel.value=v.id; }
+  }
+  PLAYER_NICK=nick; show('playerdetail');
 }
 
 // Team compare shares the scout page's same-division discipline: a team only
@@ -1607,7 +1629,7 @@ function renderScoutBody(t){
       const th=topHeroByPlayer[p.nick];
       const av=faceitAvg(p), role=roleOf(p.role);
       return `<div class="seatrow" style="grid-template-columns:1fr 40px auto${dim?';opacity:.5':''}" title="${p.games} maps this season${av?' · '+av.games+' maps with stats':''}">`+
-      `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${esc(role||'—')}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
+      `<span class="nm"><b>${playerLink(p.nick)}</b><span class="tm">${esc(role||'—')}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
       `<span class="hs">${th?heroIconMedium(th):''}</span>`+
       `<span class="rec">${p.games} map${p.games===1?'':'s'}${av?` · ${av.games}m`:` ${p.stats?'<span class="faint"> · '+p.stats.kd+' k/d</span>':''}`}</span></div>`; };
     const rc=el(`<div class="card roster"></div>`);
@@ -2377,6 +2399,152 @@ function playerStatLine(role,s){ if(!s) return ''; const kd=s.kd!=null?`${s.kd} 
   if(role==='Support') return `${nf(s.healing)} heal · ${s.deaths} d${kd?' · '+kd:''}`;
   if(role==='Tank')    return `${kd?kd+' · ':''}${s.deaths} d · ${nf(s.damage)} dmg`;
   return `${kd?kd+' · ':''}${nf(s.damage)} dmg · ${s.deaths} d`; }
+// ---- Player page (#player=<nick>) -----------------------------------------
+// A player's season across every division. Every rate carries its n; anything
+// under its floor renders as an em dash whose title says why — the same
+// treatment Eff already gets. A player's map record is largely their team's, so
+// the team's rate sits in the same row rather than in a footnote.
+function playerRateCell(wr,n,floor,label){
+  return wr==null
+    ? `<span class="faint" title="${esc(label)} needs ${floor}+ games; ${n} so far">—</span>`
+    : `${pill(wr+'%',winVar(wr))} <span class="faint">${n}g</span>`;
+}
+// This player's Eff inside one division, computed exactly the way the Players
+// tab computes it: the whole division's cohort, z-scored per role. Building the
+// cohort is the point — an Eff is a comparison, so it cannot be computed for one
+// player alone, and a second implementation would be a second answer.
+function playerEffFor(nick,cid){
+  const div=cid?DIVS[cid]:null;
+  if(!div) return null;
+  const cap=playerCaptures();
+  const list=[];
+  (div.teams||[]).forEach(t=>{ (t.roster||[]).forEach(p=>{
+    list.push({nick:p.nick, team:t.name, role:p.role||'', stats:p.stats||null,
+               cap:cap[t.name+'|'+p.nick]||null}); }); });
+  const effs=efficiencyRatings(list.map(p=>({group:effGroupOf(p), stats:p.stats})));
+  const i=list.findIndex(p=>p.nick===nick);
+  return i>=0?effs[i]:null;
+}
+function renderPlayer(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<a class="backlink" href="#players">‹ Players</a>`));
+  const S=playerSeason(PLAYER_NICK, DIVS, DATA.owdb_comps||{}, DATA.owdb_pergame_players||{});
+  if(!S.found){
+    wrap.appendChild(el(`<p class="note" style="margin-top:14px">No player named ${esc(PLAYER_NICK||'')} in this season's data.</p>`));
+    return wrap;
+  }
+  // 1. Identity. No player avatar exists in the schema; the team carries it.
+  const cur=S.current;
+  wrap.appendChild(el(sectionH(S.nick,
+    `<span class="note">${S.gameName?esc(S.gameName)+' · ':''}`+
+    `${cur?`<span class="tlink" data-scout="${esc(cur.team)}" title="Scout ${esc(cur.team)}">${esc(cur.team)}</span> · ${esc(cur.division)}`:'no current team'}</span>`)));
+
+  // 2. Headline tiles.
+  const totG=S.maps.reduce((a,m)=>a+m.games,0), totW=S.maps.reduce((a,m)=>a+m.wins,0);
+  // The division they are in NOW, not the one with the most maps: a player who
+  // moved up mid-season has a stale elo and a stale peer group in the old one.
+  const d0=(cur&&S.divisions.find(d=>d.cid===cur.cid))||S.divisions[0]||{};
+  const eff=playerEffFor(S.nick, d0.cid);
+  const tiles=el(`<div class="grid cols-4"></div>`);
+  const tile=(n,l,sub)=>el(`<div class="tile"><div class="n">${n}</div><div class="l">${esc(l)}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`);
+  tiles.append(
+    tile(totG,'maps played',S.divisions.length>1?esc(S.divisions.length+' divisions'):''),
+    tile(totG?Math.round(100*totW/totG)+'%':'—','map win rate',totG?`${totW}-${totG-totW}`:''),
+    tile(eff&&eff.eff!=null?(eff.eff>0?'+':'')+eff.eff.toFixed(2):'—','Eff',
+         eff&&eff.eff!=null?esc((eff.group||'')+' · '+eff.groupN+' peers'):'not enough peers'),
+    tile(d0.elo==null?'—':d0.elo,'elo',d0.lastSeen?esc(dshort(d0.lastSeen)):''));
+  wrap.appendChild(tiles);
+
+  // 3. Team timeline — only when there is actually a story to tell. 94% of
+  // players stayed put all season; for them the section is absent, not empty.
+  if(S.teams.length>1){
+    const tl=el(`<div class="ptl"></div>`);
+    S.teams.forEach(sp=>{
+      const now=!!(cur&&sp.team===cur.team&&sp.cid===cur.cid);
+      tl.appendChild(el(`<div class="sp${now?' now':''}">`+
+        `<div class="t">${teamAvatar(sp.team,20)}<span class="tlink" data-scout="${esc(sp.team)}">${esc(sp.team)}</span></div>`+
+        `<div class="d">${esc(sp.division)} · ${sp.games} map${sp.games===1?'':'s'}<br>`+
+        `${esc(dshort(sp.firstSeen))} → ${now?'now':esc(dshort(sp.lastSeen))}</div></div>`));
+    });
+    wrap.append(el(sectionH('Season timeline',
+      `<span class="note">${S.teams.length} spells · dates are first and last map played</span>`)), tl);
+  }
+
+  // 4. Season stats, one row per division — never blended across tiers.
+  wrap.appendChild(el(sectionH('Season stats',
+    `<span class="note">per-map averages from FACEIT · one row per division, because a Master average and an Advanced one are different units</span>`)));
+  wrap.appendChild(table([
+    {k:'division',label:'Division'},
+    {k:'teams',label:'Team(s)',html:r=>r.teams.map(t=>`<span class="tlink" data-scout="${esc(t)}">${esc(t)}</span>`).join(' → ')},
+    {k:'role',label:'Role',html:r=>esc(r.role||'—')},
+    {k:'games',label:'Maps',num:true},
+    {k:'kd',label:'K/D',num:true,html:r=>r.stats&&r.stats.kd!=null?r.stats.kd.toFixed(2):'—'},
+    {k:'dmg',label:'Damage',num:true,html:r=>r.stats?nf(r.stats.dmg):'—'},
+    {k:'heal',label:'Healing',num:true,html:r=>r.stats?nf(r.stats.heal):'—'},
+    {k:'mit',label:'Mitigated',num:true,html:r=>r.stats?nf(r.stats.mit):'—'},
+    {k:'elo',label:'Elo',num:true,html:r=>r.elo==null?'—':r.elo}
+  ], S.divisions));
+
+  // 5. Modes, then maps. Sort BEFORE table() — its group header only collapses
+  // consecutive same-group rows, which is the bug Team Compare shipped.
+  wrap.appendChild(el(sectionH('Modes & maps',
+    `<span class="note">their record, beside their teams' own · mode needs ${PLAYER_MODE_MIN}+ games, map needs ${PLAYER_MAP_MIN}+</span>`)));
+  const bars=el(`<div class="card"></div>`);
+  S.modes.forEach(m=>{
+    bars.appendChild(el(`<div class="barrow">`+
+      `<span class="lab">${esc(m.mode)} <span class="faint">${m.games}g</span></span>`+
+      `<div class="track"><div class="fill" style="width:${m.games?Math.round(100*m.wins/m.games):0}%"></div></div>`+
+      `<span class="barval">${m.wr==null?`<span class="faint" title="needs ${PLAYER_MODE_MIN}+ games; ${m.games} so far">—</span>`:m.wr+'%'}</span>`+
+      `</div>`));
+  });
+  wrap.appendChild(bars);
+  wrap.appendChild(table([
+    {k:'map',label:'Map'},
+    {k:'games',label:'Maps',num:true},
+    {k:'wr',label:'Their %',num:true,html:r=>playerRateCell(r.wr,r.games,PLAYER_MAP_MIN,'A map win rate')},
+    {k:'teamWr',label:'Team %',num:true,html:r=>r.teamWr==null?'—':`${r.teamWr}% <span class="faint">${r.teamGames}g</span>`}
+  ], S.maps.slice().sort((a,b)=>mapCmp(a.map,b.map)), byMode));
+  wrap.appendChild(el(`<p class="note">A player plays with the same four teammates, so their map record is largely their team's — the useful read is where the two columns diverge, which is where someone was subbed in or out.</p>`));
+
+  // 6. Hero pool. Present whenever captures exist; the win column only above
+  // the floor, which today means it is blank for nearly everyone.
+  if(S.heroes.length){
+    wrap.appendChild(el(sectionH('Hero pool',
+      `<span class="note">share of their captured rounds · win rate needs ${PLAYER_HERO_MIN}+ captured games on that hero</span>`)));
+    const hb=el(`<div class="card"></div>`);
+    S.heroes.forEach(h=>{
+      hb.appendChild(el(`<div class="barrow">`+
+        `<span class="lab">${heroIcon(h.hero)}${esc(h.hero)} ${playerRateCell(h.wr,h.games,PLAYER_HERO_MIN,'A hero win rate')}</span>`+
+        `<div class="track"><div class="fill" style="width:${h.share||0}%"></div></div>`+
+        `<span class="barval">${h.share==null?'—':h.share+'%'}</span>`+
+        `</div>`));
+    });
+    wrap.appendChild(hb);
+  } else {
+    wrap.appendChild(el(sectionH('Hero pool',
+      `<span class="note">no captured games for this player yet</span>`)));
+    wrap.appendChild(el(`<p class="note">Hero pools come from captured replays. <a href="${captureDivisionUrl()}" style="color:var(--accent)">Capture a map</a> and this fills in.</p>`));
+  }
+
+  // 7. Recent maps. The pure layer returns every game; the view decides how many fit.
+  wrap.appendChild(el(sectionH('Recent maps',
+    `<span class="note">their last ${Math.min(10,S.recent.length)} maps</span>`)));
+  wrap.appendChild(table([
+    {k:'at',label:'Date',html:r=>esc(dshort(r.at))},
+    {k:'opponent',label:'Opponent',html:r=>r.opponent?`<span class="tlink" data-scout="${esc(r.opponent)}">${esc(r.opponent)}</span>`:'—'},
+    {k:'map',label:'Map',html:r=>esc(r.map)},
+    {k:'hero',label:'Hero',html:r=>r.hero?heroIcon(r.hero)+esc(r.hero):'<span class="faint">—</span>'},
+    {k:'won',label:'Result',html:r=>pill(r.won?'W':'L',r.won?'var(--good)':'var(--bad)')},
+    {k:'line',label:'Line',html:r=>esc(`${r.stats.e==null?'—':r.stats.e}/${r.stats.d==null?'—':r.stats.d}`)+` · ${nf(r.stats.dmg)} dmg`}
+  ], S.recent.slice(0,10)));
+
+  // The one accepted limitation, said out loud. FACEIT publishes no nickname
+  // history, so a player who renamed mid-season becomes two pages and there is
+  // no way to detect it from the data we hold. Stating it beats being quietly
+  // wrong about a season that looks half as long as it was.
+  wrap.appendChild(el(`<p class="note">A player is identified by their FACEIT nickname. Someone who changed nickname mid-season appears here as two players — FACEIT does not publish nickname history, so this cannot be stitched back together.</p>`));
+  return wrap;
+}
 function renderPlayers(){
   const wrap=el(`<div></div>`);
   const cap=playerCaptures();
@@ -2419,7 +2587,7 @@ function renderPlayers(){
       const curP=ros.filter(p=>p.current), subP=ros.filter(p=>!p.current);
       const mkRow=(p,dim)=>{ const av=faceitAvg(p), hs=topHeroes(cap[t.name+'|'+p.nick],3), role=roleOf(p.role);
         return el(`<div class="seatrow"${dim?' style="opacity:.55"':''} title="${p.games} maps this season${av?' · '+av.kd+' k/d · '+nf(av.damage)+' dmg · '+av.deaths+' d · '+nf(av.healing)+' heal':''}">`+
-          `<span class="nm"><b>${esc(p.nick)}</b><span class="tm">${role?`<span class="dot bg-${esc(role||'')}" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>${esc(role)}`:'—'}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
+          `<span class="nm"><b>${playerLink(p.nick)}</b><span class="tm">${role?`<span class="dot bg-${esc(role||'')}" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>${esc(role)}`:'—'}${p.elo!=null?` · ${p.elo} elo`:''}</span></span>`+
           `<span class="hs">${hs.map(x=>heroIcon(x.hero)).join('')}</span>`+
           `<span class="rec">${av?playerStatLine(role,av)+` <span class="faint">· ${av.games}m</span>`:''}</span></div>`); };
       curP.forEach(p=>card.appendChild(mkRow(p,false)));
@@ -2476,7 +2644,7 @@ function renderPlayers(){
       const tb2=tb.querySelector('tbody');
       list.forEach(p=>{ const hs=topHeroes(p.cap,3);
         tb2.appendChild(el(`<tr>`+
-          `<td><b>${esc(p.nick)}</b><span class="tm" style="display:block;font-size:11px">${esc(p.team)}</span></td>`+
+          `<td><b>${playerLink(p.nick)}</b><span class="tm" style="display:block;font-size:11px">${esc(p.team)}</span></td>`+
           `<td class="num">${hs.length?hs.map(x=>heroIconSmall(x.hero)).join(''):'<span class="faint">—</span>'}</td>`+
           statCells(p)+`</tr>`)); });
       tb.querySelectorAll('th[data-k]').forEach(th=>{ th.onclick=()=>{ PLAYERS_ROLE_SORT=th.dataset.k; drawRole(); }; });
@@ -2511,7 +2679,7 @@ function renderPlayers(){
       const hs=topHeroes(p.cap,3);
       body2.appendChild(el(`<tr>`+
         `<td class="num faint">${i+1}</td>`+
-        `<td><b>${esc(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
+        `<td><b>${playerLink(p.nick)}</b>${p.current?'':' <span class="faint" style="font-size:11px">sub</span>'}</td>`+
         `<td><span class="tlink" data-scout="${esc(p.team)}" style="display:flex;align-items:center;gap:6px">${teamAvatar(p.team,20)}${esc(p.team)}${capBtn(p.team)}</span></td>`+
         `<td><span class="dot bg-${esc(p.role||'')}"></span> <span class="faint">${esc(p.role||'—')}</span></td>`+
         `<td class="num">${hs.length?hs.map(x=>heroIconSmall(x.hero)).join(''):'<span class="faint">—</span>'}</td>`+
@@ -3098,6 +3266,7 @@ function hashFor(id){
   if(id==='matchdetail'&&MATCH_ID) return 'match='+encodeURIComponent(MATCH_ID);
   if(id==='compare'&&COMPARE_A&&COMPARE_B) return 'compare='+encodeURIComponent(COMPARE_A+'|'+COMPARE_B);
   if(id==='scout'&&SCOUT_TEAM) return (SCOUT_PREP?'prep=':'scout=')+encodeURIComponent(SCOUT_TEAM);
+  if(id==='playerdetail'&&PLAYER_NICK) return 'player='+encodeURIComponent(PLAYER_NICK);
   return id;
 }
 // Browser back/forward: the hash is the source of truth for which screen we're
@@ -3163,6 +3332,15 @@ function hashDispatch(){
     if(!COMPARE_A&&!COMPARE_B){ show(TABS.some(t=>t.id===start)?start:'overview'); return; }
     show('compare'); return;
   }
+  if(start.startsWith('player=')){
+    const nick=start.slice(7);
+    // An unresolvable nick lands on the Players tab, never a blank page — the
+    // same way a stale #match= id lands on the match list.
+    if(!playerDivisions(nick, DIVS).length && !playerGames(nick, DIVS, {}).length){
+      show('players'); return;
+    }
+    gotoPlayer(nick); return;
+  }
   // 'playoffs' and 'sim' were their own tabs before this redesign; a link
   // bookmarked from before still needs to resolve to real content, not fall
   // through to Overview.
@@ -3172,7 +3350,7 @@ function hashDispatch(){
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
 function show(id){
-  const navId = (id==='matchdetail'?'matches':(id==='compare'?'scout':id));   // drill-ins: no nav entry of their own - they hang off Matches / Teams
+  const navId = (id==='matchdetail'?'matches':(id==='compare'?'scout':(id==='playerdetail'?'players':id)));   // drill-ins: no nav entry of their own - they hang off Matches / Teams / Players
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
   const heroScout=document.getElementById('heroScout');
   if(heroScout) heroScout.classList.toggle('hidden', navId==='scout');   // already scouting on this tab - the button would just re-open it
@@ -3183,6 +3361,8 @@ function show(id){
     c.appendChild(renderMatchDetail(m));
   } else if(id==='compare'){
     c.appendChild(renderCompare());
+  } else if(id==='playerdetail'){
+    c.appendChild(renderPlayer());
   } else {
     c.appendChild(TABS.find(t=>t.id===id).render());
   }

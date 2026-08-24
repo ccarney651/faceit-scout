@@ -1488,3 +1488,365 @@ def test_sparkline_flat_history_stays_centered(tmp_path) -> None:
     # point should land at the same y.
     ys = [p.split(',')[1] for p in got.split(' ')]
     assert len(set(ys)) == 1
+
+
+# --- player pages ----------------------------------------------------------
+# A player's season is assembled from two scans. The fixture builds divisions
+# out of one-game matches, because every claim under test is per game: which
+# team a player was on, whether that game was won, and when it happened.
+
+_PLAYER_FIX = """
+const stat=(n)=>({e:n,d:5,dmg:1000*n,heal:0,mit:100*n});
+// one match, one game, `nick` on `team` (omit nick for a game they sat out)
+const mk=(id,at,team,opp,map,cat,won,nick)=>({
+  id:id, finished_at:at, f1:team, f2:opp, winner_team:(won?team:opp),
+  games:[{game_no:1, map:map, map_category:cat, winner_team:(won?team:opp),
+    rosters:[
+      {team:team, players:(nick?[{nick:nick,role:'Tank',...stat(20)}]:[])},
+      {team:opp,  players:[]}]}]});
+const div=(label,teams,matches,playoffs)=>({
+  summary:{championship:label}, teams:teams, matches:matches,
+  playoffs:(playoffs||[])});
+"""
+
+
+def _prun(body: str, tmp_path) -> object:
+    """Run a player-page test body with the fixture builders in scope."""
+    return _run(_PLAYER_FIX + body, tmp_path)
+
+
+def test_player_games_include_playoff_games(tmp_path) -> None:
+    """Team-facing reads once stopped at the group stage (fixed 2026-08-20).
+    A player page reading div.matches directly would reintroduce exactly that."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],
+        [{id:'P1',status:'FINISHED',finished_at:'2026-07-25T00:00:00Z',
+          f1:'Alpha',f2:'Zeta',winner_team:'Alpha',
+          games:[{game_no:1,map:'Ilios',map_category:'Control',winner_team:'Alpha',
+            rosters:[{team:'Alpha',players:[{nick:'Blip',role:'Tank',e:20,d:5,dmg:20000,heal:0,mit:2000}]},
+                     {team:'Zeta',players:[]}]}]}])};
+      return playerGames('Blip', DIVS, {}).map(g=>g.matchId);
+    """, tmp_path)
+    assert got == ["P1", "M1"]          # newest first, playoff game present
+
+
+def test_player_games_skip_walkovers_and_other_players(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Nepal','Control',true,'Other'),
+        {id:'M3',finished_at:'2026-07-03T00:00:00Z',f1:'Alpha',f2:'Zeta',
+         winner_team:'Alpha',games:[{game_no:1,map:null,map_category:null,
+           winner_team:'Alpha',rosters:[]}]}
+      ],[])};
+      return playerGames('Blip', DIVS, {}).map(g=>g.map);
+    """, tmp_path)
+    assert got == ["Ilios"]
+
+
+def test_player_games_carry_opponent_result_and_hero(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',false,'Blip')],[])};
+      return playerGames('Blip', DIVS, {'M1:1':{Blip:'Winston'}})[0];
+    """, tmp_path)
+    assert got["team"] == "Alpha"
+    assert got["opponent"] == "Zeta"
+    assert got["won"] is False
+    assert got["hero"] == "Winston"
+    assert got["mode"] == "Control"
+    assert got["division"] == "EMEA Master"
+    assert got["stats"]["mit"] == 2000
+
+
+def test_player_games_hero_is_null_without_attribution(tmp_path) -> None:
+    """10.8% of players have any attributed game. A missing hero is the normal
+    case, not an error, and must not become the string 'undefined'."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerGames('Blip', DIVS, {})[0].hero;
+    """, tmp_path)
+    assert got is None
+
+
+def test_team_records_count_every_game_not_just_the_players(tmp_path) -> None:
+    """teamWr's whole purpose is to be the team's record, including games the
+    player sat out - otherwise it is the player's own number twice over."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Ilios','Control',false,null)
+      ],[])};
+      const r=teamRecords(DIVS);
+      return {alpha:r['m1|Alpha'].map.Ilios, zeta:r['m1|Zeta'].mode.Control};
+    """, tmp_path)
+    assert got["alpha"] == {"games": 2, "wins": 1}
+    assert got["zeta"] == {"games": 2, "wins": 1}
+
+
+def test_player_spells_are_chronological_across_a_mid_season_swap(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Nepal','Control',true,'Blip'),
+        mk('M3','2026-07-20T00:00:00Z','Beta','Zeta','Ilios','Control',true,'Blip')
+      ],[])};
+      return playerSpells(playerGames('Blip', DIVS, {}));
+    """, tmp_path)
+    assert [s["team"] for s in got["spells"]] == ["Alpha", "Beta"]
+    assert got["spells"][0]["games"] == 2
+    assert got["spells"][0]["firstSeen"] == "2026-07-01T00:00:00Z"
+    assert got["spells"][0]["lastSeen"] == "2026-07-02T00:00:00Z"
+    assert got["current"]["team"] == "Beta"
+
+
+def test_player_spells_span_divisions(tmp_path) -> None:
+    """17 of 1187 players moved division mid-season. The earlier division is a
+    spell, not a separate player."""
+    got = _prun("""
+      const DIVS={
+        m1:div('EMEA Master',[],[mk('M2','2026-07-20T00:00:00Z','Beta','Zeta','Ilios','Control',true,'Blip')],[]),
+        m2:div('EMEA Expert',[],[mk('M1','2026-06-10T00:00:00Z','Gamma','Delta','Numbani','Hybrid',true,'Blip')],[])};
+      return playerSpells(playerGames('Blip', DIVS, {})).spells
+               .map(s=>s.division+'/'+s.team);
+    """, tmp_path)
+    assert got == ["EMEA Expert/Gamma", "EMEA Master/Beta"]
+
+
+def test_player_spells_are_empty_for_an_unknown_nick(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerSpells(playerGames('Nobody', DIVS, {}));
+    """, tmp_path)
+    assert got["spells"] == []
+    assert got["current"] is None
+
+
+def test_player_map_record_refuses_below_the_floor_and_fires_at_it(tmp_path) -> None:
+    """Median per-map sample is 3 games. The floor is the feature: null under,
+    a number at, never a confident-looking figure from four games."""
+    got = _prun("""
+      const ms=[]; for(let i=0;i<4;i++)
+        ms.push(mk('K'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Kings Row','Hybrid',true,'Blip'));
+      for(let i=0;i<5;i++)
+        ms.push(mk('I'+i,'2026-07-1'+i+'T00:00:00Z','Alpha','Zeta','Ilios','Control',i<3,'Blip'));
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      const by={}; r.maps.forEach(m=>by[m.map]=m);
+      return {kings:by['Kings Row'], ilios:by['Ilios']};
+    """, tmp_path)
+    assert got["kings"]["games"] == 4 and got["kings"]["wr"] is None
+    assert got["ilios"]["games"] == 5 and got["ilios"]["wr"] == 60
+
+
+def test_player_mode_record_aggregates_maps_into_modes(tmp_path) -> None:
+    """Mode is the headline grain precisely because it clears the floor where
+    the individual maps do not."""
+    got = _prun("""
+      const ms=[];
+      ['Ilios','Nepal','Oasis'].forEach((mp,i)=>{
+        ms.push(mk('A'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta',mp,'Control',true,'Blip'));
+        ms.push(mk('B'+i,'2026-07-1'+i+'T00:00:00Z','Alpha','Zeta',mp,'Control',false,'Blip'));
+      });
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      return {modes:r.modes, mapWr:r.maps.map(m=>m.wr)};
+    """, tmp_path)
+    assert got["modes"][0] == {"mode": "Control", "games": 6, "wins": 3, "wr": 50,
+                               "teamGames": 6, "teamWr": 50}
+    assert got["mapWr"] == [None, None, None]      # 2 games each, all under the floor
+
+
+def test_player_map_record_shows_the_teams_rate_including_games_they_missed(tmp_path) -> None:
+    """A sub's divergence from their team is the one genuinely player-specific
+    read here, and it only exists if teamWr counts the games they sat out."""
+    got = _prun("""
+      const ms=[];
+      for(let i=0;i<5;i++)
+        ms.push(mk('P'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'));
+      for(let i=0;i<5;i++)
+        ms.push(mk('S'+i,'2026-07-1'+i+'T00:00:00Z','Alpha','Zeta','Ilios','Control',false,null));
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      return r.maps[0];
+    """, tmp_path)
+    assert got["games"] == 5 and got["wr"] == 100
+    assert got["teamGames"] == 10 and got["teamWr"] == 50
+
+
+def test_player_map_record_pools_the_teams_of_a_swapped_player(tmp_path) -> None:
+    got = _prun("""
+      const ms=[
+        mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+        mk('M2','2026-07-20T00:00:00Z','Beta','Zeta','Ilios','Control',false,'Blip')];
+      const DIVS={m1:div('EMEA Master',[],ms,[])};
+      const r=playerMapRecord(playerGames('Blip',DIVS,{}), teamRecords(DIVS));
+      return r.maps[0].teamGames;
+    """, tmp_path)
+    assert got == 2      # Alpha's one game plus Beta's one, not Zeta's two
+
+
+def test_player_hero_pool_reports_share_without_a_win_rate(tmp_path) -> None:
+    """The expected row at today's coverage: 10.8% of players have any
+    attribution at all and the median is 8 games across every hero they play."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[
+        {hero:'Winston',rounds:30},{hero:'D.Va',rounds:10}]}]}}};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,{'M1:1':{Blip:'Winston'}}), comps);
+    """, tmp_path)
+    assert [h["hero"] for h in got] == ["Winston", "D.Va"]
+    assert got[0]["share"] == 75 and got[0]["games"] == 1 and got[0]["wr"] is None
+    assert got[1]["share"] == 25 and got[1]["games"] == 0
+
+
+def test_player_hero_win_rate_appears_at_the_floor(tmp_path) -> None:
+    """The hero floor is 3, not 5 like the map and mode floors: captured
+    attribution is the scarcest input on the page, and 3 doubles the (player,
+    hero) cells that can say anything. Two games still says nothing."""
+    def pool(n):
+        return _prun("""
+          const N=%d;
+          const ms=[]; for(let i=0;i<N;i++)
+            ms.push(mk('M'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Ilios','Control',i<2,'Blip'));
+          const DIVS={m1:div('EMEA Master',[],ms,[])};
+          const pg={}; for(let i=0;i<N;i++) pg['M'+i+':1']={Blip:'Winston'};
+          const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:50}]}]}}};
+          return playerHeroPool('Blip', playerGames('Blip',DIVS,pg), comps)[0];
+        """ % n, tmp_path)
+    assert pool(2)["wr"] is None                     # one under the floor
+    at_floor = pool(3)
+    assert at_floor["games"] == 3 and at_floor["wins"] == 2
+    assert at_floor["wr"] == 67                      # fires exactly at 3
+
+
+def test_player_hero_pool_ignores_pools_from_teams_they_never_played_for(tmp_path) -> None:
+    """Pools are matched by nick inside a team. A same-nick entry under a team
+    the player never played for is not their pool."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      const comps={
+        Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:10}]}]}},
+        Zeta: {scout:{players:[{player:'Blip',heroes:[{hero:'Sigma',rounds:99}]}]}}};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,{}), comps).map(h=>h.hero);
+    """, tmp_path)
+    assert got == ["Winston"]
+
+
+def test_player_hero_pool_is_empty_without_captures(tmp_path) -> None:
+    """89% of players. Empty, not an error, and not a zero-length share."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerHeroPool('Blip', playerGames('Blip',DIVS,{}), {});
+    """, tmp_path)
+    assert got == []
+
+
+def test_merge_player_stats_reweights_by_sample_and_recomputes_kd(tmp_path) -> None:
+    """k/d is a ratio of season totals, never a mean of two ratios - averaging
+    ratios lets a two-map row outvote a forty-map one."""
+    got = _prun("""
+      return mergePlayerStats([
+        {games:10, elims:20, deaths:10, dmg:1000, heal:0, mit:500, kd:2},
+        {games:30, elims:10, deaths:5,  dmg:2000, heal:0, mit:100, kd:2}]);
+    """, tmp_path)
+    assert got["games"] == 40
+    assert got["elims"] == 12.5          # (20*10 + 10*30) / 40
+    assert got["deaths"] == 6.3           # 6.25, rounded to 1dp as export.py stores it
+    assert got["dmg"] == 1750
+    assert got["kd"] == 2.0                # from the UNrounded 12.5 / 6.25
+
+
+def test_merge_player_stats_is_null_without_a_sample(tmp_path) -> None:
+    """Zeroed rows (data hazard A) are stored NULL, so a player can have maps
+    played and no stat sample at all."""
+    got = _prun("return mergePlayerStats([null, {games:0}]);", tmp_path)
+    assert got is None
+
+
+def test_player_divisions_keeps_a_cross_division_player_in_two_rows(tmp_path) -> None:
+    got = _prun("""
+      const row=(nick,g,seen,elo,st)=>({nick:nick,game_name:'Blip#1',games:g,
+        last_seen:seen, elo:elo, role:'Tank', current:true, stats:st});
+      const DIVS={
+        m1:div('EMEA Master',[{name:'Beta',roster:[
+              row('Blip',10,'2026-07-20T00:00:00Z',2100,{games:10,elims:10,deaths:5,dmg:6000,heal:0,mit:7000,kd:2})]}],[],[]),
+        m2:div('EMEA Expert',[{name:'Gamma',roster:[
+              row('Blip',4,'2026-06-10T00:00:00Z',1900,{games:4,elims:20,deaths:5,dmg:9000,heal:0,mit:8000,kd:4})]}],[],[])};
+      return playerDivisions('Blip', DIVS);
+    """, tmp_path)
+    assert [d["division"] for d in got] == ["EMEA Master", "EMEA Expert"]
+    assert got[0]["stats"]["dmg"] == 6000 and got[1]["stats"]["dmg"] == 9000
+    assert got[0]["elo"] == 2100
+
+
+def test_player_divisions_merges_two_teams_inside_one_division(tmp_path) -> None:
+    """A mid-season swap inside one division leaves two roster rows. They are
+    one division row - and elo comes from the most recent of them."""
+    got = _prun("""
+      const row=(g,seen,elo,st)=>({nick:'Blip',game_name:'Blip#1',games:g,
+        last_seen:seen, elo:elo, role:'Tank', current:true, stats:st});
+      const DIVS={m1:div('EMEA Master',[
+        {name:'Alpha',roster:[row(2,'2026-07-02T00:00:00Z',2000,{games:2,elims:20,deaths:5,dmg:8000,heal:0,mit:9000,kd:4})]},
+        {name:'Beta', roster:[row(2,'2026-07-20T00:00:00Z',2100,{games:2,elims:10,deaths:5,dmg:6000,heal:0,mit:7000,kd:2})]}],[],[])};
+      return playerDivisions('Blip', DIVS)[0];
+    """, tmp_path)
+    assert got["teams"] == ["Alpha", "Beta"]
+    assert got["games"] == 4
+    assert got["elo"] == 2100                 # the later roster row
+    assert got["stats"]["games"] == 4
+    assert got["stats"]["dmg"] == 7000        # (8000*2 + 6000*2) / 4
+
+
+def test_player_season_composes_the_whole_page(tmp_path) -> None:
+    got = _prun("""
+      const row=(g,seen,elo,st)=>({nick:'Blip',game_name:'Blip#1',games:g,
+        last_seen:seen, elo:elo, role:'Tank', current:true, stats:st});
+      const st={games:2,elims:20,deaths:5,dmg:8000,heal:0,mit:9000,kd:4};
+      const DIVS={m1:div('EMEA Master',
+        [{name:'Alpha',roster:[row(2,'2026-07-02T00:00:00Z',2000,st)]}],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip'),
+         mk('M2','2026-07-02T00:00:00Z','Alpha','Zeta','Nepal','Control',false,'Blip')],[])};
+      const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:20}]}]}}};
+      return playerSeason('Blip', DIVS, comps, {'M1:1':{Blip:'Winston'}});
+    """, tmp_path)
+    assert got["found"] is True
+    assert got["gameName"] == "Blip#1"
+    assert got["current"]["team"] == "Alpha"
+    assert [t["team"] for t in got["teams"]] == ["Alpha"]
+    assert got["modes"][0]["mode"] == "Control" and got["modes"][0]["games"] == 2
+    assert got["modes"][0]["wr"] is None                 # 2 games, under the floor
+    assert [g["matchId"] for g in got["recent"]] == ["M2", "M1"]
+    assert got["heroes"][0]["hero"] == "Winston"
+    assert got["divisions"][0]["division"] == "EMEA Master"
+
+
+def test_player_season_is_found_from_a_roster_row_alone(tmp_path) -> None:
+    """A player on a roster whose games all fell to walkovers still has a page
+    - with an empty record, not a 'no such player' dead end."""
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',
+        [{name:'Alpha',roster:[{nick:'Blip',game_name:'Blip#1',games:0,
+          last_seen:'2026-07-02T00:00:00Z',elo:2000,role:'Tank',current:true,stats:null}]}],
+        [],[])};
+      return playerSeason('Blip', DIVS, {}, {});
+    """, tmp_path)
+    assert got["found"] is True
+    assert got["recent"] == [] and got["maps"] == []
+    assert got["divisions"][0]["stats"] is None
+
+
+def test_player_season_reports_an_unknown_nick_as_not_found(tmp_path) -> None:
+    got = _prun("""
+      const DIVS={m1:div('EMEA Master',[],
+        [mk('M1','2026-07-01T00:00:00Z','Alpha','Zeta','Ilios','Control',true,'Blip')],[])};
+      return playerSeason('Nobody', DIVS, {}, {});
+    """, tmp_path)
+    assert got["found"] is False
+    assert got["current"] is None and got["teams"] == []

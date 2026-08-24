@@ -443,13 +443,17 @@ def _dashboard_data(db: Database, cid: str,
             by_team: dict[str, list[dict[str, Any]]] = {}
             for rp in rows("""SELECT rp.team_id, COALESCE(p.nickname, rp.player_id) nick,
                                      rp.role, rp.stats_captured cap, rp.eliminations e,
-                                     rp.deaths d, rp.damage dmg, rp.healing heal
+                                     rp.deaths d, rp.damage dmg, rp.healing heal,
+                                     rp.damage_mitigated mit
                               FROM round_players rp LEFT JOIN players p ON p.id=rp.player_id
                               WHERE rp.match_id=? AND rp.game_no=?""", m["id"], gno):
                 tname = tid_name.get(rp["team_id"]) or "?"
+                # `mit` stays NULL on a zeroed row (hazard A) rather than
+                # coalescing to 0, which would claim a measurement never taken.
                 by_team.setdefault(tname, []).append({
                     "nick": rp["nick"], "role": rp["role"], "cap": bool(rp["cap"]),
                     "e": rp["e"], "d": rp["d"], "dmg": rp["dmg"], "heal": rp["heal"],
+                    "mit": rp["mit"],
                 })
             rosters = [{"team": t, "players": pls} for t, pls in by_team.items()]
             gs.append({
