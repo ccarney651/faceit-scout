@@ -1705,15 +1705,23 @@ def test_player_hero_pool_reports_share_without_a_win_rate(tmp_path) -> None:
 
 
 def test_player_hero_win_rate_appears_at_the_floor(tmp_path) -> None:
-    got = _prun("""
-      const ms=[]; for(let i=0;i<5;i++)
-        ms.push(mk('M'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Ilios','Control',i<4,'Blip'));
-      const DIVS={m1:div('EMEA Master',[],ms,[])};
-      const pg={}; for(let i=0;i<5;i++) pg['M'+i+':1']={Blip:'Winston'};
-      const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:50}]}]}}};
-      return playerHeroPool('Blip', playerGames('Blip',DIVS,pg), comps)[0];
-    """, tmp_path)
-    assert got["games"] == 5 and got["wins"] == 4 and got["wr"] == 80
+    """The hero floor is 3, not 5 like the map and mode floors: captured
+    attribution is the scarcest input on the page, and 3 doubles the (player,
+    hero) cells that can say anything. Two games still says nothing."""
+    def pool(n):
+        return _prun("""
+          const N=%d;
+          const ms=[]; for(let i=0;i<N;i++)
+            ms.push(mk('M'+i,'2026-07-0'+(i+1)+'T00:00:00Z','Alpha','Zeta','Ilios','Control',i<2,'Blip'));
+          const DIVS={m1:div('EMEA Master',[],ms,[])};
+          const pg={}; for(let i=0;i<N;i++) pg['M'+i+':1']={Blip:'Winston'};
+          const comps={Alpha:{scout:{players:[{player:'Blip',heroes:[{hero:'Winston',rounds:50}]}]}}};
+          return playerHeroPool('Blip', playerGames('Blip',DIVS,pg), comps)[0];
+        """ % n, tmp_path)
+    assert pool(2)["wr"] is None                     # one under the floor
+    at_floor = pool(3)
+    assert at_floor["games"] == 3 and at_floor["wins"] == 2
+    assert at_floor["wr"] == 67                      # fires exactly at 3
 
 
 def test_player_hero_pool_ignores_pools_from_teams_they_never_played_for(tmp_path) -> None:

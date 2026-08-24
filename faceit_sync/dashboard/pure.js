@@ -679,9 +679,16 @@ function sparklinePoints(history, w, h) {
 //
 // Every rate here refuses under a floor. Measured 2026-08-24: the median player
 // has 38 maps but only 3 per map and 8 per mode, and only 10.8% have any
-// captured hero attribution at all. A 3-game win rate reads to a coach as a
-// fact, so the pure layer returns null and lets the page say why.
-const PLAYER_MODE_MIN=5, PLAYER_MAP_MIN=5, PLAYER_HERO_MIN=5;
+// captured hero attribution at all. A thin win rate reads to a coach as a fact,
+// so the pure layer returns null and lets the page say why.
+//
+// The hero floor is 3 rather than 5, set deliberately on 2026-08-24 after
+// looking at the live page. Captured attribution is the scarcest input here:
+// at 5 it showed a rate on 56 (player, hero) cells across 54 players, at 3 on
+// 113 across 71 — double the cells for a third more players. The cost is real
+// and is why the count is never optional beside the rate: of the 31 cells
+// sitting at exactly 3 games, 10 read 0% or 100%.
+const PLAYER_MODE_MIN=5, PLAYER_MAP_MIN=5, PLAYER_HERO_MIN=3;
 
 function playerRate(wins, games, floor){
   return games>=floor ? Math.round(100*wins/games) : null;

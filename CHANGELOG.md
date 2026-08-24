@@ -39,7 +39,7 @@ Entries before 2026-08-11 were reconstructed from git history.
   but only 3 per map and 8 per mode, so mode is the headline grain and map the
   drill-down, both needing 5+ games. Only 128 of 1187 players have any captured
   hero attribution at all, at a median of 8 games — so per-hero **win rate**
-  needs 5+ captured games on that hero and is blank for nearly everyone, while
+  needs 3+ captured games on that hero and is blank for most people, while
   the hero **pool** (share of captured rounds) shows at any sample size. The
   win column fills in as capture coverage grows, with no rewrite.
 

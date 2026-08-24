@@ -68,7 +68,8 @@ Three consequences, and they are design decisions rather than caveats:
    same four teammates. The page prints the team's rate in the same row and says
    so. The differentiating read is *divergence* — which is precisely the sub and
    mid-season-swap case (61 players changed team this season).
-3. **Per-hero win rate sits behind a hard floor** (n≥5 games on that hero) and
+3. **Per-hero win rate sits behind a hard floor** (n≥3 games on that hero — see
+   the amendment below) and
    will therefore be blank for nearly everyone this season. It is paired with the
    hero **pool** (share of rounds), which is factual at any sample size, so the
    section has a non-empty state today and gains the win-rate column as capture
@@ -118,7 +119,7 @@ Floors, named constants beside the existing `LB_MIN_GAMES` / `EFF_GROUP_MIN`:
 |---|---|---|
 | `PLAYER_MODE_MIN` | 5 | mode win rate |
 | `PLAYER_MAP_MIN` | 5 | per-map win rate |
-| `PLAYER_HERO_MIN` | 5 | per-hero win rate |
+| `PLAYER_HERO_MIN` | 3 | per-hero win rate (amended 2026-08-24, see below) |
 
 `teamWr` is the player's **current team on that row**, over the same division
 and season, across all of that team's games — not only the ones the player
@@ -268,6 +269,25 @@ invariant 2; the local DB runs days behind CI's.
 - **Scrim players.** Invariant 8 — scrims never enter the dashboard build.
 - **Cross-division player search** beyond what the Players tab already offers.
 - **A recency window control** on the page.
+
+## Amendment 2026-08-24 — the hero floor is 3, not 5
+
+Decided by the operator after looking at the live page, and measured rather than
+guessed. Captured attribution is the scarcest input on this page, so the hero
+floor buys far more coverage per point than the map and mode floors do:
+
+| Floor | (player, hero) cells showing a rate | Distinct players |
+|---|---|---|
+| n≥5 | 56 | 54 |
+| n≥4 | 82 | 64 |
+| **n≥3** | **113** | **71** |
+
+Three doubles the cells for a third more players. The cost is stated rather than
+hidden: of the 31 cells sitting at exactly 3 games, **10 read 0% or 100%** —
+the two most fact-like numbers a three-game sample can produce. That is why the
+game count is never optional beside the rate, and why the map and mode floors
+stay at 5: they are not sample-starved, so lowering them would buy little and
+cost the same.
 
 ## Risks
 

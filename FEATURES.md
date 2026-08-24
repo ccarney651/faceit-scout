@@ -219,7 +219,7 @@ same-role peers, mode and map win rates beside their teams' own rate, the hero
 pool captures have proved, and their last ten maps with a stat line and hero.
 
 Every rate refuses under a sample floor and prints its `n`: 5+ games for a mode
-or map rate, 5+ captured games on a hero for a hero win rate. The floors are
+or map rate, 3+ captured games on a hero for a hero win rate. The floors are
 load-bearing — the median player has 38 maps but 3 per map, and only about a
 tenth of players have any captured hero attribution at all. So the hero
 **pool** (share of captured rounds) shows at any sample size while the hero
