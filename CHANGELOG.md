@@ -17,6 +17,46 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-24
+
+### Added
+- **Every player has a page.** `#player=<nick>` is a new drill-in off the
+  Players tab, reached by clicking a player name anywhere on the site — the
+  Players tab, team roster cards, and match scoreboards. It carries their team
+  timeline (with real first/last dates per spell, so a mid-season swap reads as
+  "Alpha until 2026-07-08, Dystopia since 2026-07-10"), per-division stat rows,
+  mode and map win rates beside their teams' own, their hero pool, and their
+  last ten maps.
+
+  Unlike every other screen it is **season-scoped, not division-scoped**: it
+  aggregates every division in the payload, which is the only scope in which a
+  player who moved division mid-season is one player rather than two. The
+  headline elo and Eff follow their *current* division, not the one they played
+  most maps in.
+
+  **Every rate refuses under a floor**, and the floors are the feature rather
+  than a caveat. Measured against the live data: the median player has 38 maps
+  but only 3 per map and 8 per mode, so mode is the headline grain and map the
+  drill-down, both needing 5+ games. Only 128 of 1187 players have any captured
+  hero attribution at all, at a median of 8 games — so per-hero **win rate**
+  needs 5+ captured games on that hero and is blank for nearly everyone, while
+  the hero **pool** (share of captured rounds) shows at any sample size. The
+  win column fills in as capture coverage grows, with no rewrite.
+
+  Map rows also carry the team's own rate, because a player plays with the same
+  four teammates: their map record is largely their team's, and the useful read
+  is where the two diverge — which is where someone was subbed in or out.
+
+### Changed
+- **The inlined payload's per-game roster rows now carry `mit`**
+  (`matches[].games[].rosters[].players[].mit`, from `round_players.damage_mitigated`).
+  Without it a Tank's per-map table would omit the stat their season card leads
+  with. It stays `null` on a zeroed row (data hazard A) rather than coalescing
+  to 0, which would claim a measurement that was never taken. Costs about
+  512 KB raw (~60 KB gzipped) on a 9.1 MB page.
+
+---
+
 ## 2026-08-20
 
 ### Fixed

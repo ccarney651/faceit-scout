@@ -240,6 +240,29 @@ season average** (owscouter's scoreboard modal). All data exists in
 `round_players`; it's compute + UI. "Kinda cool, not super important" — bundle
 with the player index work if either gets scoped.
 
+**Resolved 2026-08-24** by the player pages, which are the "player index work"
+this entry was waiting on. `#player=<nick>` carries the per-division stat rows
+against same-role peers (reusing `efficiencyRatings`' cohort), per-map and
+per-mode records beside the team's own rate, and a per-map stat line on every
+recent game. Design + plan:
+`specs/2026-08-24-player-pages-{design,plan}.md`.
+
+Two things were deliberately left out, with the measurement rather than a
+shrug behind each:
+
+- **Per-game elo trend.** `round_players.elo_snapshot` exists per game but is
+  exported only as the player's latest value. Shipping it per game costs
+  **+473 KB raw** on a 9.1 MB page for one trend line, and season form can
+  already be sparklined from the per-game stats that do ship. Revisit if the
+  page ever earns a form chart.
+- **Career / multi-season pages.** The payload is one season by construction
+  (CI exports `--season s9`), so this needs a decision about what a
+  cross-season page compares, not just code.
+
+One accepted limitation: a player is keyed by nickname, so someone who renames
+mid-season becomes two pages. FACEIT publishes no nickname history, so the page
+says so rather than being quietly wrong.
+
 ### P3 — Map drawer (reimagine, do not copy)
 
 A draw-on-map strategy whiteboard is a fun idea but owscouter owns the shape

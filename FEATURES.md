@@ -209,6 +209,24 @@ deliberately invisible to the league dashboard and to the public site — league
 maps stay public, scrim maps stay private. See §2.3 (Scrim mode) below for the
 capture side.
 
+**Player pages** — every player name on the site links to `#player=<nick>`, a
+drill-in off the Players tab. It is the one **season-scoped** screen: it
+aggregates every division in the payload, so a player who changed team or
+division mid-season is one player with a real chronology rather than two
+strangers. It carries a team timeline (first and last map played per spell,
+rendered only when there is more than one), per-division stat rows against
+same-role peers, mode and map win rates beside their teams' own rate, the hero
+pool captures have proved, and their last ten maps with a stat line and hero.
+
+Every rate refuses under a sample floor and prints its `n`: 5+ games for a mode
+or map rate, 5+ captured games on a hero for a hero win rate. The floors are
+load-bearing — the median player has 38 maps but 3 per map, and only about a
+tenth of players have any captured hero attribution at all. So the hero
+**pool** (share of captured rounds) shows at any sample size while the hero
+**win rate** is usually blank, and the map table sits beside the team's own rate
+because a player plays with the same four teammates: their map record is largely
+their team's, and only the gap is a player signal.
+
 ### Cross-cutting conventions
 
 - **Map ordering** — grouped into labelled mode blocks (Control → Escort → Hybrid
