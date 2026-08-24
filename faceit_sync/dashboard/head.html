@@ -540,6 +540,18 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
   border-top:1px solid var(--line);font-size:12px}
 .codesrow:first-child{border-top:0}
 .hidden{display:none}
+/* ---- player page: the season timeline ---- */
+/* The one component the player page adds. It stays here rather than in
+   theme.css because docs/scrims.html has no player pages, and a selector
+   defined in both data pages is what test_ui_consistency.py fails on. */
+.ptl{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:10px 0}
+.ptl .sp{flex:1 1 180px;min-width:0;background:var(--surface2);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:var(--r-sm);padding:8px 10px}
+.ptl .sp .t{font-weight:660;font-size:13px;display:flex;align-items:center;gap:7px;min-width:0}
+.ptl .sp .t .tlink{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ptl .sp .d{color:var(--muted);font-size:11.5px;margin-top:3px;font-variant-numeric:tabular-nums}
+.ptl .sp.now{border-left-color:var(--good)}
+@media (max-width:640px){.ptl{flex-direction:column}}
 </style>
 </head>
 <body>
