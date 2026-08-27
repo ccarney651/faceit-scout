@@ -17,6 +17,75 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-27
+
+### Added
+- **Season 9 is frozen at `/s9/`**, linked from a new `/archive.html` and from
+  the footer of every page. It is a point-in-time export — standings, teams,
+  players, League meta and all 274 captured comps exactly as they stood when the
+  last match was played on 17 August — and it is never rebuilt. Read it as
+  history: the rosters are the ones that played, and its replay codes were
+  invalidated by later patches.
+- **The site says which season it is showing.** The header carries the season
+  beside the wordmark, read from the data the page was built from rather than
+  from the build flag, so a fallback is visible rather than silent.
+- **A finished season explains itself.** Between seasons there is nothing to
+  capture — every code from the season that just ended predates the patch that
+  ended it — and the hero slot used to render empty there, which reads as a
+  broken site rather than a finished one. It now says so, and names when the
+  next season starts until that date passes.
+- **SA and OCE are supported regions**, ready for Season 10's SA Master and OCE
+  Master. Inert until such a championship exists, which is why it landed now
+  rather than on cutover day.
+
+### Changed
+- **A pinned season with no data no longer fails the build.** `export --season
+  s10` against a database with no Season 10 matches used to write a 0-byte file
+  and exit 1; CI runs under `bash -e`, so that failed the whole job before the
+  publish step and froze the site silently. The pin now falls back to the newest
+  season that does have matches, which means it can be flipped to `s10` at any
+  time and the site switches itself over on the first ingested Season 10 match.
+  An explicit pin still wins whenever it can be satisfied.
+- **`--region` matches region names exactly rather than by first letter.** With
+  four regions the old prefix test was one addition away from resolving the
+  wrong one, and a wrong region narrows the export silently rather than failing.
+  The CLI's choices are now derived from `export.REGIONS` instead of restating
+  them, and a test pins `tools/build_capture_data.py`'s separate copy to the
+  same tuple.
+- **The `owscout-capture` IndexedDB name is kept permanently.** The promise to
+  revisit it at the Season 10 cutover is closed as won't-do: the name is
+  invisible to users, and renaming it would orphan every contributor's learned
+  refs, unsent captures and scrim history.
+- **The Season 10 cutover runbook is resequenced, and its trigger is corrected.**
+  Season 9 finished on 2026-08-17. The original runbook fired "once S9's last
+  match finishes", which is now demonstrably wrong: no S10 championship exists
+  yet, so flipping the live export to `--season s10` today would publish an empty
+  site. The trigger is **S10 having real results**, and until then the live
+  export stays pinned to `--season s9` — which also keeps trickling S10 rows off
+  the live site on its own.
+
+  `specs/2026-08-10-season10-cutover-design.md` gains a §6 recording what of the
+  design actually shipped (season filtering and capture season-scoping are live
+  and deployed; the frozen archive and SA/OCE region support are not), and
+  regroups the steps by what gates them: unblocked today, gated on S10 rooms
+  existing, gated on S10 results. Two corrections came out of it — the frozen S9
+  archive must be built from CI's DB (`docs/faceit.sqlite3.gz`), not the local
+  one, or it violates invariant 2; and the runbook lives in that design document,
+  not in `CLAUDE.md`, which the 2026-08-11 documentation refactor emptied.
+
+  Documented alongside it: relegation matches are unreachable by the keyless
+  crawler (it is scoped to a championship it was handed), which makes them the
+  only live replay codes left in the league and the only record of who is in
+  which S10 division (ingesting them was considered and deliberately skipped);
+  and `team_rosters` in the capture feed has no season filter, so its measured
+  zero-collision guarantee does not automatically survive a second season
+  entering the pool.
+
+### Fixed
+- `ARCHITECTURE.md` §10 was missing the 2026-08-18 code wipe from its list of
+  recorded wipes, and still described the cutover as deferred until Season 9
+  finishes.
+
 ## 2026-08-24
 
 ### Added

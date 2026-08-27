@@ -5,10 +5,11 @@ from __future__ import annotations
 import csv
 import html
 import json
+import logging
 import os
 import re
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
@@ -18,6 +19,8 @@ from .hero_icons import load_hero_icons
 from .models import is_playoff_name
 from .subroles import SEAT_ORDER, seat_of
 from .team_logos import build_team_logos
+
+log = logging.getLogger("faceit_sync")
 
 # On mirrored modes (Control, Flashpoint, Push) the sides are symmetric, so which
 # team "attacks first" is competitively meaningless. Attack-order only matters on
@@ -511,7 +514,13 @@ def _tier_of(name: str | None) -> str | None:
     return next((t for t in TIERS if t in name), None)
 
 
-REGIONS: tuple[str, ...] = ("EMEA", "NA")
+REGIONS: tuple[str, ...] = ("EMEA", "NA", "SA", "OCE")
+
+# When the next FACEIT League season's first matches are played. The page says
+# so while the current season is finished and the new one has no data yet, and
+# stops mentioning it once the date has passed. Update it once per season -
+# nothing derives from it, so a stale value degrades to silence, not a lie.
+NEXT_SEASON_START = "2026-09-07"
 
 
 def _region_of(name: str | None) -> str | None:
@@ -545,6 +554,17 @@ def _season_of(name: str | None) -> str | None:
     return f"s{m.group(1)}" if m else None
 
 
+def _newest_season(names: Iterable[str | None]) -> str | None:
+    """The highest-numbered season across these championship names.
+
+    Compared numerically, not lexically: sorted as strings 's9' beats 's10',
+    which would pin the site to the season that just ended for as long as both
+    are in the database.
+    """
+    seasons = {s for s in (_season_of(n) for n in names) if s}
+    return max(seasons, key=lambda s: int(s[1:]), default=None)
+
+
 def _is_playoff(name: str | None) -> bool:
     """A playoff/knockout championship, separate from the '... - Regular Season'
     divisions. Its matches feed the Playoffs tab as real results but must NOT
@@ -561,7 +581,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
-    (master/expert/advanced/open), ``only_region`` ('emea'/'na') and
+    (master/expert/advanced/open), ``only_region`` ('emea'/'na'/'sa'/'oce') and
     ``only_season`` ('s9', 's10', ...) restrict the dashboard; the DB may hold
     several divisions across tiers, regions and (once a cutover has happened)
     seasons. Returns the number of divisions with data.
@@ -573,7 +593,11 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
     want_region: str | None = None
     if only_region:
         w = only_region.strip().lower()
-        want_region = "EMEA" if w.startswith("e") else "NA" if w.startswith("n") else None
+        # Exact match on the region name, not a first-letter prefix: with four
+        # regions a prefix test is one addition away from resolving the wrong
+        # one, and a wrong region narrows the export silently rather than
+        # failing.
+        want_region = next((r for r in REGIONS if r.lower() == w), None)
     want_season: str | None = only_season.strip().lower() if only_season else None
 
     if championship_id:
@@ -585,7 +609,24 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         if want_region:
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
         if want_season:
-            rows = [r for r in rows if _season_of(r["name"]) == want_season]
+            seasoned = [r for r in rows if _season_of(r["name"]) == want_season]
+            if seasoned:
+                rows = seasoned
+            else:
+                # The pinned season exists as an intention but not yet as data -
+                # the days either side of a season boundary. Falling back to the
+                # newest season that DOES have matches keeps the site live, and
+                # switches it over by itself on the first ingested match of the
+                # new season, with no second manual step at an hour nobody is
+                # watching. Without this the export writes a 0-byte file and
+                # exits 1, which under CI's `bash -e` fails the whole job.
+                # An explicit pin always wins when it has data; this only ever
+                # covers the gap.
+                fallback = _newest_season([r["name"] for r in rows])
+                log.warning("season %s has no data yet - falling back to %s",
+                            want_season, fallback or "(no season could be parsed)")
+                rows = ([r for r in rows if _season_of(r["name"]) == fallback]
+                        if fallback else [])
         cids = [str(r["id"]) for r in rows]
 
     # Split off playoff championships: they become the Playoffs tab's real results
@@ -735,6 +776,13 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         "owdb_contributors": owdb_contributors,
         "team_avatars": inlined_team_avatars,
         "code_wipe": owdb_wipe,
+        # The season actually rendered, which is NOT necessarily the pinned one:
+        # export_html falls back when the pin has no data yet. The page labels
+        # itself from this, so a fallback is visible rather than silent.
+        "season": _newest_season(
+            str(d["summary"]["championship"]) for d in divisions.values()
+        ),
+        "next_season_start": NEXT_SEASON_START,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.
         # Where the page asks for an on-demand rebuild (the upload worker).

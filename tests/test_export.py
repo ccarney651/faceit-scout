@@ -11,7 +11,7 @@ from conftest import RESTART_DC_ID, make_client, register_match
 
 from faceit_sync.client import MATCH_URL
 from faceit_sync.db import Database
-from faceit_sync.export import _dashboard_data, export_html
+from faceit_sync.export import NEXT_SEASON_START, _dashboard_data, export_html
 from faceit_sync.sync import SyncEngine
 
 
@@ -538,6 +538,117 @@ def test_season_filter_narrows_the_export(db: Database) -> None:
                       .group(1).replace("<\\/", "</"))
     assert [v["label"] for v in data["views"]] == ["EMEA Master"]
     assert list(data["divisions"].keys()) == ["s9m"]
+
+
+def _seed_divisions(db: Database, names: dict[str, str]) -> None:
+    """One finished match per championship, so each name becomes a division with
+    data. Keys are championship ids, values the FACEIT championship names."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    for cid, nm in names.items():
+        c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+                  (cid, nm, "ow2"))
+        _insert_match(db, cid, f"m-{cid}", "FINISHED", "t1", "t2", "faction1", None,
+                      "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    db.conn.commit()
+
+
+def _payload(buf: io.StringIO) -> dict:
+    """The inlined data blob, as the existing filter tests read it."""
+    return json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+
+
+def test_newest_season_picks_the_highest_number() -> None:
+    from faceit_sync.export import _newest_season
+
+    names = ["S9 EMEA Master Central - Regular Season",
+             "S10 EMEA Master Central - Regular Season"]
+    assert _newest_season(names) == "s10"
+    # Lexically "s9" > "s10"; the compare must be numeric.
+    assert _newest_season(reversed(names)) == "s10"
+    assert _newest_season(["Winter Finale Cup", None]) is None
+    assert _newest_season([]) is None
+
+
+def test_pinned_season_with_no_data_falls_back_to_the_newest(db: Database) -> None:
+    """The days either side of a season boundary: the pin names a season that
+    exists as an intention but not yet as data. Falling back keeps the site live
+    and lets it switch over by itself on the first ingested match.
+
+    Without it the export writes a 0-byte file and exits 1, which under CI's
+    `bash -e` fails the whole job and silently freezes the site."""
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    n = export_html(db, buf, only_season="s10")
+    assert n == 1, "expected the S9 division to render as the fallback"
+    assert [v["label"] for v in _payload(buf)["views"]] == ["EMEA Master"]
+
+
+def test_pinned_season_wins_whenever_it_has_data(db: Database) -> None:
+    """The fallback must never override an explicit pin that CAN be satisfied."""
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season",
+                         "s10m": "S10 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    n = export_html(db, buf, only_season="s9")
+    assert n == 1
+    assert list(_payload(buf)["divisions"].keys()) == ["s9m"]
+
+
+def test_payload_names_the_season_it_rendered(db: Database) -> None:
+    """The page can render a season other than the pinned one (export_html falls
+    back when the pin has no data yet), so the label has to come from the data
+    rather than from the flag - otherwise a fallback is silent."""
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    data = _payload(buf)
+    assert data["season"] == "s9"
+    assert data["next_season_start"] == NEXT_SEASON_START
+
+
+def test_sa_and_oce_are_supported_regions() -> None:
+    """S10 adds SA Master and OCE Master. _region_of already matches whole
+    words, so the only thing standing in the way is the tuple."""
+    from faceit_sync.export import REGIONS, _region_of
+
+    assert REGIONS == ("EMEA", "NA", "SA", "OCE")
+    assert _region_of("S10 SA Master Central - Regular Season") == "SA"
+    assert _region_of("S10 OCE Master Central - Regular Season") == "OCE"
+    # Whole-word matching, still: a region name must not match inside a word.
+    assert _region_of("S10 CANADA Master - Regular Season") is None
+
+
+def test_single_division_region_gets_no_combined_view(db: Database) -> None:
+    """A "Combined" view over one division is the same division twice. SA and
+    OCE ship one tier each, so this is their normal case, not an edge one."""
+    _seed_divisions(db, {"oce": "S10 OCE Master Central - Regular Season",
+                         "em": "S10 EMEA Master Central - Regular Season",
+                         "ee": "S10 EMEA Expert Central - Regular Season"})
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    labels = [v["label"] for v in _payload(buf)["views"]]
+    assert "EMEA Combined" in labels
+    assert "OCE Combined" not in labels
+
+
+def test_region_filter_resolves_every_region_by_name(db: Database) -> None:
+    """--region matched on a first-letter prefix, which with four regions is one
+    addition away from resolving the wrong one - and a wrong region narrows the
+    export silently rather than failing."""
+    _seed_divisions(db, {"sam": "S10 SA Master Central - Regular Season",
+                         "em": "S10 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    n = export_html(db, buf, only_region="sa", only_season="s10")
+    assert n == 1
+    assert [v["label"] for v in _payload(buf)["views"]] == ["SA Master"]
 
 
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):

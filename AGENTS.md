@@ -207,14 +207,24 @@ canonical and this copy is the bug.
 - **Captures are season-scoped** (`data/captures/s9/`). Two writers key off a
   per-season constant each: `CURRENT_SEASON` in `infra/upload-worker/worker.js`
   and `CONTRIB_DIR` in `owdb/contribute.py`. At the cutover, follow
-  `specs/2026-08-10-season10-cutover-design.md` rather than improvising.
+  `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
+  **start at its §6**, which records what already shipped and resequences the
+  runbook. The two writers must move in the same change: a Worker writing to
+  `s10/` while CI still merges `s9/` silently drops every contribution.
 - **Coverage expands at the S10 cutover, not before** — §5 of that design.
   Target: EMEA + NA Master/Expert/Advanced, SA Master, OCE Master; Open and
   Intermediate deliberately excluded. Only three divisions are actually
   missing (NA Advanced, SA Master, OCE Master) = +37% data, page 8.7 → 11.9 MB.
   The SA/OCE region support is a four-line code change that is **inert until a
   SA/OCE championship exists**, so land it early and keep it off the cutover
-  critical path. Size divisions with the validated formulas in that section —
+  critical path. It **landed 2026-08-27** and is inert until a SA/OCE
+  championship exists, so what remains is seeds, not code.
+  `tools/build_capture_data.py` keeps its own `REGIONS` copy; a test now pins it
+  to `export.REGIONS`, because a region on the site but not in the feed is a
+  division missing from the capture app's dropdown with nothing to say so.
+  Intermediate is deliberately NOT in scope at the boundary — it is new, its
+  team count is unknown, and it is seeded in week 1 of S10 instead, when it is
+  countable and there is still nothing to back-crawl. Size divisions with the validated formulas in that section —
   Master is `n(n-1)/2` exactly, every other tier is 7.43 matches/team, Open is
   3.16 — rather than re-estimating.
 - **`mypy` covers `faceit_sync` only.** `owdb` is not in the must-stay-clean
@@ -224,6 +234,29 @@ canonical and this copy is the bug.
   segment 404s.
 
 ## Roadmap
+
+### Season state (2026-08-27)
+
+**Season 9 is over** — last match 2026-08-17 — and **Season 10 starts Monday
+7 September 2026, 01:00 BST.** The league feed is empty until S10 games are
+played: all 4,456 coded S9 games predate the 2026-08-18 wipe, so nothing in S9
+is replayable and `docs/capture/data.json` carries `codes: 0`. CI's daily runs
+are healthy; a quiet commit log is no-change runs, not a break.
+
+The readiness work is **done** (2026-08-27, `specs/2026-08-27-season10-readiness-plan.md`):
+Season 9 is frozen at `docs/s9/` behind `docs/archive.html`, SA/OCE are
+supported regions, the page labels the season it rendered and explains a
+finished one, and a pinned season with no data now falls back to the newest
+season that has some — so `--season` can be flipped at any time and the site
+switches itself over on the first ingested S10 match.
+
+**The cutover itself has NOT happened.** It is three lines plus a human
+`wrangler deploy`, written out verbatim in
+`specs/2026-08-10-season10-cutover-design.md` §6.4 group C. Only the export line
+is protected by the fallback: move the merge dir and `CURRENT_SEASON` with it,
+or every team's Season 9 comps attach to their Season 10 page by team id. What
+is left is seeds — which nothing can automate — and that one commit. Open items:
+`specs/BACKLOG.md` § "Added 2026-08-27".
 
 ### Priorities (ordered)
 
@@ -315,8 +348,11 @@ audiences if the analytics are strong enough.
 - **Branding is "OWDB"**, on **owdb.io** (registered 2026-08-09), with the upload
   Worker on `upload.owdb.io`. The rename from "OW Scout" / `owscout` is complete
   in code, CLI, and copy; the browser IndexedDB name `owscout-capture` is
-  deliberately kept until the Season 10 cutover, since renaming it would orphan
-  every contributor's local data.
+  kept **permanently**. It is invisible to users — it appears in no UI, URL or
+  document — and renaming it orphans every contributor's learned refs, unsent
+  captures and scrim history for no gain. The old promise to revisit it at the
+  Season 10 cutover was closed as won't-do on 2026-08-27; do not re-open it at a
+  season boundary.
 - **Do not overengineer unless expandability requires it.** The dashboard is
   modularised into concatenated static parts under `faceit_sync/dashboard/` —
   land new features in the right part file rather than growing one string.

@@ -1,6 +1,6 @@
 # OWDB — backlog
 
-Compiled 2026-08-01; updated 2026-08-07 (post-playoffs audit). Everything the
+Compiled 2026-08-01; updated 2026-08-27 (end of Season 9 — newest section last). Everything the
 project is tracking but is not (yet) a dated plan/design spec. Items move out
 of here into `specs/<date>-<topic>-*` docs when they get scoped for
 implementation.
@@ -395,3 +395,90 @@ Overview already is), keeping the league-wide count as a separate signal.
 
 `specs/2026-08-05-draft-sim-explainable-*.md` is the design reference for the
 current (explainable) draft sim.
+
+---
+
+## Added 2026-08-27 — end of Season 9
+
+S9 finished 2026-08-17. **Season 10 starts Monday 7 September 2026, 01:00
+BST.** Full analysis and the cutover runbook live in
+`specs/2026-08-10-season10-cutover-design.md` §6; the readiness work that
+executed off it is `specs/2026-08-27-season10-readiness-plan.md`. Do not
+re-derive any of this — those documents carry the evidence.
+
+### Shipped 2026-08-27 — do not re-plan
+
+- **Season fallback + season label.** A pinned season with no data used to write
+  a 0-byte `index.html` and exit 1, which under CI's `bash -e` failed the whole
+  job and froze the site silently. It now falls back to the newest season with
+  data, so the pin can be flipped at any time and the site switches itself over
+  on the first ingested S10 match. The page labels the season it actually
+  rendered, so a fallback is visible rather than silent.
+- **Season-state note.** Between seasons there is nothing to capture and the
+  hero slot rendered empty, which reads as a broken site. It now explains the
+  wipe, and names the next season's start date until that date passes.
+- **SA and OCE regions.** Inert until such a championship exists. `--region` now
+  matches region names exactly rather than by first letter, and the capture
+  feed's separate `REGIONS` copy is test-pinned to the exporter's.
+- **Season 9 frozen** at `docs/s9/`, indexed by `docs/archive.html`, linked from
+  every page footer. Built from CI's DB, never the local one.
+- **IndexedDB rename closed as won't-do.** `owscout-capture` is kept
+  permanently; `AGENTS.md` records a decision, not a deadline.
+- **Relegation ingest: skipped**, operator's decision. The window has closed
+  regardless — 0 of the 4,456 coded S9 games finished after the 2026-08-18 wipe,
+  so nothing in Season 9 is replayable any more.
+
+### P1 — Cross-season player careers (design first)
+
+**Wanted, and worth building BEFORE the cutover rather than after** — the one
+item on this list whose value decays if it lands late. Player pages aggregate
+whatever divisions are in the payload, so the moment the site becomes S10 every
+player restarts from nothing and their S9 record exists only inside the frozen
+archive, at a different URL. A new season is exactly when people look up who
+moved where.
+
+Needs a **design document, not a plan**: the honest implementation cuts against
+the season-scoped export, and the obvious version (ship both seasons inline)
+roughly doubles page weight — the same `--external-data` question the
+Intermediate decision defers. Decide the two together.
+
+### P2 — Operator-gated, around 7 September
+
+- **S10 seed room URLs.** One FACEIT match room per division, collected by hand
+  once rooms exist. There is no automated path: FACEIT's keyless
+  `championships/v1/championships` refuses offset enumeration (verified
+  2026-08-27). Seed NA Advanced, SA Master and OCE Master alongside the existing
+  divisions.
+- **The Intermediate call, in week 1 of S10.** Deferred from the boundary
+  deliberately: Intermediate is new, nobody knows its team count, and at
+  Advanced's size it adds ~2.6 MB/region while at Open's it adds ~6.1 MB — the
+  difference between a 17 MB and a 24 MB page. Week 1 is when it becomes
+  countable and there is still almost nothing to back-crawl.
+- **Register the S10 code-wipe date** when the season-start patch lands
+  (`_SEED_WIPES` only).
+- **The cutover commit itself** — three lines, written out verbatim in the
+  design's §6.4 group C, plus a human `wrangler deploy`. Only the export line is
+  protected by the fallback; the merge dir and `CURRENT_SEASON` must move with
+  it or Season 9 comps attach to Season 10 teams by team id.
+
+### P2 — `team_rosters` in the capture feed is not season-scoped
+
+`tools/build_capture_data.py` builds it from every `round_players` row ever
+ingested, so after the cutover it carries S9 and S10 rosters plus disbanded
+teams. Scrim opponent identification's zero-collision measurement (3-of-5 bar,
+8,356 lineups) was taken on a single season's pool. Scope it to the live season,
+or re-measure before the pool doubles. Design §6.6.
+
+### P3 — `FACEIT_API_KEY`-backed championship discovery
+
+Every season, seeding costs a manual hunt for one room URL per division. The
+Data API's `organizers/{id}/championships` would list them directly; organizer
+id `f0e8a591-08fd-4619-9d59-d97f0571842e`. Worth it only if manual seeding
+actually hurts — CI needs no key today, and adding one is a new operational
+dependency.
+
+### Decision, not a task — open scrim mode for the off-season?
+
+Both scrim pages ship locked behind `?unlock=scrimbeta`. **Asked and answered
+2026-08-27: keep it locked for now**, revisit when phase 2 (opponent
+identification / roster search) is complete.

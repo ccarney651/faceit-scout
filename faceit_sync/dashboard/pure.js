@@ -147,6 +147,51 @@ function coverageState(total, scoutable, done, wipe){
   return {kind:'partial', lost, text:''};
 }
 
+// 's10' -> 'Season 10'. The page renders whichever season it actually built
+// from, which is not necessarily the one the --season flag names: the exporter
+// falls back when the pin has no data yet. So this reads the data, and a
+// fallback shows up in the header instead of passing unnoticed.
+function seasonLabel(season){
+  const m=/^s(\d+)$/i.exec(String(season||''));
+  return m ? `Season ${m[1]}` : '';
+}
+
+// '2026-09-07' -> '7 September'. Deliberately no year: this only ever names a
+// date within the next few weeks.
+function longDate(iso){
+  const MONTHS=['January','February','March','April','May','June','July',
+                'August','September','October','November','December'];
+  const p=String(iso||'').split('-');
+  if(p.length!==3) return '';
+  const mon=MONTHS[parseInt(p[1],10)-1];
+  return mon ? `${parseInt(p[2],10)} ${mon}` : '';
+}
+
+// The one line under the hero copy explaining where the season stands, for the
+// weeks when there is nothing to capture. The wipe note owns this slot whenever
+// live codes exist, so this is '' in the normal case.
+//
+// Between seasons the funnel is dead by construction: every code from the
+// season that just ended predates the patch that ended it, and no amount of
+// scouting recovers one. The page used to render an empty slot there, which
+// reads as a broken site rather than a finished season. A start date already
+// past is dropped rather than advertised.
+function seasonNote(season, liveCodes, nextStartISO, todayISO){
+  if(liveCodes) return '';
+  const label=seasonLabel(season);
+  if(!label) return '';
+  const next=seasonLabel('s'+(parseInt(String(season).slice(1),10)+1));
+  const wiped=`${label} has finished — every replay code from it was wiped by `
+    + `an Overwatch patch, so there is nothing left to capture.`;
+  // The start date is only worth naming while it is still ahead. Past it the
+  // sentence has to stand alone, because this page is also what gets frozen as
+  // a season archive: a promise about what appears "here" would be read years
+  // later on a page where nothing will ever appear again.
+  return (nextStartISO && todayISO && todayISO < nextStartISO)
+    ? `${wiped} ${next} starts ${longDate(nextStartISO)}.`
+    : wiped;
+}
+
 // Which division to open on, given the one remembered from last visit. With more
 // than one region live, always opening VIEWS[0] (EMEA Master) makes every NA
 // visitor re-pick their region on every visit.

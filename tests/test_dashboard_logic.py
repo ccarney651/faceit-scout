@@ -1850,3 +1850,46 @@ def test_player_season_reports_an_unknown_nick_as_not_found(tmp_path) -> None:
     """, tmp_path)
     assert got["found"] is False
     assert got["current"] is None and got["teams"] == []
+
+
+# --- season labelling ------------------------------------------------------
+# The page can render a season other than the pinned one (export_html falls back
+# when the pin has no data yet), so the label is derived from the data. And
+# between seasons there is nothing to capture at all: every code from the season
+# that just ended predates the wipe that ended it. The page never said that out
+# loud, so an off-season visitor saw a dead capture funnel and no explanation.
+
+def test_season_label_reads_as_prose(tmp_path) -> None:
+    got = _run("return [seasonLabel('s10'), seasonLabel('s9'), seasonLabel(null)];",
+               tmp_path)
+    assert got == ["Season 10", "Season 9", ""]
+
+
+def test_season_note_is_silent_while_codes_are_live(tmp_path) -> None:
+    """The wipe note owns this slot whenever there is something to capture."""
+    got = _run("return seasonNote('s9', 12, '2026-09-07', '2026-08-27');", tmp_path)
+    assert got == ""
+
+
+def test_season_note_explains_a_finished_season(tmp_path) -> None:
+    got = _run("return seasonNote('s9', 0, '2026-09-07', '2026-08-27');", tmp_path)
+    assert "Season 9" in got
+    assert "Season 10" in got
+    assert "7 September" in got
+
+
+def test_season_note_stops_promising_a_date_once_it_passes(tmp_path) -> None:
+    """Past the start date the sentence has to stand alone. This page is also
+    what gets frozen as a season archive, so anything it says about what happens
+    next is still on screen years later, on a page where nothing happens next."""
+    got = _run("return seasonNote('s9', 0, '2026-09-07', '2026-09-09');", tmp_path)
+    assert "wiped" in got and "Season 9" in got
+    assert "Season 10" not in got, (
+        "a frozen archive must not carry a claim about a later season")
+    assert "7 September" not in got, \
+        "a date in the past must not be advertised as upcoming"
+
+
+def test_season_note_is_silent_with_no_season_to_name(tmp_path) -> None:
+    got = _run("return seasonNote(null, 0, '2026-09-07', '2026-08-27');", tmp_path)
+    assert got == ""

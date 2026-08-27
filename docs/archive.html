@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<script>
+// Apply the remembered palette before first paint (no flash). Shares the
+// dashboard's owdb.palette localStorage key across the origin — pick a palette
+// on any page and it carries to the others.
+(function(){try{
+  var p=localStorage.getItem('owdb.palette');
+  if(['violet','ocean','forest','sunset','teal','overwatch'].indexOf(p)>=0) document.documentElement.setAttribute('data-palette',p);
+  else document.documentElement.setAttribute('data-palette','original');
+}catch(e){}})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>owdb &mdash; Past seasons</title>
+<meta name="description" content="Frozen end-of-season snapshots of the owdb FACEIT League scouting site.">
+<meta name="theme-color" content="#0d1015">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230d1015'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='17'%20fill='none'%20stroke='%238087ff'%20stroke-width='5'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='4.5'%20fill='%238087ff'/%3E%3C/svg%3E">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="topbar"><div class="topbar-in"><div class="toprow">
+  <div class="brand"><span class="prodname"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">Past seasons</span></span></div>
+  <div class="sidebox"><div class="sidetoggle"><a href="./">Current season</a></div></div>
+</div></div></div>
+
+<main style="max-width:760px;margin:28px auto;padding:0 20px">
+  <div class="card">
+    <p class="eyebrow">Past seasons</p>
+    <p class="note">Each finished season is frozen exactly as it stood when the
+    last match was played, at its own address, and never rebuilt. Read them as
+    history rather than as scouting: the rosters are the ones that played, not
+    the ones that exist now, and the replay codes they link to were invalidated
+    by later Overwatch patches.</p>
+    <p style="margin-top:14px"><a class="btn" href="s9/" style="text-decoration:none">Season 9 &rarr;</a></p>
+    <p class="note" style="margin-top:8px">Ran to 17 August 2026. EMEA Master,
+    Expert and Advanced; NA Master and Expert &mdash; regular seasons and
+    playoffs, with every capture contributed during the season.</p>
+  </div>
+</main>
+
+<footer style="max-width:760px;margin:32px auto 20px;padding:16px 20px;border-top:1px solid var(--line);color:var(--faint);font-size:12px;line-height:1.6">
+  <b style="color:var(--muted)">owdb</b> &mdash; community Overwatch 2 scouting for the FACEIT League.
+  Not affiliated with, endorsed by, or sponsored by FACEIT or Blizzard Entertainment.
+  Overwatch is a trademark of Blizzard Entertainment.
+</footer>
+</body>
+</html>

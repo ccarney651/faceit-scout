@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from . import __version__
 from .client import FaceitClient
 from .db import Database
-from .export import export_csv, export_html, export_json, team_stats
+from .export import REGIONS, export_csv, export_html, export_json, team_stats
 from .sync import DEFAULT_BACKFILL_DAYS, EnumerationError, SyncEngine
 
 log = logging.getLogger("faceit_sync")
@@ -232,7 +232,9 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--format", choices=("csv", "json", "html"), required=True)
     e.add_argument("--tier", choices=("master", "expert", "advanced", "open"), default=None,
                    help="restrict the HTML dashboard to one skill tier (default: all)")
-    e.add_argument("--region", choices=("emea", "na"), default=None,
+    # Derived from export.REGIONS rather than restated, so a new region cannot
+    # ship on the site while the CLI still refuses to name it.
+    e.add_argument("--region", choices=tuple(r.lower() for r in REGIONS), default=None,
                    help="restrict the HTML dashboard to one region (default: all)")
     e.add_argument("--season", default=None,
                    help="restrict the HTML dashboard to one season, e.g. 's9' (default: all)")
