@@ -1879,8 +1879,13 @@ def test_season_note_explains_a_finished_season(tmp_path) -> None:
 
 
 def test_season_note_stops_promising_a_date_once_it_passes(tmp_path) -> None:
+    """Past the start date the sentence has to stand alone. This page is also
+    what gets frozen as a season archive, so anything it says about what happens
+    next is still on screen years later, on a page where nothing happens next."""
     got = _run("return seasonNote('s9', 0, '2026-09-07', '2026-09-09');", tmp_path)
-    assert "Season 10" in got
+    assert "wiped" in got and "Season 9" in got
+    assert "Season 10" not in got, (
+        "a frozen archive must not carry a claim about a later season")
     assert "7 September" not in got, \
         "a date in the past must not be advertised as upcoming"
 

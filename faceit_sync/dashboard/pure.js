@@ -181,13 +181,15 @@ function seasonNote(season, liveCodes, nextStartISO, todayISO){
   const label=seasonLabel(season);
   if(!label) return '';
   const next=seasonLabel('s'+(parseInt(String(season).slice(1),10)+1));
-  if(nextStartISO && todayISO && todayISO < nextStartISO){
-    return `${label} has finished — every replay code from it was wiped by an `
-      + `Overwatch patch, so there is nothing left to capture. `
-      + `${next} starts ${longDate(nextStartISO)}.`;
-  }
-  return `${label} has finished. ${next} replay codes will appear here once `
-    + `matches are played.`;
+  const wiped=`${label} has finished — every replay code from it was wiped by `
+    + `an Overwatch patch, so there is nothing left to capture.`;
+  // The start date is only worth naming while it is still ahead. Past it the
+  // sentence has to stand alone, because this page is also what gets frozen as
+  // a season archive: a promise about what appears "here" would be read years
+  // later on a page where nothing will ever appear again.
+  return (nextStartISO && todayISO && todayISO < nextStartISO)
+    ? `${wiped} ${next} starts ${longDate(nextStartISO)}.`
+    : wiped;
 }
 
 // Which division to open on, given the one remembered from last visit. With more

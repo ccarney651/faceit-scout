@@ -34,7 +34,10 @@ DOCS = Path(__file__).resolve().parents[1] / "docs"
 # at its source instead.
 # Matched on the path, not the basename: docs/capture/index.html is a real
 # hand-authored page and an earlier draft of this filter silently excluded it.
-GENERATED = {"index.html"}
+# Frozen season archives (docs/s9/index.html, ...) are the same file one step
+# further along: generated from the same template and then deliberately never
+# rebuilt, so a finding against one could not be acted on even in principle.
+GENERATED = {"index.html"} | {f"s{n}/index.html" for n in range(1, 30)}
 
 PAGES = sorted(p for p in DOCS.rglob("*.html")
                if p.relative_to(DOCS).as_posix() not in GENERATED)

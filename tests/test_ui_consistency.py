@@ -36,7 +36,10 @@ DASHBOARD = ROOT / "faceit_sync" / "dashboard"
 # CI regenerates docs/index.html from faceit_sync/dashboard/head.html on every
 # run, so a finding there would be reported against a file nobody edits. The
 # dashboard is covered at its source instead — head.html is in PAGES below.
-GENERATED = {"index.html"}
+# Frozen season archives (docs/s9/index.html, ...) are the same file one step
+# further along: generated from the same template and then deliberately never
+# rebuilt, so a finding against one could not be acted on even in principle.
+GENERATED = {"index.html"} | {f"s{n}/index.html" for n in range(1, 30)}
 
 PAGES = sorted(
     [p for p in DOCS.rglob("*.html") if p.relative_to(DOCS).as_posix() not in GENERATED]
@@ -225,3 +228,10 @@ def test_custom_property_fallbacks_match_the_token(page: Path) -> None:
         f"{rel(page)} has custom-property fallbacks that disagree with the "
         f"token; drop the fallback or match it:\n  " + "\n  ".join(stale)
     )
+
+
+def test_frozen_season_archives_are_excluded_from_page_checks() -> None:
+    """A frozen archive is a generated export that is then deliberately never
+    rebuilt, so a finding against one could not be acted on even in principle -
+    docs/index.html's reasoning, one step further along."""
+    assert "s9/index.html" in GENERATED
