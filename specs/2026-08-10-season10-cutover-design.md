@@ -320,6 +320,34 @@ them.
 9. After the first crawl, confirm SA and OCE appear in the region switcher and
    that neither gets a spurious "Combined" view.
 
+**The group C change in full** — three lines, one commit, then a human deploy:
+
+```
+.github/workflows/update.yml:136
+-  ... contribute merge --dir data/captures/s9 --out owdb_comps.json ...
++  ... contribute merge --dir data/captures/s10 --out owdb_comps.json ...
+
+.github/workflows/update.yml:149
+-  faceit-sync --db faceit.sqlite3 export --season s9 ... --out docs/index.html
++  faceit-sync --db faceit.sqlite3 export --season s10 ... --out docs/index.html
+
+infra/upload-worker/worker.js:35
+-  const CURRENT_SEASON = "s9";
++  const CURRENT_SEASON = "s10";
+```
+
+Then `wrangler deploy`, by the human.
+
+**Only the export line is protected by the fallback** (shipped 2026-08-27): a
+pinned season with no data falls back to the newest season that has some, so
+flipping that line alone is safe at any time and the site switches itself over
+on the first ingested S10 match. The merge line is *not* protected and must not
+move early — teams persist across seasons by FACEIT team id, so merging
+`data/captures/s9` while the site renders S10 attaches every team's Season 9
+comps to their Season 10 page, which is the exact hazard season-scoped captures
+exist to prevent. Move the merge line and `CURRENT_SEASON` together, when the
+site is actually showing S10.
+
 ### 6.5 Relegation matches are not ingested, and their codes are alive
 
 **New gap, found 2026-08-27.** The keyless crawler enumerates

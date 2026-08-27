@@ -789,8 +789,9 @@ rm ./owdb_comps.json
 and then removed. **Never commit it** (invariant 6) — confirm with `git status`
 before staging that only `docs/s9/index.html` is new.
 
-Expected: `wrote docs/s9/index.html (N division(s))` with N = 6, and a file of
-roughly 8–9 MB. If N is smaller, the merge or the DB is wrong — stop and find out
+Expected: `wrote docs/s9/index.html (N division(s))` with N = 5 (EMEA
+Master/Expert/Advanced + NA Master/Expert; playoff championships attach to their
+division rather than counting as one), and a file of roughly 9 MB. If N is smaller, the merge or the DB is wrong — stop and find out
 why rather than committing a partial season.
 
 - [ ] **Step 6: Write `docs/archive.html`**
@@ -977,7 +978,6 @@ into `_seed_divisions`/`_payload` in Task 1; and the `pure.js` helpers are teste
 from `tests/test_dashboard_logic.py`, which executes them under node from pytest
 via `_run` — there is no JS-native test runner in this repo.
 
-**Remaining soft spot.** Task 4 step 5's expected division count (6) comes from
-the CI DB as of 2026-08-24. Sanity-check it against what the export actually
+**Remaining soft spot.** Task 4 step 5's division count was corrected to 5 during execution. Sanity-check it against what the export actually
 prints rather than asserting it blindly; a smaller number means the merge or the
 DB is wrong, and a partial season must not be frozen.
