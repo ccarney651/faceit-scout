@@ -540,6 +540,65 @@ def test_season_filter_narrows_the_export(db: Database) -> None:
     assert list(data["divisions"].keys()) == ["s9m"]
 
 
+def _seed_divisions(db: Database, names: dict[str, str]) -> None:
+    """One finished match per championship, so each name becomes a division with
+    data. Keys are championship ids, values the FACEIT championship names."""
+    c = db.conn
+    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
+        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+    for cid, nm in names.items():
+        c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+                  (cid, nm, "ow2"))
+        _insert_match(db, cid, f"m-{cid}", "FINISHED", "t1", "t2", "faction1", None,
+                      "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
+    db.conn.commit()
+
+
+def _payload(buf: io.StringIO) -> dict:
+    """The inlined data blob, as the existing filter tests read it."""
+    return json.loads(re.search(r"var __OWDB_DATA__=(\{.*\});", buf.getvalue())
+                      .group(1).replace("<\\/", "</"))
+
+
+def test_newest_season_picks_the_highest_number() -> None:
+    from faceit_sync.export import _newest_season
+
+    names = ["S9 EMEA Master Central - Regular Season",
+             "S10 EMEA Master Central - Regular Season"]
+    assert _newest_season(names) == "s10"
+    # Lexically "s9" > "s10"; the compare must be numeric.
+    assert _newest_season(reversed(names)) == "s10"
+    assert _newest_season(["Winter Finale Cup", None]) is None
+    assert _newest_season([]) is None
+
+
+def test_pinned_season_with_no_data_falls_back_to_the_newest(db: Database) -> None:
+    """The days either side of a season boundary: the pin names a season that
+    exists as an intention but not yet as data. Falling back keeps the site live
+    and lets it switch over by itself on the first ingested match.
+
+    Without it the export writes a 0-byte file and exits 1, which under CI's
+    `bash -e` fails the whole job and silently freezes the site."""
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    n = export_html(db, buf, only_season="s10")
+    assert n == 1, "expected the S9 division to render as the fallback"
+    assert [v["label"] for v in _payload(buf)["views"]] == ["EMEA Master"]
+
+
+def test_pinned_season_wins_whenever_it_has_data(db: Database) -> None:
+    """The fallback must never override an explicit pin that CAN be satisfied."""
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season",
+                         "s10m": "S10 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    n = export_html(db, buf, only_season="s9")
+    assert n == 1
+    assert list(_payload(buf)["divisions"].keys()) == ["s9m"]
+
+
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):
     """The dashboard renders its whole body in JS, so ONE syntax error (e.g. a
     duplicate `const`) yields a completely blank page — which balanced-bracket

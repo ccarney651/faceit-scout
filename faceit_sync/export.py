@@ -5,10 +5,11 @@ from __future__ import annotations
 import csv
 import html
 import json
+import logging
 import os
 import re
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
@@ -18,6 +19,8 @@ from .hero_icons import load_hero_icons
 from .models import is_playoff_name
 from .subroles import SEAT_ORDER, seat_of
 from .team_logos import build_team_logos
+
+log = logging.getLogger("faceit_sync")
 
 # On mirrored modes (Control, Flashpoint, Push) the sides are symmetric, so which
 # team "attacks first" is competitively meaningless. Attack-order only matters on
@@ -545,6 +548,17 @@ def _season_of(name: str | None) -> str | None:
     return f"s{m.group(1)}" if m else None
 
 
+def _newest_season(names: Iterable[str | None]) -> str | None:
+    """The highest-numbered season across these championship names.
+
+    Compared numerically, not lexically: sorted as strings 's9' beats 's10',
+    which would pin the site to the season that just ended for as long as both
+    are in the database.
+    """
+    seasons = {s for s in (_season_of(n) for n in names) if s}
+    return max(seasons, key=lambda s: int(s[1:]), default=None)
+
+
 def _is_playoff(name: str | None) -> bool:
     """A playoff/knockout championship, separate from the '... - Regular Season'
     divisions. Its matches feed the Playoffs tab as real results but must NOT
@@ -585,7 +599,24 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         if want_region:
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
         if want_season:
-            rows = [r for r in rows if _season_of(r["name"]) == want_season]
+            seasoned = [r for r in rows if _season_of(r["name"]) == want_season]
+            if seasoned:
+                rows = seasoned
+            else:
+                # The pinned season exists as an intention but not yet as data -
+                # the days either side of a season boundary. Falling back to the
+                # newest season that DOES have matches keeps the site live, and
+                # switches it over by itself on the first ingested match of the
+                # new season, with no second manual step at an hour nobody is
+                # watching. Without this the export writes a 0-byte file and
+                # exits 1, which under CI's `bash -e` fails the whole job.
+                # An explicit pin always wins when it has data; this only ever
+                # covers the gap.
+                fallback = _newest_season([r["name"] for r in rows])
+                log.warning("season %s has no data yet - falling back to %s",
+                            want_season, fallback or "(no season could be parsed)")
+                rows = ([r for r in rows if _season_of(r["name"]) == fallback]
+                        if fallback else [])
         cids = [str(r["id"]) for r in rows]
 
     # Split off playoff championships: they become the Playoffs tab's real results
