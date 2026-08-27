@@ -1,10 +1,11 @@
 # Season 10 cutover — design
 
 **Date:** 2026-08-10
-**Status:** partly shipped; the rest is blocked on S10 seeds.
+**Status:** all code shipped; what remains is blocked on S10 seeds.
 See **§6 — Status at the end of Season 9 (2026-08-27)** before acting on
-anything below: sections 1 and 3 are live, section 4's runbook has moved and
-been resequenced, and section 5 has not landed.
+anything below. §6.4 group A is complete as of 2026-08-27 (frozen archive,
+SA/OCE regions, the season fallback and label, and two decisions closed);
+groups B and C wait on S10 rooms and S10 results respectively.
 
 ## Goal
 
@@ -226,10 +227,11 @@ and the commit history on 2026-08-27:
 | Section | State |
 |---|---|
 | §1 season filtering | **Live.** `_season_of` + `--season` exist, with word-boundary tests in `tests/test_export.py`. CI pins the live export to `--season s9`, not `s10` — deliberately, see §6.3. |
-| §2 frozen archive | **Not started.** No `docs/s9/`, no `docs/archive.html`. Now unblocked — see §6.4. |
+| §2 frozen archive | **Shipped 2026-08-27.** `docs/s9/index.html` (5 divisions, 274 captured comps) and `docs/archive.html`, linked from every page footer. Built from CI's DB, per the correction in §6.4. |
 | §3 capture season-scoping | **Live and deployed.** `CURRENT_SEASON = "s9"` in `worker.js`; the merge step reads `data/captures/s9`; the `git mv` happened in `705aa77`; contributions since (`2caffc1`) land under `data/captures/s9/`, which is the proof the Worker was actually deployed. |
 | §4 runbook | **Moved.** It is this document, not `CLAUDE.md` — the 2026-08-11 documentation refactor emptied `CLAUDE.md`, and `AGENTS.md` now points here. Resequenced in §6.4. |
-| §5 coverage expansion (SA/OCE regions) | **Not landed.** `REGIONS` in `faceit_sync/export.py` is still `("EMEA", "NA")`, `--region` still offers only `emea`/`na`, and `want_region` is still the `startswith("e")`/`startswith("n")` pair the section says to generalise. `tools/build_capture_data.py` carries its own `REGIONS` copy that must move with it. This was meant to land early precisely so it would not be on the critical path; it is now the one piece of cutover code still outstanding, and it is still inert until a SA/OCE championship exists. |
+| §5 coverage expansion (SA/OCE regions) | **Code shipped 2026-08-27**, seeds outstanding. `REGIONS` is `("EMEA", "NA", "SA", "OCE")`, `--region` matches region names exactly instead of by first letter, and `tools/build_capture_data.py`'s separate copy is pinned to the exporter's by a test. Inert until a SA/OCE championship exists, so what remains is seeds (group B), not code. |
+| §6.3 day-one flip | **Shipped 2026-08-27.** A pinned season with no data falls back to the newest season that has some, so the export pin can be flipped at any time. The page now labels the season it actually rendered, so a fallback is visible rather than silent. |
 
 ### 6.2 The site is in an off-season trough, and it degrades correctly
 
@@ -273,29 +275,40 @@ case the flag was built for.
 Replaces §4's single ordered list. Same steps, grouped by what actually gates
 them.
 
-**A. Unblocked today — nothing here waits on S10.**
+**A. Unblocked today — ALL DONE 2026-08-27.** Kept for the reasoning; the plan
+that executed them is `specs/2026-08-27-season10-readiness-plan.md`.
 
-1. **Build the frozen S9 archive** (§2). S9 is final, so this can be done now and
-   never needs redoing. **Correction to §2:** do not build it from the local
+1. ~~**Build the frozen S9 archive**~~ (§2) — **done.** `docs/s9/index.html`
+   (5 divisions) and `docs/archive.html`, linked from every page footer.
+   **The correction that mattered:** it must NOT be built from the local
    `faceit.sqlite3` — that copy is routinely days behind and invariant 2 forbids
-   exporting from it. Build from CI's copy instead:
+   exporting from it. The recipe, for the next season:
    `gunzip -c docs/faceit.sqlite3.gz > s9.sqlite3`, merge
-   `owdb contribute merge --dir data/captures/s9 --out owdb_comps_s9.json`
-   against it, then `faceit-sync --db s9.sqlite3 export --season s9 --format html
-   --out docs/s9/index.html`. Commit `docs/s9/**` and `docs/archive.html`; never
-   `owdb_comps_s9.json` (invariant 6).
-2. **Land the SA/OCE region change** (§5). Inert until a SA/OCE championship
-   exists, so it carries no risk to the live S9 site, and it is the one thing
-   that would otherwise be written under time pressure on cutover day. Remember
-   `tools/build_capture_data.py`'s own `REGIONS` copy.
-3. **Decide the IndexedDB rename.** `owscout-capture` was kept "until the Season
-   10 cutover" (Conventions, `AGENTS.md`) because renaming orphans every
-   contributor's local data. That reasoning has not changed with the season — the
-   name is invisible to users, and a rename buys tidiness at the cost of every
-   scout's learned refs and unsent captures. The recommendation is to **close it
-   as won't-do** and delete the deadline from `AGENTS.md`, rather than let a dated
-   promise trigger a data-losing rename.
-4. **Answer the relegation question** — time-critical, see §6.5.
+   `owdb contribute merge --dir data/captures/s9 --out owdb_comps.json` against
+   it, then `faceit-sync --db s9.sqlite3 export --season s9 --format html --out
+   docs/s9/index.html`. Commit `docs/s9/**`; never `owdb_comps.json`
+   (invariant 6). Both page-glob test suites exclude `s<n>/index.html` for the
+   same reason they exclude `docs/index.html`.
+2. ~~**Land the SA/OCE region change**~~ (§5) — **done**, including
+   `tools/build_capture_data.py`'s own `REGIONS` copy, now pinned to the
+   exporter's by a test. `--region` also stopped matching on a first-letter
+   prefix, which with four regions was one addition away from silently resolving
+   the wrong one.
+3. ~~**Decide the IndexedDB rename**~~ — **closed as won't-do.** The name is
+   invisible to users and renaming orphans every contributor's learned refs,
+   unsent captures and scrim history. `AGENTS.md` now records a decision rather
+   than a deadline; do not re-open it at a season boundary.
+4. ~~**Answer the relegation question**~~ (§6.5) — **decided: skip entirely.**
+   Operator's call. S9 standings stay the record and S10 division membership
+   becomes visible once S10 is crawled. Note for the record that the window has
+   since closed either way: 0 of the 4,456 coded S9 games finished after the
+   2026-08-18 wipe, so nothing in S9 is replayable any more.
+
+Added by the same pass, not in the original plan: **the day-one flip guard**
+(§6.3). The operator's decision was to flip the site to S10 on day one, and
+testing that against CI's DB showed it wrote a 0-byte file and exited 1, failing
+the whole CI job under `bash -e`. The pin now falls back to the newest season
+with data, and the page labels the season it actually rendered.
 
 **B. Gated on S10 rooms existing (operator collects seeds).**
 

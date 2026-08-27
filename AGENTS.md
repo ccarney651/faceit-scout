@@ -217,9 +217,14 @@ canonical and this copy is the bug.
   missing (NA Advanced, SA Master, OCE Master) = +37% data, page 8.7 → 11.9 MB.
   The SA/OCE region support is a four-line code change that is **inert until a
   SA/OCE championship exists**, so land it early and keep it off the cutover
-  critical path — as of 2026-08-27 it still has not landed, and it is the only
-  piece of cutover code outstanding. `tools/build_capture_data.py` keeps its own
-  `REGIONS` copy that has to move with `export.py`'s. Size divisions with the validated formulas in that section —
+  critical path. It **landed 2026-08-27** and is inert until a SA/OCE
+  championship exists, so what remains is seeds, not code.
+  `tools/build_capture_data.py` keeps its own `REGIONS` copy; a test now pins it
+  to `export.REGIONS`, because a region on the site but not in the feed is a
+  division missing from the capture app's dropdown with nothing to say so.
+  Intermediate is deliberately NOT in scope at the boundary — it is new, its
+  team count is unknown, and it is seeded in week 1 of S10 instead, when it is
+  countable and there is still nothing to back-crawl. Size divisions with the validated formulas in that section —
   Master is `n(n-1)/2` exactly, every other tier is 7.43 matches/team, Open is
   3.16 — rather than re-estimating.
 - **`mypy` covers `faceit_sync` only.** `owdb` is not in the must-stay-clean
@@ -232,17 +237,26 @@ canonical and this copy is the bug.
 
 ### Season state (2026-08-27)
 
-**Season 9 is over** — last match 2026-08-17, relegation played since. The
-league feed is empty and stays that way until S10 games are played: every S9
-code predates the 2026-08-18 wipe, so the CI-built `docs/capture/data.json`
-carries `codes: 0` and the capture app has nothing league-side to offer. The
-site degrades correctly (`coverageState()`'s `wiped` branch; the funnel and Most
-wanted withhold themselves), and CI's daily runs are healthy — a quiet commit
-log is no-change runs, not a break. **The cutover has not happened and must not
-be triggered by S9 ending**: flipping the live export to `--season s10` before
-S10 has results would publish an empty site. What to do in the meantime, in
-order, is `specs/2026-08-10-season10-cutover-design.md` §6.4, and the open items
-are `specs/BACKLOG.md` § "Added 2026-08-27".
+**Season 9 is over** — last match 2026-08-17 — and **Season 10 starts Monday
+7 September 2026, 01:00 BST.** The league feed is empty until S10 games are
+played: all 4,456 coded S9 games predate the 2026-08-18 wipe, so nothing in S9
+is replayable and `docs/capture/data.json` carries `codes: 0`. CI's daily runs
+are healthy; a quiet commit log is no-change runs, not a break.
+
+The readiness work is **done** (2026-08-27, `specs/2026-08-27-season10-readiness-plan.md`):
+Season 9 is frozen at `docs/s9/` behind `docs/archive.html`, SA/OCE are
+supported regions, the page labels the season it rendered and explains a
+finished one, and a pinned season with no data now falls back to the newest
+season that has some — so `--season` can be flipped at any time and the site
+switches itself over on the first ingested S10 match.
+
+**The cutover itself has NOT happened.** It is three lines plus a human
+`wrangler deploy`, written out verbatim in
+`specs/2026-08-10-season10-cutover-design.md` §6.4 group C. Only the export line
+is protected by the fallback: move the merge dir and `CURRENT_SEASON` with it,
+or every team's Season 9 comps attach to their Season 10 page by team id. What
+is left is seeds — which nothing can automate — and that one commit. Open items:
+`specs/BACKLOG.md` § "Added 2026-08-27".
 
 ### Priorities (ordered)
 
