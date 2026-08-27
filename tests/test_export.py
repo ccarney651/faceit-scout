@@ -612,6 +612,45 @@ def test_payload_names_the_season_it_rendered(db: Database) -> None:
     assert data["next_season_start"] == NEXT_SEASON_START
 
 
+def test_sa_and_oce_are_supported_regions() -> None:
+    """S10 adds SA Master and OCE Master. _region_of already matches whole
+    words, so the only thing standing in the way is the tuple."""
+    from faceit_sync.export import REGIONS, _region_of
+
+    assert REGIONS == ("EMEA", "NA", "SA", "OCE")
+    assert _region_of("S10 SA Master Central - Regular Season") == "SA"
+    assert _region_of("S10 OCE Master Central - Regular Season") == "OCE"
+    # Whole-word matching, still: a region name must not match inside a word.
+    assert _region_of("S10 CANADA Master - Regular Season") is None
+
+
+def test_single_division_region_gets_no_combined_view(db: Database) -> None:
+    """A "Combined" view over one division is the same division twice. SA and
+    OCE ship one tier each, so this is their normal case, not an edge one."""
+    _seed_divisions(db, {"oce": "S10 OCE Master Central - Regular Season",
+                         "em": "S10 EMEA Master Central - Regular Season",
+                         "ee": "S10 EMEA Expert Central - Regular Season"})
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    labels = [v["label"] for v in _payload(buf)["views"]]
+    assert "EMEA Combined" in labels
+    assert "OCE Combined" not in labels
+
+
+def test_region_filter_resolves_every_region_by_name(db: Database) -> None:
+    """--region matched on a first-letter prefix, which with four regions is one
+    addition away from resolving the wrong one - and a wrong region narrows the
+    export silently rather than failing."""
+    _seed_divisions(db, {"sam": "S10 SA Master Central - Regular Season",
+                         "em": "S10 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    n = export_html(db, buf, only_region="sa", only_season="s10")
+    assert n == 1
+    assert [v["label"] for v in _payload(buf)["views"]] == ["SA Master"]
+
+
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):
     """The dashboard renders its whole body in JS, so ONE syntax error (e.g. a
     duplicate `const`) yields a completely blank page — which balanced-bracket

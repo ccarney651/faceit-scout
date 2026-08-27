@@ -334,11 +334,11 @@ audiences if the analytics are strong enough.
 - **Branding is "OWDB"**, on **owdb.io** (registered 2026-08-09), with the upload
   Worker on `upload.owdb.io`. The rename from "OW Scout" / `owscout` is complete
   in code, CLI, and copy; the browser IndexedDB name `owscout-capture` is
-  deliberately kept until the Season 10 cutover, since renaming it would orphan
-  every contributor's local data. That deadline arrived with S9's end and the
-  reasoning did not change with it; the standing recommendation is to close the
-  rename as won't-do rather than let a dated promise trigger a data-losing
-  migration — cutover design §6.4 step 3.
+  kept **permanently**. It is invisible to users — it appears in no UI, URL or
+  document — and renaming it orphans every contributor's learned refs, unsent
+  captures and scrim history for no gain. The old promise to revisit it at the
+  Season 10 cutover was closed as won't-do on 2026-08-27; do not re-open it at a
+  season boundary.
 - **Do not overengineer unless expandability requires it.** The dashboard is
   modularised into concatenated static parts under `faceit_sync/dashboard/` —
   land new features in the right part file rather than growing one string.

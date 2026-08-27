@@ -127,7 +127,12 @@ def test_divisions_list_is_region_major_and_matches_the_codes(
     payload = _build(monkeypatch, tmp_path)
     assert payload["divisions"] == ["EMEA Master", "NA Expert"]
     assert set(payload["divisions"]) == {c["division"] for c in payload["codes"]}
-    assert payload["regions"] == ["EMEA", "NA"]
+    # Every region the site ships, whether or not this fixture has codes in it:
+    # the app reads this to group the dropdown. Compared against the exporter's
+    # tuple rather than a copy of it, so adding a region cannot leave a stale
+    # literal here asserting the previous season's world.
+    from faceit_sync.export import REGIONS
+    assert payload["regions"] == list(REGIONS)
 
 
 def test_region_of_matches_whole_words_only(
@@ -311,3 +316,16 @@ def test_team_rosters_accumulate_a_squad_across_matches(
     assert {"GameName#1234", "SubPlayer"} <= names, (
         f"t1's roster did not accumulate across matches: {names}"
     )
+
+
+def test_capture_feed_regions_match_the_exporter(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """build_capture_data.py keeps its own REGIONS tuple. A region added to the
+    site but not to the feed is a division missing from the capture app's
+    dropdown, with nothing anywhere to say so."""
+    from faceit_sync.export import REGIONS
+
+    db = tmp_path / "feed.sqlite3"
+    _fixture_db(db, "2026-07-28")
+    mod = _load_tool(monkeypatch, db, tmp_path / "out.json")
+    assert tuple(mod.REGIONS) == REGIONS

@@ -514,7 +514,7 @@ def _tier_of(name: str | None) -> str | None:
     return next((t for t in TIERS if t in name), None)
 
 
-REGIONS: tuple[str, ...] = ("EMEA", "NA")
+REGIONS: tuple[str, ...] = ("EMEA", "NA", "SA", "OCE")
 
 # When the next FACEIT League season's first matches are played. The page says
 # so while the current season is finished and the new one has no data yet, and
@@ -581,7 +581,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
-    (master/expert/advanced/open), ``only_region`` ('emea'/'na') and
+    (master/expert/advanced/open), ``only_region`` ('emea'/'na'/'sa'/'oce') and
     ``only_season`` ('s9', 's10', ...) restrict the dashboard; the DB may hold
     several divisions across tiers, regions and (once a cutover has happened)
     seasons. Returns the number of divisions with data.
@@ -593,7 +593,11 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
     want_region: str | None = None
     if only_region:
         w = only_region.strip().lower()
-        want_region = "EMEA" if w.startswith("e") else "NA" if w.startswith("n") else None
+        # Exact match on the region name, not a first-letter prefix: with four
+        # regions a prefix test is one addition away from resolving the wrong
+        # one, and a wrong region narrows the export silently rather than
+        # failing.
+        want_region = next((r for r in REGIONS if r.lower() == w), None)
     want_season: str | None = only_season.strip().lower() if only_season else None
 
     if championship_id:

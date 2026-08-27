@@ -38,7 +38,7 @@ FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
 OUT = os.environ.get("CAPTURE_OUT", os.path.join("docs", "capture", "data.json"))
 # Regions the site ships, strongest-audience first. Order drives the app's
 # division dropdown. Kept in sync with faceit_sync.export.REGIONS.
-REGIONS = ("EMEA", "NA")
+REGIONS = ("EMEA", "NA", "SA", "OCE")
 # Single source of truth for the league-wide replay-code wipe: owdb.db's
 # LATEST_KNOWN_WIPE (never duplicate it here — bump it in _SEED_WIPES instead).
 CODE_WIPE_DATE = LATEST_KNOWN_WIPE
