@@ -1,6 +1,6 @@
 # OWDB — backlog
 
-Compiled 2026-08-01; updated 2026-08-07 (post-playoffs audit). Everything the
+Compiled 2026-08-01; updated 2026-08-27 (end of Season 9 — newest section last). Everything the
 project is tracking but is not (yet) a dated plan/design spec. Items move out
 of here into `specs/<date>-<topic>-*` docs when they get scoped for
 implementation.
@@ -395,3 +395,84 @@ Overview already is), keeping the league-wide count as a separate signal.
 
 `specs/2026-08-05-draft-sim-explainable-*.md` is the design reference for the
 current (explainable) draft sim.
+
+---
+
+## Added 2026-08-27 — end of Season 9
+
+S9 finished 2026-08-17 and relegation has been played, so the league is dark
+until S10. Full analysis and the resequenced cutover runbook live in
+**`specs/2026-08-10-season10-cutover-design.md` §6** — these are the items it
+produced. Do not re-derive them from scratch; that section carries the evidence.
+
+### P1 — Seed the S9 relegation matches (time-critical)
+
+The keyless crawler is scoped to a championship it was handed, so a separate
+relegation/promotion championship is unreachable from the current seeds and none
+is in the DB. Two reasons this is urgent rather than tidy: those games are the
+**only live replay codes in the league** (last wipe 2026-08-18; every other S9
+game predates it and is permanently gone), and relegation decides who is in
+which S10 division. Needs one match-room URL per relegation championship from
+the operator. Closes as a non-issue if FACEIT ran relegation inside the existing
+playoff brackets — one look at a relegated team's FACEIT history settles it.
+Design §6.5.
+
+### P1 — Freeze the S9 archive
+
+`docs/s9/index.html` + `docs/archive.html`, per design §2. S9 is final, so this
+is done once and never redone, and it is what makes the "stay on `--season s9`"
+decision safe. **Build it from `docs/faceit.sqlite3.gz` (CI's DB), not the local
+`faceit.sqlite3`** — invariant 2. Design §6.4 step 1.
+
+### P2 — Land the SA/OCE region change while it is free
+
+The only piece of cutover code still outstanding. Four places plus
+`tools/build_capture_data.py`'s own `REGIONS` copy; inert until a SA/OCE
+championship exists, so it can land any time and should not be written under
+cutover-day pressure. Design §5 and §6.1.
+
+### P2 — Say on the site that the season is over
+
+The dashboard degrades correctly with zero live codes (`coverageState()`'s
+`wiped` branch, funnel and Most wanted withhold themselves), but nothing tells a
+visitor *why* the capture funnel is dead. A one-line season-state note is the
+cheapest item on the whole list. Design §6.2.
+
+### P2 — Decide the `owscout-capture` IndexedDB rename
+
+`AGENTS.md` promises this "until the Season 10 cutover", and the deadline is now
+here. The recommendation is to close it as won't-do and delete the deadline: the
+name is invisible to users, and renaming orphans every contributor's learned
+refs and unsent captures. Design §6.4 step 3.
+
+### P2 — `team_rosters` in the capture feed is not season-scoped
+
+`tools/build_capture_data.py` builds it from every `round_players` row ever
+ingested, so after cutover it carries S9 and S10 rosters plus disbanded teams.
+Scrim opponent identification's zero-collision measurement (3-of-5 bar, 8,356
+lineups) was taken on a single season's pool. Scope it to the live season, or
+re-measure before the pool doubles. Design §6.6.
+
+### P3 — `FACEIT_API_KEY`-backed championship discovery
+
+Every season, seeding costs the operator a manual hunt for one room URL per
+division, because FACEIT's keyless endpoint refuses offset enumeration
+(`"Only s2s calls are allowed to get championships by offset"`, verified
+2026-08-27). The Data API's `organizers/{id}/championships` would list them
+directly; organizer id `f0e8a591-08fd-4619-9d59-d97f0571842e`. Worth it only if
+manual seeding actually hurts on cutover day — CI needs no key today, and adding
+one is a new operational dependency.
+
+### P3 — Cross-season player history
+
+Player pages aggregate the payload, so at cutover every player restarts from
+nothing and their S9 history is reachable only inside the frozen archive at a
+different URL. A career view is the one read where crossing the boundary clearly
+pays. Product decision, not a cutover step. Design §6.6.
+
+### Decision, not a task — open scrim mode for the off-season?
+
+Both scrim pages ship locked behind `?unlock=scrimbeta`. The league is dark for
+weeks and teams still scrim, so this is the only window in which scrim mode is
+the *only* thing the tool can do — the moment it is worth the most. Still the
+operator's call.

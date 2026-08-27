@@ -207,14 +207,19 @@ canonical and this copy is the bug.
 - **Captures are season-scoped** (`data/captures/s9/`). Two writers key off a
   per-season constant each: `CURRENT_SEASON` in `infra/upload-worker/worker.js`
   and `CONTRIB_DIR` in `owdb/contribute.py`. At the cutover, follow
-  `specs/2026-08-10-season10-cutover-design.md` rather than improvising.
+  `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
+  **start at its §6**, which records what already shipped and resequences the
+  runbook. The two writers must move in the same change: a Worker writing to
+  `s10/` while CI still merges `s9/` silently drops every contribution.
 - **Coverage expands at the S10 cutover, not before** — §5 of that design.
   Target: EMEA + NA Master/Expert/Advanced, SA Master, OCE Master; Open and
   Intermediate deliberately excluded. Only three divisions are actually
   missing (NA Advanced, SA Master, OCE Master) = +37% data, page 8.7 → 11.9 MB.
   The SA/OCE region support is a four-line code change that is **inert until a
   SA/OCE championship exists**, so land it early and keep it off the cutover
-  critical path. Size divisions with the validated formulas in that section —
+  critical path — as of 2026-08-27 it still has not landed, and it is the only
+  piece of cutover code outstanding. `tools/build_capture_data.py` keeps its own
+  `REGIONS` copy that has to move with `export.py`'s. Size divisions with the validated formulas in that section —
   Master is `n(n-1)/2` exactly, every other tier is 7.43 matches/team, Open is
   3.16 — rather than re-estimating.
 - **`mypy` covers `faceit_sync` only.** `owdb` is not in the must-stay-clean
@@ -224,6 +229,20 @@ canonical and this copy is the bug.
   segment 404s.
 
 ## Roadmap
+
+### Season state (2026-08-27)
+
+**Season 9 is over** — last match 2026-08-17, relegation played since. The
+league feed is empty and stays that way until S10 games are played: every S9
+code predates the 2026-08-18 wipe, so the CI-built `docs/capture/data.json`
+carries `codes: 0` and the capture app has nothing league-side to offer. The
+site degrades correctly (`coverageState()`'s `wiped` branch; the funnel and Most
+wanted withhold themselves), and CI's daily runs are healthy — a quiet commit
+log is no-change runs, not a break. **The cutover has not happened and must not
+be triggered by S9 ending**: flipping the live export to `--season s10` before
+S10 has results would publish an empty site. What to do in the meantime, in
+order, is `specs/2026-08-10-season10-cutover-design.md` §6.4, and the open items
+are `specs/BACKLOG.md` § "Added 2026-08-27".
 
 ### Priorities (ordered)
 
@@ -316,7 +335,10 @@ audiences if the analytics are strong enough.
   Worker on `upload.owdb.io`. The rename from "OW Scout" / `owscout` is complete
   in code, CLI, and copy; the browser IndexedDB name `owscout-capture` is
   deliberately kept until the Season 10 cutover, since renaming it would orphan
-  every contributor's local data.
+  every contributor's local data. That deadline arrived with S9's end and the
+  reasoning did not change with it; the standing recommendation is to close the
+  rename as won't-do rather than let a dated promise trigger a data-losing
+  migration — cutover design §6.4 step 3.
 - **Do not overengineer unless expandability requires it.** The dashboard is
   modularised into concatenated static parts under `faceit_sync/dashboard/` —
   land new features in the right part file rather than growing one string.

@@ -1,7 +1,10 @@
 # Season 10 cutover — design
 
 **Date:** 2026-08-10
-**Status:** approved, ready for implementation planning
+**Status:** partly shipped; the rest is blocked on S10 seeds.
+See **§6 — Status at the end of Season 9 (2026-08-27)** before acting on
+anything below: sections 1 and 3 are live, section 4's runbook has moved and
+been resequenced, and section 5 has not landed.
 
 ## Goal
 
@@ -54,7 +57,7 @@ all already decoupled from where the static site is served.
 | S9 live-site visibility | Stays the sole live season (`docs/index.html`) until every S9 game finishes — no commingling with S10 divisions that start trickling into the DB during the overlap period | Explicit user requirement: rosters/teams change constantly between seasons, so a commingled or look-back selector is "kinda pointless" day-to-day. Cutover to S10-only is a deliberate, explicit action, not an auto-detected one, because playoffs of one season and the start of the next can overlap in the DB. |
 | Archive shape | One frozen static export per past season, at its own path (`docs/s9/index.html`, ...), linked from a small static `docs/archive.html` index; never regenerated after creation | Cheapest correct option — a true point-in-time snapshot, no new season-switcher UI/JS logic in the live dashboard app. |
 | Captures | Season-scoped directories: `data/captures/s9/`, `data/captures/s10/`, ... | A team's S9 comp must never silently feed S10 scouting — rosters and metas both change. Existing flat files get `git mv`'d into `data/captures/s9/` at cutover for a uniform scheme (no flat-file special case going forward). |
-| Cutover mechanism | Manual, documented runbook (in `CLAUDE.md`), not an automated script | Quarterly cadence, and this is the *first* cutover ever run — automating an unrehearsed process guesses at the wrong abstraction. Revisit as a script only if manual execution proves error-prone after being run for real. |
+| Cutover mechanism | Manual, documented runbook (this document; §6.4 is the current sequence), not an automated script | Quarterly cadence, and this is the *first* cutover ever run — automating an unrehearsed process guesses at the wrong abstraction. Revisit as a script only if manual execution proves error-prone after being run for real. |
 | Coverage at cutover (added 2026-08-20) | Expand to EMEA + NA **Master/Expert/Advanced**, plus **SA Master** and **OCE Master** | The season boundary is the only free moment to change coverage: `matches.txt` is being rewritten anyway (runbook step 3), and seeding a division mid-season means back-crawling a live schedule. Operator's chosen scope. |
 | Open and Intermediate | **Not ingested** | Open is 129 teams in EMEA alone and the lowest scouting value in the league; S10's new Intermediate sits between Advanced and Open and inherits that. Excluding both is what keeps the page under 12 MB — see the sizing section. |
 
@@ -74,7 +77,8 @@ all already decoupled from where the static site is served.
 
 ### 2. Frozen archive
 
-One-time, by hand, once S9 is fully finished:
+One-time, by hand, once S9 is fully finished — which it now is. **Build it from
+CI's DB, not the local one: see the correction in §6.4 step 1.**
 
 1. `owdb contribute merge --dir data/captures/s9 --out owdb_comps_s9.json`
 2. `faceit-sync export --season s9 --format html --out docs/s9/index.html`
@@ -97,8 +101,11 @@ One-time, by hand, once S9 is fully finished:
 - `owdb/contribute.py`: no code change — `contribution_files` already globs
   `*.json` in whatever directory it's handed.
 
-### 4. The cutover runbook (documented in `CLAUDE.md`, executed once S9's
-   last match finishes)
+### 4. The cutover runbook (superseded — see §6.4)
+
+> Kept for the rationale behind each step. The order below assumed the cutover
+> fires when S9's last match finishes; §6.3 shows why the real trigger is S10
+> having data, and §6.4 regroups these steps by what gates them.
 
 1. Register the S10 code-wipe date (existing procedure: `owdb/db.py`
    `_SEED_WIPES` + `tools/build_capture_data.py` `CODE_WIPE_DATE`, plus the
@@ -200,3 +207,164 @@ above as an upper bound.
 - Any change to `docs/scrims.html` or the browser-local scrim IndexedDB.
 - Automating the cutover into a script (deferred until after it's been run
   by hand at least once).
+
+---
+
+## 6. Status at the end of Season 9 (added 2026-08-27)
+
+S9 finished on **2026-08-17** (last ingested match: NA Expert Playoffs,
+`2026-08-17T02:23:34Z`), and the operator reports relegation has since been
+played. This section records what of the design above is actually live, what the
+ten days since have changed, and the order the rest should happen in. It
+supersedes the earlier sections where they disagree.
+
+### 6.1 What is already shipped
+
+Verified against the working tree, the CI-published DB (`docs/faceit.sqlite3.gz`)
+and the commit history on 2026-08-27:
+
+| Section | State |
+|---|---|
+| §1 season filtering | **Live.** `_season_of` + `--season` exist, with word-boundary tests in `tests/test_export.py`. CI pins the live export to `--season s9`, not `s10` — deliberately, see §6.3. |
+| §2 frozen archive | **Not started.** No `docs/s9/`, no `docs/archive.html`. Now unblocked — see §6.4. |
+| §3 capture season-scoping | **Live and deployed.** `CURRENT_SEASON = "s9"` in `worker.js`; the merge step reads `data/captures/s9`; the `git mv` happened in `705aa77`; contributions since (`2caffc1`) land under `data/captures/s9/`, which is the proof the Worker was actually deployed. |
+| §4 runbook | **Moved.** It is this document, not `CLAUDE.md` — the 2026-08-11 documentation refactor emptied `CLAUDE.md`, and `AGENTS.md` now points here. Resequenced in §6.4. |
+| §5 coverage expansion (SA/OCE regions) | **Not landed.** `REGIONS` in `faceit_sync/export.py` is still `("EMEA", "NA")`, `--region` still offers only `emea`/`na`, and `want_region` is still the `startswith("e")`/`startswith("n")` pair the section says to generalise. `tools/build_capture_data.py` carries its own `REGIONS` copy that must move with it. This was meant to land early precisely so it would not be on the critical path; it is now the one piece of cutover code still outstanding, and it is still inert until a SA/OCE championship exists. |
+
+### 6.2 The site is in an off-season trough, and it degrades correctly
+
+Worth knowing before anyone reads the live site as broken:
+
+- **There is not one live replay code in the league.** Every S9 game finished on
+  or before 2026-08-17; `LATEST_KNOWN_WIPE` is 2026-08-18. The CI-built
+  `docs/capture/data.json` says so exactly — `codes: 0`, `divisions: []`, built
+  `2026-08-24T00:45:32Z`. The capture app's league side has nothing to offer
+  until S10 games are played, and no work can change that: a code nobody
+  captured before the wipe is gone permanently.
+- **The dashboard handles it.** `coverageState()` returns the `wiped` state and
+  the page reads "Nothing left to scout — all N replay codes were wiped on
+  2026-08-18"; Most wanted and the capture funnel withhold themselves rather than
+  render empty. No fix needed. What is *not* said anywhere is that the season is
+  over — a visitor sees a full site with a dead capture funnel and no
+  explanation. A one-line season-state note is the cheapest item on this list.
+- **CI is healthy.** Daily scheduled runs succeeded through 2026-08-27; the quiet
+  commit log since 2026-08-24 is no-change runs, not a broken pipeline.
+
+### 6.3 The cutover trigger is S10 data, not the end of S9
+
+The original design says the cutover happens "once S9's last match finishes".
+That is now demonstrably the wrong trigger. S9 finished ten days ago and no S10
+championship exists in the DB, so flipping the live export to `--season s10`
+today would publish an **empty site**: no standings, no power rankings, no player
+pages, no meta.
+
+**Decision:** the live export stays `--season s9` until S10 has enough played
+matches to be worth showing, and the *archive* is what makes S9 permanent in the
+meantime. The trigger for the export flip is "S10 divisions have real results in
+the DB", not "S9 ended". The two events are weeks apart and only the second is a
+cutover.
+
+This does not weaken the no-commingling rule: `--season s9` keeps S10 rows out of
+the live site automatically as they start arriving, which is exactly the overlap
+case the flag was built for.
+
+### 6.4 Resequenced runbook
+
+Replaces §4's single ordered list. Same steps, grouped by what actually gates
+them.
+
+**A. Unblocked today — nothing here waits on S10.**
+
+1. **Build the frozen S9 archive** (§2). S9 is final, so this can be done now and
+   never needs redoing. **Correction to §2:** do not build it from the local
+   `faceit.sqlite3` — that copy is routinely days behind and invariant 2 forbids
+   exporting from it. Build from CI's copy instead:
+   `gunzip -c docs/faceit.sqlite3.gz > s9.sqlite3`, merge
+   `owdb contribute merge --dir data/captures/s9 --out owdb_comps_s9.json`
+   against it, then `faceit-sync --db s9.sqlite3 export --season s9 --format html
+   --out docs/s9/index.html`. Commit `docs/s9/**` and `docs/archive.html`; never
+   `owdb_comps_s9.json` (invariant 6).
+2. **Land the SA/OCE region change** (§5). Inert until a SA/OCE championship
+   exists, so it carries no risk to the live S9 site, and it is the one thing
+   that would otherwise be written under time pressure on cutover day. Remember
+   `tools/build_capture_data.py`'s own `REGIONS` copy.
+3. **Decide the IndexedDB rename.** `owscout-capture` was kept "until the Season
+   10 cutover" (Conventions, `AGENTS.md`) because renaming orphans every
+   contributor's local data. That reasoning has not changed with the season — the
+   name is invisible to users, and a rename buys tidiness at the cost of every
+   scout's learned refs and unsent captures. The recommendation is to **close it
+   as won't-do** and delete the deadline from `AGENTS.md`, rather than let a dated
+   promise trigger a data-losing rename.
+4. **Answer the relegation question** — time-critical, see §6.5.
+
+**B. Gated on S10 rooms existing (operator collects seeds).**
+
+5. Add S10 championship IDs to `matches.txt`, comment out the S9 blocks, and seed
+   NA Advanced, SA Master and OCE Master — one room URL each. There is no way to
+   automate this discovery: FACEIT's keyless `championships/v1/championships`
+   refuses offset enumeration (`"Only s2s calls are allowed to get championships
+   by offset"`, verified 2026-08-27), so the seed URLs are collected by hand — or
+   by adding a `FACEIT_API_KEY`-backed `organizers/{id}/championships` lookup,
+   the only path that removes the manual step. The FACEIT League organizer id is
+   `f0e8a591-08fd-4619-9d59-d97f0571842e`.
+6. Register the S10 code-wipe date when the season-start patch lands (existing
+   procedure — `_SEED_WIPES` only).
+
+**C. Gated on S10 having real results.**
+
+7. `update.yml`: live export becomes `--season s10`; merge `--dir` becomes
+   `data/captures/s10`.
+8. `worker.js`: `CURRENT_SEASON = "s10"`, then the human runs `wrangler deploy`.
+   Treat 7 and 8 as one change — a Worker writing to `s10/` while CI still merges
+   `s9/` silently drops every contribution.
+9. After the first crawl, confirm SA and OCE appear in the region switcher and
+   that neither gets a spurious "Combined" view.
+
+### 6.5 Relegation matches are not ingested, and their codes are alive
+
+**New gap, found 2026-08-27.** The keyless crawler enumerates
+`iter_team_championship_matches(championship_id, team_id)` — it is scoped to a
+championship it was already handed. A relegation/promotion championship is a
+*separate* FACEIT championship, so nothing in the current seed set can reach it,
+and none is in the DB: the ten ingested S9 championships are six regular seasons
+and four playoff brackets, with no match later than 2026-08-17.
+
+This matters more than an ordinary gap, for two reasons:
+
+- **Those codes are the only live replay codes in the league.** The last wipe is
+  2026-08-18. A relegation game played after that date is still replayable right
+  now and stops being so at the next Overwatch patch. Everything else is already
+  lost.
+- **Relegation determines S10 division membership** — which teams a scout will
+  even find in each S10 division. Without it, the site's S9 standings imply a
+  league structure that no longer holds.
+
+Action: the operator supplies one match-room URL per relegation championship,
+exactly like any other seed. If FACEIT ran relegation inside the existing playoff
+brackets rather than as its own championship, this closes as a non-issue — and
+that check is one look at a relegated team's FACEIT match history.
+
+### 6.6 Open questions this design does not settle
+
+- **`team_rosters` in the capture feed has no season filter.**
+  `tools/build_capture_data.py` builds it from every `round_players` row in the
+  DB, so after cutover it carries S9 *and* S10 rosters, including teams that have
+  disbanded. Scrim opponent identification matches ten HUD names against that
+  pool, and its measured guarantee — zero collisions at the 3-of-5 bar across
+  8,356 lineups (`tools/roster_match_eval.py`) — was measured on one season's
+  pool. Either scope it to the live season or re-measure before the pool doubles.
+  Do not assume the number holds.
+- **Player pages are season-scoped by construction.** They aggregate every
+  division in the payload, so at cutover every player's page restarts from
+  nothing and their S9 history survives only inside the frozen archive, under a
+  different URL. A player's career is the one read where crossing the season
+  boundary has obvious value; whether to give it a cross-season data source is a
+  product decision, not a cutover step, and is deliberately not answered here.
+- **Advanced will shrink** — S10's new Intermediate tier siphons teams from the
+  bottom of Advanced, so §5's NA Advanced estimate (404 matches) is an upper
+  bound.
+- **Should the off-season open scrim mode?** Both scrim pages ship locked behind
+  `?unlock=scrimbeta`. The league is dark for weeks and teams still scrim, which
+  makes this the only window where scrim mode is the *only* thing the tool can
+  do. Opening it is a decision rather than a cleanup task (`AGENTS.md`
+  priority 2) — but this is the moment it is worth the most.

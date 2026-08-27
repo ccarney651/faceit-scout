@@ -17,6 +17,38 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-27
+
+### Changed
+- **The Season 10 cutover runbook is resequenced, and its trigger is corrected.**
+  Season 9 finished on 2026-08-17. The original runbook fired "once S9's last
+  match finishes", which is now demonstrably wrong: no S10 championship exists
+  yet, so flipping the live export to `--season s10` today would publish an empty
+  site. The trigger is **S10 having real results**, and until then the live
+  export stays pinned to `--season s9` — which also keeps trickling S10 rows off
+  the live site on its own.
+
+  `specs/2026-08-10-season10-cutover-design.md` gains a §6 recording what of the
+  design actually shipped (season filtering and capture season-scoping are live
+  and deployed; the frozen archive and SA/OCE region support are not), and
+  regroups the steps by what gates them: unblocked today, gated on S10 rooms
+  existing, gated on S10 results. Two corrections came out of it — the frozen S9
+  archive must be built from CI's DB (`docs/faceit.sqlite3.gz`), not the local
+  one, or it violates invariant 2; and the runbook lives in that design document,
+  not in `CLAUDE.md`, which the 2026-08-11 documentation refactor emptied.
+
+  Documented alongside it: relegation matches are unreachable by the keyless
+  crawler (it is scoped to a championship it was handed), which makes them the
+  only live replay codes left in the league and the only record of who is in
+  which S10 division; and `team_rosters` in the capture feed has no season
+  filter, so its measured zero-collision guarantee does not automatically survive
+  a second season entering the pool.
+
+### Fixed
+- `ARCHITECTURE.md` §10 was missing the 2026-08-18 code wipe from its list of
+  recorded wipes, and still described the cutover as deferred until Season 9
+  finishes.
+
 ## 2026-08-24
 
 ### Added

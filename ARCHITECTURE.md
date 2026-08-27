@@ -1242,14 +1242,24 @@ Fixtures whose matches must stay *alive* derive their dates from
 trick in `tests/test_capture_feed.py`), so a new wipe does not silently flip
 them to dead. Keep new fixtures on that pattern rather than hard-coding a date.
 
-Recorded wipes so far: 2026-07-14, 2026-07-28 and 2026-08-11.
+Recorded wipes so far: 2026-07-14, 2026-07-28, 2026-08-11 and 2026-08-18. The
+last one is dated a day early on purpose — the patch landed mid-evening on the
+19th, and `codeDead()` is date-granular, so dating it the 19th would have marked
+that day's post-patch league games dead. The comment on the entry explains why
+the two errors are not equal.
 
 ### Season cutover
 
-Season 10 cutover is **deliberately deferred until Season 9 finishes**, and the
-safe-now subset (season-scoped captures and a season-filtered export) is already
-shipped. The live site is pinned with `--season s9` in
-`.github/workflows/update.yml`.
+Season 9 finished on 2026-08-17, and the cutover has **not** happened. The
+safe-now subset (season-scoped captures and a season-filtered export) is shipped;
+the live site is pinned with `--season s9` in `.github/workflows/update.yml`.
+
+**The trigger is S10 having results, not S9 ending.** Those are weeks apart, and
+flipping the export to `--season s10` in between would publish an empty site —
+no standings, no rankings, no player pages. Until then the pin stays on `s9`,
+which also keeps trickling S10 rows out of the live site automatically. The
+work that *is* unblocked in the meantime (freeze the S9 archive, land SA/OCE
+region support) is sequenced in §6.4 of the design below.
 
 Do not improvise the cutover. The full sequence and the reasoning behind it —
 archive export, bumping the season constants in both the Worker and
