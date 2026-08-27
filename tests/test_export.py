@@ -11,7 +11,7 @@ from conftest import RESTART_DC_ID, make_client, register_match
 
 from faceit_sync.client import MATCH_URL
 from faceit_sync.db import Database
-from faceit_sync.export import _dashboard_data, export_html
+from faceit_sync.export import NEXT_SEASON_START, _dashboard_data, export_html
 from faceit_sync.sync import SyncEngine
 
 
@@ -597,6 +597,19 @@ def test_pinned_season_wins_whenever_it_has_data(db: Database) -> None:
     n = export_html(db, buf, only_season="s9")
     assert n == 1
     assert list(_payload(buf)["divisions"].keys()) == ["s9m"]
+
+
+def test_payload_names_the_season_it_rendered(db: Database) -> None:
+    """The page can render a season other than the pinned one (export_html falls
+    back when the pin has no data yet), so the label has to come from the data
+    rather than from the flag - otherwise a fallback is silent."""
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season"})
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    data = _payload(buf)
+    assert data["season"] == "s9"
+    assert data["next_season_start"] == NEXT_SEASON_START
 
 
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):

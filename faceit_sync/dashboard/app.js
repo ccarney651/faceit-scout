@@ -3412,7 +3412,16 @@ function setDivision(id){
 function updateWipeNote(){
   const el=document.getElementById('wipenote'); if(!el) return;
   const q=viewQueue();
-  if(!CODE_WIPE || !q.length){ el.style.display='none'; return; }
+  if(!CODE_WIPE || !q.length){
+    // Nothing to capture. Rather than leave the slot empty - which reads as a
+    // broken site rather than a finished season - say where the season stands.
+    const note=seasonNote(DATA.season, q.length, DATA.next_season_start,
+                          new Date().toISOString().slice(0,10));
+    if(!note){ el.style.display='none'; return; }
+    el.style.display='block';
+    el.innerHTML=`<span style="color:var(--muted)">${esc(note)}</span>`;
+    return;
+  }
   el.style.display='block';
   el.innerHTML=`<span style="color:var(--mid)">Replay codes wiped <b>${esc(CODE_WIPE)}</b> — ${q.length} live replay code${q.length===1?'':'s'} still need a capture before the next patch.</span> `+
     `<a href="${captureDivisionUrl()}" style="color:var(--accent);font-weight:700;text-decoration:none">Pick one →</a>`;
@@ -3420,6 +3429,8 @@ function updateWipeNote(){
 function init(){
   recomputeDivision();
   initTheme();
+  const slab=document.getElementById('seasonlab');
+  if(slab) slab.textContent=seasonLabel(DATA.season);
   const dsel=document.getElementById('division');
   VIEWS.forEach(v=>dsel.appendChild(el(`<option value="${v.id}">${esc(v.label)}</option>`)));
   dsel.value=CURRENT_VIEW;

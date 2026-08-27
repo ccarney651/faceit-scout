@@ -516,6 +516,12 @@ def _tier_of(name: str | None) -> str | None:
 
 REGIONS: tuple[str, ...] = ("EMEA", "NA")
 
+# When the next FACEIT League season's first matches are played. The page says
+# so while the current season is finished and the new one has no data yet, and
+# stops mentioning it once the date has passed. Update it once per season -
+# nothing derives from it, so a stale value degrades to silence, not a lie.
+NEXT_SEASON_START = "2026-09-07"
+
 
 def _region_of(name: str | None) -> str | None:
     """The region a championship name encodes ('EMEA' | 'NA' | None).
@@ -766,6 +772,13 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         "owdb_contributors": owdb_contributors,
         "team_avatars": inlined_team_avatars,
         "code_wipe": owdb_wipe,
+        # The season actually rendered, which is NOT necessarily the pinned one:
+        # export_html falls back when the pin has no data yet. The page labels
+        # itself from this, so a fallback is visible rather than silent.
+        "season": _newest_season(
+            str(d["summary"]["championship"]) for d in divisions.values()
+        ),
+        "next_season_start": NEXT_SEASON_START,
         # When this page was generated - so anyone can tell at a glance whether
         # their contribution has landed yet.
         # Where the page asks for an on-demand rebuild (the upload worker).
