@@ -20,6 +20,17 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-27
 
 ### Added
+- **Hero bans are captured from the game instead of remembered.** The scrim
+  workshop code gains a ban phase: during setup each team bans one hero by
+  switching to it and pressing `Interact + Melee`. The ban is enforced for all
+  ten players, the two bans must be of different roles, and a map cannot start
+  with exactly one ban — if the setup timer runs out holding one, it is cleared
+  rather than stalling the lobby. The bans are drawn on the spectator view and
+  survive into the replay, so the capture panel's new *Read bans* button fills
+  the ban picker from the screen. It abstains rather than guessing, and the
+  manual picker is untouched — which matters, because bans are only recorded in
+  lobbies running this workshop code, and scrims today are hosted on a mix of
+  it, ScrimTime and ScrimTime Lite.
 - **Season 9 is frozen at `/s9/`**, linked from a new `/archive.html` and from
   the footer of every page. It is a point-in-time export — standings, teams,
   players, League meta and all 274 captured comps exactly as they stood when the

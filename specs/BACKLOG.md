@@ -96,11 +96,13 @@ Shipped and verified live since the 2026-08-01 audit (all six carry tests; the
   reproduced headlessly: a synthetic frame teaches nothing meaningful, so it
   needs a live frame and the operator.
 
-- **Map-name verification is stubbed.** The OCR hook returns `None`, so map
-  mismatch reads "not checked". Open question: is the map name reliably on the
-  observer HUD at all? If not, close as impossible rather than fake it. Not a
-  desk task — needs a live in-client HUD check, not something resolvable by
-  reading code.
+- **Map-name verification: answered for scrims, still stubbed for league.**
+  The open question was whether the map name is reliably on the observer HUD at
+  all. It is **not** — but the scrim workshop code can put it there, and does:
+  `MAP   : SAMOA`, confirmed rendering in game 2026-08-27. So a scrim's map can
+  be verified against the HUD instead of trusting the operator's panel
+  selection. League captures have no such row and no workshop code of ours, so
+  the stub stays for them; close that half as impossible rather than faking it.
 - **Ref library live-frame validation is ongoing.** 88/104 hero+team refs have
   never faced a live frame. Not a code task — `refs coverage` tracks it and it
   shrinks with every capture. Keep `doctor`/`coverage` surfacing it.

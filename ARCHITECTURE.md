@@ -940,6 +940,29 @@ calls this at every point a code can start a scrim capture
 offering to jump to League capture instead of letting the save proceed. A
 league map's replay code can no longer be recorded as a private scrim.
 
+**Hero bans are read off the workshop HUD, not remembered.**
+`tools/scrim_code/scrim_owdb.opy` runs a ban phase during setup: one hero per
+team (switch to it, `Interact + Melee`), enforced with `setAllowedHeroes`, the
+two bans forced to different roles, and the map blocked from starting with
+exactly one. It draws `BANS  : SOMBRA | MAUGA` and `MAP   : SAMOA` with
+`SpecVisibility.ALWAYS`, so both survive into the replay where captures are
+taken. `docs/capture/engine/banrow.js` finds those rows by their label in a
+multi-line OCR read — a **textual** anchor, so the crop only has to contain the
+row rather than land on it, which is what separates this from the replay-code
+reader and its five geometry probes. It validates by shape (two bans or none,
+never one; different roles; both resolving to known heroes) and abstains
+otherwise, **filling** the panel's ban picker rather than replacing it.
+
+Two things not to undo. Matching is exact after normalization — fuzzy matching
+would turn a safe abstention into a plausible wrong answer in a private log. And
+the row renders `NONE` explicitly rather than disappearing: an absent row means
+"could not read", a row reading `NONE` means "known, no bans", and the parser
+depends on telling those apart.
+
+Bans are only recorded in lobbies running **this** workshop code. Scrims hosted
+on stock ScrimTime or ScrimTime Lite have no ban row, and Lite has no spectator
+scoreboard either, so it can never support the stats read.
+
 **Three features still carry `WIP` badges**: auto side-detection, the scoreboard
 OCR read, and the score-box read. Side detection has since worked end to end in
 the field (2026-08-19, all ten slots), but one confirmed run is not a track

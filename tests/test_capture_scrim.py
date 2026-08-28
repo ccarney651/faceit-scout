@@ -1333,3 +1333,23 @@ def test_the_code_is_read_at_several_geometries_not_just_contrasts() -> None:
         "cannot catch a mis-placed crop"
     )
     assert "answers.length" in src, "a probe that read nothing must not be treated as agreement"
+
+
+def test_scrim_page_loads_the_ban_row_parser() -> None:
+    """A script the page uses but never loads is invisible to pytest and fatal
+    in the browser - the CSP has silently broken three scripts already."""
+    page = (Path(__file__).resolve().parents[1]
+            / "docs" / "capture" / "scrim.html").read_text(encoding="utf-8")
+    assert "engine/banrow.js" in page, "banrow.js is used but never loaded"
+    assert "OWDBBanRow" in page, "banrow.js is loaded but never called"
+
+
+def test_scrim_page_reads_bans_through_the_deadline_wrapped_ocr() -> None:
+    """ocrWorker()'s timeout only covers LOADING tesseract. A recognize() that
+    stalls afterwards never returns and takes every other read down with it."""
+    page = (Path(__file__).resolve().parents[1]
+            / "docs" / "capture" / "scrim.html").read_text(encoding="utf-8")
+    body = page[page.index("async function readBanRow"):]
+    body = body[:body.index("\n}")]
+    assert "ocrRead(" in body, "the ban read must go through ocrRead"
+    assert ".recognize(" not in body, "call ocrRead, never recognize directly"

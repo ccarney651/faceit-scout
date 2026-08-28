@@ -35,6 +35,10 @@ they already know at a lower server cost.
 - **Spectator scoreboard** (Standard preset, Small/Medium/Large, all grouping
   styles) — created with `SpecVisibility.ALWAYS`, so it renders for spectators
   **and in replays**; that is what the capture tool reads.
+- **Hero bans** (added for OWDB, not in Scrimtime) — one per team during setup,
+  enforced with `setAllowedHeroes`, the two forced to different roles, and the
+  map blocked from starting with exactly one. Drawn on the spectator view as
+  text so the capture tool can read it. Toggle under `1. Hero Bans`.
 - **Match time display** + host-spectator scoreboard toggle (Z+Q).
 - The in-game **Settings panel** (ready up / setup phase / map completion /
   scoreboard / keybinds) with Scrimtime's original tunables.
@@ -87,6 +91,7 @@ Game menu.
 | Action | Input |
 |---|---|
 | Ready up / unready | Interact + Reload |
+| Ban a hero (during setup) | Interact + Melee, while playing that hero |
 | Force team ready (hold) | Interact + Reload, hold 3 s |
 | Add setup time | Interact + Ultimate (+30 s, cap 90 s) |
 | Defender teleport | Interact + Jump |
