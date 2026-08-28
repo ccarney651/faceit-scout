@@ -16,7 +16,7 @@ from typing import Any, TextIO
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
 from .hero_icons import load_hero_icons
-from .models import is_playoff_name
+from .models import is_playoff_name, newest_season, season_of
 from .subroles import SEAT_ORDER, seat_of
 from .team_logos import build_team_logos
 
@@ -538,31 +538,12 @@ def _region_of(name: str | None) -> str | None:
     return next((r for r in REGIONS if r in words), None)
 
 
-_SEASON_RE = re.compile(r"\bS(\d+)\b", re.IGNORECASE)
-
-
-def _season_of(name: str | None) -> str | None:
-    """The season a championship name encodes ('s9', 's10', ...), or None.
-
-    Matched with a word boundary (mirrors ``_region_of``): a bare substring
-    test would let "S90 EMEA..." match "s9", or a name merely containing
-    "s9" mid-word false-match.
-    """
-    if not name:
-        return None
-    m = _SEASON_RE.search(name)
-    return f"s{m.group(1)}" if m else None
-
-
-def _newest_season(names: Iterable[str | None]) -> str | None:
-    """The highest-numbered season across these championship names.
-
-    Compared numerically, not lexically: sorted as strings 's9' beats 's10',
-    which would pin the site to the season that just ended for as long as both
-    are in the database.
-    """
-    seasons = {s for s in (_season_of(n) for n in names) if s}
-    return max(seasons, key=lambda s: int(s[1:]), default=None)
+# Season parsing lives in models.py beside the other championship-name
+# helpers, so the exporter and tools/build_capture_data.py cannot drift on what
+# "the newest season" means. Kept under the private names this module already
+# used.
+_season_of = season_of
+_newest_season = newest_season
 
 
 def _is_playoff(name: str | None) -> bool:

@@ -434,7 +434,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/replaycode.js"></script><script src="engine/heroes.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/replaycode.js"></script><script src="engine/heroes.js"></script><script src="engine/banrow.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -1569,6 +1569,39 @@ async function readReplayCode(){
 }
 function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
 
+// ---------- reading the workshop's ban row ----------
+//
+// A GENEROUS crop, on purpose. The label is a textual anchor, so the crop only
+// has to CONTAIN the row - unlike the replay code, where the crop has to land
+// on it and being 2% off returns a well-formed wrong answer. Page-seg mode 6
+// keeps the lines separate so findRow can pick one out.
+let LAST_BAN_READ={why:null, raw:null};
+async function readBanRow(){
+  LAST_BAN_READ={why:null, raw:null};
+  if(!vid.srcObject){ LAST_BAN_READ.why='share your screen first'; return null; }
+  const frame=grabFrame();
+  // Frame-relative, NOT relative to boxes.a. The workshop draws HudPosition.LEFT
+  // at the screen's left edge; boxes.a is the portrait strip, which sits
+  // centre-top. Anchoring to it put the crop to the RIGHT of the text and read
+  // nothing. Because the label is a textual anchor, a generous fixed region is
+  // both simpler and safer - and it means the read needs no calibration at all.
+  const w=Math.max(1, Math.round(frame.width*0.35));
+  const h=Math.max(1, Math.round(frame.height*0.45));
+  const cv=document.createElement('canvas');
+  cv.width=w; cv.height=h;
+  cv.getContext('2d').drawImage(frame, 0, 0, w, h, 0, 0, w, h);
+  const worker=await ocrWorker();
+  // Page-seg 6 keeps the lines separate so findRow can pick one out.
+  await worker.setParameters({ tessedit_pageseg_mode:'6' });
+  const {data}=await ocrRead(worker, cv);
+  await worker.setParameters({ tessedit_pageseg_mode:'7' });
+  const text=(data&&data.text)||'';
+  LAST_BAN_READ.raw=text;
+  const res=OWDBBanRow.parseBans(text, OWDBBanRow.buildHeroIndex(heroCatalog()), OWDBHeroes.inferRole);
+  if(!res.ok){ LAST_BAN_READ.why=res.why; return null; }
+  return res;
+}
+
 // ---------- hero bans ----------
 // Bans are optional per scrim: some teams play them, some do not, and a ban
 // control on a scrim that never bans is just noise. Stored per MAP rather than
@@ -1649,6 +1682,25 @@ function renderBanPickerInto(box, d){
   none.title='Record that this map was played with no bans at all';
   none.onclick=()=>{ if(MAP_BANS_NONE && !MAP_BANS.length) clearBans(); else setNoBans(); renderBans(); };
   box.appendChild(none);
+  // Prefill from the screen. It FILLS the picker rather than replacing it: an
+  // abstention leaves the grid exactly as it was and the operator picks by
+  // hand, which is how every scrim worked before this existed.
+  const read=d.createElement('button'); read.type='button';
+  read.textContent='⌘ Read bans'; read.className='ghost';
+  read.title='Read the ban row off the workshop HUD and fill the picker';
+  read.onclick=async()=>{
+    const res=await readBanRow();
+    if(!res){ snapMsg(esc(LAST_BAN_READ.why||'could not read the ban row'), true); return; }
+    if(res.none){ setNoBans(); renderBans(); snapMsg('read: no bans this map'); return; }
+    // `by` stays null - the workshop knows Team 1 and Team 2, this page knows
+    // us and them, and nothing here maps between them. "by either" is already
+    // a supported value, and a wrong attribution is worse than none.
+    MAP_BANS=res.bans.map(b=>({g:b.g, n:heroName(b.g)||b.n, by:null}));
+    MAP_BANS_NONE=false;
+    renderBans();
+    snapMsg('read '+res.bans.map(b=>b.n).join(' + '));
+  };
+  box.appendChild(read);
   const grid=d.createElement('div'); grid.style.cssText='width:100%';
   grid.innerHTML=banGridHtml(heroCatalog(), MAP_BANS);
   grid.querySelectorAll('.banbtn').forEach(b=>{

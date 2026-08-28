@@ -90,6 +90,12 @@ globalvar Keybind_Command 1
 globalvar Keybind_Ready 2
 globalvar Keybind_DefenderTeleport 3
 globalvar Keybind_AddSetupTime 4
+globalvar Ban_Enabled 38
+globalvar Ban_Team1 39
+globalvar Ban_Team2 40
+globalvar Keybind_BanHero 41
+globalvar Debug_DisplayServerLoad 42
+globalvar Ban_HudTo 43
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
 globalvar Colour_TextTypeA 7
@@ -131,6 +137,39 @@ playervar ReadyUp_CurrentHoldTime 1
 
 #Only remove the following directive if the gamemode does not use tricks such as A+0, A*0, A or "", "am" == "**", etc which would otherwise be optimized out.
 #!optimizeStrict
+
+# Two bans may not share a role. A macro rather than a subroutine because
+# Workshop subroutines take no parameters and return no value. The role getters
+# are dynamic, so a new Overwatch hero needs no change here.
+macro Ban_SameRole(hero, other):
+    other != null and ((hero in getTankHeroes() and other in getTankHeroes())
+        or (hero in getDamageHeroes() and other in getDamageHeroes())
+        or (hero in getSupportHeroes() and other in getSupportHeroes()))
+
+
+def Ban_Apply():
+    @Name "Subroutine: Apply hero bans"
+    # "If a player's current hero becomes unavailable, the player is forced to
+    # choose a different hero and respawn" - which doubles as the visible
+    # confirmation that the ban took. `null` never equals a hero, so one ban,
+    # two bans and none all fall out of the same filter.
+    if Ban_Team1 == null and Ban_Team2 == null:
+        getAllPlayers().resetHeroAvailability()
+    else:
+        getAllPlayers().setAllowedHeroes(getAllHeroes().filter(
+            lambda h: h != Ban_Team1 and h != Ban_Team2))
+
+
+rule "Settings: Debug Options":
+    # Default OFF: with the setting false the rule's condition never holds, no
+    # HUD text is created, and this costs nothing in a normal scrim. Panel 6 was
+    # free because the strip removed the Log Generator.
+    Debug_DisplayServerLoad = createWorkshopSettingBool("6. Debug", "Display Server Load", false)
+
+
+rule "Settings: Hero Ban Options":
+    Ban_Enabled = createWorkshopSettingBool("1. Hero Bans", "Enable Hero Bans", true)
+
 
 rule "Settings: Ready Up Options":
     ReadyUp_FreqMode = createWorkshopSettingEnum("2. Ready Up System", "Enable Ready Up System", 0, ["Every Round", "Only Round One", "Off"])
@@ -174,6 +213,7 @@ rule "Settings: Keybind Options":
     Keybind_Ready = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Ready Up Toggle / Force Team Ready", 9, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 1)]
     Keybind_DefenderTeleport = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Defender Teleport", 6, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 2)]
     Keybind_AddSetupTime = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Add Setup Time", 4, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 3)]
+    Keybind_BanHero = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Ban Hero", 8, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 4)]
 
 
 rule "Initialisation: Match":
@@ -250,6 +290,26 @@ rule "HUD Setup: Add Setup Time":
         hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(inputBindingString(Keybind_Command), inputBindingString(Keybind_AddSetupTime), "Add {0} sec to setup timer".format(SetupAddTime_Step)), HudPosition.TOP, 5.4, Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command) and eventPlayer.isHoldingButton(Keybind_AddSetupTime) else Colour_TextTypeA, HudReeval.STRING_AND_COLOR, SpecVisibility.NEVER)
     else:
         hudSubheader(eventPlayer, "{0} and {1} can add {2} sec to the setup timer".format("{0}".format(getPlayersInSlot(0, Team.1)), "{0}".format(getPlayersInSlot(0, Team.2)), SetupAddTime_Step), HudPosition.TOP, 5.4, Colour_TextTypeA, HudReeval.STRING, SpecVisibility.NEVER)
+
+
+rule "HUD Setup: Ban Hero":
+    @Event eachPlayer
+    @Condition Ban_Enabled == true
+    @Condition isInSetup() == true
+
+    # Sits under the ready-up and add-setup-time hints (5.2, 5.4) in the same
+    # style, so the ban reads as part of the setup controls rather than a
+    # secret. SpecVisibility.NEVER: it is an instruction to the player holding
+    # the keys, not something a spectator or the capture tool should see.
+    hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(
+                     inputBindingString(Keybind_Command), inputBindingString(Keybind_BanHero),
+                     "Clear your team's hero ban"
+                     if (Ban_Team1 if eventPlayer.getTeam() == Team.1 else Ban_Team2) == eventPlayer.getHero()
+                     else "Ban {0} for both teams".format(eventPlayer.getHero())),
+                 HudPosition.TOP, 5.5,
+                 Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command)
+                     and eventPlayer.isHoldingButton(Keybind_BanHero) else Colour_TextTypeA,
+                 HudReeval.STRING_AND_COLOR, SpecVisibility.NEVER)
 
 
 rule "Setup: Remove Assembling Heroes":
@@ -354,6 +414,12 @@ rule "Setup: Both Teams Ready, Start Match (Captain-Only Mode)":
     if getNumberOfPlayers(Team.ALL) < ReadyUp_MinimumPlayersToStart:
         smallMessage(getAllPlayers(), "Both teams ready, but not enough players in game ({0})".format(ReadyUp_MinimumPlayersToStart))
         return
+    # R3: two bans or none, never one. This guard is in BOTH start rules on
+    # purpose - a lobby in the other ready mode would otherwise start with one
+    # ban and the captured record would be wrong with nothing saying so.
+    if Ban_Enabled and (Ban_Team1 == null) != (Ban_Team2 == null):
+        smallMessage(getAllPlayers(), "Both teams ready, but only one hero is banned - ban a second or clear it")
+        return
     smallMessage(getAllPlayers(), "Both teams ready, starting countdown")
     if ReadyUp_FreezeSetupTime:
         unpauseMatchTime()
@@ -376,6 +442,12 @@ rule "Setup: Both Teams Ready, Start Match (All Players Mode)":
     if getNumberOfPlayers(Team.ALL) < ReadyUp_MinimumPlayersToStart:
         smallMessage(getAllPlayers(), "All players ready, but not enough players in game ({0})".format(ReadyUp_MinimumPlayersToStart))
         return
+    # R3: two bans or none, never one. This guard is in BOTH start rules on
+    # purpose - a lobby in the other ready mode would otherwise start with one
+    # ban and the captured record would be wrong with nothing saying so.
+    if Ban_Enabled and (Ban_Team1 == null) != (Ban_Team2 == null):
+        smallMessage(getAllPlayers(), "All players ready, but only one hero is banned - ban a second or clear it")
+        return
     smallMessage(getAllPlayers(), "All players ready, starting countdown")
     if ReadyUp_FreezeSetupTime:
         unpauseMatchTime()
@@ -386,6 +458,172 @@ rule "Setup: Both Teams Ready, Start Match (All Players Mode)":
         if ReadyUp_FreezeSetupTime:
             pauseMatchTime()
         setMatchTime(Setup_SetupTimeOverride)
+
+
+rule "Debug: Display Server Load":
+    @Condition Debug_DisplayServerLoad == true
+    @Condition isGameInProgress() == true
+
+    # For comparing this code's cost against ScrimTime and ScrimTime Lite, both
+    # of which ship the same readout in their own Debug panels - ours was the
+    # only one of the three that could not be measured. Mirrors DKEEH's rule so
+    # the numbers mean the same thing.
+    #
+    # Drawn on the RIGHT deliberately: the capture tool OCRs the top-left of the
+    # frame for the BANS row, and a debug readout in that crop is noise it does
+    # not need to parse around.
+    wait()
+    hudSubheader(getAllPlayers(), "{0} cur / {1} avg / {2} peak server load".format(
+                     getServerLoad(), getAverageServerLoad(), getPeakServerLoad()),
+                 HudPosition.RIGHT, 100, Colour_TextTypeA,
+                 HudReeval.VISIBILITY_AND_STRING, SpecVisibility.ALWAYS)
+
+
+rule "Bans: Toggle Ban On Current Hero":
+    @Event eachPlayer
+    @Condition Ban_Enabled == true
+    @Condition isInSetup() == true
+    @Condition eventPlayer.isHoldingButton(Keybind_Command) == true
+    @Condition eventPlayer.isHoldingButton(Keybind_BanHero) == true
+
+    # R1: one ban per team, so a second confirm REPLACES the first. Pressing
+    # again on your own banned hero clears it, which is the only route back to
+    # "neither team banned" once a team has banned - and R3 makes that a state
+    # teams need to be able to reach.
+    if eventPlayer.getTeam() == Team.1 and Ban_Team1 == eventPlayer.getHero():
+        Ban_Team1 = null
+    elif eventPlayer.getTeam() == Team.2 and Ban_Team2 == eventPlayer.getHero():
+        Ban_Team2 = null
+    # R2: checked on EVERY confirm including a change, or team 1 could ban a
+    # tank, wait for team 2 to ban a tank, then switch onto one and collide.
+    elif Ban_SameRole(eventPlayer.getHero(), Ban_Team2 if eventPlayer.getTeam() == Team.1 else Ban_Team1):
+        smallMessage(eventPlayer, "That role is already banned by the other team")
+    elif eventPlayer.getTeam() == Team.1:
+        Ban_Team1 = eventPlayer.getHero()
+    else:
+        Ban_Team2 = eventPlayer.getHero()
+    Ban_Apply()
+    waitUntil(not eventPlayer.isHoldingButton(Keybind_BanHero), 1)
+
+
+rule "Bans: New Map Clears Them, Later Rounds Keep Them":
+    @Condition isInSetup() == true
+
+    # Round 1 is a new map, so start from no bans. Every later round is the SAME
+    # map: the bans carry over by default. Teams can still change them during
+    # that round's setup - the toggle rule runs in every setup - but nothing
+    # clears them on the teams' behalf.
+    #
+    # Conditioning the clear on isInSetup() alone was a bug: setup runs at the
+    # start of EVERY round, so Escort/Hybrid round 2 and each Control point
+    # would have silently un-banned both heroes mid-map.
+    if getMatchRound() == 1:
+        Ban_Team1 = null
+        Ban_Team2 = null
+    # Re-assert enforcement either way, in case a round transition restored hero
+    # availability. With both bans null this is just resetHeroAvailability().
+    Ban_Apply()
+
+
+rule "Bans: Clear A Lone Ban Before The Timer Expires":
+    @Condition Ban_Enabled == true
+    @Condition isInSetup() == true
+    @Condition getMatchTime() <= 5
+    @Condition (Ban_Team1 == null) != (Ban_Team2 == null)
+
+    # R3's guard only blocks the READY path; setup time expiring ends setup
+    # regardless. Clearing keeps the invariant (no map starts with exactly one
+    # ban) while failing toward no-bans rather than stalling a live scrim.
+    Ban_Team1 = null
+    Ban_Team2 = null
+    Ban_Apply()
+    smallMessage(getAllPlayers(), "Only one hero was banned - bans cleared for this map")
+
+
+def Ban_DrawRows():
+    @Name "Subroutine: Draw the ban rows"
+    # SpecVisibility.ALWAYS so it renders for spectators AND in replays, which
+    # is where captures are actually taken from. The label is the capture
+    # tool's textual anchor - do not remove the colon or reword "BANS".
+    # A bare Hero renders as its NAME (confirmed in game 2026-08-27);
+    # heroIcon() would draw a glyph that OCR cannot read.
+    #
+    # The NONE branch is not cosmetic: an absent row means "could not read" and
+    # a present row reading NONE means "known, no bans". engine/banrow.js
+    # depends on telling those apart.
+    #
+    # Ban_HudTo decides who sees it, because Workshop subroutines take no
+    # parameters. During setup that is every player - you need to know what is
+    # banned before you pick. During the round it is `null`, which with
+    # SpecVisibility.ALWAYS means SPECTATORS AND REPLAYS ONLY: the scoreboard
+    # uses exactly this trick, which is why a player sees no legend mid-fight.
+    # Players complained about the clutter, and capture reads the replay anyway.
+    #
+    # HudReeval.STRING, not VISIBILITY_AND_STRING: the audience is fixed when the
+    # row is created. Re-evaluating visibility would re-read Ban_HudTo, so a live
+    # setup row would flip to spectator-only the moment the in-game rule set the
+    # global. The string still updates, which is what a changing ban needs.
+    hudSubheader(Ban_HudTo, "BANS  : {0}".format(
+                     "NONE" if Ban_Team1 == null and Ban_Team2 == null else
+                     "{0} | {1}".format(Ban_Team1, Ban_Team2)),
+                 HudPosition.LEFT, 0.2, Colour_TextTypeA,
+                 HudReeval.STRING, SpecVisibility.ALWAYS)
+    hudSubheader(Ban_HudTo, "MAP   : {0}".format(getCurrentMap()),
+                 HudPosition.LEFT, 0.3, Colour_TextTypeA,
+                 HudReeval.STRING, SpecVisibility.ALWAYS)
+
+
+# TWO rules, because "Game: Clean Up HUD Text" calls destroyAllHudTexts() the
+# moment the match starts and again between rounds. Anything created once by a
+# condition that never transitions again is destroyed and never comes back -
+# which is exactly what happened on the first in-game test: the rows showed in
+# setup and vanished at "DEFEND OBJECTIVE A". The scoreboard survives by being
+# conditioned on isGameInProgress() with a wait(), so it is RECREATED after each
+# cleanup. These mirror that, and the wait() is what orders them after it.
+rule "Bans: HUD Row (Setup)":
+    @Condition Ban_Enabled == true
+    @Condition isInSetup() == true
+
+    wait()
+    # Spectator-only in setup as well as in game. Players read the per-team
+    # lines in "HUD Setup: Team Bans" instead, which say the same thing with the
+    # attribution the combined row cannot carry. Keeping the combined row for
+    # spectators through setup matters: a replay includes the setup phase, and
+    # the capture parser needs its anchor present in every frame it might read.
+    Ban_HudTo = null
+    Ban_DrawRows()
+    # The players' view of the same facts, slotted into the ready-up block:
+    # TEAM 1 sits at sort 1 with its players at 2.x and TEAM 2 at 3 with players
+    # at 4.x, so 1.5 and 3.5 put each team's ban directly under its own header,
+    # in that team's colour. HudReeval.STRING so it updates the moment someone
+    # bans. SpecVisibility.ALWAYS and VISIBILITY_STRING_AND_COLOR mirror the
+    # player-ready rows exactly, which are known to render for players.
+    #
+    # An earlier version used SpecVisibility.NEVER to keep spectators clean and
+    # rendered for NOBODY. Every NEVER row in this file targets `eventPlayer`;
+    # every getAllPlayers() row uses ALWAYS or default. getAllPlayers() + NEVER
+    # is a combination nothing else here uses, and it does not display. Do not
+    # reintroduce it to tidy the spectator view.
+    #
+    # The label is "BAN", which normalizes to "ban" - it cannot be mistaken for
+    # the combined row's "bans" anchor by engine/banrow.js. Do not rename it.
+    hudSubheader(getAllPlayers(),
+                 "   BAN: {0}".format(Ban_Team1) if Ban_Team1 != null else "   BAN: none yet",
+                 HudPosition.LEFT, 1.5, Colour_TeamOne,
+                 HudReeval.VISIBILITY_STRING_AND_COLOR, SpecVisibility.ALWAYS)
+    hudSubheader(getAllPlayers(),
+                 "   BAN: {0}".format(Ban_Team2) if Ban_Team2 != null else "   BAN: none yet",
+                 HudPosition.LEFT, 3.5, Colour_TeamTwo,
+                 HudReeval.VISIBILITY_STRING_AND_COLOR, SpecVisibility.ALWAYS)
+
+
+rule "Bans: HUD Row (In Game)":
+    @Condition Ban_Enabled == true
+    @Condition isGameInProgress() == true
+
+    wait()
+    Ban_HudTo = null
+    Ban_DrawRows()
 
 
 rule "Game: Clean Up HUD Text":

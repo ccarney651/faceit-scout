@@ -11,8 +11,10 @@ they already know at a lower server cost.
   add-time, defender-teleport and scoreboard UX.
 - The **spectator scoreboard layout is preserved**, which is exactly what the
   OWDB capture tool will OCR in the scrim-tracker feature (Phase 2+).
-- Bloat removed (see below) roughly **halves the compiled size** and removes the
-  per-event processing that tanks host FPS.
+- Bloat removed (see below) cuts the compiled size to **about a third** and
+  removes the per-event processing that tanks host FPS. Measured 2026-08-27:
+  `scrim_owdb.txt` is 50,446 bytes against `dkeeh_raw.txt`'s 141,746 — 35.6%,
+  across 35 rules versus 80.
 
 ### What was stripped
 
@@ -33,6 +35,10 @@ they already know at a lower server cost.
 - **Spectator scoreboard** (Standard preset, Small/Medium/Large, all grouping
   styles) — created with `SpecVisibility.ALWAYS`, so it renders for spectators
   **and in replays**; that is what the capture tool reads.
+- **Hero bans** (added for OWDB, not in Scrimtime) — one per team during setup,
+  enforced with `setAllowedHeroes`, the two forced to different roles, and the
+  map blocked from starting with exactly one. Drawn on the spectator view as
+  text so the capture tool can read it. Toggle under `1. Hero Bans`.
 - **Match time display** + host-spectator scoreboard toggle (Z+Q).
 - The in-game **Settings panel** (ready up / setup phase / map completion /
   scoreboard / keybinds) with Scrimtime's original tunables.
@@ -50,17 +56,71 @@ npm run decompile:dkeeh   # regenerate dkeeh.opy from a fresh dkeeh_raw.txt expo
 `scrim_owdb.txt` is the file you paste into Overwatch. The `.opy` source is
 the versioned, patchable form — edit that, then rebuild.
 
+## The share code
+
+**`B4GM8`** — minted 2026-08-28. Hosts should load this rather than pasting the
+script; it is the only way bans and the spectator scoreboard reach a scrim
+somebody else is hosting.
+
+Two things about it that are easy to get wrong:
+
+- **It was uploaded from the alt account `ragecomic`, not `gcb`.** Re-uploading
+  from a different account almost certainly mints a NEW code rather than
+  updating this one, which would strand every host on the old version. Confirm
+  before anyone tries. Whoever holds `ragecomic` is the one who can publish
+  workshop changes.
+- **Always pick "update an existing code", never "upload a new one."** It keeps
+  the code stable for the team, it does not consume the create-code rate limit,
+  and it counts as activity against expiry.
+
+**The create-code rate limit is about ten codes.** Measured 2026-08-28 while
+rerolling for a memorable one: after roughly ten creations Overwatch returns
+"Reached limit for creating game settings code. Please try again later." The
+cooldown is not published and was not waited out, so it is unknown. Blizzard
+assigns the code randomly - it cannot be chosen - so rerolling is the only
+lever, and it is a budget of about ten. Decide what you will accept before
+spending it.
+
+**Codes expire six months after creation** unless imported or uploaded to often
+enough. Regular use by the team is what keeps this one alive; a code that only
+gets loaded occasionally will quietly die, probably mid-season.
+
 ## Import in Overwatch
 
-1. Custom Game > Create.
-2. Settings > Workshop > Import Code; paste the entire `scrim_owdb.txt`.
-3. Save. Share code is minted in-game via **Copy Settings** (Custom Game menu).
+**Do not look for an "Import Code" button — that is a different mechanism.**
+Overwatch has two, and they are not interchangeable:
+
+- **Import** takes a short *share code* (`DKEEH`, `0PP1T`) and downloads a
+  published mode. It cannot take a script.
+- **Copy / Paste** moves the whole settings blob, workshop rules included,
+  through your operating system's clipboard. That is how a script gets in.
+
+To load `scrim_owdb.txt`:
+
+1. Open `scrim_owdb.txt` in a text editor and copy all of it (Ctrl+A, Ctrl+C).
+   **Do this first** — see step 4.
+2. Custom Game > Create > **Settings** (top right).
+3. Stay on the **Settings** screen. The button row is in the **Summary panel on
+   the right**; do NOT go into the Workshop sub-screen, which has no paste
+   control at all.
+4. Click the orange **Paste** button beside Copy. It only appears when the
+   clipboard already holds valid workshop text, so an empty clipboard shows
+   nothing and looks like a missing feature.
+
+Pasting replaces **all** lobby settings, not only the rules. Use a fresh lobby.
+
+Pasting also fails outright if the Overwatch client language is not English —
+`scrim_owdb.txt` is compiled `en-US`. Going the other way, a mode is exported
+with the **Copy** button in the same place, which is how `dkeeh_raw.txt` was
+obtained. A share code is minted separately via **Copy Settings** in the Custom
+Game menu.
 
 ## Controls (default keybinds)
 
 | Action | Input |
 |---|---|
 | Ready up / unready | Interact + Reload |
+| Ban a hero (during setup) | Interact + Melee, while playing that hero |
 | Force team ready (hold) | Interact + Reload, hold 3 s |
 | Add setup time | Interact + Ultimate (+30 s, cap 90 s) |
 | Defender teleport | Interact + Jump |

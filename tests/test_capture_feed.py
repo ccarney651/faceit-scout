@@ -329,3 +329,192 @@ def test_capture_feed_regions_match_the_exporter(
     _fixture_db(db, "2026-07-28")
     mod = _load_tool(monkeypatch, db, tmp_path / "out.json")
     assert tuple(mod.REGIONS) == REGIONS
+
+
+def test_team_rosters_cover_only_the_active_season(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A team that did not return for the new season is not a scrim opponent.
+
+    Matching a scrim against last season's squad is not a near miss - it writes
+    a team that no longer plays into a private scrim log. The pool is therefore
+    the newest season that HAS data, which also stops it growing by a season
+    every year.
+
+    The season is compared numerically, not lexically: sorted as strings 's9'
+    beats 's10', which would pin the pool to the season that just ended.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    # Season 10 arrives. Charlie plays; the S9-only teams never come back.
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO teams VALUES('t3','Charlie')")
+    con.execute("INSERT INTO championships VALUES('c-s10',"
+                "'S10 EMEA Master Central - Regular Season')")
+    con.execute("INSERT INTO matches VALUES('mt-s10','c-s10',"
+                "'2027-01-05T20:00:00Z','t3','t1')")
+    con.execute("INSERT INTO round_players VALUES('mt-s10',1,'t3','p7','Tank')")
+    con.execute("INSERT INTO players VALUES('p7','newnick','NewGameName')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    tr = payload["team_rosters"]
+    assert set(tr) == {"t3"}, (
+        f"team_rosters should hold the active season's teams only, got {set(tr)}"
+    )
+    assert [p["game_name"] for p in tr["t3"]["players"]] == ["NewGameName"]
+
+
+def test_a_sub_seen_only_last_season_is_dropped_but_their_team_survives(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Scoping is per player-row, not per team.
+
+    A team that carries over keeps its entry; the stand-in who played for them
+    last season and not this one is no longer one of their names.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    con = sqlite3.connect(db)
+    # A stand-in who only ever appeared in the S9 fixture matches.
+    con.execute("INSERT INTO players VALUES('p9','subnick','SubPlayer')")
+    con.execute("INSERT INTO round_players VALUES('mt-ne',1,'t1','p9','Damage')")
+    # Alpha carries over into S10 with its regular five.
+    con.execute("INSERT INTO championships VALUES('c-s10',"
+                "'S10 EMEA Master Central - Regular Season')")
+    con.execute("INSERT INTO matches VALUES('mt-s10','c-s10',"
+                "'2027-01-05T20:00:00Z','t1','t2')")
+    for pid, role in LINEUP:
+        con.execute("INSERT INTO round_players VALUES('mt-s10',1,'t1',?,?)", (pid, role))
+    con.commit()
+    con.close()
+
+    mod.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    names = {p["game_name"] for p in payload["team_rosters"]["t1"]["players"]}
+    assert "SubPlayer" not in names, (
+        f"a stand-in from the previous season is still in the pool: {names}"
+    )
+    assert "GameName#1234" in names, "the carried-over five were dropped too"
+
+
+def test_a_season_less_championship_is_left_out_of_team_rosters(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A row that cannot be dated can never age out.
+
+    Keeping one-off cups would quietly rebuild the unbounded pool, one
+    undateable championship at a time. Dropping mirrors _division(), which
+    drops a region-less name rather than mislabelling it.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    con = sqlite3.connect(db)
+    # Plays for Alpha in the Winter Invitational only, which names no season.
+    con.execute("INSERT INTO players VALUES('p8','cupnick','CupOnly')")
+    con.execute("INSERT INTO round_players VALUES('mt-cup',1,'t1','p8','Damage')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    names = {p["game_name"] for p in payload["team_rosters"]["t1"]["players"]}
+    assert "CupOnly" not in names, (
+        f"an undateable championship's player is in the pool: {names}"
+    )
+
+
+def test_rosters_are_unscoped_when_no_championship_names_a_season(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """With nothing to scope by, an empty pool would identify nobody.
+
+    The filter exists to drop STALE teams; a database that never names a season
+    has no stale teams to drop, so it keeps them all rather than shipping a
+    feed that silently identifies no opponent at all.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    con = sqlite3.connect(db)
+    con.execute("UPDATE championships SET name = replace(name, 'S9 ', '')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+
+    assert payload["team_rosters"], (
+        "no season anywhere emptied the pool - every scrim opponent would now "
+        "be unidentifiable"
+    )
+
+
+def test_capture_feed_and_exporter_share_one_definition_of_the_season(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One source, not two copies.
+
+    The feed decides which rosters are live and the exporter decides which
+    season the site renders. If those drift, the capture app matches scrims
+    against a season the site is not showing. `REGIONS` is already a copy that
+    needed a test to hold it in place; this one is shared outright, and this
+    asserts it stays shared.
+    """
+    from faceit_sync import export
+    from faceit_sync.models import newest_season, season_of
+
+    assert export._season_of is season_of
+    assert export._newest_season is newest_season
+
+    db = tmp_path / "feed.sqlite3"
+    _fixture_db(db, "2026-07-28")
+    mod = _load_tool(monkeypatch, db, tmp_path / "out.json")
+    assert mod.season_of is season_of
+    assert mod.newest_season is newest_season
+
+
+def test_team_roster_players_are_emitted_in_a_stable_order(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The feed is committed, so an unstable order diffs the file against itself.
+
+    Player order carries no meaning to the app - opponent identification builds
+    a set - but the season filter had to drop the GROUP BY that used to impose
+    an order, and the whole 126 KB file churning on every CI build is noise that
+    hides real changes.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    # Inserted in the opposite order to the one they must come out in, so the
+    # database's natural row order cannot pass this by accident.
+    con = sqlite3.connect(db)
+    for pid in ("p0z", "p0a"):
+        con.execute("INSERT INTO players VALUES(?,?,?)", (pid, pid, pid.upper()))
+        con.execute("INSERT INTO round_players VALUES('mt-em',1,'t1',?,'Damage')", (pid,))
+    con.commit()
+    con.close()
+    mod.main()
+
+    players = json.loads(out.read_text(encoding="utf-8"))["team_rosters"]["t1"]["players"]
+    ids = [p["id"] for p in players]
+    assert ids == sorted(ids), f"team roster order is not stable: {ids}"

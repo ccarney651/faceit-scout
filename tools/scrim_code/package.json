@@ -4,7 +4,8 @@
   "description": "Lean Overwatch 2 scrim workshop code for OWDB - a stripped derivative of Scrimtime (DKEEH) that keeps the spectator scoreboard visible to the capture tool.",
   "scripts": {
     "build": "overpy compile -i scrim_owdb.opy -o scrim_owdb.txt",
-    "decompile:dkeeh": "overpy decompile -i dkeeh_raw.txt -o dkeeh.opy"
+    "decompile:dkeeh": "overpy decompile -i dkeeh_raw.txt -o dkeeh.opy",
+    "decompile:lite": "overpy decompile -i lite_raw.txt -o lite.opy"
   },
   "license": "UNLICENSED",
   "private": true,

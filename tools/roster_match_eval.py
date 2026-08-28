@@ -5,33 +5,58 @@ Evidence for specs/2026-08-12-scrim-mode-design.md §4.2. Takes every real
 lineup would also match at each threshold. A lineup matching two teams at the
 bar is ambiguous; one matching the wrong team alone is a misidentification.
 
+Scoped to the ACTIVE season, exactly as tools/build_capture_data.py scopes the
+`team_rosters` it ships — both the pool and the lineups tested against it. A
+number measured over a pool the app does not use would describe nothing.
+
 Re-run it when the season turns over or the roster data grows — the bar is only
-as good as the collision rate it was chosen against.
+as good as the collision rate it was chosen against. It is worth re-running the
+first week of a new season in particular: the pool is then the teams that have
+already played, not the whole league.
 
     .venv/Scripts/python.exe tools/roster_match_eval.py
 """
 import collections
 import pathlib
 import sqlite3
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from faceit_sync.models import newest_season, season_of  # noqa: E402
 
 con = sqlite3.connect(pathlib.Path(__file__).resolve().parents[1] / "faceit.sqlite3")
 
-# Accumulated roster per team: every player ever seen playing for them.
+SEASON = newest_season(
+    r[0] for r in con.execute("select name from championships"))
+print(f"active season: {SEASON}")
+
+# Accumulated roster per team, within the active season.
 roster = collections.defaultdict(set)
-for tid, gn, nick in con.execute("""
-        select rp.team_id, p.game_name, p.nickname
-        from round_players rp join players p on p.id = rp.player_id
+for tid, gn, nick, champ in con.execute("""
+        select rp.team_id, p.game_name, p.nickname, ch.name
+        from round_players rp
+        join players p on p.id = rp.player_id
+        join matches m on m.id = rp.match_id
+        join championships ch on ch.id = m.championship_id
         where rp.team_id is not null"""):
+    if season_of(champ) != SEASON:
+        continue
     n = (gn or nick or "").strip().lower()
     if n:
         roster[tid].add(n)
 
 # Real lineups: the five players who actually played one game together.
 lineups = collections.defaultdict(set)
-for mid, gno, tid, gn, nick in con.execute("""
-        select rp.match_id, rp.game_no, rp.team_id, p.game_name, p.nickname
-        from round_players rp join players p on p.id = rp.player_id
+for mid, gno, tid, gn, nick, champ in con.execute("""
+        select rp.match_id, rp.game_no, rp.team_id, p.game_name, p.nickname,
+               ch.name
+        from round_players rp
+        join players p on p.id = rp.player_id
+        join matches m on m.id = rp.match_id
+        join championships ch on ch.id = m.championship_id
         where rp.team_id is not null"""):
+    if season_of(champ) != SEASON:
+        continue
     n = (gn or nick or "").strip().lower()
     if n:
         lineups[(mid, gno, tid)].add(n)

@@ -940,6 +940,29 @@ calls this at every point a code can start a scrim capture
 offering to jump to League capture instead of letting the save proceed. A
 league map's replay code can no longer be recorded as a private scrim.
 
+**Hero bans are read off the workshop HUD, not remembered.**
+`tools/scrim_code/scrim_owdb.opy` runs a ban phase during setup: one hero per
+team (switch to it, `Interact + Melee`), enforced with `setAllowedHeroes`, the
+two bans forced to different roles, and the map blocked from starting with
+exactly one. It draws `BANS  : SOMBRA | MAUGA` and `MAP   : SAMOA` with
+`SpecVisibility.ALWAYS`, so both survive into the replay where captures are
+taken. `docs/capture/engine/banrow.js` finds those rows by their label in a
+multi-line OCR read — a **textual** anchor, so the crop only has to contain the
+row rather than land on it, which is what separates this from the replay-code
+reader and its five geometry probes. It validates by shape (two bans or none,
+never one; different roles; both resolving to known heroes) and abstains
+otherwise, **filling** the panel's ban picker rather than replacing it.
+
+Two things not to undo. Matching is exact after normalization — fuzzy matching
+would turn a safe abstention into a plausible wrong answer in a private log. And
+the row renders `NONE` explicitly rather than disappearing: an absent row means
+"could not read", a row reading `NONE` means "known, no bans", and the parser
+depends on telling those apart.
+
+Bans are only recorded in lobbies running **this** workshop code. Scrims hosted
+on stock ScrimTime or ScrimTime Lite have no ban row, and Lite has no spectator
+scoreboard either, so it can never support the stats read.
+
 **Three features still carry `WIP` badges**: auto side-detection, the scoreboard
 OCR read, and the score-box read. Side detection has since worked end to end in
 the field (2026-08-19, all ten slots), but one confirmed run is not a track
@@ -1162,7 +1185,11 @@ app never has to crawl FACEIT itself.
                      "role": "Tank"}]}
     }
   },
-  "hero_roles": {"0x02E000000000007A": "Tank"}
+  "hero_roles": {"0x02E000000000007A": "Tank"},
+  "team_rosters": {
+    "<team_id>": {"name": "Qwiz Esports",
+      "players": [{"id": "…", "nick": "qeezyow", "game_name": "qeezy"}]}
+  }
 }
 ```
 
@@ -1179,6 +1206,25 @@ a candidate for it. Scrim opponent identification wants
 the opposite — the accumulated squad, because a season's stand-ins are what still
 identify a lineup when two players are on smurfs. Two consumers, two correct
 shapes; neither should be bent to serve the other.
+
+**`team_rosters` is the ACTIVE season only** — the newest season that has data,
+read from `faceit_sync.models.newest_season` so the feed and the exported site
+cannot disagree about which season is current. A team that did not return for
+the new season is not someone you scrim, so matching a scrim against last
+season's squad is not a near miss: it writes a team that no longer plays into a
+private scrim log. Scoping also keeps the pool from growing by a season every
+year, which is what the measured guarantee rests on — zero wrong teams at the
+3-of-5 bar across 8,830 real lineups, from `tools/roster_match_eval.py`, which
+applies the same filter so the number describes the pool that actually ships.
+
+Two consequences worth knowing. A championship whose name carries no season is
+dropped rather than kept, because a row that cannot be dated can never age out
+and would quietly rebuild the unbounded pool. And **for roughly the first week
+of a season the pool is only the teams that have already played** — measured
+across S9's five regular-season divisions, 48% of teams had played by day 3 and
+99% by day 7. Identification fails safe there: an opponent who is not in the
+pool becomes a `new_group` the operator can label with *Name them*, which is
+remembered locally and upgrades to the real team once they appear.
 
 `role` is FACEIT's own per-game value (the `i16` stats field), stored as `null`
 for a game whose stats never captured rather than guessed. `hero_roles` exists

@@ -1,0 +1,36 @@
+variables {
+    global:
+        0: Probe_White
+        1: Probe_Amber
+        2: Probe_Green
+}
+
+rule ("Probe: Colours") {
+    event {
+        Ongoing - Global;
+    }
+    actions {
+        Set Global Variable(Probe_White, Color(White));
+        Set Global Variable(Probe_Amber, Custom Color(255, 155, 0, 255));
+        Set Global Variable(Probe_Green, Custom Color(40, 205, 60, 255));
+    }
+}
+
+rule ("Probe: Hero rendering") {
+    event {
+        Ongoing - Global;
+    }
+    actions {
+        Create HUD Text(All Players(All Teams), Custom String("OWDB PROBE - hero name rendering"), Null, Null, Left, 0, Global.Probe_White, Null, Null, Visible To, Visible Always);
+        "ROW 1 - the question. A bare Hero embedded in a string.\nChosen for the spellings that break naive matching: an accent, a full\nstop, a colon, an umlaut, and a two-word name."
+        Create HUD Text(All Players(All Teams), Null, Custom String("TEXT A: {0} / {1} / {2}", Hero(Lúcio), Hero(D.Va), Hero(Torbjörn)), Null, Left, 1, Null, Global.Probe_Green, Null, Visible To, Visible Always);
+        Create HUD Text(All Players(All Teams), Null, Custom String("TEXT B: {0} / {1} / {2}", Hero(Soldier: 76), Hero(Wrecking Ball), Hero(Junker Queen)), Null, Left, 2, Null, Global.Probe_Green, Null, Visible To, Visible Always);
+        "ROW 2 - the control. The SAME heroes forced through heroIcon().\nIf row 1 and row 2 look the same, a bare Hero is a glyph and the ban\nfeature needs a workshop glyph reference set (design section 2)."
+        Create HUD Text(All Players(All Teams), Null, Custom String("ICON  : {0} {1} {2}", Hero Icon String(Hero(Lúcio)), Hero Icon String(Hero(D.Va)), Hero Icon String(Hero(Torbjörn))), Null, Left, 3, Null, Global.Probe_Amber, Null, Visible To, Visible Always);
+        "If this reads as the map's name, capture can verify the map off the HUD\ninstead of trusting the operator's panel selection, which closes the\n\"map-name verification is stubbed\" item in specs/BACKLOG.md."
+        Create HUD Text(All Players(All Teams), Null, Custom String("MAP   : {0}", Current Map), Null, Left, 4, Null, Global.Probe_White, Null, Visible To and String, Visible Always);
+        "ROW 4 - the shape the real feature would draw, so you can judge it in\nplace against the scoreboard rather than in the abstract."
+        Create HUD Text(All Players(All Teams), Null, Custom String("BANS  : {0} | {1}", Hero(Sombra), Hero(Mauga)), Null, Left, 5, Null, Global.Probe_White, Null, Visible To, Visible Always);
+    }
+}
+

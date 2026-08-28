@@ -20,6 +20,17 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-08-27
 
 ### Added
+- **Hero bans are captured from the game instead of remembered.** The scrim
+  workshop code gains a ban phase: during setup each team bans one hero by
+  switching to it and pressing `Interact + Melee`. The ban is enforced for all
+  ten players, the two bans must be of different roles, and a map cannot start
+  with exactly one ban — if the setup timer runs out holding one, it is cleared
+  rather than stalling the lobby. The bans are drawn on the spectator view and
+  survive into the replay, so the capture panel's new *Read bans* button fills
+  the ban picker from the screen. It abstains rather than guessing, and the
+  manual picker is untouched — which matters, because bans are only recorded in
+  lobbies running this workshop code, and scrims today are hosted on a mix of
+  it, ScrimTime and ScrimTime Lite.
 - **Season 9 is frozen at `/s9/`**, linked from a new `/archive.html` and from
   the footer of every page. It is a point-in-time export — standings, teams,
   players, League meta and all 274 captured comps exactly as they stood when the
@@ -39,6 +50,20 @@ Entries before 2026-08-11 were reconstructed from git history.
   rather than on cutover day.
 
 ### Changed
+- **The capture feed's `team_rosters` is scoped to the active season.** Scrim
+  opponent identification matches ten HUD names against every team in the
+  league, and that pool was every `round_players` row ever ingested — so after
+  the Season 10 cutover it would have carried S9 rosters, S10 rosters and
+  disbanded teams together. You only scrim teams that are active, which makes a
+  match against last season's squad not a near miss but a team that no longer
+  plays, written into a private scrim log. The pool is now the newest season
+  with data, sharing `newest_season` with the exporter so the feed and the site
+  cannot disagree about which season is current. No visible change today (S9 is
+  the only season in the database, and the built feed was diffed to confirm the
+  output is unchanged); it flips itself on the first ingested S10 match. For
+  about the first week of a season the pool is only the teams that have already
+  played — 48% of S9's teams by day 3, 99% by day 7 — and an opponent who is not
+  in it stays labelable by hand, remembered locally for next time.
 - **A pinned season with no data no longer fails the build.** `export --season
   s10` against a database with no Season 10 matches used to write a 0-byte file
   and exit 1; CI runs under `bash -e`, so that failed the whole job before the

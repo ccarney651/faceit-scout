@@ -1,0 +1,1286 @@
+﻿settings
+{
+	main
+	{
+		Description: "workshop.codes/scrimtimelite"
+		Mode Name: "ScrimTime Lite"
+	}
+
+	lobby
+	{
+		Map Rotation: After A Game
+		Max Spectators: 12
+		Pause Game On Player Disconnect: Yes
+		Return To Lobby: After A Game
+	}
+
+	modes
+	{
+		Clash
+		{
+			Capture Speed Modifier: 45%
+			Competitive Rules: Enabled
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		Control
+		{
+			Competitive Rules: Enabled
+			Game Mode Start: Immediately
+			Score To Win: 3
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		disabled Control 6v6
+		{
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		disabled Control Balanced Overwatch
+		{
+			Competitive Rules: Enabled
+			Game Mode Start: Immediately
+			Score To Win: 3
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		disabled Escort Balanced Overwatch
+		{
+			Competitive Rules: On
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		Escort
+		{
+			Competitive Rules: On
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		Flashpoint
+		{
+			Competitive Rules: Enabled
+			Game Mode Start: Immediately
+			Score To Win: 5
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		Hybrid
+		{
+			Competitive Rules: Enabled
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		disabled Push Balanced Overwatch
+		{
+			Competitive Rules: On
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+
+		Push
+		{
+			Competitive Rules: On
+			Game Mode Start: Immediately
+			Tank Role Passive Health Bonus: Always Enabled
+		}
+	}
+
+	workshop
+	{
+		Add Setup Time: [4]
+		Command: [5]
+		Defender Teleport: [6]
+		Ready Up Toggle  Force Team Ready: [9]
+	}
+}
+
+variables
+{
+	global:
+		0: Keybind_ButtonArray
+		1: Keybind_Command
+		2: Keybind_Ready
+		3: Keybind_DefenderTeleport
+		4: Keybind_AddSetupTime
+		5: Keybind_ChangeLanguage
+		6: Text_LanguageTextArray
+		7: Text_EnableChangeLanguage
+		8: Text_DefaultLanguage
+		9: Colour_TeamOne
+		10: Colour_TeamTwo
+		11: Colour_TextTypeA
+		12: Colour_TextTypeB
+		13: Colour_TextTypeC
+		14: Debug_EnableDebugMode
+		15: Debug_DisplayServerLoad
+		17: Setup_RemoveAssemblingHeroes
+		18: Setup_SetupTimeOverride
+		19: Setup_AllowDefendersTeleport
+		20: ReadyUp_FreqMode
+		21: ReadyUp_CaptainMode
+		22: ReadyUp_EnableReadyVoiceLine
+		23: ReadyUp_MinimumPlayersToStart
+		24: ReadyUp_SetupCountdownTime
+		25: ReadyUp_FreezeSetupTime
+		26: ReadyUp_AllowForceTeamReady
+		27: ReadyUp_ForceTeamReadyHoldTime
+		28: MapComp_EnableMapCompletion
+		29: MapComp_ForceAsymTwoRounds
+		30: MapComp_ForceControlThreeRounds
+		31: MapComp_ForceFlashpointFiveCaps
+		32: MapComp_TeamOneScore
+		33: MapComp_TeamTwoScore
+		42: SetupAddTime_CaptainMode
+		43: SetupAddTime_Step
+		44: SetupAddTime_Max
+		47: Logs_AutoMatchEndTime
+
+	player:
+		0: Text_PlayerLanguage
+		1: ReadyUp_PlayerReady
+		2: ReadyUp_CurrentHoldTime
+}
+
+rule("Settings: Language Options")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.Text_EnableChangeLanguage = Workshop Setting Toggle(Custom String("1. Language"), Custom String(
+			"Allow players to change language"), True, 0);
+		Global.Text_DefaultLanguage = Workshop Setting Combo(Custom String("1. Language"), Custom String("Default Language"), 0, Array(
+			Custom String("English"), Custom String("Korean (한국어)"), Custom String("Simplified Chinese (简体中文)"), Custom String(
+			"Japanese (日本語)"), Custom String("Spanish (Español)"), Custom String("French (Français)"), Custom String("Turkish (Türkçe)")),
+			0);
+	}
+}
+
+rule("Settings: Ready Up Options")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.ReadyUp_FreqMode = Workshop Setting Combo(Custom String("2. Ready Up System"), Custom String("Enable Ready Up System"), 0,
+			Array(Custom String("Every Round"), Custom String("Only Round One"), Custom String("Off")), 0);
+		Global.ReadyUp_CaptainMode = Workshop Setting Combo(Custom String("2. Ready Up System"), Custom String("Who Needs To Ready Up"), 0,
+			Array(Custom String("All Players"), Custom String("Only Players in First Slot")), 1);
+		Global.ReadyUp_AllowForceTeamReady = Workshop Setting Toggle(Custom String("2. Ready Up System"), Custom String(
+			"Allow Players to Force Team Ready"), True, 2);
+		Global.ReadyUp_ForceTeamReadyHoldTime = Workshop Setting Integer(Custom String("2. Ready Up System"), Custom String(
+			"Force Team Ready Button Hold Time"), 3, 1, 5, 3);
+		Global.ReadyUp_SetupCountdownTime = Workshop Setting Integer(Custom String("2. Ready Up System"), Custom String("Countdown Timer"),
+			5, 5, 10, 4);
+		Global.ReadyUp_MinimumPlayersToStart = Workshop Setting Integer(Custom String("2. Ready Up System"), Custom String(
+			"Minimum Number of Players in Game"), 10, 1, 10, 5);
+		Global.ReadyUp_FreezeSetupTime = Workshop Setting Toggle(Custom String("2. Ready Up System"), Custom String("Freeze Setup Timer"),
+			False, 6);
+		Global.ReadyUp_EnableReadyVoiceLine = Workshop Setting Toggle(Custom String("2. Ready Up System"), Custom String(
+			"Play Voice Line When Readying"), True, 7);
+	}
+}
+
+rule("Settings: Setup Phase Options")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.Setup_RemoveAssemblingHeroes = Workshop Setting Toggle(Custom String("3. Setup Phase"), Custom String(
+			"Remove Assembling Heroes Phase"), True, 0);
+		Global.Setup_AllowDefendersTeleport = Workshop Setting Toggle(Custom String("3. Setup Phase"), Custom String(
+			"Allow Defenders to Teleport Between Objective and Spawn"), True, 1);
+		Global.Setup_SetupTimeOverride = Workshop Setting Integer(Custom String("3. Setup Phase"), Custom String("Base Setup Time"), 60,
+			45, 300, 2);
+		Global.SetupAddTime_CaptainMode = Workshop Setting Combo(Custom String("3. Setup Phase"), Custom String("Who Can Add Setup Time"),
+			0, Array(Custom String("All Players"), Custom String("Only Players in First Slot"), Custom String("Off")), 3);
+		Global.SetupAddTime_Step = Workshop Setting Integer(Custom String("3. Setup Phase"), Custom String("Setup Time Added"), 30, 1, 60,
+			4);
+		Global.SetupAddTime_Max = Workshop Setting Integer(Custom String("3. Setup Phase"), Custom String("Setup Time Maximum"), 90, 45,
+			600, 5);
+	}
+}
+
+rule("Settings: Map Completion Options")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.MapComp_EnableMapCompletion = Workshop Setting Toggle(Custom String("4. Map Completion"), Custom String(
+			"Ensure Full Map is Attacked on Round 2 for Assault, Escort and Hybrid Maps"), True, 0);
+		Global.MapComp_ForceAsymTwoRounds = Workshop Setting Combo(Custom String("4. Map Completion"), Custom String(
+			"End Assault, Escort and Hybrid Maps After Two Rounds"), 0, Array(Custom String("If either team fails to complete map"),
+			Custom String("Always"), Custom String("Off")), 1);
+		Global.MapComp_ForceControlThreeRounds = Workshop Setting Toggle(Custom String("4. Map Completion"), Custom String(
+			"End Control Maps After Three Rounds"), True, 2);
+		Global.MapComp_ForceFlashpointFiveCaps = Workshop Setting Toggle(Custom String("4. Map Completion"), Custom String(
+			"End Flashpoint Maps After Five Captures"), True, 3);
+	}
+}
+
+rule("Settings: Keybind Options")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.Keybind_ButtonArray = Array(Button(Primary Fire), Button(Secondary Fire), Button(Ability 1), Button(Ability 2), Button(
+			Ultimate), Button(Interact), Button(Jump), Button(Crouch), Button(Melee), Button(Reload));
+		Global.Keybind_Command = Global.Keybind_ButtonArray[Workshop Setting Combo(Custom String("5. Keybinds"), Custom String("Command"),
+			5, Array(Custom String("Primary Fire"), Custom String("Secondary Fire"), Custom String("Ability 1"), Custom String(
+			"Ability 2"), Custom String("Ultimate"), Custom String("Interact"), Custom String("Jump"), Custom String("Crouch"),
+			Custom String("Melee"), Custom String("Reload")), 0)];
+		Global.Keybind_Ready = Global.Keybind_ButtonArray[Workshop Setting Combo(Custom String("5. Keybinds"), Custom String(
+			"Ready Up Toggle / Force Team Ready"), 9, Array(Custom String("Primary Fire"), Custom String("Secondary Fire"), Custom String(
+			"Ability 1"), Custom String("Ability 2"), Custom String("Ultimate"), Custom String("Interact"), Custom String("Jump"),
+			Custom String("Crouch"), Custom String("Melee"), Custom String("Reload")), 1)];
+		Global.Keybind_DefenderTeleport = Global.Keybind_ButtonArray[Workshop Setting Combo(Custom String("5. Keybinds"), Custom String(
+			"Defender Teleport"), 6, Array(Custom String("Primary Fire"), Custom String("Secondary Fire"), Custom String("Ability 1"),
+			Custom String("Ability 2"), Custom String("Ultimate"), Custom String("Interact"), Custom String("Jump"), Custom String(
+			"Crouch"), Custom String("Melee"), Custom String("Reload")), 2)];
+		Global.Keybind_AddSetupTime = Global.Keybind_ButtonArray[Workshop Setting Combo(Custom String("5. Keybinds"), Custom String(
+			"Add Setup Time"), 4, Array(Custom String("Primary Fire"), Custom String("Secondary Fire"), Custom String("Ability 1"),
+			Custom String("Ability 2"), Custom String("Ultimate"), Custom String("Interact"), Custom String("Jump"), Custom String(
+			"Crouch"), Custom String("Melee"), Custom String("Reload")), 3)];
+	}
+}
+
+rule("Settings: Debug Options")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.Debug_EnableDebugMode = Workshop Setting Toggle(Custom String("6. Debug"), Custom String("Enable Debug Mode"), False, 0);
+		Global.Debug_DisplayServerLoad = Workshop Setting Toggle(Custom String("6. Debug"), Custom String("Display Server Load"), True, 1);
+		Global.Logs_AutoMatchEndTime = Workshop Setting Integer(Custom String("6. Debug"), Custom String("Automatically End Match Time"),
+			3600, 10, 3600, 2);
+	}
+}
+
+rule("Initialisation: Colours")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.Colour_TeamOne = Custom Color(50, 185, 240, 255);
+		Global.Colour_TeamTwo = Custom Color(250, 5, 30, 255);
+		Global.Colour_TextTypeA = Custom Color(255, 255, 255, 255);
+		Global.Colour_TextTypeB = Custom Color(255, 155, 0, 255);
+		Global.Colour_TextTypeC = Custom Color(40, 205, 60, 255);
+	}
+}
+
+rule("Initialisation: Language Strings")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.Text_LanguageTextArray[0] = Array(Custom String("ScrimTime Lite"), Custom String("ScrimTime Lite"), Custom String(
+			"ScrimTime Lite"), Custom String("ScrimTime Lite"), Custom String("ScrimTime Lite"), Custom String("ScrimTime Lite"),
+			Custom String("ScrimTime Lite"));
+		Global.Text_LanguageTextArray[1] = Array(Custom String("Countdown will start when"), Custom String("카운트다운 시작 조건"), Custom String(
+			"倒计时将在"), Custom String("カウントダウンの開始条件"), Custom String("La cuenta regresiva comenzará cuando"), Custom String(
+			"Le compte à rebours commencera quand"), Custom String("GERİ SAYIM"));
+		Global.Text_LanguageTextArray[2] = Array(Custom String("both teams are ready"), Custom String("양쪽 팀 모두 준비"), Custom String(
+			"双方队伍准备时开始"), Custom String("両チームの準備が整い次第"), Custom String("ambos equipos están listos"), Custom String(
+			"les deux équipes sont prêtes"), Custom String("HER İKİ TAKIM HAZIR OLDUĞUNDA BAŞLAYACAK"));
+		Global.Text_LanguageTextArray[3] = Array(Custom String("all players are ready"), Custom String("모든 플레이어 준비"), Custom String(
+			"所有玩家已准备时开始"), Custom String("全員の準備が整い次第"), Custom String("todos los jugadores están listos"), Custom String(
+			"tous les joueurs sont prêts"), Custom String("TÜM OYUNCULAR HAZIR OLDUĞUNDA BAŞLAYACAK"));
+		Global.Text_LanguageTextArray[4] = Array(Custom String("For more information, visit"), Custom String("상세한 지침은 방문해주세요"),
+			Custom String("有关完整文档请访问"), Custom String("フルドキュメンテーションは"), Custom String("Para mas información, visita"), Custom String(
+			"Pour plus d’informations, visitez"), Custom String("DAHA FAZLA BİLGİ İÇİN"));
+		Global.Text_LanguageTextArray[5] = Array(Custom String("workshop.codes/scrimtimelite"), Custom String(
+			"workshop.codes/scrimtimelite"), Custom String("workshop.codes/scrimtimelite"), Custom String("workshop.codes/scrimtimelite"),
+			Custom String("workshop.codes/scrimtimelite"), Custom String("workshop.codes/scrimtimelite"), Custom String(
+			"workshop.codes/scrimtimelite"));
+		Global.Text_LanguageTextArray[6] = Array(Custom String("Import code"), Custom String("코드 가져 오기"), Custom String("导入代码"),
+			Custom String("コードの読み込み"), Custom String("Importar código"), Custom String("Importer le code"), Custom String("ATÖLYE KODU"));
+		Global.Text_LanguageTextArray[7] = Array(Custom String("0PP1T"), Custom String("0PP1T"), Custom String("0PP1T"), Custom String(
+			"0PP1T"), Custom String("0PP1T"), Custom String("0PP1T"), Custom String("0PP1T"));
+		Global.Text_LanguageTextArray[8] = Array(Custom String("You are readied up"), Custom String("준비 완료 상태입니다"), Custom String(
+			"你已准备就绪"), Custom String("あなたは準備完了です"), Custom String("Estás Preparado"), Custom String("Vous êtes prêt"), Custom String(
+			"HAZIRSIN"));
+		Global.Text_LanguageTextArray[9] = Array(Custom String("You are not readied up"), Custom String("준비되지 않았습니다"), Custom String(
+			"你未准备就绪"), Custom String("あなたは準備中です"), Custom String("No estás Preparado"), Custom String("Vous n'êtes pas prêt"),
+			Custom String("HAZIR DEĞİLSİN"));
+		Global.Text_LanguageTextArray[10] = Array(Custom String("Ready Up"), Custom String("준비 완료"), Custom String("准备就绪"), Custom String(
+			"準備完了"), Custom String("Marcar Preparado"), Custom String("Prêt"), Custom String("HAZIR OL"));
+		Global.Text_LanguageTextArray[11] = Array(Custom String("Unready"), Custom String("준비 취소"), Custom String("取消准备"), Custom String(
+			"準備中"), Custom String("Desmarcar Preparado"), Custom String("Pas prêt"), Custom String("HAZIR DEĞİL"));
+		Global.Text_LanguageTextArray[12] = Array(Custom String("(Press) Ready Up / (Hold) Force Team Ready"), Custom String(
+			"(누르기) 준비 완료 / (길게 누르기) 강제 팀 준비"), Custom String("(按)准备就绪 / (按住)强制队伍准备"), Custom String("(押して) 準備完了 / (押し続けて) チームを準備完了にする"),
+			Custom String("(Presione) Preparado / (Mantener presionado) Forzar Equipo Preparado"), Custom String(
+			"(Appuyez) Prêt / (Maintenez) Forcer le prêt de l'équipe"), Custom String(
+			"(BAS) HAZIR OL / (BASILI TUT) TAKIMI ZORLA HAZIRLA"));
+		Global.Text_LanguageTextArray[13] = Array(Custom String("(Press) Unready / (Hold) Force Team Ready"), Custom String(
+			"(누르기) 준비 취소 / (길게 누르기) 강제 팀 준비"), Custom String("(按)取消准备 / (按住)强制队伍准备"), Custom String("(押して) 準備中 / (押し続けて) チームを準備完了にする"),
+			Custom String("(Presione) No preparado / (Mantener presionado) Forzar Equipo Preparado"), Custom String(
+			"(Appuyez) Pas prêt / (Maintenez) Forcer la prêt de l'équipe"), Custom String(
+			"(BAS) HAZIR DEĞİL / (BASILI TUT) TAKIMI ZORLA HAZIRLA"));
+		Global.Text_LanguageTextArray[14] = Array(Custom String("All players ready, starting countdown"), Custom String(
+			"모두 준비됐습니다, 카운트다운 시작합니다"), Custom String("所有玩家已准备就绪，开始倒计时"), Custom String("全員の準備が整いました　カウントダウンを開始します"), Custom String(
+			"Todos los jugadores están listos, comenzando la cuenta regresiva"), Custom String(
+			"Tous les joueurs sont prêts, début du compte à rebours"), Custom String("TÜM OYUNCULAR HAZIR, GERİ SAYIM BAŞLIYOR"));
+		Global.Text_LanguageTextArray[15] = Array(Custom String("Both teams ready, starting countdown"), Custom String(
+			"양 팀 모두 준비됐습니다 카운트다운 시작합니다"), Custom String("双方队伍都已准备就绪，开始倒计时"), Custom String("両チームの準備が整いました　カウントダウンを開始します"), Custom String(
+			"Ambos equipos están listos, comenzando la cuenta regresiva"), Custom String(
+			"Les deux équipes sont prêtes, début du compte à rebours"), Custom String("HER İKİ TAKIM DA HAZIR, GERİ SAYIM BAŞLIYOR"));
+		Global.Text_LanguageTextArray[16] = Array(Custom String(
+			"All players ready, but not enough players in game ([MIN_PLAYERS_TO_START])"), Custom String(
+			"모든 플레이어가 준비되었지만 게임 플레이어 수가 충분하지 않음 ([MIN_PLAYERS_TO_START] 명 이상 필요)"), Custom String(
+			"所有玩家已准备就绪，但游戏中玩家数不足([MIN_PLAYERS_TO_START])"), Custom String(
+			"すべてのプレイヤーが準備完了していますが、ゲーム内のプレイヤーが足りません ([MIN_PLAYERS_TO_START])"), Custom String(
+			"Todos los jugadores están listos, pero no hay suficientes jugadores en el juego ([MIN_PLAYERS_TO_START])"), Custom String(
+			"Tous les joueurs sont prêts, mais il n'y a pas assez de joueurs dans le jeu ([MIN_PLAYERS_TO_START])"), Custom String(
+			"TÜM OYUNCULAR HAZIR ANCAK OYUNDA YETERLİ SAYIDA OYUNCU YOK ([MIN_PLAYERS_TO_START])"));
+		Global.Text_LanguageTextArray[17] = Array(Custom String(
+			"Both teams ready, but not enough players in game ([MIN_PLAYERS_TO_START]"), Custom String(
+			"양 팀 모두 준비되었지만 게임 플레이어 수가 충분하지 않음 ([MIN_PLAYERS_TO_START] 명 이상 필요)"), Custom String(
+			"双方队伍都已准备就绪，但游戏中玩家数不足([MIN_PLAYERS_TO_START])"), Custom String("両チームが準備完了していますが、ゲーム内のプレイヤーが足りません ([MIN_PLAYERS_TO_START])"),
+			Custom String("Ambos equipos están listos, pero no hay suficientes jugadores en el juego ([MIN_PLAYERS_TO_START]"),
+			Custom String("Les deux équipes sont prêtes, mais il n'y a pas assez de joueurs dans le jeu ([MIN_PLAYERS_TO_START])"),
+			Custom String("HER İKİ TAKIM DA HAZIR ANCAK OYUNDA YETERLİ SAYIDA OYUNCU YOK ([MIN_PLAYERS_TO_START])"));
+		Global.Text_LanguageTextArray[18] = Array(Custom String("[EVENT_PLAYER] unreadied, setup timer reset"), Custom String(
+			"[EVENT_PLAYER]님이 준비 취소되었습니다 설정 타이머가 다시 시작합니다"), Custom String("[EVENT_PLAYER] 取消准备，设置计时器重置"), Custom String(
+			"[EVENT_PLAYER] が準備中になったため、マッチ準備時間がリセットされます"), Custom String(
+			"[EVENT_PLAYER] no está preparado, temporizador de configuración reiniciado"), Custom String(
+			"[EVENT_PLAYER] n'est plus prêt, le minuteur est remis à zéro"), Custom String(
+			"[EVENT_PLAYER] HAZIR DEĞİL, HAZIRLIK SÜRESİ SIFIRLANIYOR"));
+		Global.Text_LanguageTextArray[19] = Array(Custom String("A team unreadied, setup timer reset"), Custom String(
+			"한 팀이 준비 취소되었습니다 설정 타이머가 다시 시작합니다"), Custom String("一支队伍取消准备，设置计时器重置"), Custom String("チームが準備中になり、マッチ準備時間がリセットされます"),
+			Custom String("Un equipo no está preparado, temporizador de configuración reiniciado"), Custom String(
+			"Une équipe n'est pas prête, le minuteur est remis à zéro"), Custom String(
+			"BİR TAKIM ARTIK HAZIR DEĞİL, HAZIRLIK SÜRESİ SIFIRLANIYOR"));
+		Global.Text_LanguageTextArray[20] = Array(Custom String("[EVENT_PLAYER] set all players on [EVENT_PLAYER_TEAM] ready"),
+			Custom String("[EVENT_PLAYER]가 [EVENT_PLAYER_TEAM]의 모든 플레이어를 준비 상태로 강제로 변경했습니다"), Custom String(
+			"[EVENT_PLAYER] 将所有玩家设置为 [EVENT_PLAYER_TEAM] 准备"), Custom String("[EVENT_PLAYER] が [EVENT_PLAYER_TEAM] のメンバーを準備完了にしました"),
+			Custom String("[EVENT_PLAYER] estableció que todos los jugadores de [EVENT_PLAYER_TEAM] están preparados"), Custom String(
+			"[EVENT_PLAYER] a mis tous les joueurs de [EVENT_PLAYER_TEAM] prêts"), Custom String(
+			"[EVENT_PLAYER] [EVENT_PLAYER_TEAM] TAKIMINDAKİ TÜM OYUNCULARI HAZIR HALE GETİRDİ"));
+		Global.Text_LanguageTextArray[21] = Array(Custom String("Teleport to the objective"), Custom String("목표지점으로 순간이동합니다"),
+			Custom String("传送到目标地点"), Custom String("目標地点にテレポートします"), Custom String("Teletransportarse al objetivo"), Custom String(
+			"Téléporter à l'objectif"), Custom String("HEDEFE IŞINLAN"));
+		Global.Text_LanguageTextArray[22] = Array(Custom String("Teleport back to spawn"), Custom String("스폰 지점으로 순간이동합니다"), Custom String(
+			"传送回重生点"), Custom String("スポーンにテレポートします"), Custom String("Teletransportarse de vuelta al spawn"), Custom String(
+			"Téléporter au spawn"), Custom String("BAŞLANGIÇ NOKTASINA GERİ IŞINLAN"));
+		Global.Text_LanguageTextArray[23] = Array(Custom String("Teleported to objective"), Custom String("목표지점으로 순간이동했습니다"),
+			Custom String("传送到目标地点"), Custom String("目標地点にテレポートしました"), Custom String("Teletransportado al objetivo"), Custom String(
+			"Téléporté à l'objectif"), Custom String("HEDEFE IŞINLANDI"));
+		Global.Text_LanguageTextArray[24] = Array(Custom String("Teleported to spawn"), Custom String("스폰 지점으로 순간이동했습니다"), Custom String(
+			"传送到重生点"), Custom String("スポーンにテレポートしました"), Custom String("Teletransportado al spawn"), Custom String(
+			"Téléporté à l'apparition"), Custom String("BAŞLANGIÇ NOKTASINA IŞINLANDI"));
+		Global.Text_LanguageTextArray[25] = Array(Custom String("Unable to teleport, please try again later"), Custom String(
+			"순간이동이 불가능합니다 나중에 다시 시도해주세요"), Custom String("无法传送，请稍后重试"), Custom String("テレポートできません、もう一度試してください"), Custom String(
+			"No se puede teletransportar, inténtalo de nuevo más tarde"), Custom String(
+			"Impossible de se téléporter, veuillez réessayer à un autre moment"), Custom String(
+			"IŞINLANAMIYOR, LÜTFEN DAHA SONRA TEKRAR DENEYİN"));
+		Global.Text_LanguageTextArray[26] = Array(Custom String("Add [SETUP_TIME_STEP] sec to setup timer"), Custom String(
+			"설정 타이머에 [SETUP_TIME_STEP] 초를 추가합니다"), Custom String("将 [SETUP_TIME_STEP] 秒添加到设置计时器中"), Custom String(
+			"マッチ準備時間に[SETUP_TIME_STEP]秒追加します"), Custom String("Añadir [SETUP_TIME_STEP] segundos al temporizador de configuración"),
+			Custom String("Ajouter [SETUP_TIME_STEP] sec au minuteur de configuration"), Custom String(
+			"HAZIRLIK SÜRESİNE [SETUP_TIME_STEP] SN EKLE"));
+		Global.Text_LanguageTextArray[27] = Array(Custom String(
+			"[TEAM_1_CAPTAIN] and [TEAM_2_CAPTAIN] can add [SETUP_TIME_STEP] sec to the setup timer"), Custom String(
+			"[TEAM_1_CAPTAIN]과(와) [TEAM_2_CAPTAIN]은(는) 설정 타이머에 [SETUP_TIME_STEP]초를 추가할 수 있습니다"), Custom String(
+			"[TEAM_1_CAPTAIN] 和 [TEAM_2_CAPTAIN] 可以将 [SETUP_TIME_STEP] 秒添加到设置计时器中"), Custom String(
+			"[TEAM_1_CAPTAIN] と [TEAM_2_CAPTAIN] はマッチ準備時間に[SETUP_TIME_STEP]秒追加できます"), Custom String(
+			"[TEAM_1_CAPTAIN] y [TEAM_2_CAPTAIN] pueden agregar [SETUP_TIME_STEP] segundos al temporizador de configuración"),
+			Custom String("[TEAM_1_CAPTAIN] et [TEAM_2_CAPTAIN] peuvent ajouter [SETUP_TIME_STEP] sec au minuteur de configuration"),
+			Custom String("[TEAM_1_CAPTAIN] VE [TEAM_2_CAPTAIN] HAZIRLIK SÜRESİNE [SETUP_TIME_STEP] SN EKLEYEBİLİR"));
+		Global.Text_LanguageTextArray[28] = Array(Custom String("[EVENT_PLAYER] added [SETUP_TIME_STEP] sec to setup timer"),
+			Custom String("[EVENT_PLAYER] 이(가) 설정 타이머에 [SETUP_TIME_STEP]초를 추가했습니다"), Custom String(
+			"[EVENT_PLAYER] 将 [SETUP_TIME_STEP] 秒添加到设置计时器中"), Custom String("[EVENT_PLAYER] がマッチ準備時間に[SETUP_TIME_STEP]秒追加しました"),
+			Custom String("[EVENT_PLAYER] agregó [SETUP_TIME_STEP] segundos al temporizador de configuración"), Custom String(
+			"[EVENT_PLAYER] a ajouté [SETUP_TIME_STEP] sec au minuteur de configuration"), Custom String(
+			"[EVENT_PLAYER] HAZIRLIK SÜRESİNE [SETUP_TIME_STEP] SN EKLEDİ"));
+		Global.Text_LanguageTextArray[29] = Array(Custom String("Setup timer cannot be extended beyond [SETUP_TIME_MAX]"), Custom String(
+			"설정 타이머는 [SETUP_TIME_MAX] 이상으로 연장할 수 없습니다"), Custom String("设置计时器不能超过 [SETUP_TIME_MAX]"), Custom String(
+			"マッチ準備時間の限界は [SETUP_TIME_MAX] 秒です、これ以上の延長はできません"), Custom String(
+			"El temporizador de configuración no puede extenderse más allá de [SETUP_TIME_MAX]"), Custom String(
+			"Le minuteur de configuration ne peut pas être prolongé au-delà de [SETUP_TIME_MAX]"), Custom String(
+			"HAZIRLIK SÜRESİ EN FAZLA[SETUP_TIME_MAX] OLABİLİR"));
+		Global.Text_LanguageTextArray[30] = Array(Custom String(
+			"Setting [ATTACKING_TEAM]'s score to [MAP_COMPLETION_SCORE] to ensure map completion"), Custom String(
+			"[ATTACKING_TEAM]의 점수를 [MAP_COMPLETION_SCORE]로 설정하여 맵 완료를 보장합니다"), Custom String(
+			"将 [ATTACKING_TEAM] 的得分设置为 [MAP_COMPLETION_SCORE]，以确保地图完成"), Custom String(
+			"最終目標まで進めれるように、[ATTACKING_TEAM] のスコアを [MAP_COMPLETION_SCORE] に設定します"), Custom String(
+			"Estableciendo la puntuación del equipo [ATTACKING_TEAM] en [MAP_COMPLETION_SCORE] para asegurar la finalización del mapa"),
+			Custom String("Définir le score de [ATTACKING_TEAM] à [MAP_COMPLETION_SCORE] pour assurer l'achèvement de la carte"),
+			Custom String("HARİTANIN TAMAMLANMASI İÇİN [ATTACKING_TEAM] TAKIMININ SKORU [MAP_COMPLETION_SCORE] OLARAK AYARLANDI"));
+		Global.Text_LanguageTextArray[31] = Array(Custom String("Both teams completed map, match will proceed as normal"), Custom String(
+			"양 팀 모두 맵을 완료했습니다 매치는 일반적으로 진행됩니다"), Custom String("双方队伍都完成了地图，比赛将按照正常进行"), Custom String("両チームが最終目標まで進みました、マッチは通常通りに進行します"),
+			Custom String("Ambos equipos completaron el mapa, el partido continuará normalmente"), Custom String(
+			"Les deux équipes ont terminé la carte, le match se poursuivra normalement"), Custom String(
+			"HER İKİ TAKIM DA HARİTAYI TAMAMLADI, MAÇ NORMAL ŞEKİLDE DEVAM EDECEK"));
+		Global.Text_LanguageTextArray[32] = Array(Custom String("Ending match after two rounds"), Custom String("2라운드 이후 매치를 종료합니다"),
+			Custom String("进行2轮比赛后结束比赛"), Custom String("2ラウンド後にマッチを終了します"), Custom String("Finalizando el partido después de 2 rondas"),
+			Custom String("Fin de la partie après 2 rounds"), Custom String("2 TUR SONUNDA MAÇ SONLANDIRILIYOR"));
+		Global.Text_LanguageTextArray[33] = Array(Custom String("Ending match after three rounds"), Custom String("3라운드 이후 매치를 종료합니다"),
+			Custom String("进行3轮比赛后结束比赛"), Custom String("3ラウンド後にマッチを終了します"), Custom String("Finalizando el partido después de 3 rondas"),
+			Custom String("Fin de la partie après 3 rounds"), Custom String("3 TUR SONUNDA MAÇ SONLANDIRILIYOR"));
+		Global.Text_LanguageTextArray[34] = Array(Custom String("Ending match after five captures"), Custom String("5라운드 이후 매치를 종료합니다"),
+			Custom String("进行5轮比赛后结束比赛"), Custom String("5ラウンド後にマッチを終了します"), Custom String("Finalizando el partido después de 5 rondas"),
+			Custom String("Fin de la partie après 5 rounds"), Custom String("5 TUR SONUNDA MAÇ SONLANDIRILIYOR"));
+		Global.Text_LanguageTextArray[35] = Array(Custom String("Host toggled scoreboard on"), Custom String("호스트가 스코어보드를 켰습니다"),
+			Custom String("主持人打开了记分牌"), Custom String("ホストがスコアボードをオンにしました"), Custom String("El anfitrión activó el marcador"),
+			Custom String("L'hôte a activé le tableau des scores"), Custom String("YÖNETİCİ SKOR TABLOSUNU AÇTI"));
+		Global.Text_LanguageTextArray[36] = Array(Custom String("Host toggled scoreboard off"), Custom String("호스트가 스코어보드를 껐습니다"),
+			Custom String("主持人关闭了记分牌"), Custom String("ホストがスコアボードをオフにしました"), Custom String("El anfitrión desactivó el marcador"),
+			Custom String("L'hôte a désactivé le tableau des scores"), Custom String("YÖNETİCİ SKOR TABLOSUNU KAPATTI"));
+		Global.Text_LanguageTextArray[37] = Array(Custom String("● EN   ○ KR   ○ CN   ○ JP   ○ ES   ○ FR   ○ TR"), Custom String(
+			"○ EN   ● KR   ○ CN   ○ JP   ○ ES   ○ FR   ○ TR"), Custom String("○ EN   ○ KR   ● CN   ○ JP   ○ ES   ○ FR   ○ TR"),
+			Custom String("○ EN   ○ KR   ○ CN   ● JP   ○ ES   ○ FR   ○ TR"), Custom String(
+			"○ EN   ○ KR   ○ CN   ○ JP   ● ES   ○ FR   ○ TR"), Custom String("○ EN   ○ KR   ○ CN   ○ JP   ○ ES   ● FR   ○ TR"),
+			Custom String("○ EN   ○ KR   ○ CN   ○ JP   ○ ES   ○ FR   ● TR"));
+		Global.Text_LanguageTextArray[38] = Array(Custom String("Changed language to English"), Custom String("한국어로 언어 변경됨"),
+			Custom String("已更改语言为简体中文"), Custom String("言語が日本語に変更されました"), Custom String("Cambiado el idioma a español"), Custom String(
+			"Langue changée en français"), Custom String("DİL İNGİLİZCE OLARAK DEĞİŞTİRİLDİ"));
+		Global.Text_LanguageTextArray[39] = Array(Custom String("Debug Mode is enabled"), Custom String("디버그 모드가 활성화되었습니다"), Custom String(
+			"调试模式已启用"), Custom String("デバッグモードが有効です"), Custom String("El modo de depuración está habilitado"), Custom String(
+			"Le mode de débuggage est activé"), Custom String("HATA AYIKLAMA MODU ETKİN"));
+	}
+}
+
+rule("Initialisation: Player")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	actions
+	{
+		Event Player.Text_PlayerLanguage = Global.Text_DefaultLanguage;
+		Event Player.ReadyUp_PlayerReady = False;
+	}
+}
+
+rule("HUD Setup: Setup Info")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Is In Setup == True;
+	}
+
+	actions
+	{
+		"ScrimTime"
+		Create HUD Text(All Players(All Teams), Null, Null, Global.Text_LanguageTextArray[0][Local Player.Text_PlayerLanguage], Left, 0,
+			Null, Null, Global.Colour_TextTypeB, Visible To and String, Default Visibility);
+		"Countdown will start when"
+		Create HUD Text(All Players(All Teams), Null, Global.Text_LanguageTextArray[1][Local Player.Text_PlayerLanguage], Null, Left,
+			0.100, Null, Global.Colour_TextTypeA, Null, Visible To and String, Default Visibility);
+		"both teams are ready / all players are ready"
+		Create HUD Text(All Players(All Teams), Null,
+			Global.ReadyUp_CaptainMode == 1 ? Global.Text_LanguageTextArray[2][Local Player.Text_PlayerLanguage] : Custom String(
+			"{2} [{0}/{1}]", Count Of(Filtered Array(All Players(All Teams), Current Array Element.ReadyUp_PlayerReady)), Max(
+			Number Of Players(All Teams), Global.ReadyUp_MinimumPlayersToStart),
+			Global.Text_LanguageTextArray[3][Local Player.Text_PlayerLanguage]), Null, Left, 0.100, Null, Global.Colour_TextTypeA, Null,
+			Visible To and String, Default Visibility);
+		"Team 1 Header"
+		Create HUD Text(All Players(All Teams), Null, Null, Team 1, Left, 1, Null, Null, Global.Colour_TeamOne, Visible To and String,
+			Default Visibility);
+		"Team 2 Header"
+		Create HUD Text(All Players(All Teams), Null, Null, Team 2, Left, 3, Null, Null, Global.Colour_TeamTwo, Visible To and String,
+			Default Visibility);
+		"Import Code"
+		Create HUD Text(All Players(All Teams), Null, Custom String("{0}",
+			Global.Text_LanguageTextArray[6][Local Player.Text_PlayerLanguage]), Null, Right, 0, Null, Global.Colour_TextTypeA, Null,
+			Visible To and String, Default Visibility);
+		"DKEEH"
+		Create HUD Text(All Players(All Teams), Null, Custom String("{0}",
+			Global.Text_LanguageTextArray[7][Local Player.Text_PlayerLanguage]), Null, Right, 0.100, Null, Global.Colour_TextTypeB, Null,
+			Visible To and String, Default Visibility);
+		"For full do***entation visit"
+		Create HUD Text(All Players(All Teams), Null, Custom String("{0}",
+			Global.Text_LanguageTextArray[4][Local Player.Text_PlayerLanguage]), Null, Right, 0.200, Null, Global.Colour_TextTypeA, Null,
+			Visible To and String, Default Visibility);
+		"workshop.codes/scrimtime"
+		Create HUD Text(All Players(All Teams), Null, Custom String("{0}",
+			Global.Text_LanguageTextArray[5][Local Player.Text_PlayerLanguage]), Null, Right, 0.300, Null, Global.Colour_TextTypeB, Null,
+			Visible To and String, Default Visibility);
+		If(Global.Debug_EnableDebugMode);
+			"Debug mode is enabled"
+			Create HUD Text(All Players(All Teams), Null, Null, Custom String("{0} {1} {0}", Icon String(Warning),
+				Global.Text_LanguageTextArray[39][Local Player.Text_PlayerLanguage]), Top, 6.100, Null, Null, Global.Colour_TextTypeB,
+				Visible To and String, Default Visibility);
+		End;
+	}
+}
+
+rule("HUD Setup: Ready Toggle")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Is In Setup == True;
+	}
+
+	actions
+	{
+		If(Global.ReadyUp_CaptainMode == 0 || (Global.ReadyUp_CaptainMode == 1 && Slot Of(Event Player) == 0));
+			"Player Ready Status"
+			Create HUD Text(All Players(All Teams), Null, Custom String(" {0} {1}", Event Player.ReadyUp_PlayerReady ? Custom String("●")
+				: Custom String("○"), Event Player), Null, Left, (Team Of(Event Player) == Team 1 ? 2 : 4) + Slot Of(Event Player) * 0.100,
+				Null, Event Player.ReadyUp_PlayerReady ? Global.Colour_TextTypeC : Global.Colour_TextTypeB, Null, Visible To String and Color,
+				Visible Always);
+			"You are readied up / You are not readied up"
+			Create HUD Text(Event Player, Null, Null,
+				Event Player.ReadyUp_PlayerReady ? Global.Text_LanguageTextArray[8][Local Player.Text_PlayerLanguage] : Global.Text_LanguageTextArray[9][Local Player.Text_PlayerLanguage],
+				Top, 5.100, Null, Null, Event Player.ReadyUp_PlayerReady ? Global.Colour_TextTypeC : Global.Colour_TextTypeB, String and Color,
+				Visible Never);
+			If(Global.ReadyUp_CaptainMode == 0 && Global.ReadyUp_AllowForceTeamReady);
+				"(Press) Ready Up / Unready • (Hold) Force Team Ready"
+				Create HUD Text(Event Player, Null, Custom String("[{0} + {1}] {2}", Input Binding String(Global.Keybind_Command),
+					Input Binding String(Global.Keybind_Ready),
+					Event Player.ReadyUp_PlayerReady ? Global.Text_LanguageTextArray[13][Local Player.Text_PlayerLanguage] : Global.Text_LanguageTextArray[12][Local Player.Text_PlayerLanguage]),
+					Null, Top, 5.200, Null, Is Button Held(Event Player, Global.Keybind_Command) && Is Button Held(Event Player,
+					Global.Keybind_Ready) ? Global.Colour_TextTypeB : Global.Colour_TextTypeA, Null, String and Color, Visible Never);
+			Else;
+				"Ready Up / Unready"
+				Create HUD Text(Event Player, Null, Custom String("[{0} + {1}] {2}", Input Binding String(Global.Keybind_Command),
+					Input Binding String(Global.Keybind_Ready),
+					Event Player.ReadyUp_PlayerReady ? Global.Text_LanguageTextArray[11][Local Player.Text_PlayerLanguage] : Global.Text_LanguageTextArray[10][Local Player.Text_PlayerLanguage]),
+					Null, Top, 5.200, Null, Is Button Held(Event Player, Global.Keybind_Command) && Is Button Held(Event Player,
+					Global.Keybind_Ready) ? Global.Colour_TextTypeB : Global.Colour_TextTypeA, Null, String and Color, Visible Never);
+			End;
+		End;
+	}
+}
+
+rule("HUD Setup: Force Ready Hold Bar")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		Global.ReadyUp_AllowForceTeamReady == True;
+	}
+
+	actions
+	{
+		Create Progress Bar HUD Text(Event Player.ReadyUp_CurrentHoldTime >= 0.200 ? Event Player : Null,
+			Event Player.ReadyUp_CurrentHoldTime / Global.ReadyUp_ForceTeamReadyHoldTime * 100, Null, Top, 5.500, Global.Colour_TextTypeA,
+			Null, Visible To Values and Color, Visible Never);
+	}
+}
+
+rule("HUD Setup: Defender Teleport")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.Setup_AllowDefendersTeleport == True;
+		Is In Setup == True;
+		Current Game Mode != Game Mode(Push);
+		Is Team On Defense(Team Of(Event Player)) == True;
+	}
+
+	actions
+	{
+		"Teleport to the objective / Teleport back to spawn"
+		Create HUD Text(Event Player, Null, Custom String("[{0} + {1}] {2}", Input Binding String(Global.Keybind_Command),
+			Input Binding String(Global.Keybind_DefenderTeleport), Is In Spawn Room(Event Player)
+			? Global.Text_LanguageTextArray[21][Local Player.Text_PlayerLanguage] : Global.Text_LanguageTextArray[22][Local Player.Text_PlayerLanguage]),
+			Null, Top, 5.300, Null, Is Button Held(Event Player, Global.Keybind_Command) && Is Button Held(Event Player,
+			Global.Keybind_DefenderTeleport) ? Global.Colour_TextTypeB : Global.Colour_TextTypeA, Null, String and Color, Visible Never);
+	}
+}
+
+rule("HUD Setup: Add Setup Time")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Global.SetupAddTime_CaptainMode != 2;
+		Is In Setup == True;
+	}
+
+	actions
+	{
+		If(Slot Of(Event Player) == 0 || Global.SetupAddTime_CaptainMode == 0);
+			"Add {0} sec to setup timer"
+			Create HUD Text(Event Player, Null, Custom String("[{0} + {1}] {2}", Input Binding String(Global.Keybind_Command),
+				Input Binding String(Global.Keybind_AddSetupTime), String Replace(
+				Global.Text_LanguageTextArray[26][Local Player.Text_PlayerLanguage], Custom String("[SETUP_TIME_STEP]"),
+				Global.SetupAddTime_Step)), Null, Top, 5.400, Null, Is Button Held(Event Player, Global.Keybind_Command) && Is Button Held(
+				Event Player, Global.Keybind_AddSetupTime) ? Global.Colour_TextTypeB : Global.Colour_TextTypeA, Null, String and Color,
+				Visible Never);
+		Else;
+			"Add {0} sec to setup timer"
+			Create HUD Text(Event Player, Null, String Replace(String Replace(String Replace(
+				Global.Text_LanguageTextArray[27][Local Player.Text_PlayerLanguage], Custom String("[TEAM_1_CAPTAIN]"), Custom String("{0}",
+				Players In Slot(0, Team 1))), Custom String("[TEAM_2_CAPTAIN]"), Custom String("{0}", Players In Slot(0, Team 2))),
+				Custom String("[SETUP_TIME_STEP]"), Global.SetupAddTime_Step), Null, Top, 5.400, Null, Global.Colour_TextTypeA, Null, String,
+				Visible Never);
+		End;
+	}
+}
+
+rule("Setup: Remove Assembling Heroes")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.Setup_RemoveAssemblingHeroes == True;
+		Is Assembling Heroes == True;
+	}
+
+	actions
+	{
+		Set Match Time(1);
+	}
+}
+
+rule("Setup: Override Setup Time")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Is In Setup == True;
+	}
+
+	actions
+	{
+		Wait(0.016, Ignore Condition);
+		Set Match Time(Global.Setup_SetupTimeOverride);
+	}
+}
+
+rule("Setup: Freeze Setup Time")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		Global.ReadyUp_FreezeSetupTime == True;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Is In Setup == True;
+	}
+
+	actions
+	{
+		Pause Match Time;
+	}
+}
+
+rule("Setup: Add Setup Time")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Global.SetupAddTime_CaptainMode != 2;
+		Is In Setup == True;
+		(Slot Of(Event Player) == 0 || Global.SetupAddTime_CaptainMode == 0) == True;
+		Is Button Held(Event Player, Global.Keybind_Command) == True;
+		Is Button Held(Event Player, Global.Keybind_AddSetupTime) == True;
+	}
+
+	actions
+	{
+		If(Match Time < Global.SetupAddTime_Max);
+			If(Is In Setup);
+				Set Match Time(Min(Global.SetupAddTime_Max + 0.900, Global.SetupAddTime_Step + Match Time));
+				Small Message(All Players(All Teams), String Replace(String Replace(
+					Global.Text_LanguageTextArray[28][Local Player.Text_PlayerLanguage], Custom String("[SETUP_TIME_STEP]"),
+					Global.SetupAddTime_Step), Custom String("[EVENT_PLAYER]"), Custom String("{0}", Event Player)));
+			End;
+		Else;
+			"Setup timer cannot be extended beyond [SETUP_TIME_MAX]"
+			Small Message(Event Player, String Replace(Global.Text_LanguageTextArray[29][Local Player.Text_PlayerLanguage], Custom String(
+				"[SETUP_TIME_MAX]"), Custom String("{0}:{1}{2}", Round To Integer(Global.SetupAddTime_Max / 60, Down),
+				Global.SetupAddTime_Max % 60 < 10 ? Custom String("0") : Custom String(""), Round To Integer(Global.SetupAddTime_Max % 60,
+				Down))));
+		End;
+	}
+}
+
+rule("Setup: Teleport to Objective/Spawn (Defenders Only)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.Setup_AllowDefendersTeleport == True;
+		Current Game Mode != Game Mode(Push);
+		Is Team On Defense(Team Of(Event Player)) == True;
+		Is In Setup == True;
+		Is Button Held(Event Player, Global.Keybind_Command) == True;
+		Is Button Held(Event Player, Global.Keybind_DefenderTeleport) == True;
+	}
+
+	actions
+	{
+		If(Is In Spawn Room(Event Player));
+			If(Nearest Walkable Position(Objective Position(Objective Index)) != Null);
+				Teleport(Event Player, Nearest Walkable Position(Objective Position(Objective Index)));
+				"Teleported to objective"
+				Small Message(Event Player, Custom String("{0}", Global.Text_LanguageTextArray[23][Local Player.Text_PlayerLanguage]));
+			Else;
+				"Unable to teleport, please try again later"
+				Small Message(Event Player, Custom String("{0}", Global.Text_LanguageTextArray[25][Local Player.Text_PlayerLanguage]));
+			End;
+		Else;
+			Teleport(Event Player, Spawn Points(Team Of(Event Player)));
+			"Teleported to spawn"
+			Small Message(Event Player, Custom String("{0}", Global.Text_LanguageTextArray[24][Local Player.Text_PlayerLanguage]));
+		End;
+	}
+}
+
+rule("Setup: Change Player Language")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.Text_EnableChangeLanguage == True;
+		Is In Setup == True;
+		Is Button Held(Event Player, Global.Keybind_Command) == True;
+		Is Button Held(Event Player, Global.Keybind_ChangeLanguage) == True;
+	}
+
+	actions
+	{
+		Event Player.Text_PlayerLanguage = (Event Player.Text_PlayerLanguage + 1) % Count Of(Global.Text_LanguageTextArray[0]);
+		"Changed language to English"
+		Small Message(Event Player, Global.Text_LanguageTextArray[38][Event Player.Text_PlayerLanguage]);
+	}
+}
+
+rule("Setup: Toggle Player Ready / Force Team Ready")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		(Slot Of(Event Player) == 0 || Global.ReadyUp_CaptainMode == 0) == True;
+		Is In Setup == True;
+		Is Button Held(Event Player, Global.Keybind_Command) == True;
+		Is Button Held(Event Player, Global.Keybind_Ready) == True;
+	}
+
+	actions
+	{
+		If(Global.ReadyUp_CaptainMode == 0 && Global.ReadyUp_AllowForceTeamReady);
+			Event Player.ReadyUp_CurrentHoldTime = 0;
+			Chase Player Variable Over Time(Event Player, ReadyUp_CurrentHoldTime, Global.ReadyUp_ForceTeamReadyHoldTime,
+				Global.ReadyUp_ForceTeamReadyHoldTime, None);
+			Wait Until(!(Is Button Held(Event Player, Global.Keybind_Command) && Is Button Held(Event Player, Global.Keybind_Ready)),
+				Global.ReadyUp_ForceTeamReadyHoldTime);
+			Stop Chasing Player Variable(Event Player, ReadyUp_CurrentHoldTime);
+			Event Player.ReadyUp_CurrentHoldTime = 0;
+			If(Is Button Held(Event Player, Global.Keybind_Command) && Is Button Held(Event Player, Global.Keybind_Ready));
+				If(Is In Setup);
+					"[EVENT_PLAYER] set all players on [EVENT_PLAYER_TEAM] ready"
+					Small Message(All Players(All Teams), String Replace(String Replace(
+						Global.Text_LanguageTextArray[20][Local Player.Text_PlayerLanguage], Custom String("[EVENT_PLAYER]"), Custom String("{0}",
+						Event Player)), Custom String("[EVENT_PLAYER_TEAM]"), Custom String("{0}", Team Of(Event Player))));
+					All Players(Team Of(Event Player)).ReadyUp_PlayerReady = True;
+					If(Global.ReadyUp_EnableReadyVoiceLine);
+						Communicate(Event Player, Go);
+					End;
+				End;
+				Abort;
+			End;
+		End;
+		If(Event Player.ReadyUp_PlayerReady);
+			Event Player.ReadyUp_PlayerReady = False;
+		Else;
+			Event Player.ReadyUp_PlayerReady = True;
+			If(Global.ReadyUp_EnableReadyVoiceLine);
+				Communicate(Event Player, Ready);
+			End;
+		End;
+	}
+}
+
+rule("Setup: Both Teams Ready, Start Match (Captain-Only Mode)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		Global.ReadyUp_CaptainMode == 1;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Is In Setup == True;
+		Players In Slot(0, Team 1).ReadyUp_PlayerReady == True;
+		Players In Slot(0, Team 2).ReadyUp_PlayerReady == True;
+	}
+
+	actions
+	{
+		If(Number Of Players(All Teams) < Global.ReadyUp_MinimumPlayersToStart);
+			"Both teams ready, but not enough players in game ([MIN_PLAYERS_TO_START])"
+			Small Message(All Players(All Teams), String Replace(Global.Text_LanguageTextArray[17][Local Player.Text_PlayerLanguage],
+				Custom String("[MIN_PLAYERS_TO_START]"), Global.ReadyUp_MinimumPlayersToStart));
+			Abort;
+		End;
+		"Both teams ready, starting countdown"
+		Small Message(All Players(All Teams), Global.Text_LanguageTextArray[15][Local Player.Text_PlayerLanguage]);
+		If(Global.ReadyUp_FreezeSetupTime);
+			Unpause Match Time;
+		End;
+		Set Match Time(Global.ReadyUp_SetupCountdownTime);
+		Wait Until(Players In Slot(0, Team 1).ReadyUp_PlayerReady == False || Players In Slot(0, Team 2).ReadyUp_PlayerReady == False,
+			Global.ReadyUp_SetupCountdownTime);
+		If((Is In Setup && Players In Slot(0, Team 1).ReadyUp_PlayerReady == False) || (Players In Slot(0, Team 2)
+			.ReadyUp_PlayerReady == False));
+			"A team unreadied, setup timer reset"
+			Small Message(All Players(All Teams), Global.Text_LanguageTextArray[19][Local Player.Text_PlayerLanguage]);
+			If(Global.ReadyUp_FreezeSetupTime);
+				Pause Match Time;
+			End;
+			Set Match Time(Global.Setup_SetupTimeOverride);
+		End;
+	}
+}
+
+rule("Setup: Both Teams Ready, Start Match (All Players Mode)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		Global.ReadyUp_CaptainMode == 0;
+		(Match Round == 1 || Global.ReadyUp_FreqMode == 0) == True;
+		Is In Setup == True;
+		Is True For All(All Players(All Teams), Current Array Element.ReadyUp_PlayerReady) == True;
+	}
+
+	actions
+	{
+		If(Number Of Players(All Teams) < Global.ReadyUp_MinimumPlayersToStart);
+			"All players ready, but not enough players in game ([MIN_PLAYERS_TO_START])"
+			Small Message(All Players(All Teams), String Replace(Global.Text_LanguageTextArray[16][Local Player.Text_PlayerLanguage],
+				Custom String("[MIN_PLAYERS_TO_START]"), Global.ReadyUp_MinimumPlayersToStart));
+			Abort;
+		End;
+		"All players ready, starting countdown"
+		Small Message(All Players(All Teams), Global.Text_LanguageTextArray[14][Local Player.Text_PlayerLanguage]);
+		If(Global.ReadyUp_FreezeSetupTime);
+			Unpause Match Time;
+		End;
+		Set Match Time(Global.ReadyUp_SetupCountdownTime);
+		Wait Until(Count Of(Filtered Array(All Players(All Teams), Current Array Element.ReadyUp_PlayerReady == True)) < Count Of(
+			All Players(All Teams)), Global.ReadyUp_SetupCountdownTime);
+		If(Is In Setup && Count Of(Filtered Array(All Players(All Teams), Current Array Element.ReadyUp_PlayerReady == True)) < Count Of(
+			All Players(All Teams)));
+			"[EVENT_PLAYER] unreadied, setup timer reset"
+			Small Message(All Players(All Teams), String Replace(Global.Text_LanguageTextArray[18][Local Player.Text_PlayerLanguage],
+				Custom String("[EVENT_PLAYER]"), First Of(Filtered Array(All Players(All Teams),
+				Current Array Element.ReadyUp_PlayerReady == False))));
+			If(Global.ReadyUp_FreezeSetupTime);
+				Pause Match Time;
+			End;
+			Set Match Time(Global.Setup_SetupTimeOverride);
+		End;
+	}
+}
+
+rule("Game: Clean Up HUD Text")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		While(True);
+			Wait Until(Is Game In Progress, 99999);
+			Destroy All HUD Text;
+			Wait Until(Is Between Rounds, 99999);
+			Destroy All HUD Text;
+		End;
+	}
+}
+
+rule("Game: Reset Player Ready Status")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.ReadyUp_FreqMode != 2;
+		Is Game In Progress == True;
+	}
+
+	actions
+	{
+		Wait(0.016, Ignore Condition);
+		All Players(All Teams).ReadyUp_PlayerReady = False;
+		Stop Chasing Player Variable(All Players(All Teams), ReadyUp_CurrentHoldTime);
+		All Players(All Teams).ReadyUp_CurrentHoldTime = 0;
+	}
+}
+
+rule("Map Completion: Save Team Scores on Round End")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Current Game Mode != Game Mode(Control);
+		Current Game Mode != Game Mode(Flashpoint);
+		Current Game Mode != Game Mode(Push);
+		Is Between Rounds == True;
+	}
+
+	actions
+	{
+		If(Is Team On Offense(Team 1));
+			Global.MapComp_TeamOneScore = Team Score(Team 1);
+		Else;
+			Global.MapComp_TeamTwoScore = Team Score(Team 2);
+		End;
+	}
+}
+
+rule("Map Completion: Ensure Map Completion (Assault, Escort and Hybrid)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.MapComp_EnableMapCompletion == True;
+		Is Between Rounds == True;
+		Current Game Mode != Game Mode(Control);
+		Current Game Mode != Game Mode(Flashpoint);
+		Current Game Mode != Game Mode(Push);
+		Team Score(Is Team On Offense(Team 1) ? Team 1 : Team 2) < (Current Game Mode == Game Mode(Assault) ? 2 : 3);
+	}
+
+	actions
+	{
+		Wait(0.016, Ignore Condition);
+		If(Current Game Mode == Game Mode(Assault));
+			Small Message(All Players(All Teams), String Replace(String Replace(
+				Global.Text_LanguageTextArray[30][Local Player.Text_PlayerLanguage], Custom String("[ATTACKING_TEAM]"), Is Team On Offense(
+				Team 1) ? Team 1 : Team 2), Custom String("[MAP_COMPLETION_SCORE]"), 2 + 0));
+			Set Team Score(Is Team On Offense(Team 1) ? Team 1 : Team 2, 2);
+		Else;
+			Small Message(All Players(All Teams), String Replace(String Replace(
+				Global.Text_LanguageTextArray[30][Local Player.Text_PlayerLanguage], Custom String("[ATTACKING_TEAM]"), Is Team On Offense(
+				Team 1) ? Team 1 : Team 2), Custom String("[MAP_COMPLETION_SCORE]"), 3 + 0));
+			Set Team Score(Is Team On Offense(Team 1) ? Team 1 : Team 2, 3);
+		End;
+	}
+}
+
+rule("Map Completion: Force Match End After Two Rounds (Assault, Escort and Hybrid)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.MapComp_ForceAsymTwoRounds != 2;
+		Current Game Mode != Game Mode(Control);
+		Current Game Mode != Game Mode(Flashpoint);
+		Current Game Mode != Game Mode(Push);
+		Is Between Rounds == True;
+		Match Round == 2;
+	}
+
+	actions
+	{
+		If(Global.MapComp_ForceAsymTwoRounds == 0 && Global.MapComp_TeamOneScore + Global.MapComp_TeamTwoScore == (
+			Current Game Mode == Game Mode(Assault) ? 4 : 6));
+			"Both teams completed map, match will proceed as normal"
+			Small Message(All Players(All Teams), Global.Text_LanguageTextArray[31][Local Player.Text_PlayerLanguage]);
+		Else;
+			"Ending match after two rounds"
+			Small Message(All Players(All Teams), Global.Text_LanguageTextArray[32][Local Player.Text_PlayerLanguage]);
+			Wait(1, Ignore Condition);
+			Declare Match Draw;
+		End;
+	}
+}
+
+rule("Map Completion: Force Match End After Three Rounds (Control)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.MapComp_ForceControlThreeRounds == True;
+		Current Game Mode == Game Mode(Control);
+		Team Score(Team 1) + Team Score(Team 2) == 3;
+	}
+
+	actions
+	{
+		"Ending match after three rounds"
+		Small Message(All Players(All Teams), Global.Text_LanguageTextArray[33][Local Player.Text_PlayerLanguage]);
+		Wait(1, Ignore Condition);
+		Declare Team Victory(Team Score(Team 1) > Team Score(Team 2) ? Team 1 : Team 2);
+	}
+}
+
+rule("Map Completion: Force Match End After Five Captures (Flashpoint)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.MapComp_ForceFlashpointFiveCaps == True;
+		Current Game Mode == Game Mode(Flashpoint);
+		Team Score(Team 1) + Team Score(Team 2) == 5;
+	}
+
+	actions
+	{
+		"Ending match after five captures"
+		Small Message(All Players(All Teams), Global.Text_LanguageTextArray[34][Local Player.Text_PlayerLanguage]);
+		"Because of a bug with the Declare Team Victory action (it doesn't work), we'll need to use this workaround for now"
+		Set Team Score(Team Score(Team 1) > Team Score(Team 2) ? Team 1 : Team 2, 10);
+		Declare Round Victory(Team Score(Team 1) > Team Score(Team 2) ? Team 1 : Team 2);
+		Wait Until(Is Match Complete, 99999);
+		Set Team Score(Team Score(Team 1) > Team Score(Team 2) ? Team 1 : Team 2, 5 - (Team Score(Team 1) > Team Score(Team 2)
+			? Team Score(Team 2) : Team Score(Team 1)));
+	}
+}
+
+rule("Debug: Force Ready (Interact + Ability 1)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.Debug_EnableDebugMode == True;
+		Is In Setup == True;
+		Is Button Held(Host Player, Button(Interact)) == True;
+		Is Button Held(Host Player, Button(Ability 1)) == True;
+	}
+
+	actions
+	{
+		All Players(All Teams).ReadyUp_PlayerReady = True;
+	}
+}
+
+rule("Debug: Reduce Timer to 5 (Interact + Alt Fire)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Global.Debug_EnableDebugMode == True;
+		Is Button Held(Host Player, Button(Interact)) == True;
+		Is Button Held(Host Player, Button(Secondary Fire)) == True;
+	}
+
+	actions
+	{
+		Set Match Time(5);
+	}
+}
+
+rule("Debug: Spawn Test Bot (Interact + Melee)")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.Debug_EnableDebugMode == True;
+		Is Button Held(Host Player, Button(Interact)) == True;
+		Is Button Held(Host Player, Button(Melee)) == True;
+	}
+
+	actions
+	{
+		Create Dummy Bot(Hero(Reaper), Opposite Team Of(Team Of(Host Player)), -1, Position Of(Host Player), Vector(0, 0, 0));
+	}
+}
+
+rule("Debug: Automatically End Match")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.Debug_EnableDebugMode == True;
+		Global.Logs_AutoMatchEndTime < 3600;
+	}
+
+	actions
+	{
+		Wait(Global.Logs_AutoMatchEndTime, Ignore Condition);
+		Declare Team Victory(All Teams);
+	}
+}
+
+rule("Debug: Display Server Loads")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global.Debug_EnableDebugMode == True;
+		Global.Debug_DisplayServerLoad == True;
+		Is Game In Progress == True;
+	}
+
+	actions
+	{
+		Wait(0.016, Ignore Condition);
+		Create HUD Text(All Players(All Teams), Null, Custom String(
+			"{0} Current Server Load\r\n{1} Average Server Load\r\n{2} Peak Server Load", Server Load, Server Load Average,
+			Server Load Peak), Null, Left, 100, Global.Colour_TextTypeA, Global.Colour_TextTypeA, Global.Colour_TextTypeA,
+			Visible To and String, Visible Always);
+	}
+}

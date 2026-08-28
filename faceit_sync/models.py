@@ -10,6 +10,7 @@ trivial to correct if FACEIT changes the schema.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 # --- Overwatch 2 stats: FACEIT ``i*`` code -> named per-game metric -----------
@@ -61,6 +62,38 @@ def playoff_base_name(name: str | None) -> str | None:
         return None
     base = _PLAYOFF_STAGE_SUFFIX.sub("", name.strip())
     return base or None
+
+
+# The season a championship belongs to is carried only by its name ("S9 EMEA
+# Master Central - Regular Season"); there is no season column anywhere in the
+# schema. Both the site (which season to render) and the capture feed (whose
+# rosters are still active) derive it from here rather than each parsing it,
+# because the numeric comparison below is easy to get wrong in a copy.
+_SEASON_RE = re.compile(r"\bS(\d+)\b", re.IGNORECASE)
+
+
+def season_of(name: str | None) -> str | None:
+    """The season a championship name encodes ('s9', 's10', ...), or None.
+
+    Matched with a word boundary (mirrors the region match): a bare substring
+    test would let "S90 EMEA..." match "s9", or a name merely containing "s9"
+    mid-word false-match.
+    """
+    if not name:
+        return None
+    m = _SEASON_RE.search(name)
+    return f"s{m.group(1)}" if m else None
+
+
+def newest_season(names: Iterable[str | None]) -> str | None:
+    """The highest-numbered season across these championship names.
+
+    Compared numerically, not lexically: sorted as strings 's9' beats 's10',
+    which would pin the caller to the season that just ended for as long as
+    both are in the database.
+    """
+    seasons = {s for s in (season_of(n) for n in names) if s}
+    return max(seasons, key=lambda s: int(s[1:]), default=None)
 
 
 @dataclass(slots=True)
