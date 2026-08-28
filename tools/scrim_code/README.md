@@ -56,6 +56,28 @@ npm run decompile:dkeeh   # regenerate dkeeh.opy from a fresh dkeeh_raw.txt expo
 `scrim_owdb.txt` is the file you paste into Overwatch. The `.opy` source is
 the versioned, patchable form — edit that, then rebuild.
 
+## The share code
+
+**`B4GM8`** — minted 2026-08-28. Hosts should load this rather than pasting the
+script; it is the only way bans and the spectator scoreboard reach a scrim
+somebody else is hosting.
+
+Two things about it that are easy to get wrong:
+
+- **It was uploaded from the alt account `ragecomic`, not `gcb`.** Re-uploading
+  from a different account almost certainly mints a NEW code rather than
+  updating this one, which would strand every host on the old version. Confirm
+  before anyone tries. Whoever holds `ragecomic` is the one who can publish
+  workshop changes.
+- **Always pick "update an existing code", never "upload a new one."** It keeps
+  the code stable for the team, it does not consume the create-code rate limit
+  (which is real and has no published cooldown), and it counts as activity
+  against expiry.
+
+**Codes expire six months after creation** unless imported or uploaded to often
+enough. Regular use by the team is what keeps this one alive; a code that only
+gets loaded occasionally will quietly die, probably mid-season.
+
 ## Import in Overwatch
 
 **Do not look for an "Import Code" button — that is a different mechanism.**
