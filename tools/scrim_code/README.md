@@ -70,9 +70,16 @@ Two things about it that are easy to get wrong:
   before anyone tries. Whoever holds `ragecomic` is the one who can publish
   workshop changes.
 - **Always pick "update an existing code", never "upload a new one."** It keeps
-  the code stable for the team, it does not consume the create-code rate limit
-  (which is real and has no published cooldown), and it counts as activity
-  against expiry.
+  the code stable for the team, it does not consume the create-code rate limit,
+  and it counts as activity against expiry.
+
+**The create-code rate limit is about ten codes.** Measured 2026-08-28 while
+rerolling for a memorable one: after roughly ten creations Overwatch returns
+"Reached limit for creating game settings code. Please try again later." The
+cooldown is not published and was not waited out, so it is unknown. Blizzard
+assigns the code randomly - it cannot be chosen - so rerolling is the only
+lever, and it is a budget of about ten. Decide what you will accept before
+spending it.
 
 **Codes expire six months after creation** unless imported or uploaded to often
 enough. Regular use by the team is what keeps this one alive; a code that only
