@@ -96,6 +96,7 @@ globalvar Ban_Team2 40
 globalvar Keybind_BanHero 41
 globalvar Debug_DisplayServerLoad 42
 globalvar Ban_HudTo 43
+globalvar Keybind_ClearBan 44
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
 globalvar Colour_TextTypeA 7
@@ -214,6 +215,7 @@ rule "Settings: Keybind Options":
     Keybind_DefenderTeleport = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Defender Teleport", 6, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 2)]
     Keybind_AddSetupTime = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Add Setup Time", 4, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 3)]
     Keybind_BanHero = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Ban Hero", 8, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 4)]
+    Keybind_ClearBan = Keybind_ButtonArray[createWorkshopSettingEnum("7. Keybinds", "Clear Hero Ban", 7, ["Primary Fire", "Secondary Fire", "Ability 1", "Ability 2", "Ultimate", "Interact", "Jump", "Crouch", "Melee", "Reload"], 5)]
 
 
 rule "Initialisation: Match":
@@ -303,12 +305,28 @@ rule "HUD Setup: Ban Hero":
     # the keys, not something a spectator or the capture tool should see.
     hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(
                      inputBindingString(Keybind_Command), inputBindingString(Keybind_BanHero),
-                     "Clear your team's hero ban"
-                     if (Ban_Team1 if eventPlayer.getTeam() == Team.1 else Ban_Team2) == eventPlayer.getHero()
-                     else "Ban {0} for both teams".format(eventPlayer.getHero())),
+                     "Ban {0} for both teams".format(eventPlayer.getHero())),
                  HudPosition.TOP, 5.5,
                  Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command)
                      and eventPlayer.isHoldingButton(Keybind_BanHero) else Colour_TextTypeA,
+                 HudReeval.STRING_AND_COLOR, SpecVisibility.NEVER)
+
+
+rule "HUD Setup: Clear Ban":
+    @Event eachPlayer
+    @Condition Ban_Enabled == true
+    @Condition isInSetup() == true
+    @Condition (Ban_Team1 if eventPlayer.getTeam() == Team.1 else Ban_Team2) != null
+
+    # Only shown when your team has something to clear, so the setup controls do
+    # not carry a line that would do nothing.
+    hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(
+                     inputBindingString(Keybind_Command), inputBindingString(Keybind_ClearBan),
+                     "Clear your team's ban on {0}".format(
+                         Ban_Team1 if eventPlayer.getTeam() == Team.1 else Ban_Team2)),
+                 HudPosition.TOP, 5.6,
+                 Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command)
+                     and eventPlayer.isHoldingButton(Keybind_ClearBan) else Colour_TextTypeA,
                  HudReeval.STRING_AND_COLOR, SpecVisibility.NEVER)
 
 
@@ -490,13 +508,15 @@ rule "Bans: Toggle Ban On Current Hero":
     # again on your own banned hero clears it, which is the only route back to
     # "neither team banned" once a team has banned - and R3 makes that a state
     # teams need to be able to reach.
-    if eventPlayer.getTeam() == Team.1 and Ban_Team1 == eventPlayer.getHero():
-        Ban_Team1 = null
-    elif eventPlayer.getTeam() == Team.2 and Ban_Team2 == eventPlayer.getHero():
-        Ban_Team2 = null
+    # R1: one ban per team, so this always sets or REPLACES. Clearing has its own
+    # bind - see "Bans: Clear Your Team's Ban". An earlier version cleared by
+    # pressing this again while on your own banned hero, which cannot happen:
+    # Ban_Apply() removes the hero from every player including the banning team,
+    # so you are force-swapped off it and can never be on it to press anything.
+    #
     # R2: checked on EVERY confirm including a change, or team 1 could ban a
     # tank, wait for team 2 to ban a tank, then switch onto one and collide.
-    elif Ban_SameRole(eventPlayer.getHero(), Ban_Team2 if eventPlayer.getTeam() == Team.1 else Ban_Team1):
+    if Ban_SameRole(eventPlayer.getHero(), Ban_Team2 if eventPlayer.getTeam() == Team.1 else Ban_Team1):
         smallMessage(eventPlayer, "That role is already banned by the other team")
     elif eventPlayer.getTeam() == Team.1:
         Ban_Team1 = eventPlayer.getHero()
@@ -504,6 +524,26 @@ rule "Bans: Toggle Ban On Current Hero":
         Ban_Team2 = eventPlayer.getHero()
     Ban_Apply()
     waitUntil(not eventPlayer.isHoldingButton(Keybind_BanHero), 1)
+
+
+rule "Bans: Clear Your Team's Ban":
+    @Event eachPlayer
+    @Condition Ban_Enabled == true
+    @Condition isInSetup() == true
+    @Condition eventPlayer.isHoldingButton(Keybind_Command) == true
+    @Condition eventPlayer.isHoldingButton(Keybind_ClearBan) == true
+
+    # Its own bind because there is no other way back. R3 forbids starting a map
+    # with exactly one ban, so a team that bans while the other does not has to
+    # be able to undo it - and without this the only escape was the setup timer
+    # wiping the lone ban at five seconds.
+    if eventPlayer.getTeam() == Team.1:
+        Ban_Team1 = null
+    else:
+        Ban_Team2 = null
+    Ban_Apply()
+    smallMessage(getAllPlayers(), "{0} cleared their team's hero ban".format(eventPlayer))
+    waitUntil(not eventPlayer.isHoldingButton(Keybind_ClearBan), 1)
 
 
 rule "Bans: New Map Clears Them, Later Rounds Keep Them":

@@ -36,6 +36,14 @@ Entries before 2026-08-11 were reconstructed from git history.
   is created and it costs nothing.
 
 ### Fixed
+- **A team could not undo its own ban.** The design specified clearing by
+  pressing the ban key again while on your own banned hero — which cannot happen,
+  because the ban removes that hero from every player including the banning team,
+  so you are force-swapped off it and can never be on it to press anything. With
+  R3 forbidding a start with exactly one ban, the only escape was the setup timer
+  wiping the lone ban at five seconds. Clearing is now its own bind,
+  `Interact + Crouch`, shown in the setup controls whenever your team has a ban
+  to clear.
 
 - **The ban rows vanished when the match started.** `destroyAllHudTexts()` wipes
   every HUD element the instant a round begins, so anything created once by a
