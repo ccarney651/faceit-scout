@@ -326,6 +326,13 @@ Both cost a test cycle and neither was visible from the compiled output.
   on the first test. The scoreboard survives by being conditioned on
   `isGameInProgress()` with a `wait()`, so it is *recreated* after each wipe.
   Anything that must outlive the setup phase has to follow that pattern.
+- **A rule that creates HUD text must fire once per phase, not once per state
+  change.** The clear-ban hint was conditioned on "your team has a ban", which
+  flips false->true on every ban-after-clear - and each firing created another
+  copy, because nothing destroys HUD text until `destroyAllHudTexts()` at round
+  start. Three bans, three stacked hints. If a hint needs to reflect mutable
+  state, put the state in its *string* (re-evaluated) and never in its
+  *condition*.
 - **`getAllPlayers()` with `SpecVisibility.NEVER` renders for nobody.** Every
   `NEVER` row in `scrim_owdb.opy` targets `eventPlayer`; every `getAllPlayers()`
   row uses `ALWAYS` or default. The combination is used nowhere else and it

@@ -36,6 +36,12 @@ Entries before 2026-08-11 were reconstructed from git history.
   is created and it costs nothing.
 
 ### Fixed
+- **The clear-ban hint stacked a new copy on every ban.** It was drawn only when
+  your team had something to clear, so each ban-after-clear flipped that
+  condition and created another line - nothing destroys HUD text until the round
+  starts. It is now drawn once per setup like every other control hint, and the
+  hero it would clear is read from the per-team `BAN:` lines instead of repeated
+  in the hint.
 - **A team could not undo its own ban.** The design specified clearing by
   pressing the ban key again while on your own banned hero — which cannot happen,
   because the ban removes that hero from every player including the banning team,

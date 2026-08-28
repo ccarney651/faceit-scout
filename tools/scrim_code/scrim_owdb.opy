@@ -316,14 +316,20 @@ rule "HUD Setup: Clear Ban":
     @Event eachPlayer
     @Condition Ban_Enabled == true
     @Condition isInSetup() == true
-    @Condition (Ban_Team1 if eventPlayer.getTeam() == Team.1 else Ban_Team2) != null
 
-    # Only shown when your team has something to clear, so the setup controls do
-    # not carry a line that would do nothing.
+    # NO ban-state condition, deliberately. An earlier version only drew this
+    # when your team had something to clear, and every ban-after-clear flipped
+    # that condition false->true and created ANOTHER copy of the line - three
+    # stacked hints after three bans, because nothing destroys HUD text until
+    # destroyAllHudTexts() at round start. A rule that creates HUD text must
+    # fire once per phase, not once per state change.
+    #
+    # The hero is not named here: the per-team "BAN:" lines in the ready-up
+    # block already say what is banned, and repeating it is what forced the
+    # state-dependent condition in the first place.
     hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(
                      inputBindingString(Keybind_Command), inputBindingString(Keybind_ClearBan),
-                     "Clear your team's ban on {0}".format(
-                         Ban_Team1 if eventPlayer.getTeam() == Team.1 else Ban_Team2)),
+                     "Clear your team's hero ban"),
                  HudPosition.TOP, 5.6,
                  Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command)
                      and eventPlayer.isHoldingButton(Keybind_ClearBan) else Colour_TextTypeA,
