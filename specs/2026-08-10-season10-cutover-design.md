@@ -387,14 +387,15 @@ that check is one look at a relegated team's FACEIT match history.
 
 ### 6.6 Open questions this design does not settle
 
-- **`team_rosters` in the capture feed has no season filter.**
-  `tools/build_capture_data.py` builds it from every `round_players` row in the
-  DB, so after cutover it carries S9 *and* S10 rosters, including teams that have
-  disbanded. Scrim opponent identification matches ten HUD names against that
-  pool, and its measured guarantee — zero collisions at the 3-of-5 bar across
-  8,356 lineups (`tools/roster_match_eval.py`) — was measured on one season's
-  pool. Either scope it to the live season or re-measure before the pool doubles.
-  Do not assume the number holds.
+- **`team_rosters` in the capture feed has no season filter.** **Settled
+  2026-08-27 — scoped to the active season.** The pool is now the newest season
+  with data, sharing `newest_season` with the exporter. The deciding argument was
+  not collision arithmetic: you only scrim teams that are active, so a match
+  against last season's squad writes a team that no longer plays into a private
+  scrim log. Inert until cutover (S9 is the only season, and the built feed was
+  diffed to confirm it), and it flips itself on the first ingested S10 match.
+  `tools/roster_match_eval.py` applies the same filter — re-run it in week 1 of
+  S10, when the pool is only the teams that have already played.
 - **Player pages are season-scoped by construction.** They aggregate every
   division in the payload, so at cutover every player's page restarts from
   nothing and their S9 history survives only inside the frozen archive, under a

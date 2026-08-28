@@ -39,6 +39,20 @@ Entries before 2026-08-11 were reconstructed from git history.
   rather than on cutover day.
 
 ### Changed
+- **The capture feed's `team_rosters` is scoped to the active season.** Scrim
+  opponent identification matches ten HUD names against every team in the
+  league, and that pool was every `round_players` row ever ingested — so after
+  the Season 10 cutover it would have carried S9 rosters, S10 rosters and
+  disbanded teams together. You only scrim teams that are active, which makes a
+  match against last season's squad not a near miss but a team that no longer
+  plays, written into a private scrim log. The pool is now the newest season
+  with data, sharing `newest_season` with the exporter so the feed and the site
+  cannot disagree about which season is current. No visible change today (S9 is
+  the only season in the database, and the built feed was diffed to confirm the
+  output is unchanged); it flips itself on the first ingested S10 match. For
+  about the first week of a season the pool is only the teams that have already
+  played — 48% of S9's teams by day 3, 99% by day 7 — and an opponent who is not
+  in it stays labelable by hand, remembered locally for next time.
 - **A pinned season with no data no longer fails the build.** `export --season
   s10` against a database with no Season 10 matches used to write a 0-byte file
   and exit 1; CI runs under `bash -e`, so that failed the whole job before the

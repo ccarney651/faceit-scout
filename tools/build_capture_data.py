@@ -20,8 +20,8 @@ data.json:
     hero_roles:   { <hero_guid>: "Tank"|"Damage"|"Support" },
     team_rosters: { <team_id>: {name, players:[{id,nick,game_name}]} } }
 `rosters` is per coded match (capture attribution); `lineups` is the exact five
-who played ONE game, with roles (player assignment); `team_rosters` is every
-team's accumulated squad (scrim opponent identification).
+who played ONE game, with roles (player assignment); `team_rosters` is the ACTIVE
+season's teams with their accumulated squads (scrim opponent identification).
 Whether a code is already scouted is read from the sibling docs/captured.json,
 so it is not duplicated here.
 """
@@ -32,6 +32,7 @@ import os
 import sqlite3
 from datetime import UTC, datetime
 
+from faceit_sync.models import newest_season, season_of
 from owdb.db import LATEST_KNOWN_WIPE
 
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
@@ -189,20 +190,54 @@ def main() -> None:
     # specs/2026-08-12-scrim-mode-design.md) matches ten HUD names against every
     # team in the league, so it needs the full set.
     #
-    # Accumulated, not per-match: a season's subs and stand-ins are exactly the
-    # names that let a lineup still be recognised when two players are on smurf
-    # accounts. Measured collision rate at the 3-of-5 bar is zero across 8356
-    # real lineups — see tools/roster_match_eval.py.
+    # ACTIVE SEASON ONLY. A team that did not return for the new season is not
+    # someone you scrim, so matching a scrim against last season's squad is not
+    # a near miss - it writes a team that no longer plays into a private scrim
+    # log. Scoping here also stops the pool growing by a season every year,
+    # which is what the measured collision rate rests on: zero wrong teams at
+    # the 3-of-5 bar across 8830 real lineups (tools/roster_match_eval.py, which
+    # applies this same filter so the number describes the pool that ships).
+    # The season comes from faceit_sync.models so the feed and the site cannot
+    # disagree about which one is current.
+    #
+    # Accumulated WITHIN that season, deliberately: a season's subs and
+    # stand-ins are exactly the names that let a lineup still be recognised when
+    # two players are on smurf accounts.
+    #
+    # A championship whose name carries no season is dropped rather than kept -
+    # a row that cannot be dated can never age out, so keeping it would quietly
+    # rebuild the unbounded pool. Mirrors _division() dropping a region-less
+    # name instead of guessing. A database where NOTHING names a season needs no
+    # special case: `season` is then None and so is every row's, so the equality
+    # keeps them all rather than shipping a pool that identifies nobody.
+    season = newest_season(
+        row["name"] for row in con.execute("SELECT name FROM championships"))
     team_rosters: dict[str, dict[str, object]] = {}
+    # Not GROUP BY (team, player): the championship name has to survive to the
+    # filter, and grouping across seasons would hand it an arbitrary one of them
+    # - dropping a player who DID play this season because SQLite happened to
+    # pick their row from last one. Filter first, dedupe here. The ORDER BY is
+    # what GROUP BY used to provide implicitly; without it the roster order
+    # churns every build and the committed feed diffs against itself.
+    seen_pair: set[tuple[str, str]] = set()
     for rp in con.execute(
         """SELECT rp.team_id tid, te.name tname, rp.player_id pid,
-                  COALESCE(p.nickname, rp.player_id) nick, p.game_name gname
+                  COALESCE(p.nickname, rp.player_id) nick, p.game_name gname,
+                  ch.name champ
            FROM round_players rp
+           JOIN matches m ON m.id = rp.match_id
+           JOIN championships ch ON ch.id = m.championship_id
            LEFT JOIN players p ON p.id = rp.player_id
            LEFT JOIN teams te ON te.id = rp.team_id
            WHERE rp.team_id IS NOT NULL
-           GROUP BY rp.team_id, rp.player_id"""
+           ORDER BY rp.team_id, rp.player_id"""
     ):
+        if season_of(rp["champ"]) != season:
+            continue
+        pair = (rp["tid"], rp["pid"])
+        if pair in seen_pair:
+            continue
+        seen_pair.add(pair)
         slot = team_rosters.setdefault(rp["tid"], {"name": rp["tname"], "players": []})
         slot["players"].append(
             {"id": rp["pid"], "nick": rp["nick"], "game_name": rp["gname"]})

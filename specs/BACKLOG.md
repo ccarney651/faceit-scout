@@ -461,13 +461,22 @@ Intermediate decision defers. Decide the two together.
   protected by the fallback; the merge dir and `CURRENT_SEASON` must move with
   it or Season 9 comps attach to Season 10 teams by team id.
 
-### P2 — `team_rosters` in the capture feed is not season-scoped
+### Shipped 2026-08-27 — `team_rosters` is scoped to the active season
 
-`tools/build_capture_data.py` builds it from every `round_players` row ever
-ingested, so after the cutover it carries S9 and S10 rosters plus disbanded
-teams. Scrim opponent identification's zero-collision measurement (3-of-5 bar,
-8,356 lineups) was taken on a single season's pool. Scope it to the live season,
-or re-measure before the pool doubles. Design §6.6.
+Was a P2 open question here and in the cutover design §6.6. The feed now builds
+`team_rosters` from the newest season that has data only, sharing
+`faceit_sync.models.newest_season` with the exporter rather than parsing the
+season a second time. The operator's call, and the reason it is the right one:
+you only scrim teams that are active, so matching against last season's squad
+writes a team that no longer plays into a private scrim log — worse than not
+identifying at all.
+
+Inert on today's database (S9 is the only season, so the emitted `data.json` is
+byte-identical, verified by diffing the built feed rather than assumed) and
+flips itself on the first ingested S10 match. `tools/roster_match_eval.py`
+applies the same filter, so re-running it at cutover measures the pool that
+actually ships. Worth re-running in week 1 of S10 in particular: the pool is
+then only the teams that have played.
 
 ### P3 — `FACEIT_API_KEY`-backed championship discovery
 
