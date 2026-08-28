@@ -17,6 +17,40 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-28
+
+### Added
+
+- **The ban phase went live, and in-game testing reshaped it.** The entry below
+  describes what was built; this is what shipped after four rounds of testing in
+  a real lobby. During setup each team's ban is displayed under its own team
+  header in that team's colour, updating the moment someone bans, and a third
+  control hint appears beside ready-up and add-time reading *"Ban <hero> for both
+  teams"* — resolved to each player's own keybind, so nobody has to be told which
+  key. While a round is playing the rows are drawn for **spectators and replays
+  only**, because players said the text cluttered their view and capture reads
+  the replay anyway.
+- **`6. Debug → Display Server Load`**, default off. ScrimTime and ScrimTime Lite
+  both ship this in their own Debug panels; ours was the only one of the three
+  that could not be measured against them. With the setting off, no HUD element
+  is created and it costs nothing.
+
+### Fixed
+
+- **The ban rows vanished when the match started.** `destroyAllHudTexts()` wipes
+  every HUD element the instant a round begins, so anything created once by a
+  condition that never transitions again is erased and never returns. They are
+  now recreated per phase, the way the scoreboard survives the same call.
+- **Bans would have cleared between rounds of the same map.** The reset was
+  conditioned on `isInSetup()`, which is true at the setup of *every* round — so
+  Escort/Hybrid round 2, or each Control point, would have silently un-banned
+  both heroes mid-map. Round 1 now clears and later rounds inherit, while
+  remaining editable.
+- **`Read bans` was cropping the wrong part of the screen.** The crop was
+  anchored to the portrait strip, which sits centre-top, while the workshop draws
+  its column at the screen's left edge. It is frame-relative now, and needs no
+  calibration.
+
 ## 2026-08-27
 
 ### Added

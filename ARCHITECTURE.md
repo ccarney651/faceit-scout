@@ -959,6 +959,22 @@ the row renders `NONE` explicitly rather than disappearing: an absent row means
 "could not read", a row reading `NONE` means "known, no bans", and the parser
 depends on telling those apart.
 
+**Who sees what is deliberate, and was got wrong twice.** During setup each
+team's ban is drawn under its own team header in that team's colour, for
+players; the combined `BANS  :` row is spectator-only in every phase, because a
+replay includes setup and the parser needs its anchor present in any frame it
+might read. While a round plays, players see nothing — the rows are
+spectator-and-replay only, which is where capture reads from. The mechanism is
+passing `null` as the HUD text's audience with `SpecVisibility.ALWAYS`, exactly
+how the scoreboard renders for a spectator but not a player. Note that
+`getAllPlayers()` paired with `SpecVisibility.NEVER` renders for **nobody** —
+that combination appears nowhere else in `scrim_owdb.opy` and does not display.
+
+**Bans exist only in lobbies running our workshop code.** Share code `B4GM8`
+(`tools/scrim_code/README.md`) is how a host loads it without pasting 60 KB.
+ScrimTime Lite has no spectator scoreboard at all, so a Lite-hosted scrim can
+never support the stats read either.
+
 Bans are only recorded in lobbies running **this** workshop code. Scrims hosted
 on stock ScrimTime or ScrimTime Lite have no ban row, and Lite has no spectator
 scoreboard either, so it can never support the stats read.

@@ -301,6 +301,22 @@ is left is seeds — which nothing can automate — and that one commit. Open it
    hero-glyph reference set (3); the viewer's Players tab (4); sync and sharing
    (5); auto map detection (6). See `ARCHITECTURE.md` §7.
 
+   **Hero bans shipped 2026-08-28**, outside those phases:
+   `tools/scrim_code/scrim_owdb.opy` runs a ban phase in setup and draws the
+   result as text on the spectator view; `docs/capture/engine/banrow.js` reads
+   it back. Design: `specs/2026-08-27-scrim-hero-bans-design.md`. Its §6.1
+   records two Overwatch behaviours that each cost an in-game test cycle and are
+   invisible from compiled output — `destroyAllHudTexts()` erasing anything
+   created by a condition that never transitions again, and `getAllPlayers()`
+   with `SpecVisibility.NEVER` rendering for nobody at all. Read it before
+   touching workshop HUD code.
+
+   **Bans and the spectator scoreboard only exist in lobbies running our
+   workshop code.** Scrims are hosted on a mix of ScrimTime, ScrimTime Lite and
+   ours, and Lite has no scoreboard — so a Lite-hosted scrim can never support
+   the phase 3 stats read. The share code `B4GM8` is what moves hosts onto ours;
+   see `tools/scrim_code/README.md`.
+
    **Auto map detection (6) is now cheaper than it was**: the code reader can
    already tell when the replay on screen is not the one being captured. It was
    deliberately left on-demand rather than polling — see

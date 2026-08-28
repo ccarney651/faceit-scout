@@ -493,3 +493,70 @@ dependency.
 Both scrim pages ship locked behind `?unlock=scrimbeta`. **Asked and answered
 2026-08-27: keep it locked for now**, revisit when phase 2 (opponent
 identification / roster search) is complete.
+
+## Added 2026-08-28 — hero bans shipped
+
+### Shipped 2026-08-28 — hero bans, in game and read back
+
+Design `specs/2026-08-27-scrim-hero-bans-design.md`, plan `...-plan.md`, both
+executed and merged to `main` (`37cb66a`), live on owdb.io behind the existing
+`?unlock=scrimbeta` gate.
+
+One ban per team during setup, chosen by switching to the hero and pressing
+Interact + Melee, enforced with `setAllowedHeroes`. The two must be different
+roles; a map cannot start with exactly one; round 1 clears and later rounds
+inherit while staying editable. The rows are drawn as text on the spectator
+view, and `docs/capture/engine/banrow.js` reads them back into the panel's ban
+picker, abstaining rather than guessing.
+
+Live-verified in game: text rendering, the map name, survival into the replay,
+persistence across rounds on Control and Hybrid, the per-team display, and the
+keybind hint resolving to each player's own binding.
+
+### P1 — `Read bans` has never faced a real replay
+
+**The one thing between this feature and being trusted.** Every part of the
+workshop half is verified in game; the capture half has only ever seen synthetic
+strings. It needs one captured scrim, not a desk.
+
+Three outcomes to tell apart when it is finally run. Filling both heroes means
+the path works. Abstaining is informative and the reason matters — "could not
+find the BANS row" is a crop or OCR problem, "no hero matches X" is a name that
+did not resolve, "expected two bans, read N" is a garbled row. Returning the
+WRONG heroes should be impossible by construction (exact-after-normalization,
+no fuzzy fallback), so if it happens an assumption in the design's §4.3 is
+wrong and should be treated as urgent.
+
+Capture `LAST_BAN_READ.raw` before reloading — it holds exactly what tesseract
+saw, and is worth more than any description of the symptom.
+
+### P1 — Get the team's hosts onto the share code
+
+Bans and the spectator scoreboard only exist in lobbies running our workshop
+code, and scrims today are hosted on a mix of ScrimTime, ScrimTime Lite and
+ours. **`B4GM8`** (see `tools/scrim_code/README.md`) is what fixes that: a host
+loads five characters instead of pasting 60 KB.
+
+Two reasons this is P1 rather than housekeeping. Lite has no spectator
+scoreboard at all, so phase 3's stats read can never work in a Lite-hosted
+scrim. And **codes expire six months after creation** unless imported or
+uploaded to often enough — regular use by the team is what keeps `B4GM8` alive,
+so adoption is also maintenance.
+
+### P2 — Confirm who can update the share code
+
+`B4GM8` was uploaded from the alt account `ragecomic`, not `gcb`. If updating a
+code requires the account that published it, then that account is the only one
+that can ship workshop changes, and every future ban-logic change has to go
+through it. One test update from `gcb` settles it: if it mints a NEW code
+instead of updating, the team needs to know before hosts are stranded on a
+stale version.
+
+### P3 — Remaining in-game checks for the ban phase
+
+Not blockers, but unverified. `setAllowedHeroes` force-swapping a player already
+on the banned hero has only been exercised in a near-empty lobby. The R3 start
+guard has not been tested in **both** ready modes (`ReadyUp_CaptainMode` 0 and
+1) — it is a forked guard in two rules, and the wording differs between them,
+which is how a single find-and-replace would have patched only one. And the
+setup timer expiring while exactly one ban is set has never been triggered.
