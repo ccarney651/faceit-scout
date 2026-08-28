@@ -11,8 +11,10 @@ they already know at a lower server cost.
   add-time, defender-teleport and scoreboard UX.
 - The **spectator scoreboard layout is preserved**, which is exactly what the
   OWDB capture tool will OCR in the scrim-tracker feature (Phase 2+).
-- Bloat removed (see below) roughly **halves the compiled size** and removes the
-  per-event processing that tanks host FPS.
+- Bloat removed (see below) cuts the compiled size to **about a third** and
+  removes the per-event processing that tanks host FPS. Measured 2026-08-27:
+  `scrim_owdb.txt` is 50,446 bytes against `dkeeh_raw.txt`'s 141,746 — 35.6%,
+  across 35 rules versus 80.
 
 ### What was stripped
 
@@ -52,9 +54,33 @@ the versioned, patchable form — edit that, then rebuild.
 
 ## Import in Overwatch
 
-1. Custom Game > Create.
-2. Settings > Workshop > Import Code; paste the entire `scrim_owdb.txt`.
-3. Save. Share code is minted in-game via **Copy Settings** (Custom Game menu).
+**Do not look for an "Import Code" button — that is a different mechanism.**
+Overwatch has two, and they are not interchangeable:
+
+- **Import** takes a short *share code* (`DKEEH`, `0PP1T`) and downloads a
+  published mode. It cannot take a script.
+- **Copy / Paste** moves the whole settings blob, workshop rules included,
+  through your operating system's clipboard. That is how a script gets in.
+
+To load `scrim_owdb.txt`:
+
+1. Open `scrim_owdb.txt` in a text editor and copy all of it (Ctrl+A, Ctrl+C).
+   **Do this first** — see step 4.
+2. Custom Game > Create > **Settings** (top right).
+3. Stay on the **Settings** screen. The button row is in the **Summary panel on
+   the right**; do NOT go into the Workshop sub-screen, which has no paste
+   control at all.
+4. Click the orange **Paste** button beside Copy. It only appears when the
+   clipboard already holds valid workshop text, so an empty clipboard shows
+   nothing and looks like a missing feature.
+
+Pasting replaces **all** lobby settings, not only the rules. Use a fresh lobby.
+
+Pasting also fails outright if the Overwatch client language is not English —
+`scrim_owdb.txt` is compiled `en-US`. Going the other way, a mode is exported
+with the **Copy** button in the same place, which is how `dkeeh_raw.txt` was
+obtained. A share code is minted separately via **Copy Settings** in the Custom
+Game menu.
 
 ## Controls (default keybinds)
 
