@@ -543,3 +543,40 @@ def test_the_adjusted_column_is_what_the_table_sorts_by_default(tmp_path) -> Non
     got = _run_trials_js("return {key:SORT.key, dir:SORT.dir};", tmp_path)
 
     assert got == {"key": "adj", "dir": "desc"}
+
+
+# --- methodology ------------------------------------------------------------
+
+@responses.activate
+def test_the_page_explains_its_methodology(db: Database) -> None:
+    _ingest(db)
+
+    page = build_trials_page(build_dashboard_data(db))
+
+    assert 'id="methodology"' in page
+    for heading in ("Where the numbers come from", "Eff", "vs team", "Elo",
+                    "Hero pool", "What this deliberately does not do"):
+        assert heading in page, f"methodology is missing {heading!r}"
+
+
+@responses.activate
+def test_methodology_reads_its_constants_from_the_code(db: Database) -> None:
+    """A methodology section that hardcodes its own numbers drifts from the
+    implementation the first time a threshold moves, and then it is worse than
+    nothing. The floors are filled in at runtime from the same constants the
+    maths uses; FLEX_SHARE lives in Python, so it rides along in the payload."""
+    from faceit_sync.trials import FLEX_SHARE
+
+    page = build_trials_page(build_dashboard_data(db))
+
+    assert '__TRIALS_META__' in page
+    assert f'"flex_share": {FLEX_SHARE}' in page
+
+    app = (__import__("faceit_sync.trials", fromlist=["_DASHBOARD_DIR"])
+           ._DASHBOARD_DIR / "trials.js").read_text(encoding="utf-8")
+    # Each floor is written into the page from its constant, never retyped.
+    for slot, const in (("m-shrink", "EFF_SHRINK"), ("m-mode-min", "PLAYER_MODE_MIN"),
+                        ("m-map-min", "PLAYER_MAP_MIN"), ("m-hero-min", "PLAYER_HERO_MIN"),
+                        ("m-lb-min", "LB_MIN_GAMES"), ("m-group-min", "EFF_GROUP_MIN")):
+        assert slot in app, f"trials.js never fills #{slot}"
+        assert const in app, f"trials.js does not reference {const}"

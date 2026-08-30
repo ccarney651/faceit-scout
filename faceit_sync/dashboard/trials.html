@@ -72,6 +72,19 @@ table.mini td.r{text-align:right;font-variant-numeric:tabular-nums}
 .hero{display:inline-block;font-size:12px;background:var(--surface2);border-radius:var(--r-sm);
       padding:1px 6px;margin:0 4px 4px 0}
 .empty{padding:26px 0}
+
+/* Methodology: the reasoning behind every column, kept on the page rather than
+   in a doc nobody opens. */
+#methodology{margin-top:54px;border-top:1px solid var(--line2);padding-top:6px;max-width:820px}
+#methodology h2{margin-bottom:2px}
+#methodology h3{margin:20px 0 3px;font-size:14px;color:var(--fg)}
+#methodology p{margin:5px 0;font-size:13px;line-height:1.55;color:var(--muted)}
+#methodology p.lede{margin-bottom:2px}
+#methodology b{color:var(--fg)}
+#methodology code{font-size:12px;background:var(--surface2);border-radius:var(--r-sm);padding:1px 4px}
+#methodology ul{margin:6px 0;padding-left:18px;font-size:13px;line-height:1.55}
+#methodology li{margin:4px 0;color:var(--muted)}
+#methodology .fx,#methodology .allroles{margin:0 1px}
 </style>
 </head>
 <body>
@@ -87,6 +100,114 @@ table.mini td.r{text-align:right;font-variant-numeric:tabular-nums}
   <div id="results"></div>
   <div id="pool"></div>
   <div id="tables"></div>
+
+  <section id="methodology">
+    <h2>Methodology</h2>
+    <p class="note lede">What every column means, where it comes from, and what it cannot tell you.
+       The thresholds below are written in from the code at page build, so this section cannot drift
+       from the maths it describes.</p>
+
+    <h3>Where the numbers come from</h3>
+    <p>Built by <code>faceit-sync trials</code> from the local FACEIT database, through the same
+       payload builder that produces owdb.io, and computed by the same code — <code>pure.js</code> is
+       inlined here unchanged. A number on this page and the same number on the site cannot disagree.
+       Every division in the database is included, not only the current season: judging a trialist
+       wants every map on record. Nothing here is published.</p>
+
+    <h3>Finding a player</h3>
+    <p>Search matches the <b>FACEIT nickname</b> or the <b>in-game name</b>, case-insensitive
+       substring, across every region at once. Those two names often differ, and a recruiting
+       shortlist is normally written in the in-game one — of a real 24-name sheet, 3 resolved by
+       nickname and 13 by in-game name. A player who appears in several divisions collapses to one
+       result; a name that matches nothing usually means they do not play FACEIT League at all.</p>
+
+    <h3>Maps</h3>
+    <p>Counted from the per-game rosters of the regular season <b>and</b> the playoffs. The team
+       roster's own game count is deliberately ignored: it is rolled up per championship and playoffs
+       are a separate championship, so it stops at the group stage and undercounts anyone whose team
+       went deep.</p>
+
+    <h3>Win %, team %, and vs team</h3>
+    <p><b>Win %</b> is the player's own map record. Read it next to <b>team %</b>, which is their
+       team's record over its whole season, including maps the player sat out. Measured across 1016
+       players, a player's win rate is <b>82% explained</b> by which team they were on; it is closer
+       to a team statistic than a personal one.</p>
+    <p><b>vs team</b> is the difference. It is <b>structurally zero</b> for anyone who started every
+       map — they <i>are</i> the team, so there is nothing to diverge from; those cells are dimmed
+       rather than shown as a bold zero. It carries real signal only for substitutes and mid-season
+       arrivals, which is exactly the trialist case.</p>
+
+    <h3>Eff</h3>
+    <p>Each player's per-map averages — damage, healing, mitigation, K/D — expressed as a z-score
+       against <b>the same role in the same division</b>, then averaged. <b>+1.00 means one standard
+       deviation above that peer group.</b> Needs <span id="m-lb-min">…</span>+ maps and
+       <span id="m-group-min">…</span>+ peers, and shows an em dash otherwise. The peer group is
+       named beside every value, because it is the unit: only <b>22%</b> of Eff is explained by team
+       quality against 82% for win rate, which makes it the fairest single number here.</p>
+
+    <h3>Eff·n — and why it, not Eff, sets the order</h3>
+    <p>Eff averages z-scores of per-<i>map</i> figures, so a short season is not merely less reliable,
+       it is <b>wider</b>. Across 1123 players the spread of Eff is 0.679 at 5–14 maps against 0.356
+       at 50+, and <b>12.6%</b> of low-sample players post an Eff beyond ±1 against <b>1.0%</b> of
+       high-sample ones. The averages themselves barely move — the correlation between maps and Eff
+       is +0.165, faintly <i>upward</i> — so this is spread, not bias. Sorting on raw Eff therefore
+       fills the top of the list with whoever played least.</p>
+    <p><b>Eff·n</b> is Eff pulled toward the group mean in proportion to sample:
+       <code>Eff × n/(n+<span id="m-shrink">…</span>)</code>, the standard regression-to-the-mean
+       correction. It only ever scales toward zero — a sign never flips, and an Eff that was below its
+       floor stays absent rather than becoming a number. Raw Eff keeps its own column; only the
+       ranking changes. <span class="note">Its own limit: it weights the player's sample, not the
+       size of the cohort they were scored against, so an Eff computed against the minimum peers is
+       thin in a way this does not catch — check the peer count printed beside Eff.</span></p>
+
+    <h3>Elo</h3>
+    <p>FACEIT's matchmaking rating, shown and sortable. <b>It feeds no calculation on this page</b> —
+       not Eff, not any rate or ranking. That is enforced by a test which recomputes every number with
+       all elo stripped out and fails if anything moves. Treat it as context only: it is
+       tier-relative and reflects solo-queue history as much as league play.</p>
+
+    <h3>Roles, and the “2nd role” tag</h3>
+    <p>A player sits in the table of the role they played most, from FACEIT's per-game role. A second
+       role played on at least <span id="m-flex">…</span>% of their maps earns them a row in that
+       table too, tagged <span class="fx">2nd role</span>. In that second table their stats and Eff
+       are marked <span class="allroles">all roles</span>: the data carries <b>no per-role split</b>,
+       so a flex player's tank row shows season-wide averages and a peer group from their main role.
+       The numbers are shown because they are the only ones that exist, not because they are
+       role-specific.</p>
+
+    <h3>Per-mode and per-map records</h3>
+    <p>Inside an expanded row, with the team's rate for the same mode or map beside each one. A mode
+       needs <span id="m-mode-min">…</span>+ games and a map <span id="m-map-min">…</span>+; below
+       that the rate is an em dash rather than a number, because a record over two or three maps is
+       not a rate.</p>
+
+    <h3>Hero pool</h3>
+    <p>The one genuinely thin section. Heroes come from <b>replay captures</b>, not the FACEIT feed:
+       122 games and 128 players in the whole dataset, so most players have none at all. A win rate
+       needs <span id="m-hero-min">…</span>+ captured games on that hero. <b>An empty pool means
+       nobody captured their games — never that they play few heroes</b>, and a pool showing one hero
+       at "100%" is usually one captured match, not a one-trick.</p>
+
+    <h3>Tier and region are not a common scale</h3>
+    <p>Eff is z-scored inside one division and elo is region-and-tier relative, so <b>+0.9 in Advanced
+       is not +0.9 in Master</b>. Every row names its region and tier. No cross-tier normalisation is
+       attempted, because there is no defensible one — comparing across tiers is a judgement call the
+       tool leaves to you.</p>
+
+    <h3>What this deliberately does not do</h3>
+    <ul class="note">
+      <li><b>Blizzard / competitive rank.</b> There are no BattleTags in the data — not one of 1347
+          players — so there is nothing to join on, and Blizzard publishes no stats API.</li>
+      <li><b>Strength-of-schedule adjustment.</b> Measured and rejected: mean opponent win rate spans
+          only 47–57% within a division while team quality spans 35–96%. In a round robin everyone
+          plays everyone, so adjusting for it adds noise.</li>
+      <li><b>Team-adjusted Eff</b> (Eff minus the player's own team mean). It removes the residual 22%
+          but asks “better than your teammates?” rather than “how good?”, which punishes a strong
+          player on a strong team.</li>
+      <li><b>Any single composite score.</b> One number hides which axis a player is actually good at,
+          which is the whole question when comparing trialists.</li>
+    </ul>
+  </section>
 </div>
 <script>
 /* __PURE_JS__ */

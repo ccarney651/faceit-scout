@@ -18,6 +18,7 @@
 const HAS_WINDOW = typeof window !== 'undefined';
 const DATA = (HAS_WINDOW && window.__OWDB_DATA__) || {};
 const IDX = (HAS_WINDOW && window.__TRIALS_INDEX__) || [];
+const META = (HAS_WINDOW && window.__TRIALS_META__) || {};
 const DIVS = DATA.divisions || {};
 const COMPS = DATA.owdb_comps || {};
 const PERGAME = DATA.owdb_pergame_players || {};
@@ -574,6 +575,25 @@ function render() {
   }
 }
 
+// The methodology section quotes the floors it describes. Writing them in from
+// the constants rather than retyping them means the prose cannot drift from the
+// maths — a stale methodology is worse than none.
+function fillMethodology() {
+  const slots = {
+    'm-shrink': EFF_SHRINK,
+    'm-mode-min': PLAYER_MODE_MIN,
+    'm-map-min': PLAYER_MAP_MIN,
+    'm-hero-min': PLAYER_HERO_MIN,
+    'm-lb-min': LB_MIN_GAMES,
+    'm-group-min': EFF_GROUP_MIN,
+    'm-flex': Math.round((META.flex_share || 0) * 100)
+  };
+  Object.keys(slots).forEach(function (id) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = slots[id];
+  });
+}
+
 function boot() {
   const q = document.getElementById('q');
   q.addEventListener('input', function () { renderResults(q.value); });
@@ -583,6 +603,7 @@ function boot() {
   }
   document.getElementById('built').textContent =
     IDX.length + ' players indexed · built ' + dshort(DATA.built_at);
+  fillMethodology();
   render();
 }
 

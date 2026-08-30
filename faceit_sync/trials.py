@@ -159,9 +159,14 @@ def build_trials_page(data: dict[str, Any]) -> str:
     pure = (_DASHBOARD_DIR / "pure.js").read_text(encoding="utf-8")
     app = (_DASHBOARD_DIR / "trials.js").read_text(encoding="utf-8")
     index = build_search_index(data)
+    # FLEX_SHARE lives in Python but the page's methodology section quotes it, so
+    # it rides along in the payload rather than being retyped into the prose.
+    meta = {"flex_share": FLEX_SHARE}
     blob = (f"window.__OWDB_DATA__={_json_blob(data)};\n"
             f"var __TRIALS_INDEX__={_json_blob(index)};\n"
-            "window.__TRIALS_INDEX__=__TRIALS_INDEX__;")
+            f"var __TRIALS_META__={_json_blob(meta)};\n"
+            "window.__TRIALS_INDEX__=__TRIALS_INDEX__;\n"
+            "window.__TRIALS_META__=__TRIALS_META__;")
     return (shell
             .replace("/* __THEME_CSS__ */", _inline_theme_css())
             .replace("/* __PURE_JS__ */", pure)

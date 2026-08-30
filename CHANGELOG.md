@@ -42,6 +42,13 @@ Entries before 2026-08-11 were reconstructed from git history.
   and made you compare across a horizontal scrollbar. Modes, maps, hero pool and
   team spells moved into a per-player expandable row. Missing values sort last in
   both directions, so a player under the Eff floor never tops the list.
+- **Trials page: a Methodology section.** What every column means, where it comes
+  from and what it cannot tell you — including the limits (`vs team` is
+  structurally zero for full-timers; an empty hero pool means nobody captured
+  those games, not that the player is narrow; tiers are not a common scale) and
+  what the tool deliberately refuses to do. Every threshold it quotes is written
+  in from the constant it describes at page build, so the prose cannot drift from
+  the maths.
 - **Trials page: `Eff·n`, an Eff weighted by sample size, and the new default
   sort.** Raw Eff's top end is mostly small-sample noise: across 1123 players the
   SD of Eff is 0.679 at 5–14 maps against 0.356 at 50+, and 12.6% of low-sample
