@@ -342,7 +342,8 @@ def test_cli_trials_fails_loudly_on_an_empty_database(db: Database, tmp_path) ->
 # the maths that can mislead a coach gets executed for real rather than being
 # smoke-tested through a screenshot.
 
-def _run_trials_js(body: str, tmp_path) -> object:
+def _run_trials_js(body: str, tmp_path, data: dict | None = None,
+                   index: list | None = None, name: str = "trials_under_test") -> object:
     import shutil
     import subprocess
 
@@ -352,9 +353,13 @@ def _run_trials_js(body: str, tmp_path) -> object:
     if not node:
         pytest.skip("node not available to run the trials helpers")
     from faceit_sync.trials import _DASHBOARD_DIR
-    src = tmp_path / "trials_under_test.js"
+    # trials.js reads its payload off `window` at load, so handing it a fake one
+    # runs the real pipeline here — factsFor -> playerSeason/efficiencyRatings.
+    setup = "globalThis.window={__OWDB_DATA__:%s,__TRIALS_INDEX__:%s};\n" % (
+        json.dumps(data or {}), json.dumps(index or []))
+    src = tmp_path / (name + ".js")
     src.write_text(
-        (_DASHBOARD_DIR / "pure.js").read_text(encoding="utf-8") + "\n" +
+        (_DASHBOARD_DIR / "pure.js").read_text(encoding="utf-8") + "\n" + setup +
         (_DASHBOARD_DIR / "trials.js").read_text(encoding="utf-8") +
         "\nconsole.log(JSON.stringify((()=>{" + body + "})()));",
         encoding="utf-8",
@@ -406,3 +411,85 @@ def test_sorting_breaks_ties_by_name_so_the_order_is_stable(tmp_path) -> None:
     """, tmp_path)
 
     assert got == ["amy", "zed"]
+
+
+# --- elo must never reach a computed number --------------------------------
+
+def _elo_probe_payload(elo: bool) -> tuple[dict, list]:
+    """One division, one team, five Damage players with differing stats — enough
+    peers for efficiencyRatings to produce a real Eff. `elo` toggles whether any
+    elo value is present at all."""
+    players = [
+        # nick, kd, dmg, deaths, elo
+        ("alpha", 3.1, 11000, 6.0, 2400),
+        ("bravo", 2.4, 9500, 7.2, 1900),
+        ("chuck", 1.9, 8800, 8.1, 2750),
+        ("delta", 2.7, 10200, 6.6, 1500),
+        ("echo", 2.2, 9100, 7.7, 2050),
+    ]
+    roster, games = [], []
+    for nick, kd, dmg, deaths, e in players:
+        roster.append({
+            "nick": nick, "game_name": nick.upper(), "role": "Damage",
+            "games": 10, "last_seen": "2026-08-01T00:00:00Z",
+            "elo": e if elo else None,
+            "stats": {"games": 10, "kd": kd, "elims": round(kd * deaths, 1),
+                      "deaths": deaths, "dmg": dmg, "heal": 300, "mit": 500},
+        })
+    for i in range(10):
+        games.append({"map": "Ilios", "map_category": "Control", "game_no": i,
+                      "winner_team": "Alpha" if i % 3 else "Beta",
+                      "rosters": [{"team": "Alpha",
+                                   "players": [{"nick": n, "role": "Damage"}
+                                               for n, *_ in players]}]})
+    div = {
+        "summary": {"championship": "S9 EMEA Master Central - Regular Season"},
+        "team_names": ["Alpha"],
+        "teams": [{"name": "Alpha", "roster": roster}],
+        "matches": [{"id": "m1", "finished_at": "2026-08-01T00:00:00Z", "games": games}],
+    }
+    data = {"divisions": {"c1": div}, "heroes": [], "owdb_comps": {},
+            "owdb_pergame_players": {}, "built_at": "2026-08-30T00:00:00Z"}
+    return data, build_search_index(data)
+
+
+def test_elo_is_shown_but_never_feeds_a_computed_number(tmp_path) -> None:
+    """Elo is FACEIT's own matchmaking rating. It is a column you can sort by and
+    nothing else: no rate, z-score or ranking on this page may move when it
+    changes. Proven by recomputing every number with all elo stripped out.
+
+    Fails if anyone routes Eff through pure.js's rankPlayers()/powerRankings(),
+    which DO use elo and which this page deliberately never calls.
+    """
+    body = """
+      const out={};
+      ['alpha','bravo','chuck','delta','echo'].forEach(function(n){
+        out[n]=factsFor(n,'Damage').sort;
+      });
+      return out;
+    """
+    with_elo = _run_trials_js(body, tmp_path, *_elo_probe_payload(True), name="with_elo")
+    without = _run_trials_js(body, tmp_path, *_elo_probe_payload(False), name="without_elo")
+
+    # The fixture must actually exercise Eff, or this proves nothing.
+    assert with_elo["alpha"]["eff"] is not None
+    assert with_elo["alpha"]["elo"] == 2400
+    assert without["alpha"]["elo"] is None
+
+    for nick in with_elo:
+        a = dict(with_elo[nick]); b = dict(without[nick])
+        assert a.pop("elo") is not None
+        assert b.pop("elo") is None
+        assert a == b, f"{nick}: a number moved when elo was removed"
+
+
+def test_the_page_never_calls_the_elo_based_helpers(tmp_path) -> None:
+    """A belt-and-braces guard on the above: pure.js's elo-driven helpers exist
+    and are used by the dashboard, so name them here. If a future edit reaches
+    for one, this fails rather than quietly letting elo into a rating."""
+    from faceit_sync.trials import _DASHBOARD_DIR
+
+    app = (_DASHBOARD_DIR / "trials.js").read_text(encoding="utf-8")
+
+    for fn in ("rankPlayers", "powerRankings", "eloExpected", "eloNext", "sparklinePoints"):
+        assert fn not in app, f"trials.js now calls {fn}(), which is elo-driven"
