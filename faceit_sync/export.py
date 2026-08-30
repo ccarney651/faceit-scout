@@ -7,9 +7,8 @@ import html
 import json
 import logging
 import os
-import re
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
@@ -554,18 +553,22 @@ def _is_playoff(name: str | None) -> bool:
     return is_playoff_name(name)
 
 
-def export_html(db: Database, out: TextIO, championship_id: str | None = None,
-                only_tier: str | None = None, only_region: str | None = None,
-                only_season: str | None = None,
-                data_path: str | None = None) -> int:
-    """Render the multi-division dashboard.
+def build_dashboard_data(db: Database, championship_id: str | None = None,
+                         only_tier: str | None = None, only_region: str | None = None,
+                         only_season: str | None = None) -> dict[str, Any]:
+    """Build the dashboard's data payload, without rendering anything.
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
     (master/expert/advanced/open), ``only_region`` ('emea'/'na'/'sa'/'oce') and
-    ``only_season`` ('s9', 's10', ...) restrict the dashboard; the DB may hold
+    ``only_season`` ('s9', 's10', ...) restrict the payload; the DB may hold
     several divisions across tiers, regions and (once a cutover has happened)
-    seasons. Returns the number of divisions with data.
+    seasons.
+
+    Returns ``{}`` when no division has data — the caller decides what an empty
+    build means. Split out of ``export_html`` so that the dashboard and the local
+    trials page (``faceit_sync.trials``) build their data through ONE code path
+    and cannot drift apart; ``test_trials.py`` pins the two together.
     """
     want_tier: str | None = None
     if only_tier:
@@ -663,7 +666,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         ordered.append((str(d["summary"]["championship"]), cid))
 
     if not divisions:
-        return 0
+        return {}
 
     # Attach each playoff championship's played series to the matching region+tier
     # division, so the Playoffs tab shows real results the moment those matches are
@@ -776,6 +779,20 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         # when the art isn't present; the page then falls back to text chips.
         "hero_icons": load_hero_icons(),
     }
+    return data
+
+
+def export_html(db: Database, out: TextIO, championship_id: str | None = None,
+                only_tier: str | None = None, only_region: str | None = None,
+                only_season: str | None = None,
+                data_path: str | None = None) -> int:
+    """Render the multi-division dashboard. Returns the number of divisions with
+    data. Filters are passed straight through to ``build_dashboard_data``."""
+    data = build_dashboard_data(db, championship_id, only_tier, only_region,
+                                only_season)
+    if not data:
+        return 0
+    divisions = data["divisions"]
     title = "FACEIT OW2 — League Scouting"
     # ensure_ascii + escaping every `<` as \u003c closes the `<!--` breakout hole
     # as well as the `</script>` one: a leading "<!" in any string can't begin an

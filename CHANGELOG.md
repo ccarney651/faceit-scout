@@ -17,6 +17,34 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-08-30
+
+### Added
+
+- **`faceit-sync trials` — a local trialist comparison page.** Search every
+  league player by FACEIT nickname **or** in-game name across all regions, keep a
+  pool of candidates, and read them as columns in one table per role (Tank /
+  Damage / Support / Unassigned). Built for judging trial candidates against each
+  other; `specs/2026-08-30-trialist-comparison-design.md` has the reasoning.
+
+  **Its output is never committed and never published.** `/trials.html` is
+  gitignored (root-anchored — `faceit_sync/dashboard/trials.html` is the page's
+  shell and stays tracked) and the page never goes under `docs/`. A shortlist of
+  who you are trialling leaks recruiting intent.
+
+  Unlike `export`, it defaults to **every division in the database** rather than
+  one season: judging a trialist wants every map on record.
+
+### Changed
+
+- **`export_html()` split into `build_dashboard_data()` + a renderer.** The
+  payload half is now its own function, so the dashboard and the trials page
+  build their data through one code path and cannot drift.
+  `test_trials.py::test_build_dashboard_data_returns_what_export_html_inlines`
+  pins the two together. `export_html`'s signature and behaviour are unchanged.
+
+---
+
 ## 2026-08-28
 
 ### Added

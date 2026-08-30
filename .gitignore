@@ -88,3 +88,9 @@ tools/scrim_code/scrim_owdb.txt
 # Agent worktrees are their own git repositories; committing one embeds a repo.
 .claude/worktrees/
 code_guard_crops/
+
+# The local trialist comparison page (`faceit-sync trials`). A shortlist of who
+# you are trialling leaks recruiting intent, so its output is never committed and
+# never lands under docs/. Root-anchored on purpose: faceit_sync/dashboard/
+# trials.html is the page's SHELL and must stay tracked.
+/trials.html

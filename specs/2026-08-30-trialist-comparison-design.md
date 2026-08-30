@@ -21,7 +21,7 @@ who cannot commit to the coming season.
 | Season scope | **All divisions in the DB**, not one season | The public site pins `--season s9` because it reports on the current season. Judging a trialist wants every map you have on them. |
 | Region scope | **All regions**, searchable together | The DB holds EMEA and NA today (`REGIONS` allows SA/OCE). Candidates may come from anywhere; narrowing by default would hide them. |
 | Composite score | **No** | One number hides which axis a player is good at, which is the entire question when comparing trialists. |
-| Per-game role purity | **No** | Needs a payload addition. Dominant-role-per-team covers 1001 of 1187 players exactly; the flex badge (below) covers the rest. |
+| Per-game role purity | **Yes** — corrected during implementation | The design assumed this needed a payload addition. It does not: `export.py:457` already ships `role` on every per-game roster entry, so the true split is computable. `teams[].roster[]`'s rollup is not used at all — see "Counting" below. |
 
 ## What the data actually supports
 
@@ -195,12 +195,32 @@ Role-specific rows, so no table is half empty:
 | Damage | damage/map, elims/map |
 | Support | healing/map, damage/map |
 
-Then per-mode win rates (5 modes, n>=5), per-map win rates behind a toggle
-(n>=3), and hero pool last — shown only where captures exist and labelled as thin
-evidence.
+Then per-mode win rates, per-map win rates behind a toggle, and hero pool last —
+shown only where captures exist and labelled as thin evidence. The floors are
+`PLAYER_MODE_MIN` / `PLAYER_MAP_MIN` / `PLAYER_HERO_MIN` read from pure.js, which
+are **5 / 5 / 3** — this document said "n>=3 per map" before implementation;
+pure.js is the authority and it says 5.
 
 Every rate prints its `n` beside it. Below-floor cells are an em dash whose
 `title` gives the floor and the sample.
+
+### Counting: never from `teams[].roster[]`
+
+Maps and roles are counted from the per-game rosters, across `matches` **and**
+`playoffs`. The `teams[].roster[]` rollup is per championship and playoffs are
+their own championship, so its `games` silently stops at the group stage: it puts
+Warglabidoo at 55 maps when he played 67. The roster is read only for the two
+things per-game entries do not carry — the in-game name and elo.
+
+### The flex caveat, and why the numbers are still shown
+
+Stats and Eff are rolled up per player per division with **no role split**. For a
+player's dominant role that is a fair label; in their *second* table it is not —
+Warglabidoo's 7 Tank maps carry the averages of his 60 Damage ones, and his Eff
+peer group is still Damage. Hiding the numbers would be worse (they are the only
+ones there are), so instead every affected cell is tagged `all roles`, the column
+header says `second role · 7 of 67 maps`, and the table carries a banner saying
+so in words.
 
 ## Error handling
 

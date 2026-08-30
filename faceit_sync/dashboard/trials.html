@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en" data-theme="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Trialists</title>
+<style>
+/* __THEME_CSS__ */
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px}
+.wrap{max-width:1500px;margin:0 auto;padding:22px 18px 80px}
+h1{font-family:var(--font-display);font-size:22px;margin:0 0 2px}
+h2{font-family:var(--font-display);font-size:17px;margin:26px 0 8px;display:flex;align-items:baseline;gap:8px}
+.note{color:var(--muted);font-size:12px;font-weight:400}
+.faint{color:var(--faint)}
+.good{color:var(--good)}.mid{color:var(--mid)}.bad{color:var(--bad)}
+#q{width:100%;max-width:460px;padding:9px 12px;font-size:14px;font-family:inherit;
+   border:1px solid var(--line2);border-radius:var(--r-md);background:var(--surface);color:var(--fg)}
+#results{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.hit{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;cursor:pointer;
+     border:1px solid var(--line);background:var(--surface);color:var(--fg);
+     border-radius:var(--r-md);padding:6px 10px;font:inherit;max-width:280px}
+.hit:hover{border-color:var(--accent);background:var(--accent-weak)}
+.hit.pooled{opacity:.55;cursor:default}
+.hit .n{font-weight:600}
+.hit .g{color:var(--muted);font-size:12px}
+.hit .meta{color:var(--faint);font-size:11px}
+.hit .tag{color:var(--accent);font-size:11px}
+#pool{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 0 4px;min-height:22px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);
+      border:1px solid var(--line);border-radius:var(--r-pill);padding:3px 6px 3px 11px;font-size:13px}
+button.x{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:15px;line-height:1;padding:0 3px}
+button.x:hover{color:var(--bad)}
+.clear{margin-left:6px;border:1px solid var(--line2);background:transparent;color:var(--muted);
+       border-radius:var(--r-pill);padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}
+.rt{margin-top:8px;overflow-x:auto}
+.rt table{border-collapse:collapse;width:100%;min-width:520px}
+.rt th,.rt td{border-bottom:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top;
+              white-space:nowrap}
+.rt th{position:relative;background:var(--surface);font-size:13px;padding-right:26px}
+.rt th .pn{font-weight:700}
+.rt th .gn{color:var(--muted);font-size:11px;font-weight:400}
+.rt th .x{position:absolute;top:4px;right:4px}
+.rt td.rowlab,.rt th.rowlab{color:var(--muted);font-weight:400;width:150px;min-width:150px;background:var(--bg)}
+.rt tr.sep td,.rt tr.sep th{border-top:2px solid var(--line2)}
+.rt .wr{font-weight:700}
+.rt th .fx{color:var(--mid);font-size:11px;font-weight:400}
+.rt .own{color:var(--fg);font-weight:600}
+.allroles{font-size:10px;border:1px solid var(--line2);border-radius:var(--r-sm);padding:0 3px;
+          margin-left:4px;white-space:nowrap}
+p.warn{border-left:3px solid var(--mid);padding:5px 10px;margin:6px 0 0;background:var(--surface)}
+details.sub{margin:10px 0 0;border:1px solid var(--line);border-radius:var(--r-md);padding:6px 10px;
+            background:var(--surface)}
+details.sub summary{cursor:pointer;font-size:13px}
+details.sub table{margin-top:8px}
+.hero{font-size:12px}
+.empty{padding:26px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Trialists</h1>
+  <p class="note" id="built"></p>
+  <p class="note">Local tool. Nothing here is published — this file is gitignored and never lands under
+     <code>docs/</code>. Numbers come from the same code the live site uses; elo and Eff are relative to a
+     player’s own region and tier, so a Master figure and an Advanced one are not the same unit.</p>
+  <input id="q" type="search" placeholder="search by FACEIT nickname or in-game name…" autocomplete="off">
+  <div id="results"></div>
+  <div id="pool"></div>
+  <div id="tables"></div>
+</div>
+<script>
+/* __PURE_JS__ */
+</script>
+<script>
+/* __DATA__ */
+/* __APP_JS__ */
+</script>
+</body>
+</html>

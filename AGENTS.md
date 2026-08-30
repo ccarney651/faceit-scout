@@ -59,6 +59,7 @@ faceit-sync fetch --championship <id>               # enumerate (needs FACEIT_AP
 faceit-sync export --format html --out docs/index.html          # build the site
 faceit-sync export --format html --out docs/index.html --region na
 owdb ... contribute merge --dir data/captures/s9 --out owdb_comps.json
+faceit-sync trials --out trials.html                 # local trialist comparison (never commit it)
 ```
 
 ### Verifying the dashboard
@@ -110,7 +111,11 @@ canonical and this copy is the bug.
     feature.
 13. **The scrim lock must fail closed.** The overlay is static markup and the
     gate only removes it, so any failure leaves the page locked.
-14. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never commit or publish the trials page.** `faceit-sync trials` writes a
+    private page naming who you are trialling. `/trials.html` is gitignored
+    (root-anchored: `faceit_sync/dashboard/trials.html` is its shell and *is*
+    tracked), and it must never be written under `docs/`.
+15. **Never trust a replay code read through a hand-dragged calibration box.**
     Past ~±2% of strip error the read returns a well-formed *wrong* code, not a
     failure. The probes in `engine/replaycode.js` refuse there now; the
     sensitivity itself remains.
