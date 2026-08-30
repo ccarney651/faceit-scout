@@ -151,20 +151,38 @@ table.mini td.r{text-align:right;font-variant-numeric:tabular-nums}
        named beside every value, because it is the unit: only <b>22%</b> of Eff is explained by team
        quality against 82% for win rate, which makes it the fairest single number here.</p>
 
-    <h3>Eff·n — and why it, not Eff, sets the order</h3>
-    <p>Eff averages z-scores of per-<i>map</i> figures, so a short season is not merely less reliable,
-       it is <b>wider</b>. Across 1123 players the spread of Eff is 0.679 at 5–14 maps against 0.356
-       at 50+, and <b>12.6%</b> of low-sample players post an Eff beyond ±1 against <b>1.0%</b> of
-       high-sample ones. The averages themselves barely move — the correlation between maps and Eff
-       is +0.165, faintly <i>upward</i> — so this is spread, not bias. Sorting on raw Eff therefore
-       fills the top of the list with whoever played least.</p>
-    <p><b>Eff·n</b> is Eff pulled toward the group mean in proportion to sample:
-       <code>Eff × n/(n+<span id="m-shrink">…</span>)</code>, the standard regression-to-the-mean
-       correction. It only ever scales toward zero — a sign never flips, and an Eff that was below its
-       floor stays absent rather than becoming a number. Raw Eff keeps its own column; only the
-       ranking changes. <span class="note">Its own limit: it weights the player's sample, not the
-       size of the cohort they were scored against, so an Eff computed against the minimum peers is
-       thin in a way this does not catch — check the peer count printed beside Eff.</span></p>
+    <h3>Rating — and why it, not Eff, sets the order</h3>
+    <p><b>Rating</b> is Eff with three measured corrections, and it is what the table sorts by. Raw
+       Eff is still shown beside it, unchanged, so you can always see what was adjusted. The z-scores
+       are <i>not</i> recomputed — only the way they are combined changes.</p>
+    <p><b>1. K/D counts double the rest.</b> Correlated against map win rate across 1033 players:
+       K/D <b>+0.75</b>, damage +0.20, healing +0.05, mitigation +0.03 — and it holds inside every
+       role (K/D 0.73–0.78). Eff averages the four <i>equally</i>, so the one component that tracks
+       winning is diluted 4:1. K/D now carries <span id="m-kd">…</span>% of the weight and the other
+       three share the remainder. <span class="note">Read with care: K/D and winning are partly
+       mechanically linked — winning a map means dying less — so some of that +0.75 is tautology
+       rather than cause. It is the <i>ranking</i> of the four that is the useful part.</span></p>
+    <p><b>2. A higher division is worth <span id="m-tier">…</span> per step.</b> Eff is z-scored
+       inside one division, so an Advanced +0.5 and a Master +0.5 are not the same achievement. The
+       gap was measured the only honest way available — the <b>11 players who actually played in two
+       tiers</b>: Advanced→Expert cost them 0.75 Eff (4 of 4 dropped) and Expert→Master 0.35 (4 of
+       7), mean 0.50. <span class="note">Eleven players is a thin bridge. Treat this as a thumb on
+       the scale, not a constant of nature — and if a tier call matters to a decision, look at the
+       raw Eff and the division rather than the rating alone.</span> The adjustment is centred on
+       <b>Expert</b>, so a rating reads roughly as “standard deviations above an average Expert”
+       rather than carrying a tier baseline. <b>It can outweigh the sample penalty:</b> a Master
+       player with 13 maps can outrank an Expert with 68. If that matters, sort by <b>maps</b>.</p>
+    <p><b>3. A thin record ranks down.</b> Eff averages z-scores of per-<i>map</i> figures, so a short
+       season is not merely less reliable — it is <b>wider</b>: the spread of Eff is 0.679 at 5–14
+       maps against 0.356 at 50+, and <b>12.6%</b> of low-sample players post an Eff beyond ±1
+       against <b>1.0%</b> of high-sample ones. The rating therefore uses the <b>pessimistic end</b>
+       of the estimate: one standard error, <code>√(<span id="m-noise">…</span>/n)</code>, subtracted.
+       For two identical Effs the thicker record always wins.</p>
+    <p class="note">An earlier version instead pulled Eff toward zero by <code>n/(n+15)</code>. That
+       is the right correction for <i>estimating</i> a player but the wrong one for <i>ranking</i>
+       them, and provably so: shrinking lifts a weak small sample faster than the error term pushes
+       it down, so a bad 10-map player still outranked a bad 60-map player. Ranking on the lower
+       bound alone is monotonic in sample size in both directions.</p>
 
     <h3>Elo</h3>
     <p>FACEIT's matchmaking rating, shown and sortable. <b>It feeds no calculation on this page</b> —

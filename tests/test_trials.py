@@ -496,55 +496,6 @@ def test_the_page_never_calls_the_elo_based_helpers(tmp_path) -> None:
         assert fn not in app, f"trials.js now calls {fn}(), which is elo-driven"
 
 
-# --- sample-size weighting --------------------------------------------------
-# Eff is a mean of z-scores of per-map averages, so a small sample is not just
-# less reliable — it is WIDER. Measured across 1123 players: SD of Eff is 0.679
-# at 5-14 maps against 0.356 at 50+, and 12.6% of low-sample players post |Eff|>1
-# against 1.0% of high-sample ones. Sorting descending therefore fills the top of
-# the list with noise. Fitting variance = skill + noise/n gives skill 0.062 and
-# noise 3.64; the shrink below pulls each Eff toward its group mean by sample.
-
-def test_shrinking_leaves_a_large_sample_almost_untouched(tmp_path) -> None:
-    got = _run_trials_js("return [adjustedEff(1.0, 60), adjustedEff(1.0, 8)];", tmp_path)
-
-    big, small = got
-    assert big > 0.79          # 60/(60+15) = 0.80
-    assert small < 0.36        # 8/(8+15)  = 0.35
-    assert big > small * 2
-
-
-def test_a_noisy_small_sample_no_longer_outranks_a_solid_one(tmp_path) -> None:
-    """The behaviour actually asked for. styxywhixy's +0.71 over 8 maps topped the
-    support table ahead of monclermonk's +0.47 over 62; after weighting it must
-    not. Both raw values are preserved — only the ranking changes."""
-    got = _run_trials_js("""
-      const styx=adjustedEff(0.71, 8), monk=adjustedEff(0.47, 62);
-      return {styx:styx, monk:monk, monkWins:monk>styx};
-    """, tmp_path)
-
-    assert got["monkWins"] is True
-
-
-def test_shrinking_never_flips_a_sign_or_invents_a_value(tmp_path) -> None:
-    """It scales toward zero, so a negative stays negative and an Eff that was
-    below its floor stays absent rather than becoming a number."""
-    got = _run_trials_js("""
-      return {neg:adjustedEff(-0.9, 10), none:adjustedEff(null, 40), zeroN:adjustedEff(0.5, 0)};
-    """, tmp_path)
-
-    assert got["neg"] < 0
-    assert got["none"] is None
-    assert got["zeroN"] == 0
-
-
-def test_the_adjusted_column_is_what_the_table_sorts_by_default(tmp_path) -> None:
-    """Weighting only helps if it is the default order — a column nobody clicks
-    changes nothing."""
-    got = _run_trials_js("return {key:SORT.key, dir:SORT.dir};", tmp_path)
-
-    assert got == {"key": "adj", "dir": "desc"}
-
-
 # --- methodology ------------------------------------------------------------
 
 @responses.activate
@@ -575,7 +526,8 @@ def test_methodology_reads_its_constants_from_the_code(db: Database) -> None:
     app = (__import__("faceit_sync.trials", fromlist=["_DASHBOARD_DIR"])
            ._DASHBOARD_DIR / "trials.js").read_text(encoding="utf-8")
     # Each floor is written into the page from its constant, never retyped.
-    for slot, const in (("m-shrink", "EFF_SHRINK"), ("m-mode-min", "PLAYER_MODE_MIN"),
+    for slot, const in (("m-noise", "EFF_NOISE"), ("m-kd", "KD_WEIGHT"),
+                        ("m-tier", "TIER_BONUS"), ("m-mode-min", "PLAYER_MODE_MIN"),
                         ("m-map-min", "PLAYER_MAP_MIN"), ("m-hero-min", "PLAYER_HERO_MIN"),
                         ("m-lb-min", "LB_MIN_GAMES"), ("m-group-min", "EFF_GROUP_MIN")):
         assert slot in app, f"trials.js never fills #{slot}"
@@ -638,3 +590,99 @@ def test_a_dps_seat_table_still_shows_damage_stats(tmp_path) -> None:
         tmp_path)
 
     assert got == ["dmg", "dmg", "dmg"]
+
+
+# --- the composite rating ---------------------------------------------------
+# Measured inputs, all against the live payload on 2026-08-30:
+#   * component vs map win rate: kd +0.747, dmg +0.201, heal +0.052, mit +0.028
+#     (holds per role: kd 0.73-0.78). Eff averages the four EQUALLY, so the one
+#     that tracks winning is diluted 4:1.
+#   * tier gap, from the 11 players who played in two tiers: Advanced->Expert
+#     +0.75 Eff (4 of 4), Expert->Master +0.35 (4 of 7), mean +0.50 per step.
+#   * low sample must rank DOWN, not toward the middle: the old symmetric shrink
+#     lifted snwdr0p (13 maps, -0.23) to -0.11, above BroPla (53 maps, -0.25).
+
+def test_kd_carries_the_weight_the_rest_of_the_components_share(tmp_path) -> None:
+    got = _run_trials_js("""
+      const only_kd  = weightedEff({kd:{z:1}, dmg:{z:0}, heal:{z:0}, mit:{z:0}});
+      const only_dmg = weightedEff({kd:{z:0}, dmg:{z:1}, heal:{z:0}, mit:{z:0}});
+      return {kd:only_kd, dmg:only_dmg, ratio:only_kd/only_dmg};
+    """, tmp_path)
+
+    assert abs(got["kd"] - 0.5) < 1e-9          # KD_WEIGHT
+    assert abs(got["ratio"] - 3.0) < 1e-9       # the other three share the rest
+
+
+def test_a_missing_component_is_renormalised_not_counted_as_zero(tmp_path) -> None:
+    """A player with no mitigation figure must not be scored as though they had
+    a mitigation of exactly average — the weights redistribute over what exists."""
+    got = _run_trials_js("""
+      return {full:weightedEff({kd:{z:2}, dmg:{z:2}, heal:{z:2}, mit:{z:2}}),
+              partial:weightedEff({kd:{z:2}, dmg:{z:2}})};
+    """, tmp_path)
+
+    assert got["full"] == 2
+    assert got["partial"] == 2
+
+
+def test_a_higher_division_is_worth_half_an_eff_per_step(tmp_path) -> None:
+    got = _run_trials_js("""
+      return {open:tierStep('Open'), adv:tierStep('Advanced'),
+              exp:tierStep('Expert'), mas:tierStep('Master'), unknown:tierStep(null)};
+    """, tmp_path)
+
+    assert got == {"open": 0, "adv": 1, "exp": 2, "mas": 3, "unknown": 0}
+
+
+def test_the_same_player_ranks_higher_for_playing_in_a_stronger_division(tmp_path) -> None:
+    got = _run_trials_js("""
+      const c={kd:{z:0.5}, dmg:{z:0.5}, heal:{z:0.5}, mit:{z:0.5}};
+      return {master:ratingFor(c, 40, 'Master'), expert:ratingFor(c, 40, 'Expert')};
+    """, tmp_path)
+
+    assert abs((got["master"] - got["expert"]) - 0.5) < 1e-9
+
+
+def test_a_smaller_sample_always_ranks_below_an_identical_larger_one(tmp_path) -> None:
+    """Directional, unlike the old shrink. Holds for a NEGATIVE Eff too, which is
+    the case the symmetric version got backwards."""
+    got = _run_trials_js("""
+      const good={kd:{z:1}, dmg:{z:1}, heal:{z:1}, mit:{z:1}};
+      const bad={kd:{z:-1}, dmg:{z:-1}, heal:{z:-1}, mit:{z:-1}};
+      return {goodFew:ratingFor(good,10,'Expert'), goodMany:ratingFor(good,60,'Expert'),
+              badFew:ratingFor(bad,10,'Expert'),  badMany:ratingFor(bad,60,'Expert')};
+    """, tmp_path)
+
+    assert got["goodMany"] > got["goodFew"]
+    assert got["badMany"] > got["badFew"]       # the old shrink had this backwards
+
+
+def test_a_rating_needs_an_eff_to_exist(tmp_path) -> None:
+    got = _run_trials_js("return [ratingFor(null, 40, 'Master'), ratingFor({}, 40, 'Master')];",
+                         tmp_path)
+
+    assert got == [None, None]
+
+
+def test_the_table_sorts_on_the_rating(tmp_path) -> None:
+    got = _run_trials_js("return {key:SORT.key, dir:SORT.dir};", tmp_path)
+
+    assert got == {"key": "rating", "dir": "desc"}
+
+
+def test_the_tier_adjustment_is_centred_so_the_number_stays_readable(tmp_path) -> None:
+    """The bonus is a RELATIVE nudge, not an absolute lift. Centred on Expert, a
+    rating still reads on Eff's own scale — roughly "SDs above an average Expert"
+    — instead of every player being inflated by a tier baseline."""
+    got = _run_trials_js("""
+      const c={kd:{z:0}, dmg:{z:0}, heal:{z:0}, mit:{z:0}};
+      // 36 maps so the error term is a round-ish number we can subtract out.
+      const se=Math.sqrt(EFF_NOISE/36);
+      return {expert:ratingFor(c,36,'Expert')+se,
+              master:ratingFor(c,36,'Master')+se,
+              advanced:ratingFor(c,36,'Advanced')+se};
+    """, tmp_path)
+
+    assert abs(got["expert"]) < 1e-9            # an average Expert sits at zero
+    assert abs(got["master"] - 0.5) < 1e-9
+    assert abs(got["advanced"] + 0.5) < 1e-9

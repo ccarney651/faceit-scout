@@ -57,13 +57,22 @@ Entries before 2026-08-11 were reconstructed from git history.
   what the tool deliberately refuses to do. Every threshold it quotes is written
   in from the constant it describes at page build, so the prose cannot drift from
   the maths.
-- **Trials page: `Eff·n`, an Eff weighted by sample size, and the new default
+- **Trials page: `Eff·n` replaced by `Rating`, three measured corrections to
+  Eff.** (1) K/D carries half the weight — measured against map win rate across
+  1033 players, K/D correlates +0.75 against damage +0.20, healing +0.05 and
+  mitigation +0.03, while Eff had been averaging the four equally. (2) A higher
+  division is worth +0.50 Eff per step, centred on Expert, measured from the 11
+  players who played in two tiers. (3) A thin record ranks down via a subtracted
+  standard error rather than the previous symmetric shrink toward zero — which
+  was provably wrong for ranking, since it lifted a weak small sample above an
+  identical larger one. Raw Eff keeps its own column.
+- ~~**Trials page: `Eff·n`, an Eff weighted by sample size, and the new default
   sort.** Raw Eff's top end is mostly small-sample noise: across 1123 players the
   SD of Eff is 0.679 at 5–14 maps against 0.356 at 50+, and 12.6% of low-sample
   players clear |Eff|>1 against 1.0% of high-sample ones. (The means do *not*
   differ — `corr(maps, Eff)` is +0.165 — so this is spread, not bias.) The column
   shrinks each Eff toward its group mean by `n/(n+15)`. Raw Eff keeps its column;
-  only the ranking changes.
+  only the ranking changes.~~ Superseded the same day by `Rating`, above.
 - **Trials page: `team %` and `vs team` columns.** A player's win rate is 82%
   explained by which team they were on (measured, 1016 players); Eff is only 22%.
   The team's own rate now sits beside the player's so an inflated one is visible.

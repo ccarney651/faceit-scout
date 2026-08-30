@@ -41,17 +41,9 @@ IDX.forEach(function (e) { BY_NICK[e.nick] = e; });
 let STORAGE_OK = true;
 let POOL = loadPool();
 let SEATS = loadSeats();
-// Sorted by the sample-weighted Eff, not the raw one: the raw number's top end
-// is mostly small-sample noise (see adjustedEff).
-let SORT = { key: 'adj', dir: 'desc' };
-
-// How hard a small sample is pulled toward the group mean. Measured across 1123
-// players by fitting observed variance = skill + noise/n: skill 0.062, noise
-// 3.64, which implies a "correct" k of 59. That is strong enough to flatten
-// almost everyone, and 15 already does the whole job — styxywhixy's +0.71 over 8
-// maps drops from 1st to 4th at 15 and stays 4th at 30 and 59. Beyond 15 the
-// ordering stops changing and only the numbers compress, so 15 it is.
-const EFF_SHRINK = 15;
+// Sorted by the composite rating, not raw Eff: raw Eff weights K/D no more than
+// mitigation and treats 8 maps like 60 (see ratingFor).
+let SORT = { key: 'rating', dir: 'desc' };
 
 /* ---- pure helpers (executed by the tests) --------------------------------- */
 
@@ -69,21 +61,70 @@ function teamTotals(records, cid, team) {
   return { games: games, wins: wins, wr: games ? Math.round(100 * wins / games) : null };
 }
 
-// Eff pulled toward its group mean in proportion to sample size — the standard
-// regression-to-the-mean correction for a rate measured over few observations.
+/* ---- the rating ------------------------------------------------------------
+   Eff, re-weighted and then discounted for what we do not know. Three measured
+   corrections, all against the live payload on 2026-08-30. The z-scores
+   themselves are NOT recomputed — efficiencyRatings() hands back its per-
+   component z in `comps`, and this only changes how they are combined. */
+
+// 1. K/D carries the weight. Correlated against map win rate across 1033
+// players: kd +0.747, dmg +0.201, heal +0.052, mit +0.028, and it holds per role
+// (kd 0.73-0.78). Eff averages the four EQUALLY, diluting the one that tracks
+// winning 4:1. Weights redistribute over the components a player actually has,
+// so a missing figure is not silently scored as exactly average.
+// (Caveat kept honest in the methodology: K/D and winning are partly mechanically
+// linked, so some of that 0.747 is tautology rather than causation.)
+const KD_WEIGHT = 0.5;
+
+function weightedEff(comps) {
+  if (!comps) return null;
+  const keys = Object.keys(comps).filter(function (k) {
+    return comps[k] && comps[k].z != null;
+  });
+  if (!keys.length) return null;
+  const rest = (1 - KD_WEIGHT) / 3;
+  const w = function (k) { return k === 'kd' ? KD_WEIGHT : rest; };
+  let num = 0, den = 0;
+  keys.forEach(function (k) { num += comps[k].z * w(k); den += w(k); });
+  return den ? num / den : null;
+}
+
+// 2. A stronger division is worth more. Measured from the only honest bridge
+// available — the 11 players who appear in two tiers: Advanced->Expert cost them
+// 0.75 Eff (4 of 4 dropped), Expert->Master 0.35 (4 of 7), mean 0.50 per step.
+// Eleven players is thin, so this is a thumb on the scale, not a constant.
+const TIER_BONUS = 0.5;
+const TIER_STEP = { Open: 0, Advanced: 1, Expert: 2, Master: 3 };
+// Centred on Expert so the adjustment is a relative nudge rather than an
+// absolute lift: without this every rating carries a tier baseline (+1.0, +1.5)
+// and stops reading on Eff's own scale. Centred, a rating is roughly "standard
+// deviations above an average Expert", and within-tier comparisons are identical
+// either way.
+const TIER_BASELINE = TIER_STEP.Expert;
+function tierStep(tier) { return TIER_STEP[tier] || 0; }
+
+// 3. A short season ranks DOWN, whatever its sign. Eff averages z-scores of
+// per-MAP figures, so a small sample is not merely less reliable, it is wider:
+// SD 0.679 at 5-14 maps against 0.356 at 50+, and 12.6% of low-sample players
+// clear |Eff|>1 against 1.0% of high-sample ones.
 //
-// Eff is a mean of z-scores of per-MAP averages, so a short season is not merely
-// less reliable, it is WIDER: measured over 1123 players, SD of Eff is 0.679 at
-// 5-14 maps against 0.356 at 50+, and 12.6% of low-sample players clear |Eff|>1
-// against 1.0% of the high-sample ones. Sorting on the raw number therefore
-// fills the top of the list with whoever played least.
+// The rating is therefore the PESSIMISTIC end of the estimate: subtract one
+// standard error, sqrt(noise/n), fitted at noise = 3.64 per map. More maps means
+// a smaller penalty, so for two identical Effs the thicker record always wins.
 //
-// It only ever scales toward zero: a sign never flips, and an Eff that was
-// absent (below its own floor) stays absent rather than becoming a number.
-function adjustedEff(eff, n) {
-  if (eff == null) return null;
+// An earlier version instead shrank Eff toward zero by n/(n+15). That is right
+// for estimating a player but WRONG for ranking one, and provably so: shrinking
+// lifts a weak small sample faster than the error term pushes it down, so a bad
+// 10-map player still outranked a bad 60-map player. Ranking on the lower bound
+// alone is monotonic in sample size in both directions.
+const EFF_NOISE = 3.64;     // fitted per-map noise variance; SE = sqrt(noise/n)
+
+function ratingFor(comps, n, tier) {
+  const base = weightedEff(comps);
+  if (base == null) return null;
   const g = n || 0;
-  return eff * (g / (g + EFF_SHRINK));
+  const se = g ? Math.sqrt(EFF_NOISE / g) : Math.sqrt(EFF_NOISE);
+  return base + TIER_BONUS * (tierStep(tier) - TIER_BASELINE) - se;
 }
 
 // Sort rows by one column. A missing value sorts LAST in both directions: a
@@ -291,7 +332,7 @@ function factsFor(nick, role) {
       delta: (wr == null || twr == null) ? null : Math.round(10 * (wr - twr)) / 10,
       elo: d0.elo == null ? null : d0.elo,
       eff: eff && eff.eff != null ? eff.eff : null,
-      adj: eff && eff.eff != null ? adjustedEff(eff.eff, eff.n) : null,
+      rating: eff ? ratingFor(eff.comps, eff.n, idx.tier) : null,
       kd: stats && stats.kd != null ? stats.kd : null,
       stat: stats && stats[statKey] != null ? stats[statKey] : null
     }
@@ -395,16 +436,20 @@ function columnsFor(role) {
       }
     },
     {
-      key: 'adj', label: 'Eff·n',
-      title: 'Eff weighted by sample size — pulled toward the group mean by ' +
-        'n/(n+' + EFF_SHRINK + '). A short season is not just less reliable, it is wider: ' +
-        '12.6% of players under 15 maps post |Eff|>1 against 1.0% of those over 50. ' +
-        'This is what the table sorts by.',
+      key: 'rating', label: 'rating',
+      title: 'Eff re-weighted so K/D counts double the others (it correlates ' +
+        '+0.75 with winning against +0.20 for damage), plus ' + TIER_BONUS +
+        ' per division step, minus a standard error for sample size so a thin ' +
+        'record always ranks below an identical thick one. This is the sort order.',
       cell: function (f) {
-        if (f.sort.adj == null) return '<span class="faint">—</span>';
+        if (f.sort.rating == null) return '<span class="faint">—</span>';
         const n = (f.eff && f.eff.n) || 0;
-        return '<b class="' + (f.sort.adj > 0 ? 'good' : 'bad') + '">' + signed(f.sort.adj, 2) + '</b>' +
-          '<span class="faint sub" title="stat sample behind it">' + n + 'g</span>';
+        const step = tierStep(f.idx.tier);
+        return '<b class="' + (f.sort.rating > 0 ? 'good' : 'bad') + '">' +
+          signed(f.sort.rating, 2) + '</b>' +
+          '<span class="faint sub" title="' + n + ' maps of stats' +
+          (step === TIER_BASELINE ? '' : ', ' + signed(TIER_BONUS * (step - TIER_BASELINE), 2) +
+            ' for ' + esc(f.idx.tier || '')) + '">' + n + 'g</span>';
       }
     },
     {
@@ -641,7 +686,9 @@ function render() {
 // maths — a stale methodology is worse than none.
 function fillMethodology() {
   const slots = {
-    'm-shrink': EFF_SHRINK,
+    'm-noise': EFF_NOISE,
+    'm-kd': Math.round(KD_WEIGHT * 100),
+    'm-tier': TIER_BONUS.toFixed(2),
     'm-mode-min': PLAYER_MODE_MIN,
     'm-map-min': PLAYER_MAP_MIN,
     'm-hero-min': PLAYER_HERO_MIN,

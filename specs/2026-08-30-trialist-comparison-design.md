@@ -231,6 +231,39 @@ Two normalisations were measured and **rejected**:
   teammates?" rather than "how good?", penalising a strong player on a strong
   team. Rejected as a headline number; Eff is left absolute.
 
+### The rating: three measured corrections to Eff
+
+`Rating` is what the table sorts by; raw `Eff` stays beside it unchanged. The
+z-scores are **not** recomputed — `efficiencyRatings()` returns its per-component
+z in `comps`, and only the combination changes.
+
+**1. K/D counts double the rest** (`KD_WEIGHT = 0.5`). Correlation with map win
+rate across 1033 players: K/D **+0.747**, damage +0.201, healing +0.052,
+mitigation +0.028, holding inside every role (K/D 0.73–0.78). Eff averages the
+four equally, diluting the win-linked one 4:1. Weights redistribute over the
+components a player actually has, so a missing figure is not scored as average.
+*Caveat, kept on the page:* K/D and winning are partly mechanically linked, so
+some of that +0.747 is tautology. The **ranking** of the four is the usable part.
+
+**2. A higher division is worth +0.50 per step** (`TIER_BONUS`), centred on
+Expert so the number stays on Eff's scale instead of carrying a tier baseline.
+Measured from the only honest bridge available — the **11 players who played in
+two tiers**: Advanced→Expert cost 0.75 Eff (4 of 4), Expert→Master 0.35 (4 of 7),
+mean 0.50. Eleven players is thin; this is a thumb on the scale.
+
+**3. A thin record ranks down**: subtract one standard error,
+`sqrt(EFF_NOISE/n)` with noise fitted at 3.64 per map.
+
+An earlier version instead shrank Eff toward zero by `n/(n+15)`. That is correct
+for *estimating* a player and wrong for *ranking* one, and the test suite proved
+it: shrinking lifts a weak small sample faster than an error term pushes it down,
+so a bad 10-map player still outranked a bad 60-map player. Ranking on the lower
+bound alone is monotonic in sample size in **both** directions.
+
+**Known interaction:** the tier bonus can outweigh the sample penalty — a Master
+player with 13 maps can outrank an Expert with 68. Both are the operator's chosen
+settings; the page says so and points at the `maps` column.
+
 ### Weighting Eff by sample size
 
 Eff is a mean of z-scores of per-**map** averages, so a short season is not only
