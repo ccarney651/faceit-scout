@@ -34,7 +34,17 @@ IDX.forEach(function (e) { BY_NICK[e.nick] = e; });
 // fallback written to keep the page working would itself have killed it.
 let STORAGE_OK = true;
 let POOL = loadPool();
-let SORT = { key: 'eff', dir: 'desc' };   // Eff first: the least team-driven number we have.
+// Sorted by the sample-weighted Eff, not the raw one: the raw number's top end
+// is mostly small-sample noise (see adjustedEff).
+let SORT = { key: 'adj', dir: 'desc' };
+
+// How hard a small sample is pulled toward the group mean. Measured across 1123
+// players by fitting observed variance = skill + noise/n: skill 0.062, noise
+// 3.64, which implies a "correct" k of 59. That is strong enough to flatten
+// almost everyone, and 15 already does the whole job — styxywhixy's +0.71 over 8
+// maps drops from 1st to 4th at 15 and stays 4th at 30 and 59. Beyond 15 the
+// ordering stops changing and only the numbers compress, so 15 it is.
+const EFF_SHRINK = 15;
 
 /* ---- pure helpers (executed by the tests) --------------------------------- */
 
@@ -50,6 +60,23 @@ function teamTotals(records, cid, team) {
     wins += rec[m].wins || 0;
   });
   return { games: games, wins: wins, wr: games ? Math.round(100 * wins / games) : null };
+}
+
+// Eff pulled toward its group mean in proportion to sample size — the standard
+// regression-to-the-mean correction for a rate measured over few observations.
+//
+// Eff is a mean of z-scores of per-MAP averages, so a short season is not merely
+// less reliable, it is WIDER: measured over 1123 players, SD of Eff is 0.679 at
+// 5-14 maps against 0.356 at 50+, and 12.6% of low-sample players clear |Eff|>1
+// against 1.0% of the high-sample ones. Sorting on the raw number therefore
+// fills the top of the list with whoever played least.
+//
+// It only ever scales toward zero: a sign never flips, and an Eff that was
+// absent (below its own floor) stays absent rather than becoming a number.
+function adjustedEff(eff, n) {
+  if (eff == null) return null;
+  const g = n || 0;
+  return eff * (g / (g + EFF_SHRINK));
 }
 
 // Sort rows by one column. A missing value sorts LAST in both directions: a
@@ -223,6 +250,7 @@ function factsFor(nick, role) {
       delta: (wr == null || twr == null) ? null : Math.round(10 * (wr - twr)) / 10,
       elo: d0.elo == null ? null : d0.elo,
       eff: eff && eff.eff != null ? eff.eff : null,
+      adj: eff && eff.eff != null ? adjustedEff(eff.eff, eff.n) : null,
       kd: stats && stats.kd != null ? stats.kd : null,
       stat: stats && stats[statKey] != null ? stats[statKey] : null
     }
@@ -303,6 +331,19 @@ function columnsFor(role) {
         return '<b class="' + (e.eff > 0 ? 'good' : 'bad') + '">' + signed(e.eff, 2) + '</b>' +
           '<span class="faint sub" title="peer group">' + esc(e.group || '') + ' · ' + e.groupN + '</span>' +
           (f.secondary ? ALLROLES : '');
+      }
+    },
+    {
+      key: 'adj', label: 'Eff·n',
+      title: 'Eff weighted by sample size — pulled toward the group mean by ' +
+        'n/(n+' + EFF_SHRINK + '). A short season is not just less reliable, it is wider: ' +
+        '12.6% of players under 15 maps post |Eff|>1 against 1.0% of those over 50. ' +
+        'This is what the table sorts by.',
+      cell: function (f) {
+        if (f.sort.adj == null) return '<span class="faint">—</span>';
+        const n = (f.eff && f.eff.n) || 0;
+        return '<b class="' + (f.sort.adj > 0 ? 'good' : 'bad') + '">' + signed(f.sort.adj, 2) + '</b>' +
+          '<span class="faint sub" title="stat sample behind it">' + n + 'g</span>';
       }
     },
     {

@@ -494,3 +494,52 @@ def test_the_page_never_calls_the_elo_based_helpers(tmp_path) -> None:
 
     for fn in ("rankPlayers", "powerRankings", "eloExpected", "eloNext", "sparklinePoints"):
         assert fn not in app, f"trials.js now calls {fn}(), which is elo-driven"
+
+
+# --- sample-size weighting --------------------------------------------------
+# Eff is a mean of z-scores of per-map averages, so a small sample is not just
+# less reliable — it is WIDER. Measured across 1123 players: SD of Eff is 0.679
+# at 5-14 maps against 0.356 at 50+, and 12.6% of low-sample players post |Eff|>1
+# against 1.0% of high-sample ones. Sorting descending therefore fills the top of
+# the list with noise. Fitting variance = skill + noise/n gives skill 0.062 and
+# noise 3.64; the shrink below pulls each Eff toward its group mean by sample.
+
+def test_shrinking_leaves_a_large_sample_almost_untouched(tmp_path) -> None:
+    got = _run_trials_js("return [adjustedEff(1.0, 60), adjustedEff(1.0, 8)];", tmp_path)
+
+    big, small = got
+    assert big > 0.79          # 60/(60+15) = 0.80
+    assert small < 0.36        # 8/(8+15)  = 0.35
+    assert big > small * 2
+
+
+def test_a_noisy_small_sample_no_longer_outranks_a_solid_one(tmp_path) -> None:
+    """The behaviour actually asked for. styxywhixy's +0.71 over 8 maps topped the
+    support table ahead of monclermonk's +0.47 over 62; after weighting it must
+    not. Both raw values are preserved — only the ranking changes."""
+    got = _run_trials_js("""
+      const styx=adjustedEff(0.71, 8), monk=adjustedEff(0.47, 62);
+      return {styx:styx, monk:monk, monkWins:monk>styx};
+    """, tmp_path)
+
+    assert got["monkWins"] is True
+
+
+def test_shrinking_never_flips_a_sign_or_invents_a_value(tmp_path) -> None:
+    """It scales toward zero, so a negative stays negative and an Eff that was
+    below its floor stays absent rather than becoming a number."""
+    got = _run_trials_js("""
+      return {neg:adjustedEff(-0.9, 10), none:adjustedEff(null, 40), zeroN:adjustedEff(0.5, 0)};
+    """, tmp_path)
+
+    assert got["neg"] < 0
+    assert got["none"] is None
+    assert got["zeroN"] == 0
+
+
+def test_the_adjusted_column_is_what_the_table_sorts_by_default(tmp_path) -> None:
+    """Weighting only helps if it is the default order — a column nobody clicks
+    changes nothing."""
+    got = _run_trials_js("return {key:SORT.key, dir:SORT.dir};", tmp_path)
+
+    assert got == {"key": "adj", "dir": "desc"}

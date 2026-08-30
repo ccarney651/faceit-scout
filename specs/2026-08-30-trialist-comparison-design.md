@@ -214,6 +214,38 @@ Two normalisations were measured and **rejected**:
   teammates?" rather than "how good?", penalising a strong player on a strong
   team. Rejected as a headline number; Eff is left absolute.
 
+### Weighting Eff by sample size
+
+Eff is a mean of z-scores of per-**map** averages, so a short season is not only
+less reliable — it is *wider*. Measured across 1123 players:
+
+| maps | players | mean Eff | SD of Eff | share with \|Eff\|>1 |
+|---|---|---|---|---|
+| 5–14 | 199 | -0.117 | 0.679 | **12.6%** |
+| 15–29 | 250 | -0.092 | 0.530 | 5.2% |
+| 30–49 | 382 | +0.050 | 0.446 | 3.7% |
+| 50+ | 292 | +0.093 | 0.356 | **1.0%** |
+
+Note the means: low-sample Eff is **not** systematically higher —
+`corr(maps, Eff)` is **+0.165**, i.e. faintly the other way. What low sample does
+is widen the distribution, so a descending sort fills its top with whoever played
+least. That is the thing worth fixing.
+
+The `Eff·n` column applies the standard regression-to-the-mean shrink,
+`eff × n/(n+k)`. Fitting observed variance = skill + noise/n gives skill 0.062
+and noise 3.64, implying k=59 — strong enough to flatten nearly everyone. **k=15
+is used instead**, because it already does the whole job: styxywhixy's +0.71 over
+8 maps falls from 1st to 4th at k=15 and is still 4th at k=30 and k=59. Past 15
+the ordering stops changing and only the numbers compress.
+
+The shrink only scales toward zero: a sign never flips, and an Eff that was
+absent stays absent. Raw Eff keeps its own column, so nothing is hidden — the
+table just stops *ranking* on the noisier of the two.
+
+**Known thinness this does not address:** the shrink weights the player's own
+sample, not the size of the cohort they were scored against. `Javi44`'s +0.91 is
+computed against **5** peers (the floor is 4), which is its own kind of thin.
+
 `vs team` is honest about its own limit: **27% of players started every one of
 their team's maps**, and for them the difference is *structurally* zero. Those
 cells render a faint `0` titled "started every map — nothing to diverge from",
