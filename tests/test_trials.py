@@ -355,8 +355,8 @@ def _run_trials_js(body: str, tmp_path, data: dict | None = None,
     from faceit_sync.trials import _DASHBOARD_DIR
     # trials.js reads its payload off `window` at load, so handing it a fake one
     # runs the real pipeline here — factsFor -> playerSeason/efficiencyRatings.
-    setup = "globalThis.window={__OWDB_DATA__:%s,__TRIALS_INDEX__:%s};\n" % (
-        json.dumps(data or {}), json.dumps(index or []))
+    setup = (f"globalThis.window={{__OWDB_DATA__:{json.dumps(data or {})},"
+             f"__TRIALS_INDEX__:{json.dumps(index or [])}}};\n")
     src = tmp_path / (name + ".js")
     src.write_text(
         (_DASHBOARD_DIR / "pure.js").read_text(encoding="utf-8") + "\n" + setup +
@@ -477,7 +477,8 @@ def test_elo_is_shown_but_never_feeds_a_computed_number(tmp_path) -> None:
     assert without["alpha"]["elo"] is None
 
     for nick in with_elo:
-        a = dict(with_elo[nick]); b = dict(without[nick])
+        a = dict(with_elo[nick])
+        b = dict(without[nick])
         assert a.pop("elo") is not None
         assert b.pop("elo") is None
         assert a == b, f"{nick}: a number moved when elo was removed"
