@@ -42,6 +42,14 @@ Entries before 2026-08-11 were reconstructed from git history.
   and made you compare across a horizontal scrollbar. Modes, maps, hero pool and
   team spells moved into a per-player expandable row. Missing values sort last in
   both directions, so a player under the Eff floor never tops the list.
+- **Trials page: hand-assigned Hitscan / Flex DPS tables.** `HS` and `FLEX`
+  buttons on any damage player file them into their own table; anyone unassigned
+  stays under plain `Damage`. Manual because it cannot honestly be inferred —
+  separating the seats needs hero attribution, which covers 128 players in the
+  whole dataset. Choices persist per browser and outlive the pool. A seat only
+  ever replaces the Damage table, so a flex player keeps the tank table they
+  earned, and it is purely a grouping: Eff and its division-wide peer group are
+  untouched.
 - **Trials page: a Methodology section.** What every column means, where it comes
   from and what it cannot tell you — including the limits (`vs team` is
   structurally zero for full-timers; an empty hero pool means nobody captured

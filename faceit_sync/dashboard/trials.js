@@ -24,7 +24,12 @@ const COMPS = DATA.owdb_comps || {};
 const PERGAME = DATA.owdb_pergame_players || {};
 
 const POOL_KEY = 'owdb-trials-pool';
-const TABLE_ORDER = ['Tank', 'Damage', 'Support', 'Unassigned'];
+const SEAT_KEY = 'owdb-trials-seats';
+// The two DPS seats are assigned BY HAND. Inferring them needs hero attribution,
+// which reaches 128 players in the whole dataset — far too few to bucket a
+// trialist by. Plain 'Damage' remains for anyone not yet assigned.
+const DPS_SEATS = ['Hitscan', 'Flex DPS'];
+const TABLE_ORDER = ['Tank', 'Hitscan', 'Flex DPS', 'Damage', 'Support', 'Unassigned'];
 const UNASSIGNED_LABEL = 'Unassigned';
 const BY_NICK = {};
 IDX.forEach(function (e) { BY_NICK[e.nick] = e; });
@@ -35,6 +40,7 @@ IDX.forEach(function (e) { BY_NICK[e.nick] = e; });
 // fallback written to keep the page working would itself have killed it.
 let STORAGE_OK = true;
 let POOL = loadPool();
+let SEATS = loadSeats();
 // Sorted by the sample-weighted Eff, not the raw one: the raw number's top end
 // is mostly small-sample noise (see adjustedEff).
 let SORT = { key: 'adj', dir: 'desc' };
@@ -95,13 +101,27 @@ function sortRows(rows, key, dir) {
   });
 }
 
+// Which tables a player renders in, after their manually assigned DPS seat is
+// applied. The seat REPLACES 'Damage' and touches nothing else, so a flex player
+// keeps the tank table they earned on their own maps, and a stale seat left on
+// someone who has since changed role is simply ignored.
+//
+// This is a grouping, not a recomputation: Eff's peer group is division-wide and
+// cannot be rebuilt from labels that only cover the pool.
+function tablesWithSeats(entry, seats) {
+  const base = (entry && entry.tables) || [UNASSIGNED_LABEL];
+  const seat = seats && entry && seats[entry.nick];
+  if (!seat || DPS_SEATS.indexOf(seat) < 0) return base;
+  return base.map(function (t) { return t === 'Damage' ? seat : t; });
+}
+
 // A player's stats and Eff are season-wide: the export rolls them up per player
 // per division with no role split. For their DOMINANT role that is a fair label.
 // In a SECOND table it is not — Warglabidoo's 7 Tank maps carry the averages of
 // his 60 Damage ones, and his Eff peer group is still Damage. The numbers show
 // anyway (they are the only ones there are) but every one is marked.
 function isSecondary(entry, role) {
-  return (((entry || {}).tables || [])[0] || UNASSIGNED_LABEL) !== role;
+  return (tablesWithSeats(entry, SEATS)[0] || UNASSIGNED_LABEL) !== role;
 }
 
 /* ---- storage -------------------------------------------------------------- */
@@ -114,6 +134,22 @@ function loadPool() {
 function savePool() {
   try { localStorage.setItem(POOL_KEY, JSON.stringify(POOL)); }
   catch (e) { STORAGE_OK = false; }
+}
+function loadSeats() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SEAT_KEY) || '{}');
+    return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  } catch (e) { STORAGE_OK = false; return {}; }
+}
+function saveSeats() {
+  try { localStorage.setItem(SEAT_KEY, JSON.stringify(SEATS)); }
+  catch (e) { STORAGE_OK = false; }
+}
+// Seats outlive the pool on purpose: dropping someone and adding them back a
+// week later should not lose the call you already made about them.
+function setSeat(nick, seat) {
+  if (seat) SEATS[nick] = seat; else delete SEATS[nick];
+  saveSeats(); render();
 }
 
 /* ---- DOM helpers ---------------------------------------------------------- */
@@ -221,9 +257,13 @@ function teamContext(S) {
 const ROLE_STAT = {
   Tank: ['mit', 'mitigation / map'],
   Damage: ['dmg', 'damage / map'],
+  Hitscan: ['dmg', 'damage / map'],
+  'Flex DPS': ['dmg', 'damage / map'],
   Support: ['heal', 'healing / map'],
   Unassigned: ['dmg', 'damage / map']
 };
+// A seat table is still a DPS table for the purpose of "is this their main role".
+function baseRoleOfTable(role) { return DPS_SEATS.indexOf(role) >= 0 ? 'Damage' : role; }
 
 function factsFor(nick, role) {
   const S = playerSeason(nick, DIVS, COMPS, PERGAME);
@@ -274,6 +314,26 @@ function columnsFor(role) {
           (f.secondary
             ? '<span class="fx" title="' + esc(role) + ' is their second role — ' +
             ((f.idx.roles || {})[role] || 0) + ' of ' + f.idx.maps + ' maps">2nd role</span>' : '');
+      },
+      // DPS players get a hand-assigned seat. Rendered as a node rather than a
+      // string so the buttons carry their own listeners.
+      extra: function (f, td) {
+        if ((f.idx.roles || {}).Damage === undefined) return;
+        const cur = SEATS[f.nick] || '';
+        const pick = el('<span class="seatpick"></span>');
+        DPS_SEATS.concat(['']).forEach(function (seat) {
+          const on = cur === seat;
+          const label = seat === 'Hitscan' ? 'HS' : seat === 'Flex DPS' ? 'FLEX' : '—';
+          const b = el('<button class="seat' + (on ? ' on' : '') + '" title="' +
+            (seat ? 'file under ' + esc(seat) : 'unassigned — show under Damage') +
+            '">' + label + '</button>');
+          b.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            setSeat(f.nick, on ? '' : seat);
+          });
+          pick.appendChild(b);
+        });
+        td.appendChild(pick);
       }
     },
     {
@@ -396,7 +456,9 @@ function tableFor(role, facts) {
   sortRows(facts, SORT.key, SORT.dir).forEach(function (f) {
     const tr = el('<tr class="prow"></tr>');
     cols.forEach(function (c) {
-      tr.appendChild(el('<td class="' + (c.align === 'l' ? 'l' : 'r') + '">' + c.cell(f) + '</td>'));
+      const td = el('<td class="' + (c.align === 'l' ? 'l' : 'r') + '">' + c.cell(f) + '</td>');
+      if (c.extra) c.extra(f, td);
+      tr.appendChild(td);
     });
     const drop = el('<tr class="detail"><td colspan="' + cols.length + '"></td></tr>');
     drop.style.display = 'none';
@@ -563,8 +625,7 @@ function render() {
   }
   TABLE_ORDER.forEach(function (role) {
     const inRole = POOL.filter(function (n) {
-      const t = (BY_NICK[n] || {}).tables || [UNASSIGNED_LABEL];
-      return t.indexOf(role) >= 0;
+      return tablesWithSeats(BY_NICK[n], SEATS).indexOf(role) >= 0;
     }).map(function (n) { return factsFor(n, role); });
     if (inRole.length) main.appendChild(tableFor(role, inRole));
   });

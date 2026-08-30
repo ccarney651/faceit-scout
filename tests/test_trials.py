@@ -580,3 +580,61 @@ def test_methodology_reads_its_constants_from_the_code(db: Database) -> None:
                         ("m-lb-min", "LB_MIN_GAMES"), ("m-group-min", "EFF_GROUP_MIN")):
         assert slot in app, f"trials.js never fills #{slot}"
         assert const in app, f"trials.js does not reference {const}"
+
+
+# --- manual DPS seats -------------------------------------------------------
+# Hero attribution reaches too few players to infer hitscan vs flex, so the seat
+# is assigned by hand. It re-buckets which table a player renders in and nothing
+# else — Eff's peer group is division-wide and cannot be rebuilt from labels that
+# only cover the pool.
+
+def test_an_unassigned_damage_player_stays_in_the_damage_table(tmp_path) -> None:
+    got = _run_trials_js(
+        "return tablesWithSeats({nick:'x',tables:['Damage']}, {});", tmp_path)
+
+    assert got == ["Damage"]
+
+
+def test_assigning_a_seat_moves_the_player_out_of_damage(tmp_path) -> None:
+    got = _run_trials_js(
+        "return tablesWithSeats({nick:'x',tables:['Damage']}, {x:'Hitscan'});", tmp_path)
+
+    assert got == ["Hitscan"]
+
+
+def test_a_seat_only_replaces_the_damage_table_not_the_others(tmp_path) -> None:
+    """Warglabidoo is Damage+Tank. Calling him a hitscan must not touch the tank
+    table he earned on his own maps."""
+    got = _run_trials_js(
+        "return tablesWithSeats({nick:'warg',tables:['Damage','Tank']}, {warg:'Flex DPS'});",
+        tmp_path)
+
+    assert got == ["Flex DPS", "Tank"]
+
+
+def test_a_stale_seat_on_a_support_player_is_ignored(tmp_path) -> None:
+    """Seats persist; a player can change role between builds. A leftover label
+    must not drag a support into a DPS table."""
+    got = _run_trials_js(
+        "return tablesWithSeats({nick:'sup',tables:['Support']}, {sup:'Hitscan'});", tmp_path)
+
+    assert got == ["Support"]
+
+
+def test_both_dps_seats_render_their_own_table(tmp_path) -> None:
+    """The tables must exist in a sensible order, with plain Damage still there
+    for whoever has not been assigned yet."""
+    got = _run_trials_js("return TABLE_ORDER;", tmp_path)
+
+    assert got.index("Hitscan") < got.index("Flex DPS") < got.index("Damage")
+    assert set(got) >= {"Tank", "Hitscan", "Flex DPS", "Damage", "Support", "Unassigned"}
+
+
+def test_a_dps_seat_table_still_shows_damage_stats(tmp_path) -> None:
+    """A hitscan table is still a DPS table: it must not fall through to the
+    catch-all stat column."""
+    got = _run_trials_js(
+        "return [ROLE_STAT['Hitscan'][0], ROLE_STAT['Flex DPS'][0], ROLE_STAT['Damage'][0]];",
+        tmp_path)
+
+    assert got == ["dmg", "dmg", "dmg"]

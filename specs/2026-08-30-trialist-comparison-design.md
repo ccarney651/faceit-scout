@@ -197,6 +197,23 @@ Columns, in order: player (with in-game name), team, division, maps, win %,
 **team %**, **vs team**, elo, Eff, K/D, and one role-appropriate stat —
 mitigation/map for Tank, damage/map for Damage, healing/map for Support.
 
+### Splitting the DPS seats, by hand
+
+The two DPS seats (Hitscan / Flex DPS) are assigned **manually**, with the choice
+persisted per browser. Inferring them needs hero attribution, which reaches 128
+players in the whole dataset — nowhere near enough to bucket a trialist by, and
+`subroles.py` itself calls hero→seat "genuinely fuzzy at the edges".
+
+`tablesWithSeats()` applies the seat by replacing `Damage` in the player's table
+list and touching nothing else, so a flex player keeps the tank table their own
+maps earned, and a stale seat on someone who has since changed role is ignored.
+Unassigned players stay under plain `Damage`.
+
+It is a **grouping, not a recomputation**. Eff's cohort is division-wide;
+labels covering only the pool cannot build one, so no Eff moves when a seat is
+set. The peer group beside each Eff remains the real one — which is already a
+seat for the minority of players captures placed in one.
+
 ### Normalising for team quality
 
 Measured across 1016 players with 10+ maps: a player's win rate is **82%**
