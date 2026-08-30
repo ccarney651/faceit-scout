@@ -335,3 +335,74 @@ def test_cli_trials_fails_loudly_on_an_empty_database(db: Database, tmp_path) ->
 
     assert main(["--db", db.path, "trials", "--out", str(out)]) == 1
     assert not out.exists()
+
+
+# --- the page's own pure logic ---------------------------------------------
+# trials.js is loadable under node (its window/document touches are guarded), so
+# the maths that can mislead a coach gets executed for real rather than being
+# smoke-tested through a screenshot.
+
+def _run_trials_js(body: str, tmp_path) -> object:
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available to run the trials helpers")
+    from faceit_sync.trials import _DASHBOARD_DIR
+    src = tmp_path / "trials_under_test.js"
+    src.write_text(
+        (_DASHBOARD_DIR / "pure.js").read_text(encoding="utf-8") + "\n" +
+        (_DASHBOARD_DIR / "trials.js").read_text(encoding="utf-8") +
+        "\nconsole.log(JSON.stringify((()=>{" + body + "})()));",
+        encoding="utf-8",
+    )
+    proc = subprocess.run([node, str(src)], capture_output=True, text=True,
+                          encoding="utf-8")
+    assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+    return json.loads(proc.stdout)
+
+
+def test_team_totals_sum_the_teams_whole_season(tmp_path) -> None:
+    """The team's win rate is what the player's is judged against, so it is summed
+    from integer game/win counts — never re-derived from a rounded percentage."""
+    got = _run_trials_js("""
+      const records={'c1|Harmony':{mode:{},map:{
+        Ilios:{games:10,wins:7}, Numbani:{games:5,wins:1}, Oasis:{games:5,wins:2}}}};
+      return teamTotals(records,'c1','Harmony');
+    """, tmp_path)
+
+    assert got == {"games": 20, "wins": 10, "wr": 50}
+
+
+def test_team_totals_of_an_unknown_team_are_empty_not_zero_percent(tmp_path) -> None:
+    """A team with no record must not read as a 0% win rate."""
+    got = _run_trials_js("return teamTotals({}, 'c1', 'Nobody');", tmp_path)
+
+    assert got == {"games": 0, "wins": 0, "wr": None}
+
+
+def test_sorting_puts_players_with_no_value_last_in_both_directions(tmp_path) -> None:
+    """A candidate whose Eff is below its sample floor has not earned the top of
+    the list — ascending OR descending, a missing value sorts last."""
+    got = _run_trials_js("""
+      const rows=[{nick:'none',sort:{eff:null}},
+                  {nick:'low',sort:{eff:-0.5}},
+                  {nick:'high',sort:{eff:1.2}}];
+      return {desc:sortRows(rows,'eff','desc').map(r=>r.nick),
+              asc:sortRows(rows,'eff','asc').map(r=>r.nick)};
+    """, tmp_path)
+
+    assert got["desc"] == ["high", "low", "none"]
+    assert got["asc"] == ["low", "high", "none"]
+
+
+def test_sorting_breaks_ties_by_name_so_the_order_is_stable(tmp_path) -> None:
+    got = _run_trials_js("""
+      const rows=[{nick:'zed',sort:{maps:10}},{nick:'amy',sort:{maps:10}}];
+      return sortRows(rows,'maps','desc').map(r=>r.nick);
+    """, tmp_path)
+
+    assert got == ["amy", "zed"]

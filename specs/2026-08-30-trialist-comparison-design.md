@@ -7,7 +7,7 @@
 
 A local-only tool for judging trial candidates against each other. Search the
 league's players by either name they go by, add them to a persistent trialist
-pool, and read them as side-by-side columns in **separate tables per role**.
+pool, and read them as sortable rows in **separate tables per role**.
 
 Built for a real need: the operator's team is trialling replacements for players
 who cannot commit to the coming season.
@@ -50,7 +50,7 @@ is a trap.
 
 **Consequence:** every rate carries its `n`, and anything under its floor renders
 as an em dash whose tooltip says why — the discipline the player pages already
-enforce (n>=5 per mode, n>=3 per map).
+enforce (the floors come from pure.js; see "Rendering" for the exact values).
 
 ### Hero pools are near-empty and actively misleading
 
@@ -178,22 +178,46 @@ else is persisted.
 Up to four tables — **Tank**, **Damage**, **Support**, and **Unassigned** for
 players FACEIT recorded no role for — each rendered only when the pool puts
 someone in it. In practice Unassigned is near-always absent: 63 of 44 150 game
-rows carry a null or `'None'` role. Columns are players; rows are axes.
+rows carry a null or `'None'` role.
+
+**Players are rows; metrics are columns.** The first build made players columns
+and it was wrong: a fourth candidate pushed the table off-screen, and comparing
+across a horizontal scrollbar is exactly what a comparison tool must not ask for.
+Reading down a column is the whole job. Every header sorts (same column toggles
+direction, a new column starts descending, missing values sort last in **both**
+directions — a player under the Eff floor has not earned the top of the list),
+and clicking a player expands a detail row carrying the modes, maps, hero pool
+and team spells that are too long to sit in the table.
 
 Placement: a player's dominant role decides their table; a second role played on
 >=10% of their maps places them in that table as well, with a badge showing the
 split (`Damage 60 · Tank 7`).
 
-Shared rows, in order: team and division (with region and tier), last played,
-maps, map win rate, elo, Eff (naming its peer group), K/D.
+Columns, in order: player (with in-game name), team, division, maps, win %,
+**team %**, **vs team**, elo, Eff, K/D, and one role-appropriate stat —
+mitigation/map for Tank, damage/map for Damage, healing/map for Support.
 
-Role-specific rows, so no table is half empty:
+### Normalising for team quality
 
-| Table | Extra rows |
-| --- | --- |
-| Tank | mitigation/map, damage/map |
-| Damage | damage/map, elims/map |
-| Support | healing/map, damage/map |
+Measured across 1016 players with 10+ maps: a player's win rate is **82%**
+explained by which team they were on (r=0.90); Eff is only **22%** (r=0.47).
+Sorting candidates by win rate is close to sorting them by who had the best
+team, so the table carries the team's own rate and the difference beside it.
+
+Two normalisations were measured and **rejected**:
+
+- **Strength of schedule.** Mean-opponent win rate spans only 47–57% within a
+  division while team win rates span 35–96%. It is a round robin; everyone plays
+  everyone. Adjusting for it would add noise, not signal.
+- **Team-adjusted Eff** (Eff minus the player's own team mean). It removes the
+  residual 22% and works for full-timers, but it asks "better than your
+  teammates?" rather than "how good?", penalising a strong player on a strong
+  team. Rejected as a headline number; Eff is left absolute.
+
+`vs team` is honest about its own limit: **27% of players started every one of
+their team's maps**, and for them the difference is *structurally* zero. Those
+cells render a faint `0` titled "started every map — nothing to diverge from",
+not a bold zero that looks like a measurement.
 
 Then per-mode win rates, per-map win rates behind a toggle, and hero pool last —
 shown only where captures exist and labelled as thin evidence. The floors are

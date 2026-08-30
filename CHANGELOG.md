@@ -37,6 +37,16 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Changed
 
+- **Trials page: players are rows, not columns, and every column sorts.** The
+  first build put players in columns, which pushed a fourth candidate off-screen
+  and made you compare across a horizontal scrollbar. Modes, maps, hero pool and
+  team spells moved into a per-player expandable row. Missing values sort last in
+  both directions, so a player under the Eff floor never tops the list.
+- **Trials page: `team %` and `vs team` columns.** A player's win rate is 82%
+  explained by which team they were on (measured, 1016 players); Eff is only 22%.
+  The team's own rate now sits beside the player's so an inflated one is visible.
+  Strength-of-schedule adjustment was measured and rejected — opponent quality
+  spans 47–57% within a division against team quality's 35–96%, so it is noise.
 - **`export_html()` split into `build_dashboard_data()` + a renderer.** The
   payload half is now its own function, so the dashboard and the trials page
   build their data through one code path and cannot drift.
