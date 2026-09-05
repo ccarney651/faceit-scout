@@ -100,6 +100,10 @@ def resolve_season(names: Iterable[str | None], pin: str | None) -> str | None:
     """The season a pinned export ACTUALLY renders: the pin if it has data,
     otherwise the newest season that does (None when nothing parses).
 
+    Callers pass the names of championships that have PLAYED matches, not every
+    championship: see :func:`faceit_sync.export.championship_names_with_results`
+    for why a seeded-but-unplayed season must not win.
+
     One function because two callers must agree. The exporter falls back so a
     season pinned before its first match still publishes a live page; CI has to
     merge the SAME season's captured comps, or a fallback page shows one season's

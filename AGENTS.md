@@ -218,32 +218,32 @@ canonical and this copy is the bug.
   the season it is publishing (`faceit-sync resolve-season`). At a cutover,
   follow `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
   **start at its §6**, then §7 for what actually shipped.
-- **Coverage expands at the S10 cutover, not before** — §5 of that design.
-  Target: EMEA + NA Master/Expert/Advanced, SA Master, OCE Master; Open and
-  Intermediate deliberately excluded. Only three divisions are actually
-  missing (NA Advanced, SA Master, OCE Master) = +37% data, page 8.7 → 11.9 MB.
-  The SA/OCE region support is a four-line code change that is **inert until a
-  SA/OCE championship exists**, so land it early and keep it off the cutover
-  critical path. It **landed 2026-08-27** and is inert until a SA/OCE
-  championship exists, so what remains is seeds, not code.
-  `tools/build_capture_data.py` keeps its own `REGIONS` copy; a test now pins it
-  to `export.REGIONS`, because a region on the site but not in the feed is a
-  division missing from the capture app's dropdown with nothing to say so.
-  Intermediate is deliberately NOT in scope at the boundary — it is new and it
-  is seeded in week 1 of S10 instead, when there is still nothing to back-crawl.
-  Size divisions with the validated formulas in that section — Master is
-  `n(n-1)/2` exactly, every other tier is 7.43 matches/team, Open is 3.16 —
-  rather than re-estimating.
-- **S10 caps the divisions, so the S9 team counts no longer size the ingest.**
-  The announcement publishes them: Master 16, Expert **32**, Advanced **48**,
-  Intermediate **128**, Open uncapped (EMEA/NA; OCE and SA stay Master + Open,
-  with no Intermediate). **Expert is the one that moves**: it was 41 in EMEA and
-  49 in NA against a cap of 32, so the in-scope tiers lose roughly 26 teams
-  there, against Advanced gaining a handful (45 → 48) and Master unchanged. Net
-  the scope shrinks, so the "+37% data, 8.7 → 11.9 MB" figure above — computed
-  from S9 counts — is now an over-estimate rather than an under-estimate.
-  Intermediate's count is no longer unknown, only unmeasured; the cap is the
-  ceiling.
+- **The S10 coverage is seeded and measured (2026-09-05).** Ten divisions:
+  EMEA and NA Master/Expert/Advanced/**Intermediate**, plus SA Master and OCE
+  Master. Open stays out and is the reason the page fits at all. The team counts
+  are measured, not estimated — page through
+  `api.faceit.com/championships/v1/championship/{id}/subscription?limit=20&offset=N`
+  (keyless; `limit` over 20 returns 400, and no total is included, so page until
+  a short page comes back):
+
+  | | Master | Expert | Advanced | Intermediate |
+  | --- | --- | --- | --- | --- |
+  | EMEA | 16 | 27 | 43 | 46 |
+  | NA | 16 | 31 | 52 | 56 |
+  | SA | 10 | — | — | — |
+  | OCE | 8 | — | — | — |
+
+  That is ~2,540 matches with playoffs, ~9,140 games, **~15.7 MB** of
+  `docs/index.html` — against ~10.3 MB for the same scope without Intermediate.
+  `--external-data` splitting stays unnecessary. Size any future division with
+  the validated formulas rather than re-estimating: Master is `n(n-1)/2` exactly,
+  every other tier is 7.43 matches/team, Open is 3.16, 3.6 games a match, 1.76 KB
+  of page per game. Full working: design §7.1.
+- **The S10 caps are ceilings, not counts.** Master 16, Expert 32, Advanced 48,
+  Intermediate 128, Open uncapped (EMEA/NA only; SA and OCE run Master + Open).
+  Only Master fills its cap. Expert came in hardest under it — 41 → 27 in EMEA
+  and 49 → 31 in NA — and Intermediate arrived Advanced-sized at 46/56 rather
+  than anywhere near 128, which is the whole reason seeding it was affordable.
   Also new in S10 and not yet modelled anywhere: a **Season Finals** bracket per
   region (EMEA/NA, 9–15 November, 12 teams — top 4 of Master plus top 2 of each
   lower division), which is a fifth thing after Playoffs that a season can end
@@ -251,19 +251,10 @@ canonical and this copy is the bug.
   2026-11-17. Source: <https://www.faceit.com/en/news/faceit-league-season-10>
   (it 403s a plain fetch — curl it with a browser User-Agent and read the
   `__NEXT_DATA__` blob).
-- **Two S10 championship names will not classify, and the exporter degrades
-  quietly rather than failing.** Both classifiers live in
-  `faceit_sync/models.py` / `faceit_sync/export.py` and both key off the
-  championship *name* — there is no stage or tier column anywhere:
-  - **`TIERS` has no `Intermediate`** (`export.py:506`). `_tier_of` returns
-    `None` for an Intermediate division, so it is dropped from `by_region_tier`
-    and never joins its region's switcher or the region Combined view. It still
-    renders — the "didn't classify" fallback at the end of the view build gives
-    it a plain view labelled with its raw championship name. Nothing is lost,
-    but it lands outside the region grouping. The fix is one entry, ordered
-    strongest-first per the S10 ladder (Master, Expert, Advanced, **Intermediate**,
-    Open); it is inert until an Intermediate championship is actually seeded,
-    which is still deferred.
+- **One S10 championship name still will not classify.** Both classifiers live
+  in `faceit_sync/models.py` / `faceit_sync/export.py` and key off the
+  championship *name* — there is no stage or tier column anywhere. `TIERS` gained
+  `Intermediate` on 2026-09-05, so that half is fixed. What remains:
   - **"Season Finals" reads as a regular-season division.** `is_playoff_name`
     matches only `playoff`/`knockout`, and `_PLAYOFF_STAGE_SUFFIX` strips only
     `- Regular Season | Playoffs | Playoff Stage | Knockout Stage`. A
@@ -380,7 +371,9 @@ carries a season pin in two places that a human has to keep equal. CI asks
 pin once S10 has matches, the newest season that does until then — and uses that
 one answer for BOTH the export and the `data/captures/<season>/` directory it
 merges. The site therefore still shows Season 9 today and switches itself over,
-page and captured comps together, on the first ingested S10 match. Landed with
+page and captured comps together, on the first S10 match that is actually
+PLAYED — a seeded-but-unplayed season does not count, or the site would empty
+itself the day the rooms were added. Landed with
 it: `CURRENT_SEASON` in `infra/upload-worker/worker.js` and `CONTRIB_DIR` in
 `owdb/contribute.py` moved to `s10`, and `Intermediate` joined `TIERS` (inert
 until such a division is seeded, but without it one would fall out of its
@@ -392,11 +385,12 @@ region's switcher silently).
    writes uploads to `data/captures/s9/`. That is harmless while no replay code
    in the league is live, and wrong from the first S10 playday: an S10 capture
    landing in `s9/` merges into the Season 9 page. Deploy before 7 September.
-2. **The S10 seed URLs.** One finished match room per division, pasted into the
-   marked block at the foot of `matches.txt`. Nothing can automate this — FACEIT
-   refuses keyless championship enumeration (re-verified 2026-09-05, `err_f0`).
-   No S10 division exists in the DB until this happens, so nothing else can
-   proceed.
+2. ~~**The S10 seed URLs.**~~ **Done 2026-09-05** — all ten divisions are in
+   `matches.txt` and the S9 blocks are commented out. Scope grew by the
+   operator's decision to seed **Intermediate** in both regions: measured at 46
+   (EMEA) and 56 (NA) teams against a 128 cap, so the whole S10 ingest sizes at
+   ~15.7 MB of `docs/index.html`, against ~10.3 MB without it. Nothing crawls
+   until the first playday on 7 September: every seeded room is still SCHEDULED.
 3. **The S10 code-wipe date**, once the season-start patch lands — `_SEED_WIPES`
    only (invariant 4). `LATEST_KNOWN_WIPE` is still 2026-08-18.
 

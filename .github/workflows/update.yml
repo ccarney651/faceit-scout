@@ -128,7 +128,8 @@ jobs:
           # THE season this run publishes. The pin is s10; resolve-season returns
           # it once S10 has matches and the newest season that does until then, so
           # the site carries on through the boundary and switches itself over on
-          # the first ingested S10 match. Merge and export both read this one
+          # the first PLAYED S10 match (a seeded room is not a played season).
+          # Merge and export both read this one
           # value: a page whose standings and captured comps came from different
           # seasons is the exact commingling the pin exists to prevent.
           SEASON="$(faceit-sync --db faceit.sqlite3 resolve-season --season s10 || echo s10)"

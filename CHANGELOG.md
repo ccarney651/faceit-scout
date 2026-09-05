@@ -19,6 +19,26 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-05
 
+### Added
+
+- **Season 10 is seeded — all ten divisions.** EMEA and NA Master, Expert,
+  Advanced and **Intermediate**, plus SA Master and OCE Master, each room checked
+  against the match API for the championship it belongs to. Season 9's seeds are
+  commented out, not deleted. Intermediate is a scope change: the division came
+  in at 46 (EMEA) and 56 (NA) teams against its 128 cap, so it is
+  Advanced-sized, and the whole S10 ingest sizes at **~15.7 MB** of
+  `docs/index.html` rather than the ~24 MB a filled cap would have cost. The
+  counts are measured, not estimated — a championship's subscription list is
+  readable keylessly, which the championship listing is not.
+
+
+- **`Intermediate` is a known skill tier**, between Advanced and Open, in both
+  `faceit_sync/export.py` and `tools/build_capture_data.py` (a test now pins the
+  two TIERS tuples together, as it already did for REGIONS), and in the
+  `--tier` choices. Season 10's new division is not in the ingest scope, but
+  without this entry seeding one would drop it out of its region's switcher into
+  the unclassified-name fallback, silently. Inert until such a championship
+  exists.
 ### Changed
 
 - **The site now resolves the season it publishes instead of being pinned to
@@ -28,8 +48,11 @@ Entries before 2026-08-11 were reconstructed from git history.
   `data/captures/<season>/` directory it merges, so the page's standings and its
   captured comps can never come from different seasons. The practical effect is
   that the live site stays on Season 9 today and switches itself to Season 10 —
-  page and comps together — on the first ingested S10 match, with no second
-  commit at a moment nobody is watching. The exporter's own fallback is
+  page and comps together — on the first S10 match that is actually PLAYED, with
+  no second commit at a moment nobody is watching. "Has data" deliberately means
+  a FINISHED match, not a seeded championship: the season's rooms enter the
+  database days before its first game, and resolving on names alone would empty
+  the live site the moment the seeds landed. The exporter's own fallback is
   unchanged; it and the CLI now share one function (`models.resolve_season`)
   rather than agreeing by hand.
 - **Contribution uploads move to Season 10.** `CURRENT_SEASON` in
@@ -39,19 +62,17 @@ Entries before 2026-08-11 were reconstructed from git history.
   `data/captures/s9/`, which is harmless while no replay code in the league is
   live and wrong from the first S10 playday.
 
-### Added
+### Fixed
 
-- **`Intermediate` is a known skill tier**, between Advanced and Open, in both
-  `faceit_sync/export.py` and `tools/build_capture_data.py` (a test now pins the
-  two TIERS tuples together, as it already did for REGIONS), and in the
-  `--tier` choices. Season 10's new division is not in the ingest scope, but
-  without this entry seeding one would drop it out of its region's switcher into
-  the unclassified-name fallback, silently. Inert until such a championship
-  exists.
-- **A Season 10 seed block at the foot of `matches.txt`** — one commented line
-  per division in the agreed scope, with what is known about collecting them.
-  The URLs themselves are hand-collected: FACEIT's keyless championship listing
-  refuses enumeration, re-verified 2026-09-05.
+- **A seeded season is no longer mistaken for a played one.** Season resolution
+  first asked whether a season had championships, which is what the exporter's
+  own fallback had always done. Seeding the S10 rooms flipped it to `s10`
+  immediately — ten scheduled fixtures, no results — which would have replaced a
+  live Season 9 dashboard with empty standings for the two days until the season
+  started. It now resolves on championships with at least one FINISHED match,
+  which is the trigger the design always described in prose. A division that has
+  started still exports its upcoming fixtures; only the season-level switch waits
+  for a result.
 
 ## 2026-09-01
 

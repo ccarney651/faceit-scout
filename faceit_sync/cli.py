@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 from . import __version__
 from .client import FaceitClient
 from .db import Database
-from .export import REGIONS, export_csv, export_html, export_json, team_stats
+from .export import (REGIONS, championship_names_with_results, export_csv, export_html,
+                     export_json, team_stats)
 from .models import resolve_season
 from .sync import DEFAULT_BACKFILL_DAYS, EnumerationError, SyncEngine
 from .trials import write_trials_page
@@ -130,10 +131,13 @@ def cmd_resolve_season(args: argparse.Namespace) -> int:
     """Print the season a pinned export would ACTUALLY render, one line, no
     decoration - it is read by CI to pick the captures directory to merge, so
     that the comps on the page always come from the season the page shows.
+
+    "Has data" means PLAYED matches, not a seeded championship: the next
+    season's rooms are in the database days before its first game.
     """
     with Database(_db_path(args)) as db:
-        rows = db.conn.execute("SELECT name FROM championships").fetchall()
-    season = resolve_season([r["name"] for r in rows], args.season)
+        names = championship_names_with_results(db)
+    season = resolve_season(names, args.season)
     if season is None:
         print("no season could be parsed from the database", file=sys.stderr)
         return 1
@@ -278,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     rs = sub.add_parser(
         "resolve-season",
         help="print the season a pinned export would actually render (the pin "
-             "when it has data, else the newest season that does)",
+             "once it has PLAYED matches, else the newest season that does)",
     )
     rs.add_argument("--season", default=None,
                     help="the pinned season, e.g. 's10' (default: newest with data)")

@@ -459,24 +459,21 @@ it before concluding a division is missing. Note also that the unpaid-team clear
 at 15:00 the same day removes teams irreversibly, so any team list read before
 then is provisional.
 
-- **S10 seed room URLs — the one thing everything else waits on.** A commented
-  block at the foot of `matches.txt` now names every division in scope, one line
-  each: paste a finished match room and uncomment. Re-verified 2026-09-05 that
-  there is no automated path (keyless listing answers `err_f0`, and
-  organizer-filtered needs a key). Note a room seeds nothing until one of its
-  matches is FINISHED, so round-1 rooms are only useful after the first playday.
-  One FACEIT match room per division, collected by hand
-  once rooms exist. There is no automated path: FACEIT's keyless
+- ~~**S10 seed room URLs**~~ — **collected and landed 2026-09-05.** All ten
+  divisions (EMEA/NA Master, Expert, Advanced and Intermediate, plus SA and OCE
+  Master), each verified against the match API for the championship it belongs
+  to, with the S9 blocks commented out. Every room was still SCHEDULED, which is
+  what surfaced the "played, not seeded" correction to season resolution. The
+  crawl produces nothing until the first playday on 2026-09-07. There is no automated path: FACEIT's keyless
   `championships/v1/championships` refuses offset enumeration (verified
   2026-08-27). Seed NA Advanced, SA Master and OCE Master alongside the existing
   divisions.
-- **The Intermediate call — now available from 3 September, not week 1.**
-  Deferred from the boundary because nobody knew its team count; the bracket
-  publishes that count on 3 September, and FACEIT has since capped the division
-  at **128 teams per region** (EMEA/NA only), which is the ceiling either way.
-  At Advanced's size it adds ~2.6 MB/region and at Open's ~6.1 MB — the
-  difference between a 17 MB and a 24 MB page. Deciding now still gets the "next
-  to nothing to back-crawl" benefit, a fortnight earlier than planned.
+- ~~**The Intermediate call**~~ — **decided IN, 2026-09-05**, by the operator
+  seeding both rooms. The measurement that backs it: the brackets are 46 teams
+  (EMEA) and 56 (NA) against a 128 cap, so it is an Advanced-sized division and
+  costs ~5.4 MB of `docs/index.html`, not the ~12 MB a full cap implied. Whole
+  S10 scope now sizes at **~15.7 MB** (10 divisions, ~2,540 matches), against
+  ~10.3 MB without it. Revert is two commented lines in `matches.txt`.
 - ~~**`TIERS` has no `Intermediate`**~~ — **shipped 2026-09-05**, in both the
   exporter and `tools/build_capture_data.py` (the two tuples are now test-pinned
   to each other, as REGIONS already was) and in the `--tier` choices. Inert until

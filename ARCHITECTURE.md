@@ -1357,7 +1357,8 @@ cutover is done in code and waits only on the operator: seed room URLs in
 **The trigger is S10 having results, not S9 ending** — those are weeks apart, and
 publishing `--season s10` in between would mean an empty site. That is why the
 season is *resolved* rather than pinned: `faceit-sync resolve-season --season s10`
-answers `s10` from the first ingested Season 10 match and the newest season with
+answers `s10` from the first PLAYED Season 10 match — not from a seeded room —
+and the newest season with
 data before then, and CI uses that one answer for the export **and** the captures
 directory it merges. The site therefore switches itself over, page and comps
 together, with no commit and no human on the day. §7 of the design records why

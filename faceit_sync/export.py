@@ -559,6 +559,21 @@ def _is_playoff(name: str | None) -> bool:
     return is_playoff_name(name)
 
 
+def championship_names_with_results(db: Database) -> list[str]:
+    """The names of championships that have at least one FINISHED match.
+
+    Which season "has data" has to be decided on RESULTS, not on a championship
+    row existing. Seeding the next season creates its championships days before
+    its first game is played - a season resolved off names alone would flip the
+    live site to a shell of empty standings the moment the seeds landed, which is
+    the failure the season pin was introduced to avoid in the first place.
+    """
+    return [str(r["name"]) for r in db.conn.execute(
+        "SELECT DISTINCT ch.name FROM championships ch "
+        "JOIN matches m ON m.championship_id = ch.id "
+        "WHERE m.status = 'FINISHED' AND ch.name IS NOT NULL")]
+
+
 def build_dashboard_data(db: Database, championship_id: str | None = None,
                          only_tier: str | None = None, only_region: str | None = None,
                          only_season: str | None = None) -> dict[str, Any]:
@@ -599,9 +614,15 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
         if want_region:
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
         if want_season:
-            seasoned = [r for r in rows if _season_of(r["name"]) == want_season]
+            # Played, not merely scheduled - see championship_names_with_results.
+            played = set(championship_names_with_results(db))
+            seasoned = [r for r in rows
+                        if _season_of(r["name"]) == want_season and r["name"] in played]
             if seasoned:
-                rows = seasoned
+                # The pinned season's own upcoming fixtures come back here: the
+                # filter below is by season, so a division that has started is
+                # exported with its schedule intact.
+                rows = [r for r in rows if _season_of(r["name"]) == want_season]
             else:
                 # The pinned season exists as an intention but not yet as data -
                 # the days either side of a season boundary. Falling back to the
@@ -612,7 +633,8 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
                 # exits 1, which under CI's `bash -e` fails the whole job.
                 # An explicit pin always wins when it has data; this only ever
                 # covers the gap.
-                fallback = resolve_season([r["name"] for r in rows], want_season)
+                fallback = resolve_season(
+                    [r["name"] for r in rows if r["name"] in played], want_season)
                 log.warning("season %s has no data yet - falling back to %s",
                             want_season, fallback or "(no season could be parsed)")
                 rows = ([r for r in rows if _season_of(r["name"]) == fallback]

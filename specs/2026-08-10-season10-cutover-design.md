@@ -507,8 +507,18 @@ human has to remember at a boundary that happens once a quarter.
   captures directory it merges.
 
 So the merge directory follows the published season automatically: S9 today with
-its comps intact, S10 — page and comps together — on the first ingested S10
-match. A test asserts the agreement itself in both states of a boundary, because
+its comps intact, S10 — page and comps together — on the first S10 match that is
+actually **played**.
+
+**What "has data" means, corrected 2026-09-05 by seeding the real rooms.** The
+first version resolved on championship *names*, which is what the exporter's own
+fallback had always done. Seeding the ten S10 rooms flipped it to `s10`
+immediately — ten scheduled fixtures, zero results — which would have replaced a
+live Season 9 dashboard with empty standings for the two days until the season
+started. Resolution now runs on championships that have at least one FINISHED
+match (`export.championship_names_with_results`), which is the trigger §6.3
+always described in prose. A division that HAS started still exports its upcoming
+fixtures; it is only the season-level switch that waits for a result. A test asserts the agreement itself in both states of a boundary, because
 a disagreement is exactly the commingling the pin exists to prevent.
 
 `CURRENT_SEASON` and `CONTRIB_DIR` still moved to `s10` in the same pass, and
@@ -525,4 +535,59 @@ classify rather than vanish into the unclassified-name fallback.
 foot of `matches.txt` names every division in scope), `wrangler deploy`, and the
 S10 code-wipe date once the season-start patch lands. The Season Finals shape
 (§6.4 consequence 2) is untouched and still has until November.
+
+### 7.1 The seeds landed, and the divisions were measured (2026-09-05)
+
+All ten S10 rooms are in `matches.txt`, each verified against the match API for
+the championship it belongs to, and the S9 blocks are commented out (kept, not
+deleted — the file is the record of how each division was bootstrapped). Every
+room was still `SCHEDULED`, which is what forced the "played, not seeded"
+correction above.
+
+**The operator seeded Intermediate**, which closes the deferred scope question in
+§5 the other way: EMEA and NA Intermediate are in.
+
+**Team counts are no longer an estimate.** There is a keyless way to count a
+division after all — not the championship listing, which still refuses
+enumeration, but the subscription list of a championship you already know the id
+of:
+
+```
+https://api.faceit.com/championships/v1/championship/{id}/subscription?limit=20&offset=N
+```
+
+`limit` above 20 returns 400, and no total is included, so it is paged until a
+short page comes back. Measured on 2026-09-05, after the unpaid-team clear:
+
+| division | teams | regular matches | games | MB |
+|---|---|---|---|---|
+| EMEA Master | 16 | 120 | 432 | 0.7 |
+| EMEA Expert | 27 | 201 | 722 | 1.2 |
+| EMEA Advanced | 43 | 319 | 1,150 | 2.0 |
+| EMEA Intermediate | 46 | 342 | 1,230 | 2.1 |
+| NA Master | 16 | 120 | 432 | 0.7 |
+| NA Expert | 31 | 230 | 829 | 1.4 |
+| NA Advanced | 52 | 386 | 1,391 | 2.4 |
+| NA Intermediate | 56 | 416 | 1,498 | 2.6 |
+| SA Master | 10 | 45 | 162 | 0.3 |
+| OCE Master | 8 | 28 | 101 | 0.2 |
+| **total** | **305** | **2,208** | **7,948** | **13.6** |
+
+Using this document's own validated formulas: `n(n-1)/2` for Master, 7.43
+matches per team for Swiss tiers, 3.6 games per match, 1.76 KB of
+`docs/index.html` per game. Adding ~15% for playoffs gives **~2,540 matches,
+~9,140 games, ~15.7 MB** — against ~10.3 MB for the same scope without
+Intermediate. `--external-data` splitting stays unnecessary; revisit it if a
+future season's Intermediate actually approaches its 128 cap, which would have
+made this ~24 MB.
+
+Three things the measurement settles that §5 could only predict:
+
+1. **Intermediate is Advanced-sized, not Open-sized** (46/56 against a 128 cap),
+   which is why seeding it costs ~5.4 MB rather than ~12 MB.
+2. **Advanced did shrink** as predicted — EMEA 45 → 43, and NA's ~46 estimate was
+   in fact 52, so the S9-based estimate was an upper bound in EMEA and a lower one
+   in NA. Expert shrank hard against its new 32 cap: 41 → 27 in EMEA, 49 → 31 in NA.
+3. **SA Master is 10 teams, not the 12 Liquipedia showed for S9**, so its 76-match
+   estimate is really 45 regular-season matches.
 

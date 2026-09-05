@@ -561,7 +561,7 @@ def _seed_divisions(db: Database, names: dict[str, str]) -> None:
     for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
         c.execute("INSERT OR IGNORE INTO teams(id,name) VALUES(?,?)", (tid, nm))
     for cid, nm in names.items():
-        c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+        c.execute("INSERT OR REPLACE INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
                   (cid, nm, "ow2"))
         _insert_match(db, cid, f"m-{cid}", "FINISHED", "t1", "t2", "faction1", None,
                       "2026-07-20T20:00:00Z", 1, ["faction1", "faction1"])
@@ -608,10 +608,24 @@ def test_resolve_season_agrees_with_what_the_export_renders(
     assert main(["--db", db.path, "resolve-season", "--season", "s10"]) == 0
     assert capsys.readouterr().out.strip() == "s9"
 
-    # The first S10 match lands: the pin wins, and both switch together.
-    _seed_divisions(db, {"s10m": "S10 EMEA Master Central - Regular Season"})
+    # Season 10's rooms are SEEDED: its championship exists, its fixtures are
+    # stored, and not one game has been played. Nothing may move yet - flipping
+    # here would replace a live site with empty standings for days.
+    db.conn.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
+                    ("s10m", "S10 EMEA Master Central - Regular Season", "ow2"))
+    _insert_match(db, "s10m", "s10-fixture", "SCHEDULED", "t1", "t2", None,
+                  "2026-09-07T18:00:00Z", None, 1, [])
+    db.conn.commit()
     names = [r["name"] for r in db.conn.execute("SELECT name FROM championships")]
-    assert resolve_season(names, "s10") == "s10"
+    assert resolve_season(names, "s10") == "s10", "names alone cannot decide this"
+    assert main(["--db", db.path, "resolve-season", "--season", "s10"]) == 0
+    assert capsys.readouterr().out.strip() == "s9", "a seeded season is not a played one"
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    assert _payload(buf)["season"] == "s9"
+
+    # The first S10 match is PLAYED: the pin wins, and both switch together.
+    _seed_divisions(db, {"s10m": "S10 EMEA Master Central - Regular Season"})
     buf = io.StringIO()
     export_html(db, buf, only_season="s10")
     assert _payload(buf)["season"] == "s10"
