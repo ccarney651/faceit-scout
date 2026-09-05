@@ -64,6 +64,15 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Fixed
 
+- **Seeding Season 10 no longer empties the scrim opponent pool.** The capture
+  feed's `team_rosters` — the teams a private scrim is matched against — is
+  scoped to the active season, chosen as the newest season *named* by any
+  championship. Seeding the S10 rooms made that S10 instantly, while the pool
+  itself is built from `round_players`, which only a played match has: the feed
+  went from 159 teams to **zero**, meaning no opponent identification at all,
+  during exactly the week when last season's squads are still the best guess
+  available. The active season is now the newest one that has actually produced
+  players, so the handover happens when there is something to hand over to.
 - **A seeded season is no longer mistaken for a played one.** Season resolution
   first asked whether a season had championships, which is what the exporter's
   own fallback had always done. Seeding the S10 rooms flipped it to `s10`

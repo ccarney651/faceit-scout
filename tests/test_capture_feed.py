@@ -384,6 +384,39 @@ def test_team_rosters_cover_only_the_active_season(
     assert [p["game_name"] for p in tr["t3"]["players"]] == ["NewGameName"]
 
 
+def test_seeding_next_season_does_not_empty_the_roster_pool(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A seeded season is not a played one, and the pool must not hand over yet.
+
+    Season 10's championships and fixtures enter the database when its rooms are
+    seeded - days before its first game. Choosing the pool off championship names
+    alone flipped it to S10 at that moment and shipped ZERO teams, which is not a
+    degraded scrim opponent list but no opponent identification at all, in the
+    week when last season's squads are still the best guess available.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    _fixture_db(db, after.isoformat())
+
+    # The next season is seeded: a championship and a fixture, nobody has played.
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO championships VALUES('c-s10',"
+                "'S10 EMEA Master Central - Regular Season')")
+    con.execute("INSERT INTO matches VALUES('mt-s10','c-s10',"
+                "'2027-01-05T20:00:00Z','t1','t2')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    tr = json.loads(out.read_text(encoding="utf-8"))["team_rosters"]
+    assert tr, "seeding S10 emptied the pool - the season handover fired too early"
+    assert set(tr) == {"t1"}, (
+        f"the pool should still be the season that has actually played, got {set(tr)}"
+    )
+
+
 def test_a_sub_seen_only_last_season_is_dropped_but_their_team_survives(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

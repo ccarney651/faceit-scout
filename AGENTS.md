@@ -392,7 +392,13 @@ region's switcher silently).
    ~15.7 MB of `docs/index.html`, against ~10.3 MB without it. Nothing crawls
    until the first playday on 7 September: every seeded room is still SCHEDULED.
 3. **The S10 code-wipe date**, once the season-start patch lands — `_SEED_WIPES`
-   only (invariant 4). `LATEST_KNOWN_WIPE` is still 2026-08-18.
+   only (invariant 4). `LATEST_KNOWN_WIPE` is still 2026-08-18. **The patch is
+   Tuesday 2026-09-08**, so the entry is `("2026-09-07", ...)`: dated a day early
+   on purpose, the same as the 2026-08-18 entry, so games played after the patch
+   on the 8th stay scoutable. **Do not register it before the patch lands** —
+   `codeDead()` is `finished_at[:10] <= wipe`, so an early entry hides every
+   still-live code from the 7th and closes the only capture window Season 10's
+   first playday has.
 
 Open items: `specs/BACKLOG.md` § "Added 2026-08-27". The Season Finals shape
 (cross-tier, no division to attach to) is still undecided and still has until

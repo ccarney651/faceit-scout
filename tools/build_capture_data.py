@@ -213,8 +213,19 @@ def main() -> None:
     # name instead of guessing. A database where NOTHING names a season needs no
     # special case: `season` is then None and so is every row's, so the equality
     # keeps them all rather than shipping a pool that identifies nobody.
+    # PLAYED, not merely seeded. The season's championships enter the database
+    # when its rooms are seeded, which is days before its first game - and the
+    # pool below is built from round_players, which only a played match has. Read
+    # off every championship name, the newest season would flip the moment the
+    # seeds landed and ship an EMPTY pool: no opponent identification at all,
+    # during exactly the week when last season's squads are still the best guess
+    # available. Restricting to championships that have produced players makes
+    # the handover happen when there is something to hand over to.
     season = newest_season(
-        row["name"] for row in con.execute("SELECT name FROM championships"))
+        row["name"] for row in con.execute(
+            """SELECT DISTINCT ch.name FROM championships ch
+               JOIN matches m ON m.championship_id = ch.id
+               JOIN round_players rp ON rp.match_id = m.id"""))
     team_rosters: dict[str, dict[str, object]] = {}
     # Not GROUP BY (team, player): the championship name has to survive to the
     # filter, and grouping across seasons would hand it an arbitrary one of them
