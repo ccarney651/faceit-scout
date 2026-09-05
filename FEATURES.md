@@ -204,7 +204,21 @@ capture app writes) by the standalone **Scrims page** (`docs/scrims.html`),
 reached via the League/Scrims side toggle in the top bar. Because `docs/capture/`
 and `docs/` share an origin it can read them without any upload or server
 round-trip. Each scrim (our team vs opponent, date, notes) lists its maps with
-the captured hero comps; an empty state points to the capture app. Scrims are
+the captured hero comps; an empty state points to the capture app.
+
+A **Practice coverage** panel sits above the log: one tile per mode, least
+practised first, showing games played, how long since you last touched the mode,
+and a per-map breakdown — because "play Control more" is not a plan and "you have
+never scrimmed Nepal" is. A mode untouched for 21 days reads as stale. The
+per-map rows are seeded from the **current FACEIT season's map pool**, not the
+game's: Season 10 pools 14 of the 30 maps, and listing all 30 would mark 26 maps
+"never played" that you cannot be drawn on. Maps you scrimmed that are outside
+the pool still appear with their counts, so the panel narrows what it *asks* of
+you without hiding what you did. Voided maps (a restart) are excluded — that was
+not practice. The pool list needs refreshing each season; the scrim capture
+page's picker is separate and deliberately keeps every map.
+
+Scrims are
 deliberately invisible to the league dashboard and to the public site — league
 maps stay public, scrim maps stay private. See §2.3 (Scrim mode) below for the
 capture side.
@@ -431,7 +445,8 @@ frame cannot corrupt a slot.
 tab's segmented League↔Private scrim switch) is the same snapshot pipeline with
 no FACEIT match behind it. Our team, opponent, date and notes are saved into a
 local scrim session (IndexedDB store `scrims`); each map you capture — picked
-from a static map list, optionally with a replay code — goes to `scrim_maps`
+from a static list of **every playable map in the game**, optionally with a
+replay code — goes to `scrim_maps`
 with observations, hero crops and scoreboard reads exactly like a league map,
 just with `side_a_team`/`side_b_team` labelled from the scrim's teams. Sides are
 always manual (there are no rosters to auto-detect against). Records are
