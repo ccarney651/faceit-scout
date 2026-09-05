@@ -17,7 +17,6 @@ from .export import (REGIONS, championship_names_with_results, export_csv, expor
                      export_json, team_stats)
 from .models import resolve_season
 from .sync import DEFAULT_BACKFILL_DAYS, EnumerationError, SyncEngine
-from .trials import write_trials_page
 
 log = logging.getLogger("faceit_sync")
 
@@ -112,19 +111,6 @@ def _resolve_championship(db: Database, requested: str | None) -> str | None:
         for r in rows:
             print(f"  {r['id']}  {r['name']}", file=sys.stderr)
     return None
-
-
-def cmd_trials(args: argparse.Namespace) -> int:
-    """Build the local trialist comparison page. Never publish its output."""
-    with Database(_db_path(args)) as db:
-        n = write_trials_page(db, args.out, championship_id=args.championship,
-                              only_tier=args.tier, only_region=args.region,
-                              only_season=args.season)
-    if n == 0:
-        print("no data to build a trials page from yet", file=sys.stderr)
-        return 1
-    log.info("wrote the trials page for %d division(s) to %s", n, args.out)
-    return 0
 
 
 def cmd_resolve_season(args: argparse.Namespace) -> int:
@@ -301,24 +287,6 @@ def build_parser() -> argparse.ArgumentParser:
                    help="stop after N matches (default: all coded matches missing it)")
     b.set_defaults(func=cmd_backfill_gamenames)
 
-    # Local-only: the page it writes is gitignored and must never be published.
-    # Unlike `export`, it defaults to EVERY division in the DB — judging a
-    # trialist wants every map on record, not just the current season.
-    t = sub.add_parser(
-        "trials",
-        help="build the local trialist comparison page (never commit its output)",
-    )
-    t.add_argument("--out", default="trials.html",
-                   help="output path (default: trials.html)")
-    t.add_argument("--championship", default=None,
-                   help="restrict to one championship id (default: all)")
-    t.add_argument("--tier", choices=("master", "expert", "advanced", "intermediate", "open"),
-                   default=None, help="restrict to one tier (default: all)")
-    t.add_argument("--region", choices=tuple(r.lower() for r in REGIONS),
-                   default=None, help="restrict to one region (default: all)")
-    t.add_argument("--season", default=None,
-                   help="restrict to one season, e.g. 's9' (default: all)")
-    t.set_defaults(func=cmd_trials)
     return p
 
 
