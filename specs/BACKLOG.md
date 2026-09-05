@@ -502,11 +502,10 @@ then is provisional.
   keeps its comps until S10 has matches, and then page and comps switch together.
   See the design's new §7. `CURRENT_SEASON` and `CONTRIB_DIR` moved to `s10` in
   the same pass.
-- **`wrangler deploy` — outstanding, operator, before 2026-09-07.** Invariant 11:
-  the Worker in the repo says `s10` and the deployed one still says `s9`. Nothing
-  can be lost while no replay code in the league is live; from the first S10
-  playday an upload would land in `data/captures/s9/` and merge into the Season 9
-  page.
+- ~~**`wrangler deploy`**~~ — **done 2026-09-05 23:05 UTC**, version
+  `3f278ab0-7b2a-43a8-a79f-c6a86cb7a5fe`, two days before the first S10 playday.
+  Uploads write to `data/captures/s10/`. Confirmed live (`/claims` answers 200)
+  and all six secrets intact.
 
 ### Shipped 2026-08-27 — `team_rosters` is scoped to the active season
 

@@ -374,12 +374,14 @@ it: `CURRENT_SEASON` in `infra/upload-worker/worker.js` and `CONTRIB_DIR` in
 until such a division is seeded, but without it one would fall out of its
 region's switcher silently).
 
-**Three things are still owed, and all three are the operator's:**
+**Two things are still owed, both the operator's** (the third, the Worker deploy, landed 2026-09-05):
 
-1. **`wrangler deploy`** — invariant 11. Until it runs, the live Worker still
-   writes uploads to `data/captures/s9/`. That is harmless while no replay code
-   in the league is live, and wrong from the first S10 playday: an S10 capture
-   landing in `s9/` merges into the Season 9 page. Deploy before 7 September.
+1. ~~**`wrangler deploy`**~~ — **done 2026-09-05 23:05 UTC**, version
+   `3f278ab0-7b2a-43a8-a79f-c6a86cb7a5fe`. Uploads now write to
+   `data/captures/s10/`. The script name did not change, so the custom domain
+   reattached without a prompt and all six secrets survived (verified with
+   `wrangler secret list`) — the 2026-08-10 secret wipe was the *rename*, not the
+   deploy.
 2. ~~**The S10 seed URLs.**~~ **Done 2026-09-05** — all ten divisions are in
    `matches.txt` and the S9 blocks are commented out. Scope grew by the
    operator's decision to seed **Intermediate** in both regions: measured at 46
