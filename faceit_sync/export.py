@@ -7,16 +7,15 @@ import html
 import json
 import logging
 import os
-import re
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
 from .hero_icons import load_hero_icons
-from .models import is_playoff_name, newest_season, season_of
+from .models import is_playoff_name, newest_season, resolve_season, season_of
 from .subroles import SEAT_ORDER, seat_of
 from .team_logos import build_team_logos
 
@@ -504,7 +503,13 @@ def _dashboard_data(db: Database, cid: str,
 # The FACEIT League skill tiers, strongest to weakest. Championship names carry
 # the tier word ("S9 EMEA Master Central …", "… Expert …", "… Advanced …",
 # "… Open …"). Order drives the site's division switcher (strongest first).
-TIERS: tuple[str, ...] = ("Master", "Expert", "Advanced", "Open")
+#
+# Intermediate is new in Season 10 and sits BETWEEN Advanced and Open (EMEA and
+# NA only, capped at 128 teams). The entry is inert until such a championship is
+# seeded, and is kept whether or not one ever is: without it _tier_of returns
+# None for an Intermediate division, which drops it out of its region's switcher
+# and Combined view into the unclassified-name fallback, silently.
+TIERS: tuple[str, ...] = ("Master", "Expert", "Advanced", "Intermediate", "Open")
 
 
 def _tier_of(name: str | None) -> str | None:
@@ -554,18 +559,37 @@ def _is_playoff(name: str | None) -> bool:
     return is_playoff_name(name)
 
 
-def export_html(db: Database, out: TextIO, championship_id: str | None = None,
-                only_tier: str | None = None, only_region: str | None = None,
-                only_season: str | None = None,
-                data_path: str | None = None) -> int:
-    """Render the multi-division dashboard.
+def championship_names_with_results(db: Database) -> list[str]:
+    """The names of championships that have at least one FINISHED match.
+
+    Which season "has data" has to be decided on RESULTS, not on a championship
+    row existing. Seeding the next season creates its championships days before
+    its first game is played - a season resolved off names alone would flip the
+    live site to a shell of empty standings the moment the seeds landed, which is
+    the failure the season pin was introduced to avoid in the first place.
+    """
+    return [str(r["name"]) for r in db.conn.execute(
+        "SELECT DISTINCT ch.name FROM championships ch "
+        "JOIN matches m ON m.championship_id = ch.id "
+        "WHERE m.status = 'FINISHED' AND ch.name IS NOT NULL")]
+
+
+def build_dashboard_data(db: Database, championship_id: str | None = None,
+                         only_tier: str | None = None, only_region: str | None = None,
+                         only_season: str | None = None) -> dict[str, Any]:
+    """Build the dashboard's data payload, without rendering anything.
 
     With ``championship_id`` set, only that division is included; otherwise every
     championship in the database becomes a switchable division. ``only_tier``
     (master/expert/advanced/open), ``only_region`` ('emea'/'na'/'sa'/'oce') and
-    ``only_season`` ('s9', 's10', ...) restrict the dashboard; the DB may hold
+    ``only_season`` ('s9', 's10', ...) restrict the payload; the DB may hold
     several divisions across tiers, regions and (once a cutover has happened)
-    seasons. Returns the number of divisions with data.
+    seasons.
+
+    Returns ``{}`` when no division has data — the caller decides what an empty
+    build means. Split out of ``export_html`` so that the dashboard and the local
+    trials page (``faceit_sync.trials``) build their data through ONE code path
+    and cannot drift apart; ``test_trials.py`` pins the two together.
     """
     want_tier: str | None = None
     if only_tier:
@@ -590,9 +614,15 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         if want_region:
             rows = [r for r in rows if _region_of(r["name"]) == want_region]
         if want_season:
-            seasoned = [r for r in rows if _season_of(r["name"]) == want_season]
+            # Played, not merely scheduled - see championship_names_with_results.
+            played = set(championship_names_with_results(db))
+            seasoned = [r for r in rows
+                        if _season_of(r["name"]) == want_season and r["name"] in played]
             if seasoned:
-                rows = seasoned
+                # The pinned season's own upcoming fixtures come back here: the
+                # filter below is by season, so a division that has started is
+                # exported with its schedule intact.
+                rows = [r for r in rows if _season_of(r["name"]) == want_season]
             else:
                 # The pinned season exists as an intention but not yet as data -
                 # the days either side of a season boundary. Falling back to the
@@ -603,7 +633,8 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
                 # exits 1, which under CI's `bash -e` fails the whole job.
                 # An explicit pin always wins when it has data; this only ever
                 # covers the gap.
-                fallback = _newest_season([r["name"] for r in rows])
+                fallback = resolve_season(
+                    [r["name"] for r in rows if r["name"] in played], want_season)
                 log.warning("season %s has no data yet - falling back to %s",
                             want_season, fallback or "(no season could be parsed)")
                 rows = ([r for r in rows if _season_of(r["name"]) == fallback]
@@ -663,7 +694,7 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         ordered.append((str(d["summary"]["championship"]), cid))
 
     if not divisions:
-        return 0
+        return {}
 
     # Attach each playoff championship's played series to the matching region+tier
     # division, so the Playoffs tab shows real results the moment those matches are
@@ -776,6 +807,20 @@ def export_html(db: Database, out: TextIO, championship_id: str | None = None,
         # when the art isn't present; the page then falls back to text chips.
         "hero_icons": load_hero_icons(),
     }
+    return data
+
+
+def export_html(db: Database, out: TextIO, championship_id: str | None = None,
+                only_tier: str | None = None, only_region: str | None = None,
+                only_season: str | None = None,
+                data_path: str | None = None) -> int:
+    """Render the multi-division dashboard. Returns the number of divisions with
+    data. Filters are passed straight through to ``build_dashboard_data``."""
+    data = build_dashboard_data(db, championship_id, only_tier, only_region,
+                                only_season)
+    if not data:
+        return 0
+    divisions = data["divisions"]
     title = "FACEIT OW2 — League Scouting"
     # ensure_ascii + escaping every `<` as \u003c closes the `<!--` breakout hole
     # as well as the `</script>` one: a leading "<!" in any string can't begin an

@@ -310,6 +310,71 @@ testing that against CI's DB showed it wrote a 0-byte file and exited 1, failing
 the whole CI job under `bash -e`. The pin now falls back to the newest season
 with data, and the page labels the season it actually rendered.
 
+Added by a later pass (2026-08-31), also not in the original plan: **the map
+pool.** S10 is the first season FACEIT restricts one — 14 of the game's 30 maps
+— which the cutover had not anticipated at all, because through S9 the league
+pool and the game pool were the same list. Done in the same pass:
+`POOL` in `docs/scrims.html` is now the S10 pool, so practice coverage measures
+you against maps you can actually be drawn on; `SCRIM_MAPS` in
+`docs/capture/scrim.html` stays every playable map and gained **Aatlis** and
+**Neon Junction**, which had never been added at all. See `AGENTS.md` for why
+the two lists differ. **`POOL` is now per-season maintenance** — refresh it from
+the season announcement at every future cutover, alongside the code-wipe date.
+
+The same announcement carries three things this design predates and does not
+model: a new **Intermediate** division (capped 128, EMEA/NA), **new caps on the
+tiers already in scope** (Expert 32, down from 41 EMEA / 49 NA; Advanced 48, up
+from ~45 — net a shrink, so §5's coverage estimate is now high rather than low),
+and a **Season Finals**
+bracket per region on 9–15 November. S10 also has **no OWCS connection** — no
+promotion or relegation to OWCS at the end of the season — so the cross-league
+relegation championship that §6.5 is chasing has no S10 equivalent. That does
+not close §6.5: its subject is the *S9* relegation matches, whose codes are
+still the only live ones in the league. FACEIT-internal move-ups continue, and
+apply 2026-11-17.
+
+Added by a further pass (2026-09-01), when FACEIT published the season calendar
+and the S10 rulebook changelog. **Group B's gate now has a date: 2026-09-03
+15:30**, when the brackets are generated and the S10 match rooms first exist —
+four days before the 7 September season start this design assumed. Round 1 only
+is generated then, round 2 the following day, and FACEIT posts a separate notice
+once every division is done, so an absent division on the day is normal. The
+unpaid-team clear at 15:00 the same day removes ineligible teams irreversibly:
+seeds collected before it are provisional. The rest of the calendar
+(registration close 2026-09-02 18:00, roster lock 2026-10-12, Season Finals
+2026-11-09 23:00 UTC → 2026-11-15 22:55 UTC with rounds on 11/12/13 November and
+the final on the 15th) is tabulated in `AGENTS.md` § Season state; this design
+does not restate it.
+
+Three consequences for the model in this document:
+
+1. **Intermediate's team count is published on 3 September**, by the bracket —
+   so §6's "decide in week 1" can be decided at the gate instead. `TIERS` in
+   `faceit_sync/export.py` still has no `Intermediate` entry, so even a seeded
+   Intermediate division would fall out of the region switcher into the
+   unclassified-name fallback. That entry is the prerequisite, and it is inert
+   until such a championship exists.
+2. **A "Season Finals" championship has no shape in this design.** It is not
+   matched by `is_playoff_name` (`playoff`/`knockout` only), so it would export
+   as a standalone division with its own standings; and because it is
+   cross-tier by construction — top 4 of Master plus top 2 of each of Expert,
+   Advanced, Intermediate and Open — it has no single region+tier division for
+   the playoff-attachment step in §6 to hang it on. Widening the matcher is not
+   sufficient. Nothing exists to crawl before November, so this is a design
+   question with two months of slack, not a cutover blocker.
+3. **S9 standings do not determine S10 division membership.** The Open
+   Qualifiers (20–23 August 2026) placed teams straight into Expert and
+   Advanced. §6's decision to skip the relegation ingest stands — S9 standings
+   remain the S9 record — but they cannot be used to *predict* the S10 division
+   lists. The crawl is the only source.
+
+Two rule changes with no code consequence, recorded so nobody re-derives them:
+in-season roster additions are capped at two slots with a 7-day cooldown across
+all divisions (which bounds `team_rosters` drift until the 12 October lock), and
+pause-on-disconnect is gone in favour of one manual tech pause per team per map
+(which shifts disconnects from restarts toward played-through games, making
+`dc_games` and `was_restarted` non-comparable across the S9→S10 boundary).
+
 **B. Gated on S10 rooms existing (operator collects seeds).**
 
 5. Add S10 championship IDs to `matches.txt`, comment out the S9 blocks, and seed
@@ -410,3 +475,119 @@ that check is one look at a relegated team's FACEIT match history.
   makes this the only window where scrim mode is the *only* thing the tool can
   do. Opening it is a decision rather than a cleanup task (`AGENTS.md`
   priority 2) — but this is the moment it is worth the most.
+
+---
+
+## 7. Group C, executed differently (2026-09-05)
+
+The operator reported Season 10 match rooms exist. Group B is still seeds, which
+nothing can automate — a fresh probe on 2026-09-05 re-confirmed the keyless
+championship listing refuses enumeration (`err_f0` "not authorized"; the
+organizer-filtered form 401s too; `open.faceit.com/data/v4/championships` is
+403 without a key). Group C, though, shipped — with one change to its shape.
+
+**What §6.4 group C said:** flip `update.yml`'s `--season` to `s10`, flip the
+merge `--dir` to `data/captures/s10`, flip `CURRENT_SEASON`, deploy. Treat 7 and
+8 as one change or contributions are dropped silently.
+
+**Why that is worse than it looks.** The export flip is protected by the season
+fallback, but the merge dir is not: pointing it at an empty `s10/` while the
+export still falls back to S9 publishes the S9 site **with none of its 274
+captured comps** — the site's whole differentiator — for as long as the seeds
+take to arrive. And the pairing rule ("treat 7 and 8 as one change") is a rule a
+human has to remember at a boundary that happens once a quarter.
+
+**What shipped instead.** The season is *resolved*, not pinned twice:
+
+- `models.resolve_season(names, pin)` — the pin when it has data, else the newest
+  season that does. The exporter's existing fallback now calls it, so there is
+  one definition rather than two that agree by inspection.
+- `faceit-sync resolve-season --season s10` prints that answer, one line.
+- `update.yml` calls it once and uses the result for the export **and** the
+  captures directory it merges.
+
+So the merge directory follows the published season automatically: S9 today with
+its comps intact, S10 — page and comps together — on the first S10 match that is
+actually **played**.
+
+**What "has data" means, corrected 2026-09-05 by seeding the real rooms.** The
+first version resolved on championship *names*, which is what the exporter's own
+fallback had always done. Seeding the ten S10 rooms flipped it to `s10`
+immediately — ten scheduled fixtures, zero results — which would have replaced a
+live Season 9 dashboard with empty standings for the two days until the season
+started. Resolution now runs on championships that have at least one FINISHED
+match (`export.championship_names_with_results`), which is the trigger §6.3
+always described in prose. A division that HAS started still exports its upcoming
+fixtures; it is only the season-level switch that waits for a result. A test asserts the agreement itself in both states of a boundary, because
+a disagreement is exactly the commingling the pin exists to prevent.
+
+`CURRENT_SEASON` and `CONTRIB_DIR` still moved to `s10` in the same pass, and
+still need `wrangler deploy` (invariant 11). The window that used to be dangerous
+is not: no replay code in the league is live, so no upload can be dropped before
+the first S10 playday on 7 September. Deploy before then.
+
+Also landed, ahead of any decision, per group B's own note: **`Intermediate` in
+`TIERS`** (both copies, now test-pinned) and the `--tier` choices. The scope
+decision to exclude it is unchanged — this only means that seeding one would
+classify rather than vanish into the unclassified-name fallback.
+
+**What remains is entirely operator work:** the seed URLs (a marked block at the
+foot of `matches.txt` names every division in scope), `wrangler deploy`, and the
+S10 code-wipe date once the season-start patch lands. The Season Finals shape
+(§6.4 consequence 2) is untouched and still has until November.
+
+### 7.1 The seeds landed, and the divisions were measured (2026-09-05)
+
+All ten S10 rooms are in `matches.txt`, each verified against the match API for
+the championship it belongs to, and the S9 blocks are commented out (kept, not
+deleted — the file is the record of how each division was bootstrapped). Every
+room was still `SCHEDULED`, which is what forced the "played, not seeded"
+correction above.
+
+**The operator seeded Intermediate**, which closes the deferred scope question in
+§5 the other way: EMEA and NA Intermediate are in.
+
+**Team counts are no longer an estimate.** There is a keyless way to count a
+division after all — not the championship listing, which still refuses
+enumeration, but the subscription list of a championship you already know the id
+of:
+
+```
+https://api.faceit.com/championships/v1/championship/{id}/subscription?limit=20&offset=N
+```
+
+`limit` above 20 returns 400, and no total is included, so it is paged until a
+short page comes back. Measured on 2026-09-05, after the unpaid-team clear:
+
+| division | teams | regular matches | games | MB |
+|---|---|---|---|---|
+| EMEA Master | 16 | 120 | 432 | 0.7 |
+| EMEA Expert | 27 | 201 | 722 | 1.2 |
+| EMEA Advanced | 43 | 319 | 1,150 | 2.0 |
+| EMEA Intermediate | 46 | 342 | 1,230 | 2.1 |
+| NA Master | 16 | 120 | 432 | 0.7 |
+| NA Expert | 31 | 230 | 829 | 1.4 |
+| NA Advanced | 52 | 386 | 1,391 | 2.4 |
+| NA Intermediate | 56 | 416 | 1,498 | 2.6 |
+| SA Master | 10 | 45 | 162 | 0.3 |
+| OCE Master | 8 | 28 | 101 | 0.2 |
+| **total** | **305** | **2,208** | **7,948** | **13.6** |
+
+Using this document's own validated formulas: `n(n-1)/2` for Master, 7.43
+matches per team for Swiss tiers, 3.6 games per match, 1.76 KB of
+`docs/index.html` per game. Adding ~15% for playoffs gives **~2,540 matches,
+~9,140 games, ~15.7 MB** — against ~10.3 MB for the same scope without
+Intermediate. `--external-data` splitting stays unnecessary; revisit it if a
+future season's Intermediate actually approaches its 128 cap, which would have
+made this ~24 MB.
+
+Three things the measurement settles that §5 could only predict:
+
+1. **Intermediate is Advanced-sized, not Open-sized** (46/56 against a 128 cap),
+   which is why seeding it costs ~5.4 MB rather than ~12 MB.
+2. **Advanced did shrink** as predicted — EMEA 45 → 43, and NA's ~46 estimate was
+   in fact 52, so the S9-based estimate was an upper bound in EMEA and a lower one
+   in NA. Expert shrank hard against its new 32 cap: 41 → 27 in EMEA, 49 → 31 in NA.
+3. **SA Master is 10 teams, not the 12 Liquipedia showed for S9**, so its 76-match
+   estimate is really 45 regular-season matches.
+

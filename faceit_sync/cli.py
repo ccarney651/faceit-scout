@@ -13,8 +13,11 @@ from dotenv import load_dotenv
 from . import __version__
 from .client import FaceitClient
 from .db import Database
-from .export import REGIONS, export_csv, export_html, export_json, team_stats
+from .export import (REGIONS, championship_names_with_results, export_csv, export_html,
+                     export_json, team_stats)
+from .models import resolve_season
 from .sync import DEFAULT_BACKFILL_DAYS, EnumerationError, SyncEngine
+from .trials import write_trials_page
 
 log = logging.getLogger("faceit_sync")
 
@@ -109,6 +112,37 @@ def _resolve_championship(db: Database, requested: str | None) -> str | None:
         for r in rows:
             print(f"  {r['id']}  {r['name']}", file=sys.stderr)
     return None
+
+
+def cmd_trials(args: argparse.Namespace) -> int:
+    """Build the local trialist comparison page. Never publish its output."""
+    with Database(_db_path(args)) as db:
+        n = write_trials_page(db, args.out, championship_id=args.championship,
+                              only_tier=args.tier, only_region=args.region,
+                              only_season=args.season)
+    if n == 0:
+        print("no data to build a trials page from yet", file=sys.stderr)
+        return 1
+    log.info("wrote the trials page for %d division(s) to %s", n, args.out)
+    return 0
+
+
+def cmd_resolve_season(args: argparse.Namespace) -> int:
+    """Print the season a pinned export would ACTUALLY render, one line, no
+    decoration - it is read by CI to pick the captures directory to merge, so
+    that the comps on the page always come from the season the page shows.
+
+    "Has data" means PLAYED matches, not a seeded championship: the next
+    season's rooms are in the database days before its first game.
+    """
+    with Database(_db_path(args)) as db:
+        names = championship_names_with_results(db)
+    season = resolve_season(names, args.season)
+    if season is None:
+        print("no season could be parsed from the database", file=sys.stderr)
+        return 1
+    print(season)
+    return 0
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -230,7 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--championship", default=None,
                    help="championship id (optional; auto-detected when only one is stored)")
     e.add_argument("--format", choices=("csv", "json", "html"), required=True)
-    e.add_argument("--tier", choices=("master", "expert", "advanced", "open"), default=None,
+    e.add_argument("--tier", choices=("master", "expert", "advanced", "intermediate", "open"), default=None,
                    help="restrict the HTML dashboard to one skill tier (default: all)")
     # Derived from export.REGIONS rather than restated, so a new region cannot
     # ship on the site while the CLI still refuses to name it.
@@ -245,6 +279,15 @@ def build_parser() -> argparse.ArgumentParser:
                         "(shell build) instead of inlining it — the seam for future access gating")
     e.set_defaults(func=cmd_export)
 
+    rs = sub.add_parser(
+        "resolve-season",
+        help="print the season a pinned export would actually render (the pin "
+             "once it has PLAYED matches, else the newest season that does)",
+    )
+    rs.add_argument("--season", default=None,
+                    help="the pinned season, e.g. 's10' (default: newest with data)")
+    rs.set_defaults(func=cmd_resolve_season)
+
     s = sub.add_parser("stats", help="team ban tendencies, map picks, win rates")
     s.add_argument("--team", required=True, help="team name")
     s.set_defaults(func=cmd_stats)
@@ -257,6 +300,25 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--limit", type=int, default=None,
                    help="stop after N matches (default: all coded matches missing it)")
     b.set_defaults(func=cmd_backfill_gamenames)
+
+    # Local-only: the page it writes is gitignored and must never be published.
+    # Unlike `export`, it defaults to EVERY division in the DB — judging a
+    # trialist wants every map on record, not just the current season.
+    t = sub.add_parser(
+        "trials",
+        help="build the local trialist comparison page (never commit its output)",
+    )
+    t.add_argument("--out", default="trials.html",
+                   help="output path (default: trials.html)")
+    t.add_argument("--championship", default=None,
+                   help="restrict to one championship id (default: all)")
+    t.add_argument("--tier", choices=("master", "expert", "advanced", "intermediate", "open"),
+                   default=None, help="restrict to one tier (default: all)")
+    t.add_argument("--region", choices=tuple(r.lower() for r in REGIONS),
+                   default=None, help="restrict to one region (default: all)")
+    t.add_argument("--season", default=None,
+                   help="restrict to one season, e.g. 's9' (default: all)")
+    t.set_defaults(func=cmd_trials)
     return p
 
 

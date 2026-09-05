@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -35,9 +36,15 @@ def _run(body: str) -> object:
     if not node:
         pytest.skip("node not available to run the viewer's helpers")
     src = _pure_js() + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));"
-    proc = subprocess.run([node, "-e", src], capture_output=True, text=True)
-    assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
-    return json.loads(proc.stdout)
+    # Via a temp file, not `node -e`: the extracted section is ~30KB and Windows
+    # caps a command line at 32,767 characters, so `-e` failed with WinError 206
+    # as soon as the page grew. A script file has no such limit.
+    with tempfile.TemporaryDirectory() as tmp:
+        script = Path(tmp) / "viewer.js"
+        script.write_text(src, encoding="utf-8")
+        proc = subprocess.run([node, str(script)], capture_output=True, text=True)
+        assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
+        return json.loads(proc.stdout)
 
 
 def _role_map() -> dict[str, list[str]]:
@@ -238,10 +245,42 @@ def test_coverage_breaks_a_mode_down_by_map() -> None:
     ])
     by = {c["mode"]: c for c in _run(f"return mapCoverage({scrims}, {maps}, '2026-08-14');")}
     ctrl = by["Control"]["maps"]
-    assert ctrl["Ilios"] == 2
     assert ctrl["Busan"] == 1
     assert ctrl["Nepal"] == 0, "an unplayed map in the pool must still be listed"
-    assert set(ctrl) >= {"Antarctic Peninsula", "Lijiang Tower", "Oasis", "Samoa"}
+    assert set(ctrl) >= {"Busan", "Nepal", "Samoa"}
+
+
+def test_a_map_played_outside_the_pool_still_shows_its_games() -> None:
+    """The pool seeds the rows; it must not censor the ones you actually played.
+
+    Ilios left the pool in Season 10, but scrims played on it are still practice
+    that happened, and a coverage panel that hid them would be lying about the
+    log.
+    """
+    scrims = json.dumps([{"id": "s1", "date": "2026-08-13"}])
+    maps = json.dumps([
+        {"scrim_id": "s1", "map_category": "Control", "map_name": "Ilios"},
+        {"scrim_id": "s1", "map_category": "Control", "map_name": "Ilios"},
+    ])
+    by = {c["mode"]: c for c in _run(f"return mapCoverage({scrims}, {maps}, '2026-08-14');")}
+    assert by["Control"]["maps"]["Ilios"] == 2
+
+
+def test_pool_is_the_faceit_season_10_map_pool() -> None:
+    """Coverage is league preparation, so the pool is the league's, not the game's.
+
+    Season 10 plays 14 of the 30 maps. Seeding the panel with all 30 would call
+    26 maps "never played" that you will never be asked to play, burying the
+    handful of real gaps.
+    """
+    pool = _run("return POOL;")
+    assert pool == {
+        "Control": ["Busan", "Nepal", "Samoa"],
+        "Escort": ["Junkertown", "Route 66", "Shambali Monastery"],
+        "Hybrid": ["Eichenwalde", "Neon Junction", "Paraiso"],
+        "Push": ["Colosseo", "Esperanca"],
+        "Flashpoint": ["Aatlis", "New Junk City", "Suravasa"],
+    }
 
 
 def test_clash_is_gone_from_the_pool() -> None:

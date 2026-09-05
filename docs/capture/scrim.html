@@ -466,9 +466,18 @@ const SCRIM_MAPS=[
   {name:"Junkertown",cat:"Escort"},{name:"Rialto",cat:"Escort"},{name:"Route 66",cat:"Escort"},
   {name:"Shambali Monastery",cat:"Escort"},{name:"Watchpoint: Gibraltar",cat:"Escort"},
   {name:"Blizzard World",cat:"Hybrid"},{name:"Eichenwalde",cat:"Hybrid"},{name:"Hollywood",cat:"Hybrid"},
-  {name:"King's Row",cat:"Hybrid"},{name:"Midtown",cat:"Hybrid"},{name:"Numbani",cat:"Hybrid"},{name:"Paraiso",cat:"Hybrid"},
+  {name:"King's Row",cat:"Hybrid"},{name:"Midtown",cat:"Hybrid"},{name:"Neon Junction",cat:"Hybrid"},
+  {name:"Numbani",cat:"Hybrid"},{name:"Paraiso",cat:"Hybrid"},
   {name:"Colosseo",cat:"Push"},{name:"Esperanca",cat:"Push"},{name:"New Queen Street",cat:"Push"},{name:"Runasapi",cat:"Push"},
-  {name:"New Junk City",cat:"Flashpoint"},{name:"Suravasa",cat:"Flashpoint"}];
+  {name:"Aatlis",cat:"Flashpoint"},{name:"New Junk City",cat:"Flashpoint"},{name:"Suravasa",cat:"Flashpoint"}];
+// Every playable map, not the current league pool: scrims are booked on anything,
+// and this list also backs bestMapMatch(), so a map missing here is a map the
+// replay-history OCR cannot read. The league pool lives in scrims.html.
+//
+// Paraiso and Esperanca are spelled without their diacritics to match the S9
+// capture data; bestMapMatch() falls back to a fuzzy score, so the accented
+// in-game names still match.
+//
 // Clash (Anubis, Hanaoka) is deliberately absent: it is no longer played
 // competitively, so offering it in a scrim picker is noise. Re-add the two
 // entries here if it returns to the pool.

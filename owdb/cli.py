@@ -1216,7 +1216,8 @@ def build_parser() -> argparse.ArgumentParser:
     consub = con.add_subparsers(dest="contribute_command", required=True)
     ce = consub.add_parser("export", help="write this machine's captures for sharing")
     ce.add_argument("contributor", help="your contributor name (becomes the filename)")
-    ce.add_argument("--out", default=None, help="output path (default: data/captures/s9/<name>.json)")
+    ce.add_argument("--out", default=None,
+                    help=f"output path (default: {CONTRIB_DIR}/<name>.json)")
     ce.add_argument("--include-drafts", action="store_true",
                     help="also share un-reviewed maps (not recommended)")
     ce.set_defaults(func=cmd_contribute_export)

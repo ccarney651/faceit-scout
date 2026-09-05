@@ -1,133 +1,140 @@
 # FACEIT OW2 match rooms — one id or URL per line. '#' lines are ignored.
-https://www.faceit.com/en/ow2/room/1-052de1e6-540e-4024-9e4a-860e783c9cba
-https://www.faceit.com/en/ow2/room/1-08e71e83-40d5-4ca5-9ed3-6b73572c0cca
-https://www.faceit.com/en/ow2/room/1-0ac4f96e-841d-4738-9e8d-e3dd12afc01e
-https://www.faceit.com/en/ow2/room/1-1ff6b9e7-2904-4f3b-b016-3def340819dc
-https://www.faceit.com/en/ow2/room/1-2124f740-7fbc-4bba-8b58-693240654718
-https://www.faceit.com/en/ow2/room/1-2417d84b-2558-418d-b623-919265f04d22
-https://www.faceit.com/en/ow2/room/1-275adaec-ea3f-4880-ad83-79c42a48dd73
-https://www.faceit.com/en/ow2/room/1-28e771e5-31f6-43b4-a75d-d4bf68ddacaf
-https://www.faceit.com/en/ow2/room/1-3a1780df-5000-46d0-a7fb-3668ae51ed39
-https://www.faceit.com/en/ow2/room/1-3dcd57be-e0eb-4731-b21d-65e7b3d2a3c5
-https://www.faceit.com/en/ow2/room/1-3fad3070-9882-4552-af77-c2d2b6e508ff
-https://www.faceit.com/en/ow2/room/1-4b7d84a3-38b5-40e8-b3a3-40dd074c9048
-https://www.faceit.com/en/ow2/room/1-4fe880ab-e40b-47a4-9a78-a08b9ce7d44b
-https://www.faceit.com/en/ow2/room/1-55b99164-3eb6-4713-bc5f-c1be0d614a9b
-https://www.faceit.com/en/ow2/room/1-5bea9071-f9af-4abb-a1fc-c13b4d901ee0
-https://www.faceit.com/en/ow2/room/1-60f70812-5115-4810-8a1f-03ef8f520d48
-https://www.faceit.com/en/ow2/room/1-637f8797-700d-4a45-9d5e-bcc519c240ab
-https://www.faceit.com/en/ow2/room/1-65d74143-8c55-4376-bc0f-f8410db7111a
-https://www.faceit.com/en/ow2/room/1-661f3ded-1071-4eae-9a18-e29c19955940
-https://www.faceit.com/en/ow2/room/1-67e851d3-7817-4189-8a4f-2a0a7f14bc20
-https://www.faceit.com/en/ow2/room/1-6b676f6e-29f1-46f9-9a47-8eb467e35973
-https://www.faceit.com/en/ow2/room/1-6dd1456c-9d4a-4bfc-ad62-1b6e778af807
-https://www.faceit.com/en/ow2/room/1-76898187-9c69-4559-9bff-61232dee60e3
-https://www.faceit.com/en/ow2/room/1-7eddca77-6c10-4413-9776-8fc837e82526
-https://www.faceit.com/en/ow2/room/1-7f42abb1-c6dd-4b81-84ab-3d16cd746ad4
-https://www.faceit.com/en/ow2/room/1-81146b1f-e016-4302-8119-c559d89d52c7
-https://www.faceit.com/en/ow2/room/1-84c0c3f8-cd7e-4f3c-b733-9508150e3059
-https://www.faceit.com/en/ow2/room/1-89a9d5fa-f51c-487a-937c-ae1df9c4d690
-https://www.faceit.com/en/ow2/room/1-a1f0047a-5d05-4b40-aa47-58d18f92fc60
-https://www.faceit.com/en/ow2/room/1-a4f21ff6-a26e-4f64-adcb-e725cad71e52
-https://www.faceit.com/en/ow2/room/1-aee58513-8a37-44a4-898a-0a04e01e4a00
-https://www.faceit.com/en/ow2/room/1-b1d7449c-b186-449f-9229-9778dc552356
-https://www.faceit.com/en/ow2/room/1-b5b3b4d1-9cc1-48e3-b6b8-ebf628c0eff8
-https://www.faceit.com/en/ow2/room/1-b9a886e8-6163-4cd3-84e6-11ff9eed0d08
-https://www.faceit.com/en/ow2/room/1-b9bd75a5-0f17-415c-908a-2aed7db9e868
-https://www.faceit.com/en/ow2/room/1-bd9e46ea-b2ff-4386-a77b-56ceea7df89f
-https://www.faceit.com/en/ow2/room/1-be8cae3b-39b8-4d46-a3a2-1d231ab41e97
-https://www.faceit.com/en/ow2/room/1-c52a9dd7-a29d-4c68-bc24-4a17e37b4379
-https://www.faceit.com/en/ow2/room/1-c8d86d17-dd45-443f-b938-142b7dd65e98
-https://www.faceit.com/en/ow2/room/1-cae6ba43-1ec0-4b82-9664-9bf582cf794a
-https://www.faceit.com/en/ow2/room/1-ce66f566-06b8-4f78-8df1-bd190b4b4af2
-https://www.faceit.com/en/ow2/room/1-d0551d2f-8254-4eba-b3a4-595dc73798cf
-https://www.faceit.com/en/ow2/room/1-d2e218ac-3836-4bdd-9d32-6ff4928a23d7
-https://www.faceit.com/en/ow2/room/1-d54b13cf-cdbe-4ec3-80a3-cde0567cf0de
-https://www.faceit.com/en/ow2/room/1-e0fc79a3-d17e-4029-816f-912ea90633d0
-https://www.faceit.com/en/ow2/room/1-e7c8b698-6fc9-4289-812d-3121881bb20c
-https://www.faceit.com/en/ow2/room/1-e907376d-0bfb-4fbc-a05e-38cbbf22d208
-https://www.faceit.com/en/ow2/room/1-eb766de3-97ec-4c89-b9b9-62cbe58c98d1
-https://www.faceit.com/en/ow2/room/1-ed5add28-f13b-4610-9102-00a628b370af
-https://www.faceit.com/en/ow2/room/1-f672840d-0bdc-4cd9-b07b-077f54e57524
+#
+# SEASON 9 SEEDS BELOW ARE COMMENTED OUT (2026-09-05). S9 finished
+# 2026-08-17 and is frozen at docs/s9/index.html; every one of its matches is
+# already in the database, so re-seeding them only spends crawl time. They are
+# kept rather than deleted because this file is the record of how each
+# division was bootstrapped. The live seeds are the Season 10 block at the
+# foot of this file.
+# https://www.faceit.com/en/ow2/room/1-052de1e6-540e-4024-9e4a-860e783c9cba
+# https://www.faceit.com/en/ow2/room/1-08e71e83-40d5-4ca5-9ed3-6b73572c0cca
+# https://www.faceit.com/en/ow2/room/1-0ac4f96e-841d-4738-9e8d-e3dd12afc01e
+# https://www.faceit.com/en/ow2/room/1-1ff6b9e7-2904-4f3b-b016-3def340819dc
+# https://www.faceit.com/en/ow2/room/1-2124f740-7fbc-4bba-8b58-693240654718
+# https://www.faceit.com/en/ow2/room/1-2417d84b-2558-418d-b623-919265f04d22
+# https://www.faceit.com/en/ow2/room/1-275adaec-ea3f-4880-ad83-79c42a48dd73
+# https://www.faceit.com/en/ow2/room/1-28e771e5-31f6-43b4-a75d-d4bf68ddacaf
+# https://www.faceit.com/en/ow2/room/1-3a1780df-5000-46d0-a7fb-3668ae51ed39
+# https://www.faceit.com/en/ow2/room/1-3dcd57be-e0eb-4731-b21d-65e7b3d2a3c5
+# https://www.faceit.com/en/ow2/room/1-3fad3070-9882-4552-af77-c2d2b6e508ff
+# https://www.faceit.com/en/ow2/room/1-4b7d84a3-38b5-40e8-b3a3-40dd074c9048
+# https://www.faceit.com/en/ow2/room/1-4fe880ab-e40b-47a4-9a78-a08b9ce7d44b
+# https://www.faceit.com/en/ow2/room/1-55b99164-3eb6-4713-bc5f-c1be0d614a9b
+# https://www.faceit.com/en/ow2/room/1-5bea9071-f9af-4abb-a1fc-c13b4d901ee0
+# https://www.faceit.com/en/ow2/room/1-60f70812-5115-4810-8a1f-03ef8f520d48
+# https://www.faceit.com/en/ow2/room/1-637f8797-700d-4a45-9d5e-bcc519c240ab
+# https://www.faceit.com/en/ow2/room/1-65d74143-8c55-4376-bc0f-f8410db7111a
+# https://www.faceit.com/en/ow2/room/1-661f3ded-1071-4eae-9a18-e29c19955940
+# https://www.faceit.com/en/ow2/room/1-67e851d3-7817-4189-8a4f-2a0a7f14bc20
+# https://www.faceit.com/en/ow2/room/1-6b676f6e-29f1-46f9-9a47-8eb467e35973
+# https://www.faceit.com/en/ow2/room/1-6dd1456c-9d4a-4bfc-ad62-1b6e778af807
+# https://www.faceit.com/en/ow2/room/1-76898187-9c69-4559-9bff-61232dee60e3
+# https://www.faceit.com/en/ow2/room/1-7eddca77-6c10-4413-9776-8fc837e82526
+# https://www.faceit.com/en/ow2/room/1-7f42abb1-c6dd-4b81-84ab-3d16cd746ad4
+# https://www.faceit.com/en/ow2/room/1-81146b1f-e016-4302-8119-c559d89d52c7
+# https://www.faceit.com/en/ow2/room/1-84c0c3f8-cd7e-4f3c-b733-9508150e3059
+# https://www.faceit.com/en/ow2/room/1-89a9d5fa-f51c-487a-937c-ae1df9c4d690
+# https://www.faceit.com/en/ow2/room/1-a1f0047a-5d05-4b40-aa47-58d18f92fc60
+# https://www.faceit.com/en/ow2/room/1-a4f21ff6-a26e-4f64-adcb-e725cad71e52
+# https://www.faceit.com/en/ow2/room/1-aee58513-8a37-44a4-898a-0a04e01e4a00
+# https://www.faceit.com/en/ow2/room/1-b1d7449c-b186-449f-9229-9778dc552356
+# https://www.faceit.com/en/ow2/room/1-b5b3b4d1-9cc1-48e3-b6b8-ebf628c0eff8
+# https://www.faceit.com/en/ow2/room/1-b9a886e8-6163-4cd3-84e6-11ff9eed0d08
+# https://www.faceit.com/en/ow2/room/1-b9bd75a5-0f17-415c-908a-2aed7db9e868
+# https://www.faceit.com/en/ow2/room/1-bd9e46ea-b2ff-4386-a77b-56ceea7df89f
+# https://www.faceit.com/en/ow2/room/1-be8cae3b-39b8-4d46-a3a2-1d231ab41e97
+# https://www.faceit.com/en/ow2/room/1-c52a9dd7-a29d-4c68-bc24-4a17e37b4379
+# https://www.faceit.com/en/ow2/room/1-c8d86d17-dd45-443f-b938-142b7dd65e98
+# https://www.faceit.com/en/ow2/room/1-cae6ba43-1ec0-4b82-9664-9bf582cf794a
+# https://www.faceit.com/en/ow2/room/1-ce66f566-06b8-4f78-8df1-bd190b4b4af2
+# https://www.faceit.com/en/ow2/room/1-d0551d2f-8254-4eba-b3a4-595dc73798cf
+# https://www.faceit.com/en/ow2/room/1-d2e218ac-3836-4bdd-9d32-6ff4928a23d7
+# https://www.faceit.com/en/ow2/room/1-d54b13cf-cdbe-4ec3-80a3-cde0567cf0de
+# https://www.faceit.com/en/ow2/room/1-e0fc79a3-d17e-4029-816f-912ea90633d0
+# https://www.faceit.com/en/ow2/room/1-e7c8b698-6fc9-4289-812d-3121881bb20c
+# https://www.faceit.com/en/ow2/room/1-e907376d-0bfb-4fbc-a05e-38cbbf22d208
+# https://www.faceit.com/en/ow2/room/1-eb766de3-97ec-4c89-b9b9-62cbe58c98d1
+# https://www.faceit.com/en/ow2/room/1-ed5add28-f13b-4610-9102-00a628b370af
+# https://www.faceit.com/en/ow2/room/1-f672840d-0bdc-4cd9-b07b-077f54e57524
 
 # --- FACEIT EMEA Expert ---
-https://www.faceit.com/en/ow2/room/1-03ed654c-7680-43fe-8412-45cae93ad930
-https://www.faceit.com/en/ow2/room/1-05fe8eba-49fd-4fc3-958f-8c0b28ce66d5
-https://www.faceit.com/en/ow2/room/1-08fa6cee-f2f1-4fc3-9aca-70b4e015624d
-https://www.faceit.com/en/ow2/room/1-0bde8bee-2d19-43c5-a0b4-47d41878726c
-https://www.faceit.com/en/ow2/room/1-0d7e64b5-7d5a-48b7-a5e0-8190e5db9376
-https://www.faceit.com/en/ow2/room/1-15902ae0-1cb2-4d2f-8d75-6884a11efa89
-https://www.faceit.com/en/ow2/room/1-1ac9b6d4-de5d-440f-a49d-892f13b5aa2a
-https://www.faceit.com/en/ow2/room/1-2192002b-5bf2-4cb0-b385-32f7d477bb90
-https://www.faceit.com/en/ow2/room/1-38d5515d-c6e5-4928-adce-7ef33ca38ee2
-https://www.faceit.com/en/ow2/room/1-44cbcf7c-31ca-4d14-8751-0b99da50f53e
-https://www.faceit.com/en/ow2/room/1-49a950b6-a11a-4a43-be30-5d2f5c604beb
-https://www.faceit.com/en/ow2/room/1-4f6eb37f-56b1-4188-9b4b-ec06e8d6ca3a
-https://www.faceit.com/en/ow2/room/1-66013f8d-21e8-4000-bebf-b2483e233fc2
-https://www.faceit.com/en/ow2/room/1-73f61164-e505-4a4f-899a-955cffb33a12
-https://www.faceit.com/en/ow2/room/1-80358d44-ba8c-4d81-9257-ad35ffb6b2e2
-https://www.faceit.com/en/ow2/room/1-863b80f0-2600-4439-88cf-d6f158fea625
-https://www.faceit.com/en/ow2/room/1-93844111-c3c0-407c-83fa-eebcd0629e51
-https://www.faceit.com/en/ow2/room/1-9ddd4ab3-2438-46e2-b467-9b11fb306945
-https://www.faceit.com/en/ow2/room/1-b1972133-9237-43a4-8a76-f7c01dd77d8b
-https://www.faceit.com/en/ow2/room/1-b43b5373-8db6-4f20-99f1-9ded793e46e5
-https://www.faceit.com/en/ow2/room/1-bda225ac-a045-458d-bfc0-7c3bfcb002d3
-https://www.faceit.com/en/ow2/room/1-c062a025-aa8d-4644-91ff-10611e09a023
-https://www.faceit.com/en/ow2/room/1-c8523102-c8c5-4423-a13b-996a20d579db
-https://www.faceit.com/en/ow2/room/1-d54557fe-0c7f-498d-ae73-8cffd4978d29
-https://www.faceit.com/en/ow2/room/1-e3c009b9-687e-4b0d-bcb2-3bf13c2aff8c
-https://www.faceit.com/en/ow2/room/1-eaf171fc-8e07-4f3f-b262-5660b9a5a523
-https://www.faceit.com/en/ow2/room/1-f4c2b0c1-3266-4200-b3f6-4a2aba4c4f44
-https://www.faceit.com/en/ow2/room/1-ff86c00e-ae9f-435c-9407-0ec4678cd2d3
+# https://www.faceit.com/en/ow2/room/1-03ed654c-7680-43fe-8412-45cae93ad930
+# https://www.faceit.com/en/ow2/room/1-05fe8eba-49fd-4fc3-958f-8c0b28ce66d5
+# https://www.faceit.com/en/ow2/room/1-08fa6cee-f2f1-4fc3-9aca-70b4e015624d
+# https://www.faceit.com/en/ow2/room/1-0bde8bee-2d19-43c5-a0b4-47d41878726c
+# https://www.faceit.com/en/ow2/room/1-0d7e64b5-7d5a-48b7-a5e0-8190e5db9376
+# https://www.faceit.com/en/ow2/room/1-15902ae0-1cb2-4d2f-8d75-6884a11efa89
+# https://www.faceit.com/en/ow2/room/1-1ac9b6d4-de5d-440f-a49d-892f13b5aa2a
+# https://www.faceit.com/en/ow2/room/1-2192002b-5bf2-4cb0-b385-32f7d477bb90
+# https://www.faceit.com/en/ow2/room/1-38d5515d-c6e5-4928-adce-7ef33ca38ee2
+# https://www.faceit.com/en/ow2/room/1-44cbcf7c-31ca-4d14-8751-0b99da50f53e
+# https://www.faceit.com/en/ow2/room/1-49a950b6-a11a-4a43-be30-5d2f5c604beb
+# https://www.faceit.com/en/ow2/room/1-4f6eb37f-56b1-4188-9b4b-ec06e8d6ca3a
+# https://www.faceit.com/en/ow2/room/1-66013f8d-21e8-4000-bebf-b2483e233fc2
+# https://www.faceit.com/en/ow2/room/1-73f61164-e505-4a4f-899a-955cffb33a12
+# https://www.faceit.com/en/ow2/room/1-80358d44-ba8c-4d81-9257-ad35ffb6b2e2
+# https://www.faceit.com/en/ow2/room/1-863b80f0-2600-4439-88cf-d6f158fea625
+# https://www.faceit.com/en/ow2/room/1-93844111-c3c0-407c-83fa-eebcd0629e51
+# https://www.faceit.com/en/ow2/room/1-9ddd4ab3-2438-46e2-b467-9b11fb306945
+# https://www.faceit.com/en/ow2/room/1-b1972133-9237-43a4-8a76-f7c01dd77d8b
+# https://www.faceit.com/en/ow2/room/1-b43b5373-8db6-4f20-99f1-9ded793e46e5
+# https://www.faceit.com/en/ow2/room/1-bda225ac-a045-458d-bfc0-7c3bfcb002d3
+# https://www.faceit.com/en/ow2/room/1-c062a025-aa8d-4644-91ff-10611e09a023
+# https://www.faceit.com/en/ow2/room/1-c8523102-c8c5-4423-a13b-996a20d579db
+# https://www.faceit.com/en/ow2/room/1-d54557fe-0c7f-498d-ae73-8cffd4978d29
+# https://www.faceit.com/en/ow2/room/1-e3c009b9-687e-4b0d-bcb2-3bf13c2aff8c
+# https://www.faceit.com/en/ow2/room/1-eaf171fc-8e07-4f3f-b262-5660b9a5a523
+# https://www.faceit.com/en/ow2/room/1-f4c2b0c1-3266-4200-b3f6-4a2aba4c4f44
+# https://www.faceit.com/en/ow2/room/1-ff86c00e-ae9f-435c-9407-0ec4678cd2d3
 
 # --- FACEIT NA Master ---
-https://www.faceit.com/en/ow2/room/1-011595cb-30cb-4473-9414-44f0d65cd41c
-https://www.faceit.com/en/ow2/room/1-0267a4ca-4bc0-4489-b13f-5e6ee845268b
-https://www.faceit.com/en/ow2/room/1-0cb51949-cfb8-4789-8359-3b359dfed497
-https://www.faceit.com/en/ow2/room/1-17e5f3a9-feb8-4304-a913-c2eac40ebc0b
-https://www.faceit.com/en/ow2/room/1-3082abf5-71c8-4277-915c-0ed4b5a3b4ef
-https://www.faceit.com/en/ow2/room/1-3955ff43-cd98-4d15-880d-694abb224fcf
-https://www.faceit.com/en/ow2/room/1-4180cdd4-ea3a-494a-b7c5-a06be12b3762
-https://www.faceit.com/en/ow2/room/1-5353bac9-dda4-40d7-b065-0872ebd56b83
-https://www.faceit.com/en/ow2/room/1-5a4d40b7-9d75-4560-b62d-baacdcfd6c8f
-https://www.faceit.com/en/ow2/room/1-63e572b3-17a6-45b3-ad86-cc56c60969d4
-https://www.faceit.com/en/ow2/room/1-6f32deff-95cf-4a80-9d4a-f9cf7ea1cb52
-https://www.faceit.com/en/ow2/room/1-7ad6eefb-6017-4b0d-8e81-fa0af5dddc11
-https://www.faceit.com/en/ow2/room/1-7bdfe8dd-04aa-4944-8955-b4f620c24864
+# https://www.faceit.com/en/ow2/room/1-011595cb-30cb-4473-9414-44f0d65cd41c
+# https://www.faceit.com/en/ow2/room/1-0267a4ca-4bc0-4489-b13f-5e6ee845268b
+# https://www.faceit.com/en/ow2/room/1-0cb51949-cfb8-4789-8359-3b359dfed497
+# https://www.faceit.com/en/ow2/room/1-17e5f3a9-feb8-4304-a913-c2eac40ebc0b
+# https://www.faceit.com/en/ow2/room/1-3082abf5-71c8-4277-915c-0ed4b5a3b4ef
+# https://www.faceit.com/en/ow2/room/1-3955ff43-cd98-4d15-880d-694abb224fcf
+# https://www.faceit.com/en/ow2/room/1-4180cdd4-ea3a-494a-b7c5-a06be12b3762
+# https://www.faceit.com/en/ow2/room/1-5353bac9-dda4-40d7-b065-0872ebd56b83
+# https://www.faceit.com/en/ow2/room/1-5a4d40b7-9d75-4560-b62d-baacdcfd6c8f
+# https://www.faceit.com/en/ow2/room/1-63e572b3-17a6-45b3-ad86-cc56c60969d4
+# https://www.faceit.com/en/ow2/room/1-6f32deff-95cf-4a80-9d4a-f9cf7ea1cb52
+# https://www.faceit.com/en/ow2/room/1-7ad6eefb-6017-4b0d-8e81-fa0af5dddc11
+# https://www.faceit.com/en/ow2/room/1-7bdfe8dd-04aa-4944-8955-b4f620c24864
 
 # --- FACEIT NA Expert ---
-https://www.faceit.com/en/ow2/room/1-0c27f710-2057-45c7-a74b-1d52ad1769a5
-https://www.faceit.com/en/ow2/room/1-142a84b6-3bb7-4e57-87e0-fc68be5b50c3
-https://www.faceit.com/en/ow2/room/1-21eb11f1-5fdd-4a8f-8362-8f0d09b23713
-https://www.faceit.com/en/ow2/room/1-25392b44-33d7-44f2-a4df-2456a7b6a4e7
-https://www.faceit.com/en/ow2/room/1-26b6e459-82a9-44b0-b391-b29cd2407b58
-https://www.faceit.com/en/ow2/room/1-2b3c302e-b9c8-4cc2-8ff4-a9d78a2c8ffe
-https://www.faceit.com/en/ow2/room/1-3d7ec964-e2c4-42d5-816f-2132aba4151d
-https://www.faceit.com/en/ow2/room/1-4937b8c3-6e75-480d-8c9e-07e7eaa7949f
-https://www.faceit.com/en/ow2/room/1-636c94e4-a392-4fc4-be02-e6e604767385
-https://www.faceit.com/en/ow2/room/1-6bb4bb1c-16cc-49c6-8ef5-4bbcf2222b37
-https://www.faceit.com/en/ow2/room/1-7a943e13-89c8-4870-b57d-6117e17cdaf7
-https://www.faceit.com/en/ow2/room/1-8609f069-9225-4a32-abbd-1f380ca81a1b
-https://www.faceit.com/en/ow2/room/1-98dbb5d5-328f-465e-88c9-43db77e47b87
-https://www.faceit.com/en/ow2/room/1-a1be81bf-75f1-44b6-b872-8d6534f17b53
-https://www.faceit.com/en/ow2/room/1-a6b7bdab-4237-41dc-9c42-695d45db5fcf
-https://www.faceit.com/en/ow2/room/1-a7034d8e-5ef1-4ec2-b5ca-59e744a26f86
-https://www.faceit.com/en/ow2/room/1-acfd12b9-0e38-4a13-bbb0-e7c49b489977
-https://www.faceit.com/en/ow2/room/1-b3024f71-0553-4106-9672-887ea03acc33
-https://www.faceit.com/en/ow2/room/1-b4befe50-b679-4225-ab17-74d587323b2c
-https://www.faceit.com/en/ow2/room/1-bf24e27d-0fbd-4f03-ad90-80ea541e2751
-https://www.faceit.com/en/ow2/room/1-d1941e11-c9af-432d-93dc-a99f227293a4
-https://www.faceit.com/en/ow2/room/1-dee9cddb-254b-460d-91d0-8faadd661694
-https://www.faceit.com/en/ow2/room/1-e55c0b07-246e-4ffe-a60f-de5beac8044a
-https://www.faceit.com/en/ow2/room/1-e85f00a4-5432-413a-97b1-c192d89281cc
-https://www.faceit.com/en/ow2/room/1-ebbb608b-cf33-4c86-9f3b-1fb5b3fd323e
-https://www.faceit.com/en/ow2/room/1-f1b2064f-18a3-4fe1-8789-1a5b31a03412
-https://www.faceit.com/en/ow2/room/1-fae02765-abea-4f2f-bec2-d977a3a1693c
+# https://www.faceit.com/en/ow2/room/1-0c27f710-2057-45c7-a74b-1d52ad1769a5
+# https://www.faceit.com/en/ow2/room/1-142a84b6-3bb7-4e57-87e0-fc68be5b50c3
+# https://www.faceit.com/en/ow2/room/1-21eb11f1-5fdd-4a8f-8362-8f0d09b23713
+# https://www.faceit.com/en/ow2/room/1-25392b44-33d7-44f2-a4df-2456a7b6a4e7
+# https://www.faceit.com/en/ow2/room/1-26b6e459-82a9-44b0-b391-b29cd2407b58
+# https://www.faceit.com/en/ow2/room/1-2b3c302e-b9c8-4cc2-8ff4-a9d78a2c8ffe
+# https://www.faceit.com/en/ow2/room/1-3d7ec964-e2c4-42d5-816f-2132aba4151d
+# https://www.faceit.com/en/ow2/room/1-4937b8c3-6e75-480d-8c9e-07e7eaa7949f
+# https://www.faceit.com/en/ow2/room/1-636c94e4-a392-4fc4-be02-e6e604767385
+# https://www.faceit.com/en/ow2/room/1-6bb4bb1c-16cc-49c6-8ef5-4bbcf2222b37
+# https://www.faceit.com/en/ow2/room/1-7a943e13-89c8-4870-b57d-6117e17cdaf7
+# https://www.faceit.com/en/ow2/room/1-8609f069-9225-4a32-abbd-1f380ca81a1b
+# https://www.faceit.com/en/ow2/room/1-98dbb5d5-328f-465e-88c9-43db77e47b87
+# https://www.faceit.com/en/ow2/room/1-a1be81bf-75f1-44b6-b872-8d6534f17b53
+# https://www.faceit.com/en/ow2/room/1-a6b7bdab-4237-41dc-9c42-695d45db5fcf
+# https://www.faceit.com/en/ow2/room/1-a7034d8e-5ef1-4ec2-b5ca-59e744a26f86
+# https://www.faceit.com/en/ow2/room/1-acfd12b9-0e38-4a13-bbb0-e7c49b489977
+# https://www.faceit.com/en/ow2/room/1-b3024f71-0553-4106-9672-887ea03acc33
+# https://www.faceit.com/en/ow2/room/1-b4befe50-b679-4225-ab17-74d587323b2c
+# https://www.faceit.com/en/ow2/room/1-bf24e27d-0fbd-4f03-ad90-80ea541e2751
+# https://www.faceit.com/en/ow2/room/1-d1941e11-c9af-432d-93dc-a99f227293a4
+# https://www.faceit.com/en/ow2/room/1-dee9cddb-254b-460d-91d0-8faadd661694
+# https://www.faceit.com/en/ow2/room/1-e55c0b07-246e-4ffe-a60f-de5beac8044a
+# https://www.faceit.com/en/ow2/room/1-e85f00a4-5432-413a-97b1-c192d89281cc
+# https://www.faceit.com/en/ow2/room/1-ebbb608b-cf33-4c86-9f3b-1fb5b3fd323e
+# https://www.faceit.com/en/ow2/room/1-f1b2064f-18a3-4fe1-8789-1a5b31a03412
+# https://www.faceit.com/en/ow2/room/1-fae02765-abea-4f2f-bec2-d977a3a1693c
 
 # --- tier seeds: one match per new championship bootstraps the keyless crawler,
 #     which then discovers the rest of that division via the team graph. ---
 # S9 EMEA Advanced Central - Regular Season
-https://www.faceit.com/en/ow2/room/1-8c961674-2cd4-481f-b8d7-d080b67761ea
+# https://www.faceit.com/en/ow2/room/1-8c961674-2cd4-481f-b8d7-d080b67761ea
 # S9 EMEA Open Central - Regular Season — HELD (big crawl; add to enable):
 # https://www.faceit.com/en/ow2/room/1-8e9e5c59-0385-40b2-a74b-f9068e32ade4
 
@@ -135,12 +142,64 @@ https://www.faceit.com/en/ow2/room/1-8c961674-2cd4-481f-b8d7-d080b67761ea
 #     "… - Playoffs" championships are classified out of the tier views and
 #     attached to their regular-season division by the Playoffs tab. ---
 # S9 EMEA Master Central - Playoffs
-https://www.faceit.com/en/ow2/room/1-53ea44f5-5f07-42d3-abb4-ffccee8dba10
+# https://www.faceit.com/en/ow2/room/1-53ea44f5-5f07-42d3-abb4-ffccee8dba10
 # S9 EMEA Expert Central - Playoffs
-https://www.faceit.com/en/ow2/room/1-3d480662-3707-477f-81f0-fbf6e5b828c4
+# https://www.faceit.com/en/ow2/room/1-3d480662-3707-477f-81f0-fbf6e5b828c4
 # S9 EMEA Advanced Central - Playoffs
-https://www.faceit.com/en/ow2/room/1-833bb9d5-d5a8-4d42-ad53-70caf541c018
+# https://www.faceit.com/en/ow2/room/1-833bb9d5-d5a8-4d42-ad53-70caf541c018
 # S9 NA Master Central - Playoffs
-https://www.faceit.com/en/ow2/room/1-d626511d-01c8-40ef-b946-4ab562855833
+# https://www.faceit.com/en/ow2/room/1-d626511d-01c8-40ef-b946-4ab562855833
 # S9 NA Expert Central - Playoffs
-https://www.faceit.com/en/ow2/room/1-ff098a30-3bb5-4227-a3cf-862f321d9286
+# https://www.faceit.com/en/ow2/room/1-ff098a30-3bb5-4227-a3cf-862f321d9286
+
+# =====================================================================
+# SEASON 10 SEEDS — live. Collected by the operator 2026-09-05 and each one
+# verified against the FACEIT match API for the championship it belongs to
+# (they were all still SCHEDULED at that point, which is expected: the season
+# starts 2026-09-07). One room per division is enough — the keyless crawler
+# walks that division's team graph from it. A scheduled room stores its two
+# teams and the fixture, and upgrades to a full ingest once it FINISHES.
+#
+# There is no automated way to find these: FACEIT's keyless championship
+# listing refuses enumeration (err_f0, re-verified 2026-09-05), so every one
+# is hand-collected. Note the room URLs now use /en/ow/ rather than /en/ow2/;
+# parse_match_id reads the id, not the path, so both forms work.
+
+# S10 EMEA Master Central - Regular Season
+https://www.faceit.com/en/ow/room/1-a7d32b02-98c7-44a7-8ba4-5dc1274795e5
+# S10 EMEA Expert Central - Regular Season
+https://www.faceit.com/en/ow/room/1-dbf02a04-eaa6-4121-a881-a3a6b205c7d0
+# S10 EMEA Advanced Central - Regular Season
+https://www.faceit.com/en/ow/room/1-684a08f2-542a-4304-a0af-be640bdb0563
+# S10 NA Master Central - Regular Season
+https://www.faceit.com/en/ow/room/1-dfa3a6ee-e832-4628-8fae-e20e4e789afe
+# S10 NA Expert Central - Regular Season
+https://www.faceit.com/en/ow/room/1-58497839-714b-430e-a80b-c99086ad6f09
+# S10 NA Advanced Central - Regular Season   (new in the S10 scope)
+https://www.faceit.com/en/ow/room/1-b567ea32-82fb-4047-9840-302be5b375df
+# S10 SA Master Central - Regular Season     (new; SA runs Master + Open only)
+https://www.faceit.com/en/ow/room/1-51b674fa-d6cf-4fdf-aa78-1c9dec8db048
+# S10 OCE Master Central - Regular Season    (new; OCE runs Master + Open only)
+https://www.faceit.com/en/ow/room/1-02791658-84b8-4075-b113-5326cc5c0c56
+
+# Intermediate — NEW DIVISION and a scope change, seeded on the operator's
+# instruction 2026-09-05. It sits between Advanced and Open. The cap is 128 teams
+# per region, but the brackets came in at 46 (EMEA) and 56 (NA), so it is an
+# Advanced-sized division in practice, not an Open-sized one: it adds ~2.1 and
+# ~2.6 MB to docs/index.html, taking the whole S10 ingest from ~10.3 MB to
+# ~15.7 MB rather than the ~24 MB a full cap would have cost. Commenting these
+# two lines out is the entire revert if the page gets uncomfortable;
+# `--external-data` splitting is the other lever. Counts measured, not guessed —
+# see specs/2026-08-10-season10-cutover-design.md §7.
+# S10 EMEA Intermediate Central - Regular Season
+https://www.faceit.com/en/ow/room/1-ac42c87c-6bbc-4276-86f5-90437def5945
+# S10 NA Intermediate Central - Regular Season
+https://www.faceit.com/en/ow/room/1-6ee7fdfe-be06-4cd4-b356-16eed3d7f4ef
+
+# HELD, deliberately — add a room here only if the scope decision changes:
+# S10 EMEA/NA Open - Regular Season (129+ teams in EMEA alone, and the lowest
+#   scouting value in the league; it is the reason the page fits at all)
+
+# Season Finals (EMEA/NA, 9-15 November) have no seed line yet on purpose:
+# they are cross-tier, so the exporter has no division to attach them to.
+# Decide that shape before seeding one — design §6.4 group B.

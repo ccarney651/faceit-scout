@@ -17,6 +17,264 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-05
+
+### Added
+
+- **Season 10 is seeded — all ten divisions.** EMEA and NA Master, Expert,
+  Advanced and **Intermediate**, plus SA Master and OCE Master, each room checked
+  against the match API for the championship it belongs to. Season 9's seeds are
+  commented out, not deleted. Intermediate is a scope change: the division came
+  in at 46 (EMEA) and 56 (NA) teams against its 128 cap, so it is
+  Advanced-sized, and the whole S10 ingest sizes at **~15.7 MB** of
+  `docs/index.html` rather than the ~24 MB a filled cap would have cost. The
+  counts are measured, not estimated — a championship's subscription list is
+  readable keylessly, which the championship listing is not.
+
+
+- **`Intermediate` is a known skill tier**, between Advanced and Open, in both
+  `faceit_sync/export.py` and `tools/build_capture_data.py` (a test now pins the
+  two TIERS tuples together, as it already did for REGIONS), and in the
+  `--tier` choices. Season 10's new division is not in the ingest scope, but
+  without this entry seeding one would drop it out of its region's switcher into
+  the unclassified-name fallback, silently. Inert until such a championship
+  exists.
+### Changed
+
+- **The site now resolves the season it publishes instead of being pinned to
+  one.** New `faceit-sync resolve-season --season s10`: it prints the pin once
+  Season 10 has matches in the DB, and the newest season that does until then.
+  CI reads it once and uses that single value for BOTH the export and the
+  `data/captures/<season>/` directory it merges, so the page's standings and its
+  captured comps can never come from different seasons. The practical effect is
+  that the live site stays on Season 9 today and switches itself to Season 10 —
+  page and comps together — on the first S10 match that is actually PLAYED, with
+  no second commit at a moment nobody is watching. "Has data" deliberately means
+  a FINISHED match, not a seeded championship: the season's rooms enter the
+  database days before its first game, and resolving on names alone would empty
+  the live site the moment the seeds landed. The exporter's own fallback is
+  unchanged; it and the CLI now share one function (`models.resolve_season`)
+  rather than agreeing by hand.
+- **Contribution uploads move to Season 10.** `CURRENT_SEASON` in
+  `infra/upload-worker/worker.js` and `CONTRIB_DIR` in `owdb/contribute.py` are
+  both `s10`, and `data/captures/s10/` exists. **This is not live until someone
+  runs `wrangler deploy`** (invariant 11) — until then the Worker still writes to
+  `data/captures/s9/`, which is harmless while no replay code in the league is
+  live and wrong from the first S10 playday.
+
+### Fixed
+
+- **Seeding Season 10 no longer empties the scrim opponent pool.** The capture
+  feed's `team_rosters` — the teams a private scrim is matched against — is
+  scoped to the active season, chosen as the newest season *named* by any
+  championship. Seeding the S10 rooms made that S10 instantly, while the pool
+  itself is built from `round_players`, which only a played match has: the feed
+  went from 159 teams to **zero**, meaning no opponent identification at all,
+  during exactly the week when last season's squads are still the best guess
+  available. The active season is now the newest one that has actually produced
+  players, so the handover happens when there is something to hand over to.
+- **A seeded season is no longer mistaken for a played one.** Season resolution
+  first asked whether a season had championships, which is what the exporter's
+  own fallback had always done. Seeding the S10 rooms flipped it to `s10`
+  immediately — ten scheduled fixtures, no results — which would have replaced a
+  live Season 9 dashboard with empty standings for the two days until the season
+  started. It now resolves on championships with at least one FINISHED match,
+  which is the trigger the design always described in prose. A division that has
+  started still exports its upcoming fixtures; only the season-level switch waits
+  for a result.
+
+## 2026-09-01
+
+### Changed
+
+- **Seed collection for Season 10 unblocks on 3 September, not 7 September.**
+  FACEIT published the S10 calendar: the brackets — and therefore the first S10
+  match rooms — are generated **2026-09-03 15:30**, four days before the season
+  starts. The operator-gated backlog is re-dated to that, with the two caveats
+  that come with it: only round 1 exists on the day, and the unpaid-team clear
+  at 15:00 the same day removes teams irreversibly, so seeds read earlier are
+  provisional. `AGENTS.md` § Season state now carries the full calendar —
+  registration close, the two 3-playday weeks, roster lock 2026-10-12, Season
+  Finals 2026-11-09 → 2026-11-15, move-ups 2026-11-17. The 7 September season
+  start is unchanged, so `NEXT_SEASON_START` is confirmed correct rather than
+  updated.
+- **The Intermediate decision no longer waits for week 1 of Season 10.** It was
+  deferred on the grounds that the division's team count was unknowable until
+  the season ran; the bracket publishes it on 3 September, and FACEIT has capped
+  the division at 128 teams per region regardless. Still deferred, but now
+  decidable a fortnight earlier.
+
+### Notes
+
+- **Two S10 championship names would not classify, documented rather than
+  fixed.** `TIERS` has no `Intermediate`, so such a division would drop out of
+  its region's switcher into the unclassified-name fallback; and a
+  `… - Season Finals` championship is not matched by `is_playoff_name`, so it
+  would export as a standalone division with its own standings — and being
+  cross-tier (top 4 Master plus top 2 of each lower division), it has no single
+  region+tier division for the playoff-attachment step to hang it on. Neither is
+  reachable until the corresponding championship is seeded by hand. Written up
+  in `AGENTS.md` and `specs/BACKLOG.md`; no code changed.
+- **S10 disconnect counts will not be comparable to S9's.** Pause-on-disconnect
+  is gone, replaced by a single manual tech pause per team per map, so a
+  disconnect is now more likely to be played through than restarted. Expect
+  relatively more `dc_games` and fewer `was_restarted` games for the same
+  underlying rate. Neither is charted today — `dc_games` is carried in the
+  payload and never rendered — so nothing on the site is wrong; it is a trap for
+  the first cross-season trend line.
+- **The S10 map pool shipped 2026-08-31 matches the published rulebook**
+  (14 maps, verified name by name against the changelog), so `POOL` needed no
+  correction in this pass.
+
+## 2026-08-31
+
+### Changed
+
+- **Practice coverage now measures you against the FACEIT Season 10 map pool,
+  not the whole game.** S10 pools 14 of the 30 maps, so seeding the coverage
+  panel with all 30 marked 26 maps "never played" that you will never be drawn
+  on, burying the handful of real gaps. `POOL` in `docs/scrims.html` is now
+  Control: Busan, Nepal, Samoa - Escort: Junkertown, Route 66, Shambali
+  Monastery - Hybrid: Eichenwalde, Neon Junction, Paraiso - Push: Colosseo,
+  Esperanca - Flashpoint: Aatlis, New Junk City, Suravasa.
+
+  **No history is lost:** maps you scrimmed that are outside the pool still
+  appear with their counts, because `mapCoverage()` adds any played map it sees.
+  This list needs updating every season.
+
+### Added
+
+- **Aatlis (Flashpoint) and Neon Junction (Hybrid) in the scrim map picker.**
+  Both had been missing since release. `SCRIM_MAPS` in `docs/capture/scrim.html`
+  deliberately stays *every playable map* rather than the league pool: scrims are
+  booked on anything, and the list also backs `bestMapMatch()`, so a map absent
+  from it is a map the replay-history OCR cannot read at all.
+
+### Fixed
+
+- **The scrims viewer's test harness no longer breaks when the page grows.** It
+  ran the page's extracted script through `node -e`, and Windows caps a command
+  line at 32,767 characters - the section had reached ~30 KB, so the next few
+  lines of source would have failed the suite with `WinError 206`. It now writes
+  the script to a temp file.
+
+## 2026-08-30
+
+### Added
+
+- **`faceit-sync trials` — a local trialist comparison page.** Search every
+  league player by FACEIT nickname **or** in-game name across all regions, keep a
+  pool of candidates, and read them as columns in one table per role (Tank /
+  Damage / Support / Unassigned). Built for judging trial candidates against each
+  other; `specs/2026-08-30-trialist-comparison-design.md` has the reasoning.
+
+  **Its output is never committed and never published.** `/trials.html` is
+  gitignored (root-anchored — `faceit_sync/dashboard/trials.html` is the page's
+  shell and stays tracked) and the page never goes under `docs/`. A shortlist of
+  who you are trialling leaks recruiting intent.
+
+  Unlike `export`, it defaults to **every division in the database** rather than
+  one season: judging a trialist wants every map on record.
+
+### Changed
+
+- **Trials page: players are rows, not columns, and every column sorts.** The
+  first build put players in columns, which pushed a fourth candidate off-screen
+  and made you compare across a horizontal scrollbar. Modes, maps, hero pool and
+  team spells moved into a per-player expandable row. Missing values sort last in
+  both directions, so a player under the Eff floor never tops the list.
+- **Trials page: hand-assigned Hitscan / Flex DPS tables.** `HS` and `FLEX`
+  buttons on any damage player file them into their own table; anyone unassigned
+  stays under plain `Damage`. Manual because it cannot honestly be inferred —
+  separating the seats needs hero attribution, which covers 128 players in the
+  whole dataset. Choices persist per browser and outlive the pool. A seat only
+  ever replaces the Damage table, so a flex player keeps the tank table they
+  earned, and it is purely a grouping: Eff and its division-wide peer group are
+  untouched.
+- **Trials page: a Methodology section.** What every column means, where it comes
+  from and what it cannot tell you — including the limits (`vs team` is
+  structurally zero for full-timers; an empty hero pool means nobody captured
+  those games, not that the player is narrow; tiers are not a common scale) and
+  what the tool deliberately refuses to do. Every threshold it quotes is written
+  in from the constant it describes at page build, so the prose cannot drift from
+  the maths.
+- **Trials page: `Eff·n` replaced by `Rating`, three measured corrections to
+  Eff.** (1) K/D carries half the weight — measured against map win rate across
+  1033 players, K/D correlates +0.75 against damage +0.20, healing +0.05 and
+  mitigation +0.03, while Eff had been averaging the four equally. (2) A higher
+  division is worth +0.50 Eff per step, centred on Expert, measured from the 11
+  players who played in two tiers. (3) A thin record ranks down via a subtracted
+  standard error rather than the previous symmetric shrink toward zero — which
+  was provably wrong for ranking, since it lifted a weak small sample above an
+  identical larger one. Raw Eff keeps its own column.
+- ~~**Trials page: `Eff·n`, an Eff weighted by sample size, and the new default
+  sort.** Raw Eff's top end is mostly small-sample noise: across 1123 players the
+  SD of Eff is 0.679 at 5–14 maps against 0.356 at 50+, and 12.6% of low-sample
+  players clear |Eff|>1 against 1.0% of high-sample ones. (The means do *not*
+  differ — `corr(maps, Eff)` is +0.165 — so this is spread, not bias.) The column
+  shrinks each Eff toward its group mean by `n/(n+15)`. Raw Eff keeps its column;
+  only the ranking changes.~~ Superseded the same day by `Rating`, above.
+- **Trials page: `team %` and `vs team` columns.** A player's win rate is 82%
+  explained by which team they were on (measured, 1016 players); Eff is only 22%.
+  The team's own rate now sits beside the player's so an inflated one is visible.
+  Strength-of-schedule adjustment was measured and rejected — opponent quality
+  spans 47–57% within a division against team quality's 35–96%, so it is noise.
+- **`export_html()` split into `build_dashboard_data()` + a renderer.** The
+  payload half is now its own function, so the dashboard and the trials page
+  build their data through one code path and cannot drift.
+  `test_trials.py::test_build_dashboard_data_returns_what_export_html_inlines`
+  pins the two together. `export_html`'s signature and behaviour are unchanged.
+
+---
+
+## 2026-08-28
+
+### Added
+
+- **The ban phase went live, and in-game testing reshaped it.** The entry below
+  describes what was built; this is what shipped after four rounds of testing in
+  a real lobby. During setup each team's ban is displayed under its own team
+  header in that team's colour, updating the moment someone bans, and a third
+  control hint appears beside ready-up and add-time reading *"Ban <hero> for both
+  teams"* — resolved to each player's own keybind, so nobody has to be told which
+  key. While a round is playing the rows are drawn for **spectators and replays
+  only**, because players said the text cluttered their view and capture reads
+  the replay anyway.
+- **`6. Debug → Display Server Load`**, default off. ScrimTime and ScrimTime Lite
+  both ship this in their own Debug panels; ours was the only one of the three
+  that could not be measured against them. With the setting off, no HUD element
+  is created and it costs nothing.
+
+### Fixed
+- **The clear-ban hint stacked a new copy on every ban.** It was drawn only when
+  your team had something to clear, so each ban-after-clear flipped that
+  condition and created another line - nothing destroys HUD text until the round
+  starts. It is now drawn once per setup like every other control hint, and the
+  hero it would clear is read from the per-team `BAN:` lines instead of repeated
+  in the hint.
+- **A team could not undo its own ban.** The design specified clearing by
+  pressing the ban key again while on your own banned hero — which cannot happen,
+  because the ban removes that hero from every player including the banning team,
+  so you are force-swapped off it and can never be on it to press anything. With
+  R3 forbidding a start with exactly one ban, the only escape was the setup timer
+  wiping the lone ban at five seconds. Clearing is now its own bind,
+  `Interact + Crouch`, shown in the setup controls whenever your team has a ban
+  to clear.
+
+- **The ban rows vanished when the match started.** `destroyAllHudTexts()` wipes
+  every HUD element the instant a round begins, so anything created once by a
+  condition that never transitions again is erased and never returns. They are
+  now recreated per phase, the way the scoreboard survives the same call.
+- **Bans would have cleared between rounds of the same map.** The reset was
+  conditioned on `isInSetup()`, which is true at the setup of *every* round — so
+  Escort/Hybrid round 2, or each Control point, would have silently un-banned
+  both heroes mid-map. Round 1 now clears and later rounds inherit, while
+  remaining editable.
+- **`Read bans` was cropping the wrong part of the screen.** The crop was
+  anchored to the portrait strip, which sits centre-top, while the workshop draws
+  its column at the screen's left edge. It is frame-relative now, and needs no
+  calibration.
+
 ## 2026-08-27
 
 ### Added

@@ -58,7 +58,9 @@ faceit-sync fetch --matches-file matches.txt        # seed + keyless transitive 
 faceit-sync fetch --championship <id>               # enumerate (needs FACEIT_API_KEY)
 faceit-sync export --format html --out docs/index.html          # build the site
 faceit-sync export --format html --out docs/index.html --region na
-owdb ... contribute merge --dir data/captures/s9 --out owdb_comps.json
+faceit-sync resolve-season --season s10          # the season CI would publish today
+owdb ... contribute merge --dir data/captures/s10 --out owdb_comps.json
+faceit-sync trials --out trials.html                 # local trialist comparison (never commit it)
 ```
 
 ### Verifying the dashboard
@@ -110,7 +112,11 @@ canonical and this copy is the bug.
     feature.
 13. **The scrim lock must fail closed.** The overlay is static markup and the
     gate only removes it, so any failure leaves the page locked.
-14. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never commit or publish the trials page.** `faceit-sync trials` writes a
+    private page naming who you are trialling. `/trials.html` is gitignored
+    (root-anchored: `faceit_sync/dashboard/trials.html` is its shell and *is*
+    tracked), and it must never be written under `docs/`.
+15. **Never trust a replay code read through a hand-dragged calibration box.**
     Past ~±2% of strip error the read returns a well-formed *wrong* code, not a
     failure. The probes in `engine/replaycode.js` refuse there now; the
     sensitivity itself remains.
@@ -204,29 +210,84 @@ canonical and this copy is the bug.
   through that harness (`rowfind_sweep.py`, then `rowfind_parity.py`, which
   proves the shipped JS still matches the Python the sweep uses) **before** it
   goes anywhere near a live capture.
-- **Captures are season-scoped** (`data/captures/s9/`). Two writers key off a
+- **Captures are season-scoped** (`data/captures/s10/`). Two writers key off a
   per-season constant each: `CURRENT_SEASON` in `infra/upload-worker/worker.js`
-  and `CONTRIB_DIR` in `owdb/contribute.py`. At the cutover, follow
-  `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
-  **start at its §6**, which records what already shipped and resequences the
-  runbook. The two writers must move in the same change: a Worker writing to
-  `s10/` while CI still merges `s9/` silently drops every contribution.
-- **Coverage expands at the S10 cutover, not before** — §5 of that design.
-  Target: EMEA + NA Master/Expert/Advanced, SA Master, OCE Master; Open and
-  Intermediate deliberately excluded. Only three divisions are actually
-  missing (NA Advanced, SA Master, OCE Master) = +37% data, page 8.7 → 11.9 MB.
-  The SA/OCE region support is a four-line code change that is **inert until a
-  SA/OCE championship exists**, so land it early and keep it off the cutover
-  critical path. It **landed 2026-08-27** and is inert until a SA/OCE
-  championship exists, so what remains is seeds, not code.
-  `tools/build_capture_data.py` keeps its own `REGIONS` copy; a test now pins it
-  to `export.REGIONS`, because a region on the site but not in the feed is a
-  division missing from the capture app's dropdown with nothing to say so.
-  Intermediate is deliberately NOT in scope at the boundary — it is new, its
-  team count is unknown, and it is seeded in week 1 of S10 instead, when it is
-  countable and there is still nothing to back-crawl. Size divisions with the validated formulas in that section —
-  Master is `n(n-1)/2` exactly, every other tier is 7.43 matches/team, Open is
-  3.16 — rather than re-estimating.
+  and `CONTRIB_DIR` in `owdb/contribute.py`; both say `s10` since 2026-09-05, and
+  the Worker's copy is not live until someone deploys it. The *reader* no longer
+  needs keeping in step by hand — CI merges whichever season directory matches
+  the season it is publishing (`faceit-sync resolve-season`). At a cutover,
+  follow `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
+  **start at its §6**, then §7 for what actually shipped.
+- **The S10 coverage is seeded and measured (2026-09-05).** Ten divisions:
+  EMEA and NA Master/Expert/Advanced/**Intermediate**, plus SA Master and OCE
+  Master. Open stays out and is the reason the page fits at all. The team counts
+  are measured, not estimated — page through
+  `api.faceit.com/championships/v1/championship/{id}/subscription?limit=20&offset=N`
+  (keyless; `limit` over 20 returns 400, and no total is included, so page until
+  a short page comes back):
+
+  | | Master | Expert | Advanced | Intermediate |
+  | --- | --- | --- | --- | --- |
+  | EMEA | 16 | 27 | 43 | 46 |
+  | NA | 16 | 31 | 52 | 56 |
+  | SA | 10 | — | — | — |
+  | OCE | 8 | — | — | — |
+
+  That is ~2,540 matches with playoffs, ~9,140 games, **~15.7 MB** of
+  `docs/index.html` — against ~10.3 MB for the same scope without Intermediate.
+  `--external-data` splitting stays unnecessary. Size any future division with
+  the validated formulas rather than re-estimating: Master is `n(n-1)/2` exactly,
+  every other tier is 7.43 matches/team, Open is 3.16, 3.6 games a match, 1.76 KB
+  of page per game. Full working: design §7.1.
+- **The S10 caps are ceilings, not counts.** Master 16, Expert 32, Advanced 48,
+  Intermediate 128, Open uncapped (EMEA/NA only; SA and OCE run Master + Open).
+  Only Master fills its cap. Expert came in hardest under it — 41 → 27 in EMEA
+  and 49 → 31 in NA — and Intermediate arrived Advanced-sized at 46/56 rather
+  than anywhere near 128, which is the whole reason seeding it was affordable.
+  Also new in S10 and not yet modelled anywhere: a **Season Finals** bracket per
+  region (EMEA/NA, 9–15 November, 12 teams — top 4 of Master plus top 2 of each
+  lower division), which is a fifth thing after Playoffs that a season can end
+  in, and **no OWCS promotion/relegation** this season. Move-ups apply
+  2026-11-17. Source: <https://www.faceit.com/en/news/faceit-league-season-10>
+  (it 403s a plain fetch — curl it with a browser User-Agent and read the
+  `__NEXT_DATA__` blob).
+- **One S10 championship name still will not classify.** Both classifiers live
+  in `faceit_sync/models.py` / `faceit_sync/export.py` and key off the
+  championship *name* — there is no stage or tier column anywhere. `TIERS` gained
+  `Intermediate` on 2026-09-05, so that half is fixed. What remains:
+  - **"Season Finals" reads as a regular-season division.** `is_playoff_name`
+    matches only `playoff`/`knockout`, and `_PLAYOFF_STAGE_SUFFIX` strips only
+    `- Regular Season | Playoffs | Playoff Stage | Knockout Stage`. A
+    `… - Season Finals` championship therefore misses the playoff split, is
+    exported as its own division with its own standings table, and is *not*
+    attached to any division's Playoffs tab. It is also cross-tier by design
+    (top 4 Master + top 2 of each lower division), so even once classified it
+    has no single region+tier division to attach to — the current
+    playoff-attachment model does not have a shape for it. Decide that before
+    seeding a Season Finals room, not after.
+- **S10 division membership is not a function of S9 standings.** The Open
+  Qualifiers (20–23 August 2026) placed teams directly into Expert and Advanced,
+  on top of the usual move-ups. Anything that reasons "team X was in S9
+  Advanced, so it starts S10 in Advanced" is wrong for an unknown number of
+  teams; the S10 crawl is the only source for who is where.
+- **There are TWO map lists and they are deliberately different.** Changing one
+  is almost always wrong on its own:
+  - `SCRIM_MAPS` in `docs/capture/scrim.html` — **every playable map in the
+    game.** Scrims get booked on anything, and it also backs `bestMapMatch()`,
+    so a map missing here is a map the replay-history OCR cannot read at all.
+    Add new maps here the season they ship, whether or not the league pools
+    them. Nobody did: Neon Junction was missing since its release this year, and
+    Aatlis since June 2025 — over a year.
+  - `POOL` in `docs/scrims.html` — **the current FACEIT season's pool**, which
+    since S10 is a restricted subset (14 of 30). It seeds the practice-coverage
+    panel's "never played" rows, so it must be the maps you can actually be drawn
+    on. Refresh it every season from the season announcement. Dropping a map
+    loses no history: `mapCoverage()` adds any played map it sees, so an
+    off-pool map you did scrim still shows with its count.
+
+  Control maps additionally need `CONTROL_SUBMAPS`, which is forked in four
+  places — `owdb/maps.py` (canonical), `docs/capture/scrim.html`,
+  `docs/capture/index.html` and `tools/build_scrim_demo.py`.
 - **`mypy` covers `faceit_sync` only.** `owdb` is not in the must-stay-clean
   contract and currently reports two errors in `owdb/contribute.py`. Its tests
   are its safety net.
@@ -235,13 +296,67 @@ canonical and this copy is the bug.
 
 ## Roadmap
 
-### Season state (2026-08-27)
+### Season state (2026-09-01)
 
 **Season 9 is over** — last match 2026-08-17 — and **Season 10 starts Monday
-7 September 2026, 01:00 BST.** The league feed is empty until S10 games are
+7 September 2026, 01:00 BST** (confirmed by FACEIT's own announcement, so
+`NEXT_SEASON_START` is right). The league feed is empty until S10 games are
 played: all 4,456 coded S9 games predate the 2026-08-18 wipe, so nothing in S9
 is replayable and `docs/capture/data.json` carries `codes: 0`. CI's daily runs
 are healthy; a quiet commit log is no-change runs, not a break.
+
+**The S10 calendar is now published.** Times are as FACEIT stated them; the
+league runs on UTC and the announcement mixes UTC with unqualified local times,
+so treat anything without an explicit zone as approximate to the hour.
+
+| When | What | Why it matters here |
+| --- | --- | --- |
+| 2026-09-02 18:00 | Registration closes | Roster-addition cooldowns start applying from here |
+| 2026-09-03 15:00 | Unpaid-team clear | Teams below 5 paid passes are **irreversibly removed** — team lists before this are provisional |
+| **2026-09-03 15:30** | **Brackets generated** | **The operator gate.** Round 1 only; round 2 the next day, the rest as normal |
+| 2026-09-07 | Season start (day 1) | `NEXT_SEASON_START`; D.Mon is legal from this day |
+| week of 2026-09-21 | 3 playdays (lower divisions) | Denser than a normal week |
+| week of 2026-09-28 | 3 playdays (lower divisions **and** Master) | Master's only 3-playday week |
+| 2026-10-12 | **Roster lock** | After this the active-season roster is final — see the roster note below |
+| 2026-11-09 23:00 UTC → 2026-11-15 22:55 UTC | Season Finals | Rounds play 11/12/13 Nov, final 15 Nov |
+| 2026-11-17 | Move-ups and move-downs applied | S11 division membership resolves here |
+
+**Seed collection unblocks on 3 September, not on the 7th.** Bracket generation
+is what creates the S10 match rooms, so the hand-collected seed URLs
+(`matches.txt`) can be gathered four days before the first game. Everything
+`specs/BACKLOG.md` files under "around 7 September" is really "after 2026-09-03
+15:30". Two caveats: only round 1 exists on the day, and a division's bracket
+may lag the announced time — FACEIT says generation is slow and posts a separate
+notice when every division is done. Wait for that notice before concluding a
+division is missing.
+
+**Bracket generation is also when Intermediate becomes countable.** The deferred
+Intermediate call was scheduled for "week 1 of S10" on the grounds that nobody
+knew its team count; the bracket publishes it on 3 September, and the cap (128)
+is the ceiling regardless. The decision can be made a fortnight earlier than
+planned.
+
+**Roster churn in S10 is bounded, which the active-season roster pool can rely
+on.** Once the season begins a team gets **two** roster-addition slots with a
+**7-day cooldown**, in every division, and the roster is **locked outright on
+12 October**. So `team_rosters` drifts slowly and stops drifting entirely
+mid-season — a roster read after 12 October is final, not a snapshot.
+
+**S10 match data is not comparable to S9 on disconnects.** FACEIT removed
+pause-on-disconnect: a match no longer auto-pauses when someone drops, and each
+team instead gets a single manual tech pause per map, for technical issues only.
+The practical effect on the data is that a DC is now more likely to be *played
+through* than restarted, so S10 should show relatively more `dc_games`
+(`round_players.stats_captured=0`) and fewer `was_restarted` games than S9 for
+the same underlying rate of disconnects. Neither is displayed on the site
+today — `dc_games` is carried in the payload and never rendered, and
+`was_restarted` only drives the per-game "veto disrupted" tag — so nothing is
+broken by this. Do not put an S9-vs-S10 trend line on either without saying so.
+
+The rest of the S10 rulebook is near-identical to S9's, so nothing else in the
+ingest assumptions moves. FACEIT promised a per-playday key-dates article the
+day after the season-start post; if precise playday dates ever matter, that
+article — not this table — is the source.
 
 The readiness work is **done** (2026-08-27, `specs/2026-08-27-season10-readiness-plan.md`):
 Season 9 is frozen at `docs/s9/` behind `docs/archive.html`, SA/OCE are
@@ -250,13 +365,44 @@ finished one, and a pinned season with no data now falls back to the newest
 season that has some — so `--season` can be flipped at any time and the site
 switches itself over on the first ingested S10 match.
 
-**The cutover itself has NOT happened.** It is three lines plus a human
-`wrangler deploy`, written out verbatim in
-`specs/2026-08-10-season10-cutover-design.md` §6.4 group C. Only the export line
-is protected by the fallback: move the merge dir and `CURRENT_SEASON` with it,
-or every team's Season 9 comps attach to their Season 10 page by team id. What
-is left is seeds — which nothing can automate — and that one commit. Open items:
-`specs/BACKLOG.md` § "Added 2026-08-27".
+**The cutover has landed except the seeds (2026-09-05).** The pipeline no longer
+carries a season pin in two places that a human has to keep equal. CI asks
+`faceit-sync resolve-season --season s10` for the season it is publishing — the
+pin once S10 has matches, the newest season that does until then — and uses that
+one answer for BOTH the export and the `data/captures/<season>/` directory it
+merges. The site therefore still shows Season 9 today and switches itself over,
+page and captured comps together, on the first S10 match that is actually
+PLAYED — a seeded-but-unplayed season does not count, or the site would empty
+itself the day the rooms were added. Landed with
+it: `CURRENT_SEASON` in `infra/upload-worker/worker.js` and `CONTRIB_DIR` in
+`owdb/contribute.py` moved to `s10`, and `Intermediate` joined `TIERS` (inert
+until such a division is seeded, but without it one would fall out of its
+region's switcher silently).
+
+**Three things are still owed, and all three are the operator's:**
+
+1. **`wrangler deploy`** — invariant 11. Until it runs, the live Worker still
+   writes uploads to `data/captures/s9/`. That is harmless while no replay code
+   in the league is live, and wrong from the first S10 playday: an S10 capture
+   landing in `s9/` merges into the Season 9 page. Deploy before 7 September.
+2. ~~**The S10 seed URLs.**~~ **Done 2026-09-05** — all ten divisions are in
+   `matches.txt` and the S9 blocks are commented out. Scope grew by the
+   operator's decision to seed **Intermediate** in both regions: measured at 46
+   (EMEA) and 56 (NA) teams against a 128 cap, so the whole S10 ingest sizes at
+   ~15.7 MB of `docs/index.html`, against ~10.3 MB without it. Nothing crawls
+   until the first playday on 7 September: every seeded room is still SCHEDULED.
+3. **The S10 code-wipe date**, once the season-start patch lands — `_SEED_WIPES`
+   only (invariant 4). `LATEST_KNOWN_WIPE` is still 2026-08-18. **The patch is
+   Tuesday 2026-09-08**, so the entry is `("2026-09-07", ...)`: dated a day early
+   on purpose, the same as the 2026-08-18 entry, so games played after the patch
+   on the 8th stay scoutable. **Do not register it before the patch lands** —
+   `codeDead()` is `finished_at[:10] <= wipe`, so an early entry hides every
+   still-live code from the 7th and closes the only capture window Season 10's
+   first playday has.
+
+Open items: `specs/BACKLOG.md` § "Added 2026-08-27". The Season Finals shape
+(cross-tier, no division to attach to) is still undecided and still has until
+November.
 
 ### Priorities (ordered)
 
@@ -300,6 +446,22 @@ is left is seeds — which nothing can automate — and that one commit. Open it
    opponent identification and roster search (2); the stats read plus a workshop
    hero-glyph reference set (3); the viewer's Players tab (4); sync and sharing
    (5); auto map detection (6). See `ARCHITECTURE.md` §7.
+
+   **Hero bans shipped 2026-08-28**, outside those phases:
+   `tools/scrim_code/scrim_owdb.opy` runs a ban phase in setup and draws the
+   result as text on the spectator view; `docs/capture/engine/banrow.js` reads
+   it back. Design: `specs/2026-08-27-scrim-hero-bans-design.md`. Its §6.1
+   records two Overwatch behaviours that each cost an in-game test cycle and are
+   invisible from compiled output — `destroyAllHudTexts()` erasing anything
+   created by a condition that never transitions again, and `getAllPlayers()`
+   with `SpecVisibility.NEVER` rendering for nobody at all. Read it before
+   touching workshop HUD code.
+
+   **Bans and the spectator scoreboard only exist in lobbies running our
+   workshop code.** Scrims are hosted on a mix of ScrimTime, ScrimTime Lite and
+   ours, and Lite has no scoreboard — so a Lite-hosted scrim can never support
+   the phase 3 stats read. The share code `B4GM8` is what moves hosts onto ours;
+   see `tools/scrim_code/README.md`.
 
    **Auto map detection (6) is now cheaper than it was**: the code reader can
    already tell when the replay on screen is not the one being captured. It was

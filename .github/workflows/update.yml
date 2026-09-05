@@ -125,28 +125,37 @@ jobs:
           else
             echo "push event ($EVENT) - skipping FACEIT fetch; re-exporting from the cached DB"
           fi
+          # THE season this run publishes. The pin is s10; resolve-season returns
+          # it once S10 has matches and the newest season that does until then, so
+          # the site carries on through the boundary and switches itself over on
+          # the first PLAYED S10 match (a seeded room is not a played season).
+          # Merge and export both read this one
+          # value: a page whose standings and captured comps came from different
+          # seasons is the exact commingling the pin exists to prevent.
+          SEASON="$(faceit-sync --db faceit.sqlite3 resolve-season --season s10 || echo s10)"
+          echo "publishing season: $SEASON"
           # Scouting data arrives as RAW OBSERVATIONS, one file per contributor
-          # under data/captures/s9/ (season-scoped, so a future season's captures
-          # never mix into this one). Merge them here rather than committing a
+          # under data/captures/<season>/ (season-scoped, so one season's captures
+          # never mix into another's). Merge them here rather than committing a
           # derived payload: the report is then always computed by the current
           # analysis, so improvements apply retroactively to every past contribution.
           # First-wins on a contested map, ordered by commit date (a contributor
           # cannot vote on their own priority) - see owdb/contribute.py.
-          if [ -n "$(ls -A data/captures/s9/*.json 2>/dev/null)" ]; then
-            owdb --faceit-db faceit.sqlite3 contribute merge --dir data/captures/s9 --out owdb_comps.json --captured-out docs/captured.json
+          if [ -n "$(ls -A "data/captures/$SEASON"/*.json 2>/dev/null)" ]; then
+            owdb --faceit-db faceit.sqlite3 contribute merge --dir "data/captures/$SEASON" --out owdb_comps.json --captured-out docs/captured.json
           else
-            echo "no contributions yet - dashboard will build without captured comps"
+            echo "no contributions for $SEASON yet - dashboard will build without captured comps"
           fi
           # docs/index.html is the LIVE SITE and this job is its only writer.
           # export reads owdb_comps.json from the repo root.
           # No --region: the site ships EVERY division the DB holds, as switchable
           # views grouped by region (EMEA Master/Expert/Advanced + Combined, then
           # NA Master/Expert + Combined). Pass --region emea|na to narrow it again.
-          # --season s9 pins the live site to Season 9 even once S10 championship
-          # ids start appearing in the DB during the overlap period (S10 seeded
-          # into matches.txt before S9's playoffs finish). Bump to s10 at the
-          # actual cutover — see specs/2026-08-10-season10-cutover-design.md.
-          faceit-sync --db faceit.sqlite3 export --season s9 --format html --out docs/index.html
+          # --season is the resolved season above, not a second pin, so the page
+          # and the comps merged into it can never disagree. Past seasons live at
+          # docs/s<n>/ as frozen exports — see
+          # specs/2026-08-10-season10-cutover-design.md.
+          faceit-sync --db faceit.sqlite3 export --season "$SEASON" --format html --out docs/index.html
           # Codes + rosters feed for the browser capture app (docs/capture/). It
           # CONSUMES this instead of crawling FACEIT; refs.json is curator-committed.
           python tools/build_capture_data.py || echo "capture feed: skipped"

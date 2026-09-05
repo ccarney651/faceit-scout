@@ -32,7 +32,7 @@ const FORMAT = 1;
 // Bump at each season cutover — see specs/2026-08-10-season10-cutover-design.md
 // for the full runbook. Every upload path below is keyed off this so a cutover
 // is a one-line change, not a migration.
-const CURRENT_SEASON = "s9";
+const CURRENT_SEASON = "s10";
 
 export default {
   async fetch(request, env) {

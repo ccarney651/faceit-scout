@@ -89,6 +89,23 @@ def test_scrim_maps_include_all_request_modes() -> None:
     assert modes == {"Control", "Escort", "Hybrid", "Push", "Flashpoint"}
 
 
+def test_scrim_maps_offer_every_playable_map() -> None:
+    """The picker is for scrims, which are played on any map in the game - not
+    only the ones the current league season happens to pool.
+
+    It also backs bestMapMatch(), so a map missing here is a map the replay-history
+    OCR cannot recognise at all.
+    """
+    maps = _run("return SCRIM_MAPS;")
+    by_name = {m["name"]: m["cat"] for m in maps}
+    assert by_name.get("Aatlis") == "Flashpoint"
+    assert by_name.get("Neon Junction") == "Hybrid"
+    counts: dict[str, int] = {}
+    for cat in by_name.values():
+        counts[cat] = counts.get(cat, 0) + 1
+    assert counts == {"Control": 7, "Escort": 8, "Hybrid": 8, "Push": 4, "Flashpoint": 3}
+
+
 def test_picking_a_mode_filters_to_its_maps() -> None:
     """Changing the mode keeps only that mode's maps selectable."""
     maps = _run("return SCRIM_MAPS;")

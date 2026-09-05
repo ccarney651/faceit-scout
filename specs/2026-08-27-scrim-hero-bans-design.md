@@ -91,10 +91,19 @@ it in the order it happens.
 
 ### 3.1 Input
 
-During setup, switch to a hero and press `Interact + Melee`. Pressing it again
-while on your own banned hero **clears** the ban. Clearing is not a convenience:
-it is the only route back to "neither team banned" once a team has banned, and
-R3 below makes that a state teams will need to reach.
+During setup, switch to a hero and press `Interact + Melee`. Clearing your team's
+ban is a **separate bind**, `Interact + Crouch`, and it is not a convenience: R3
+below forbids starting a map with exactly one ban, so a team that bans while the
+other does not must be able to undo it.
+
+**This was originally specified as "press the ban key again while on your own
+banned hero", which does not work and shipped broken on 2026-08-28.**
+`Ban_Apply()` calls `setAllowedHeroes` on *every* player, the banning team
+included, so the banned hero leaves your own hero select and you are force-
+swapped off it — `getHero()` can never equal it again and the branch is
+unreachable. The only escape was the setup timer wiping a lone ban at five
+seconds (§3.4), which is a fallback, not a control. Fixed with a dedicated bind
+on 2026-08-28; the dead branch was removed rather than left looking functional.
 
 The binding is `Keybind_Command + Keybind_BanHero`, following the existing
 pattern where every combo pairs Command with one other button, and it is
@@ -317,6 +326,13 @@ Both cost a test cycle and neither was visible from the compiled output.
   on the first test. The scoreboard survives by being conditioned on
   `isGameInProgress()` with a `wait()`, so it is *recreated* after each wipe.
   Anything that must outlive the setup phase has to follow that pattern.
+- **A rule that creates HUD text must fire once per phase, not once per state
+  change.** The clear-ban hint was conditioned on "your team has a ban", which
+  flips false->true on every ban-after-clear - and each firing created another
+  copy, because nothing destroys HUD text until `destroyAllHudTexts()` at round
+  start. Three bans, three stacked hints. If a hint needs to reflect mutable
+  state, put the state in its *string* (re-evaluated) and never in its
+  *condition*.
 - **`getAllPlayers()` with `SpecVisibility.NEVER` renders for nobody.** Every
   `NEVER` row in `scrim_owdb.opy` targets `eventPlayer`; every `getAllPlayers()`
   row uses `ALWAYS` or default. The combination is used nowhere else and it

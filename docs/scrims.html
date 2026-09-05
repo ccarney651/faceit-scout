@@ -393,15 +393,24 @@ const SCRIM_MODES = ['Control','Escort','Hybrid','Push','Flashpoint'];
 //
 // Voided maps are excluded: a restarted map was not practice, and counting it
 // would say you covered a mode you actually abandoned.
-// Every map in the competitive pool, by mode. Listed for the same reason the
-// modes are: showing that you have played Ilios four times and Nepal never is
-// the point, and deriving the list from captured maps would hide Nepal.
+// The FACEIT League Season 10 map pool, by mode - the maps you can actually be
+// drawn against. Listed for the same reason the modes are: showing that you have
+// played Busan four times and Nepal never is the point, and deriving the list
+// from captured maps would hide Nepal.
+//
+// This is the league's pool, not the game's: Season 10 pools 14 of the 30 maps,
+// and seeding this panel with all 30 would mark 26 maps "never played" that you
+// will never be asked to play, burying the few gaps that matter. Maps outside
+// the pool that you did scrim still appear with their counts - mapCoverage()
+// adds any played map it sees - so dropping a map here loses no history.
+// Update this every season; the scrim picker in capture/scrim.html is separate
+// and deliberately keeps every playable map.
 const POOL = {
-  Control: ['Antarctic Peninsula','Busan','Ilios','Lijiang Tower','Nepal','Oasis','Samoa'],
-  Escort: ['Circuit Royal','Dorado','Havana','Junkertown','Rialto','Route 66','Shambali Monastery','Watchpoint: Gibraltar'],
-  Hybrid: ['Blizzard World','Eichenwalde','Hollywood',"King's Row",'Midtown','Numbani','Paraiso'],
-  Push: ['Colosseo','Esperanca','New Queen Street','Runasapi'],
-  Flashpoint: ['New Junk City','Suravasa'],
+  Control: ['Busan','Nepal','Samoa'],
+  Escort: ['Junkertown','Route 66','Shambali Monastery'],
+  Hybrid: ['Eichenwalde','Neon Junction','Paraiso'],
+  Push: ['Colosseo','Esperanca'],
+  Flashpoint: ['Aatlis','New Junk City','Suravasa'],
 };
 
 function mapCoverage(scrims, maps, today){

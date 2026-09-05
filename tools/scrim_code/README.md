@@ -121,6 +121,7 @@ Game menu.
 |---|---|
 | Ready up / unready | Interact + Reload |
 | Ban a hero (during setup) | Interact + Melee, while playing that hero |
+| Clear your team's ban (during setup) | Interact + Crouch |
 | Force team ready (hold) | Interact + Reload, hold 3 s |
 | Add setup time | Interact + Ultimate (+30 s, cap 90 s) |
 | Defender teleport | Interact + Jump |

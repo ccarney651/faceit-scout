@@ -403,7 +403,11 @@ current (explainable) draft sim.
 ## Added 2026-08-27 — end of Season 9
 
 S9 finished 2026-08-17. **Season 10 starts Monday 7 September 2026, 01:00
-BST.** Full analysis and the cutover runbook live in
+BST** — confirmed by FACEIT's announcement on 2026-09-01, along with the rest of
+the season calendar (registration close, bracket generation, roster lock
+12 October, Season Finals 9–15 November, move-ups 17 November). The full table
+is in `AGENTS.md` § Season state; read it before scheduling anything against a
+date. Full analysis and the cutover runbook live in
 `specs/2026-08-10-season10-cutover-design.md` §6; the readiness work that
 executed off it is `specs/2026-08-27-season10-readiness-plan.md`. Do not
 re-derive any of this — those documents carry the evidence.
@@ -444,24 +448,65 @@ the season-scoped export, and the obvious version (ship both seasons inline)
 roughly doubles page weight — the same `--external-data` question the
 Intermediate decision defers. Decide the two together.
 
-### P2 — Operator-gated, around 7 September
+### P2 — Operator-gated, from 2026-09-03 15:30
 
-- **S10 seed room URLs.** One FACEIT match room per division, collected by hand
-  once rooms exist. There is no automated path: FACEIT's keyless
+Re-dated 2026-09-01 against FACEIT's published S10 calendar (the full table is
+in `AGENTS.md` § Season state). **Bracket generation on 3 September 15:30 is
+what creates the S10 match rooms**, so this section unblocks four days before
+the 7 September season start, not on it. Only round 1 exists that day, and
+FACEIT posts a separate notice when every division's bracket is done — wait for
+it before concluding a division is missing. Note also that the unpaid-team clear
+at 15:00 the same day removes teams irreversibly, so any team list read before
+then is provisional.
+
+- ~~**S10 seed room URLs**~~ — **collected and landed 2026-09-05.** All ten
+  divisions (EMEA/NA Master, Expert, Advanced and Intermediate, plus SA and OCE
+  Master), each verified against the match API for the championship it belongs
+  to, with the S9 blocks commented out. Every room was still SCHEDULED, which is
+  what surfaced the "played, not seeded" correction to season resolution. The
+  crawl produces nothing until the first playday on 2026-09-07. There is no automated path: FACEIT's keyless
   `championships/v1/championships` refuses offset enumeration (verified
   2026-08-27). Seed NA Advanced, SA Master and OCE Master alongside the existing
   divisions.
-- **The Intermediate call, in week 1 of S10.** Deferred from the boundary
-  deliberately: Intermediate is new, nobody knows its team count, and at
-  Advanced's size it adds ~2.6 MB/region while at Open's it adds ~6.1 MB — the
-  difference between a 17 MB and a 24 MB page. Week 1 is when it becomes
-  countable and there is still almost nothing to back-crawl.
+- ~~**The Intermediate call**~~ — **decided IN, 2026-09-05**, by the operator
+  seeding both rooms. The measurement that backs it: the brackets are 46 teams
+  (EMEA) and 56 (NA) against a 128 cap, so it is an Advanced-sized division and
+  costs ~5.4 MB of `docs/index.html`, not the ~12 MB a full cap implied. Whole
+  S10 scope now sizes at **~15.7 MB** (10 divisions, ~2,540 matches), against
+  ~10.3 MB without it. Revert is two commented lines in `matches.txt`.
+- ~~**`TIERS` has no `Intermediate`**~~ — **shipped 2026-09-05**, in both the
+  exporter and `tools/build_capture_data.py` (the two tuples are now test-pinned
+  to each other, as REGIONS already was) and in the `--tier` choices. Inert until
+  an Intermediate championship is seeded; the scope decision to exclude one is
+  unchanged. Original entry: (`faceit_sync/export.py:506`). Prerequisite
+  for the item above: without it `_tier_of` returns `None`, and an Intermediate
+  division falls out of its region's switcher and Combined view into the
+  unclassified-name fallback. One entry, strongest-first per the S10 ladder
+  (Master, Expert, Advanced, **Intermediate**, Open). Inert until an
+  Intermediate championship is seeded, so it can land ahead of the decision.
+- **Decide what a "Season Finals" championship is before seeding one.** New in
+  S10 (EMEA/NA, 9–15 November, 12 teams: top 4 Master + top 2 of each lower
+  division). It is not a playoff by `is_playoff_name`, which matches only
+  `playoff`/`knockout`, so today it would export as its own division with its
+  own standings table. Widening that matcher is the easy half; the hard half is
+  that the Finals are **cross-tier**, and the playoff-attachment model keys on a
+  single region+tier division, so there is no existing slot to attach them to.
+  Not urgent — nothing exists to crawl until November — but it is a design
+  question, not a one-line fix.
 - **Register the S10 code-wipe date** when the season-start patch lands
   (`_SEED_WIPES` only).
-- **The cutover commit itself** — three lines, written out verbatim in the
-  design's §6.4 group C, plus a human `wrangler deploy`. Only the export line is
-  protected by the fallback; the merge dir and `CURRENT_SEASON` must move with
-  it or Season 9 comps attach to Season 10 teams by team id.
+- ~~**The cutover commit itself**~~ — **shipped 2026-09-05, in a better shape
+  than three lines.** CI no longer carries a season pin a human has to keep equal
+  in two places: `faceit-sync resolve-season --season s10` returns the season the
+  page will actually render, and the merge directory follows it. So the S9 site
+  keeps its comps until S10 has matches, and then page and comps switch together.
+  See the design's new §7. `CURRENT_SEASON` and `CONTRIB_DIR` moved to `s10` in
+  the same pass.
+- **`wrangler deploy` — outstanding, operator, before 2026-09-07.** Invariant 11:
+  the Worker in the repo says `s10` and the deployed one still says `s9`. Nothing
+  can be lost while no replay code in the league is live; from the first S10
+  playday an upload would land in `data/captures/s9/` and merge into the Season 9
+  page.
 
 ### Shipped 2026-08-27 — `team_rosters` is scoped to the active season
 
@@ -493,3 +538,70 @@ dependency.
 Both scrim pages ship locked behind `?unlock=scrimbeta`. **Asked and answered
 2026-08-27: keep it locked for now**, revisit when phase 2 (opponent
 identification / roster search) is complete.
+
+## Added 2026-08-28 — hero bans shipped
+
+### Shipped 2026-08-28 — hero bans, in game and read back
+
+Design `specs/2026-08-27-scrim-hero-bans-design.md`, plan `...-plan.md`, both
+executed and merged to `main` (`37cb66a`), live on owdb.io behind the existing
+`?unlock=scrimbeta` gate.
+
+One ban per team during setup, chosen by switching to the hero and pressing
+Interact + Melee, enforced with `setAllowedHeroes`. The two must be different
+roles; a map cannot start with exactly one; round 1 clears and later rounds
+inherit while staying editable. The rows are drawn as text on the spectator
+view, and `docs/capture/engine/banrow.js` reads them back into the panel's ban
+picker, abstaining rather than guessing.
+
+Live-verified in game: text rendering, the map name, survival into the replay,
+persistence across rounds on Control and Hybrid, the per-team display, and the
+keybind hint resolving to each player's own binding.
+
+### P1 — `Read bans` has never faced a real replay
+
+**The one thing between this feature and being trusted.** Every part of the
+workshop half is verified in game; the capture half has only ever seen synthetic
+strings. It needs one captured scrim, not a desk.
+
+Three outcomes to tell apart when it is finally run. Filling both heroes means
+the path works. Abstaining is informative and the reason matters — "could not
+find the BANS row" is a crop or OCR problem, "no hero matches X" is a name that
+did not resolve, "expected two bans, read N" is a garbled row. Returning the
+WRONG heroes should be impossible by construction (exact-after-normalization,
+no fuzzy fallback), so if it happens an assumption in the design's §4.3 is
+wrong and should be treated as urgent.
+
+Capture `LAST_BAN_READ.raw` before reloading — it holds exactly what tesseract
+saw, and is worth more than any description of the symptom.
+
+### P1 — Get the team's hosts onto the share code
+
+Bans and the spectator scoreboard only exist in lobbies running our workshop
+code, and scrims today are hosted on a mix of ScrimTime, ScrimTime Lite and
+ours. **`B4GM8`** (see `tools/scrim_code/README.md`) is what fixes that: a host
+loads five characters instead of pasting 60 KB.
+
+Two reasons this is P1 rather than housekeeping. Lite has no spectator
+scoreboard at all, so phase 3's stats read can never work in a Lite-hosted
+scrim. And **codes expire six months after creation** unless imported or
+uploaded to often enough — regular use by the team is what keeps `B4GM8` alive,
+so adoption is also maintenance.
+
+### P2 — Confirm who can update the share code
+
+`B4GM8` was uploaded from the alt account `ragecomic`, not `gcb`. If updating a
+code requires the account that published it, then that account is the only one
+that can ship workshop changes, and every future ban-logic change has to go
+through it. One test update from `gcb` settles it: if it mints a NEW code
+instead of updating, the team needs to know before hosts are stranded on a
+stale version.
+
+### P3 — Remaining in-game checks for the ban phase
+
+Not blockers, but unverified. `setAllowedHeroes` force-swapping a player already
+on the banned hero has only been exercised in a near-empty lobby. The R3 start
+guard has not been tested in **both** ready modes (`ReadyUp_CaptainMode` 0 and
+1) — it is a forked guard in two rules, and the wording differs between them,
+which is how a single find-and-replace would have patched only one. And the
+setup timer expiring while exactly one ban is set has never been triggered.

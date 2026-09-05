@@ -87,7 +87,7 @@ Every artifact in the system, who writes it, and who reads it.
                             │                   │
                             │                   │ owdb contribute publish
                             │                   ▼
-                            │        data/captures/s9/<contributor>.json
+                            │      data/captures/s10/<contributor>.json
                             │            (committed, one file each)
                             │                   │
                             │        owdb contribute merge  (at build time)
@@ -105,7 +105,7 @@ Every artifact in the system, who writes it, and who reads it.
 
     docs/capture/index.html ──uploads──► upload.owdb.io Worker
        (league capture)                        │
-            │                                  └──► commits data/captures/s9/
+            │                                  └──► commits data/captures/s10/
             │ reads
             ▼
     docs/capture/data.json      ← built by tools/build_capture_data.py
@@ -121,7 +121,7 @@ Every artifact in the system, who writes it, and who reads it.
 | --- | --- | --- | --- |
 | `faceit.sqlite3` | `faceit-sync fetch` | `faceit-sync export`, `owdb` (read-only) | No — two independent copies exist |
 | `owdb.sqlite3` | `owdb capture`, `owdb refs` | `owdb scout`, `owdb contribute` | No — local to each contributor |
-| `data/captures/s9/` | the upload Worker, or `owdb contribute publish` | `owdb contribute merge` | **Yes** — this is the durable record |
+| `data/captures/<season>/` | the upload Worker, or `owdb contribute publish` | `owdb contribute merge` | **Yes** — this is the durable record |
 | `owdb_comps.json` | `owdb contribute merge` at build time | `faceit-sync export` | **No** — deliberately regenerated |
 | `docs/index.html` | `.github/workflows/update.yml` **only** | the public | Yes |
 | `docs/captured.json` | `owdb contribute merge` | `docs/index.html` | Yes |
@@ -375,6 +375,16 @@ attached to their matching regular-season division rather than becoming their
 own view. The page has five tabs — Overview, Teams, Players, League meta,
 Matches — with hash routing; Playoffs is a mode *inside* the Matches tab, not a
 tab of its own.
+
+Both the grouping and the split read the championship **name** — there is no
+region, tier or stage column anywhere in the schema — so a name the classifiers
+do not recognise degrades rather than erroring. A division whose region or tier
+does not parse skips `by_region_tier` and lands in the fallback at the end of
+the view build: a plain view labelled with its raw championship name, outside
+the region grouping and outside Combined. A stage the split does not recognise
+is simply treated as a regular-season division. Season 10 introduces one of
+each — an Intermediate tier and a Season Finals stage — and neither classifies
+today; `AGENTS.md` records what that costs and why nothing has changed yet.
 
 **Four drill-ins hang off those tabs**, each a non-nav screen reached by hash:
 `#match=<id>`, `#scout=<team>` / `#prep=<team>`, `#compare=<A>|<B>`, and
@@ -930,6 +940,30 @@ unused `HERO_BY_GUID` map plus the `guid` payload field it read, and both were
 removed. `docs/scrims.html` is the single viewer, and the private side stays
 separate.
 
+**The map pool is two lists, and they answer different questions.**
+`SCRIM_MAPS` in `docs/capture/scrim.html` is every playable map in the game;
+`POOL` in `docs/scrims.html` is the current FACEIT season's pool. They were the
+same list until Season 10, which restricted the league to 14 of the 30 maps, and
+collapsing them back would break one of the two jobs:
+
+- The picker has to offer any map, because a scrim is booked on whatever the
+  other team agrees to — and because `bestMapMatch()` scans that same array to
+  recognise map names off the replay-history screen. A map absent from it is a
+  map the OCR silently cannot read.
+- The coverage panel has to list only the pool, because its whole output is
+  *which maps you have not practised*. Seeded with all 30 it called 26 maps
+  "never played" that the league will never draw you on, which buries the few
+  gaps that are real.
+
+Restricting `POOL` costs no history. `mapCoverage()` seeds a zero for each
+pooled map and then increments whatever it actually finds
+(`acc[cat].maps[m.map_name] = (acc[cat].maps[m.map_name]||0)+1`), so a map you
+scrimmed that has since left the pool still renders with its count — it just no
+longer gets a zero row when you have not touched it.
+
+Both lists are season-maintenance: refresh `POOL` from the season announcement,
+and add newly released maps to `SCRIM_MAPS` whether or not the league pools them.
+
 **The league-code block lives in `docs/capture/engine/session.js`.**
 `buildCodeIndex()` turns `docs/capture/data.json`'s `codes` array into a
 lookup keyed by normalized code; `classifyCode()` checks an entered code
@@ -958,6 +992,22 @@ would turn a safe abstention into a plausible wrong answer in a private log. And
 the row renders `NONE` explicitly rather than disappearing: an absent row means
 "could not read", a row reading `NONE` means "known, no bans", and the parser
 depends on telling those apart.
+
+**Who sees what is deliberate, and was got wrong twice.** During setup each
+team's ban is drawn under its own team header in that team's colour, for
+players; the combined `BANS  :` row is spectator-only in every phase, because a
+replay includes setup and the parser needs its anchor present in any frame it
+might read. While a round plays, players see nothing — the rows are
+spectator-and-replay only, which is where capture reads from. The mechanism is
+passing `null` as the HUD text's audience with `SpecVisibility.ALWAYS`, exactly
+how the scoreboard renders for a spectator but not a player. Note that
+`getAllPlayers()` paired with `SpecVisibility.NEVER` renders for **nobody** —
+that combination appears nowhere else in `scrim_owdb.opy` and does not display.
+
+**Bans exist only in lobbies running our workshop code.** Share code `B4GM8`
+(`tools/scrim_code/README.md`) is how a host loads it without pasting 60 KB.
+ScrimTime Lite has no spectator scoreboard at all, so a Lite-hosted scrim can
+never support the stats read either.
 
 Bans are only recorded in lobbies running **this** workshop code. Scrims hosted
 on stock ScrimTime or ScrimTime Lite have no ban row, and Lite has no spectator
@@ -1028,8 +1078,9 @@ by the commit that *added* their file, and a shallow clone cannot see it — eve
 file would look equally old and silently fall back to name order.
 
 **The build order per run** is: fetch matches → backfill Battle.net game names →
-merge `data/captures/s9/` into `owdb_comps.json` and `docs/captured.json` →
-export `docs/index.html` pinned with `--season s9` → rebuild
+resolve the season to publish (`faceit-sync resolve-season --season s10`) →
+merge `data/captures/<that season>/` into `owdb_comps.json` and
+`docs/captured.json` → export `docs/index.html` for the same season → rebuild
 `docs/capture/data.json` → publish a compacted, gzipped database snapshot to
 `docs/faceit.sqlite3.gz` → commit and push if anything changed.
 
@@ -1039,7 +1090,7 @@ export `docs/index.html` pinned with `--season s9` → rebuild
 
 | Route | Purpose |
 | --- | --- |
-| `/` (POST) | Accept a capture upload and commit it to `data/captures/s9/<name>.json` via the GitHub contents API |
+| `/` (POST) | Accept a capture upload and commit it to `data/captures/<CURRENT_SEASON>/<name>.json` via the GitHub contents API |
 | `/refresh` | Fire a `repository_dispatch` at the site repo — the "Refresh now" button |
 | `/claims`, `/claim`, `/unclaim`, `/claims/ws` | Live scouting claims, held in the `ClaimRoom` Durable Object |
 | `/auth/login`, `/auth/callback` | Discord OAuth login |
@@ -1082,10 +1133,13 @@ everything else looks fine.
 them** — the local one and CI's cached one. See
 [section 1](#1-the-map) and [invariant 2](#12-invariants).
 
-**Season is pinned in the export flag.** CI passes `--season s9` so the live site
-stays on Season 9 even once Season 10 championship IDs start appearing in the
-database during the overlap. Changing it is part of the cutover, not a casual
-edit — see [section 10](#10-lifecycles-and-operations).
+**The published season is resolved, not pinned twice.** CI asks
+`faceit-sync resolve-season --season s10` once and uses the answer for both the
+export and the captures directory it merges: the pin when Season 10 has matches,
+the newest season that does until then. So the site does not commingle seasons,
+does not need a human to flip anything on the day, and cannot ship one season's
+standings under another's captured comps — see
+[section 10](#10-lifecycles-and-operations).
 
 **Fetch errors are tolerated; the export is not.** A stray unreachable match must
 never block the daily update, so both fetch steps swallow errors and continue.
@@ -1296,16 +1350,20 @@ the two errors are not equal.
 
 ### Season cutover
 
-Season 9 finished on 2026-08-17, and the cutover has **not** happened. The
-safe-now subset (season-scoped captures and a season-filtered export) is shipped;
-the live site is pinned with `--season s9` in `.github/workflows/update.yml`.
+Season 9 finished on 2026-08-17 and is frozen at `docs/s9/`. As of 2026-09-05 the
+cutover is done in code and waits only on the operator: seed room URLs in
+`matches.txt`, a `wrangler deploy`, and the Season 10 code-wipe date.
 
-**The trigger is S10 having results, not S9 ending.** Those are weeks apart, and
-flipping the export to `--season s10` in between would publish an empty site —
-no standings, no rankings, no player pages. Until then the pin stays on `s9`,
-which also keeps trickling S10 rows out of the live site automatically. The
-work that *is* unblocked in the meantime (freeze the S9 archive, land SA/OCE
-region support) is sequenced in §6.4 of the design below.
+**The trigger is S10 having results, not S9 ending** — those are weeks apart, and
+publishing `--season s10` in between would mean an empty site. That is why the
+season is *resolved* rather than pinned: `faceit-sync resolve-season --season s10`
+answers `s10` from the first PLAYED Season 10 match — not from a seeded room —
+and the newest season with
+data before then, and CI uses that one answer for the export **and** the captures
+directory it merges. The site therefore switches itself over, page and comps
+together, with no commit and no human on the day. §7 of the design records why
+the original three-line flip was worse: it would have published Season 9 without
+its captured comps for as long as the seeds took to arrive.
 
 Do not improvise the cutover. The full sequence and the reasoning behind it —
 archive export, bumping the season constants in both the Worker and
@@ -1340,8 +1398,8 @@ The project's vocabulary, defined once.
 | **FLEX swap** | A mid-map hero change that keeps the comp's core intact. |
 | **CORE swap** | A mid-map change to a genuinely different comp. |
 | **Sub-role** | A finer classification than Tank/Damage/Support — see `faceit_sync/subroles.py`. |
-| **Region** | EMEA or NA. Parsed from the championship name. |
-| **Tier** | Master, Expert, Advanced, or Open — the division's competitive level. |
+| **Region** | EMEA, NA, SA or OCE — `export.REGIONS`. Parsed from the championship name as a whole word. SA and OCE run Master and Open only. |
+| **Tier** | The division's competitive level. FACEIT's Season 10 ladder is Open, **Intermediate**, Advanced, Expert, Master (Intermediate is new in S10, EMEA/NA only). `export.TIERS` lists only Master, Expert, Advanced, Open, strongest-first — a deliberate gap while Intermediate is out of ingest scope, so an Intermediate championship would not classify. See `AGENTS.md`. |
 | **Division** | A region-and-tier competition, e.g. "EMEA Master Central". |
 | **Season** | A league season, e.g. `s9`. Parsed from the championship name. |
 | **Faction** | FACEIT's name for a side in a match: `faction1` or `faction2`. |
@@ -1401,7 +1459,13 @@ Rules that must not be broken, each with the failure mode it prevents.
     markup and the gate script only ever *removes* it, so a syntax error, a
     blocked script or localStorage being unavailable all leave the page locked.
     A gate that added the overlay instead would open the page on any failure.
-14. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never commit or publish the trials page.** `faceit-sync trials`
+    (`faceit_sync/trials.py`) writes a private page naming the players you are
+    trialling, which leaks recruiting intent. `/trials.html` is gitignored
+    root-anchored, because `faceit_sync/dashboard/trials.html` is the page's
+    shell and must stay tracked; an unanchored pattern would untrack the shell.
+    The page must never be written under `docs/` (see invariant 10).
+15. **Never trust a replay code read through a hand-dragged calibration box.**
     The crop is fractions of that box, and beyond roughly ±2% of strip error the
     read does not fail — it returns a well-formed code belonging to another
     game. The geometry probes in `engine/replaycode.js` now refuse instead, but
