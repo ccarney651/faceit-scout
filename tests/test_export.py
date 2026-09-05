@@ -6,6 +6,7 @@ import io
 import json
 import re
 
+import pytest
 import responses
 from conftest import RESTART_DC_ID, make_client, register_match
 
@@ -411,6 +412,7 @@ def test_tier_and_region_classify_championship_names() -> None:
     assert _tier_of("S9 NA Expert Central - Regular Season") == "Expert"
     assert _tier_of("S9 EMEA Advanced Central - Regular Season") == "Advanced"
     assert _tier_of("S9 EMEA Open - Regular Season") == "Open"
+    assert _tier_of("S10 EMEA Intermediate Central - Regular Season") == "Intermediate"
     assert _tier_of("Regular Season Group A") is None
     assert _tier_of(None) is None
     assert _region_of("S9 EMEA Master Central - Regular Season") == "EMEA"
@@ -440,6 +442,15 @@ def test_season_matches_whole_word_only() -> None:
     assert _season_of("S90 EMEA Master Central - Regular Season") == "s90"
     assert _season_of("S9 EMEA Master Central - Regular Season") == "s9"
     assert _season_of("Class9 Something") is None
+
+
+def test_intermediate_ranks_between_advanced_and_open() -> None:
+    """TIERS order IS the division switcher's order, strongest first. Season 10
+    put Intermediate between Advanced and Open, so a wrong position here reads as
+    the league ladder being wrong, not as a cosmetic sort."""
+    from faceit_sync.export import TIERS
+
+    assert TIERS.index("Advanced") < TIERS.index("Intermediate") < TIERS.index("Open")
 
 
 def test_region_matches_whole_words_only() -> None:
@@ -544,9 +555,11 @@ def _seed_divisions(db: Database, names: dict[str, str]) -> None:
     """One finished match per championship, so each name becomes a division with
     data. Keys are championship ids, values the FACEIT championship names."""
     c = db.conn
-    c.execute("INSERT INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
+    # OR IGNORE so a test can seed a second season onto an already-seeded DB,
+    # which is what a season boundary looks like from the exporter's side.
+    c.execute("INSERT OR IGNORE INTO maps(guid,name,category) VALUES('m1','Ilios','Control')")
     for tid, nm in [("t1", "Alpha"), ("t2", "Bravo")]:
-        c.execute("INSERT INTO teams(id,name) VALUES(?,?)", (tid, nm))
+        c.execute("INSERT OR IGNORE INTO teams(id,name) VALUES(?,?)", (tid, nm))
     for cid, nm in names.items():
         c.execute("INSERT INTO championships(id,name,game,region) VALUES(?,?,?,'GLOBAL')",
                   (cid, nm, "ow2"))
@@ -571,6 +584,50 @@ def test_newest_season_picks_the_highest_number() -> None:
     assert _newest_season(reversed(names)) == "s10"
     assert _newest_season(["Winter Finale Cup", None]) is None
     assert _newest_season([]) is None
+
+
+def test_resolve_season_agrees_with_what_the_export_renders(
+        db: Database, capsys: pytest.CaptureFixture[str]) -> None:
+    """CI merges the captures of whatever `resolve-season` prints and exports with
+    the same pin. If the two ever disagree, one season's standings ship under
+    another season's scouting comps - the commingling the pin exists to stop.
+
+    So this asserts the agreement itself, in both states of a season boundary.
+    """
+    from faceit_sync.cli import main
+    from faceit_sync.models import resolve_season
+
+    _seed_divisions(db, {"s9m": "S9 EMEA Master Central - Regular Season"})
+    names = [r["name"] for r in db.conn.execute("SELECT name FROM championships")]
+
+    # Before the new season has data: the pin falls back, and both agree on s9.
+    assert resolve_season(names, "s10") == "s9"
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    assert _payload(buf)["season"] == "s9"
+    assert main(["--db", db.path, "resolve-season", "--season", "s10"]) == 0
+    assert capsys.readouterr().out.strip() == "s9"
+
+    # The first S10 match lands: the pin wins, and both switch together.
+    _seed_divisions(db, {"s10m": "S10 EMEA Master Central - Regular Season"})
+    names = [r["name"] for r in db.conn.execute("SELECT name FROM championships")]
+    assert resolve_season(names, "s10") == "s10"
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    assert _payload(buf)["season"] == "s10"
+    assert main(["--db", db.path, "resolve-season", "--season", "s10"]) == 0
+    assert capsys.readouterr().out.strip() == "s10"
+
+
+def test_resolve_season_without_a_pin_is_the_newest_season() -> None:
+    """No pin is not an error: it is "whatever the DB is newest on"."""
+    from faceit_sync.models import resolve_season
+
+    names = ["S9 EMEA Master Central - Regular Season",
+             "S10 EMEA Master Central - Regular Season"]
+    assert resolve_season(names, None) == "s10"
+    assert resolve_season(names, "  S9  ") == "s9", "the pin is trimmed and lowered"
+    assert resolve_season([], "s10") is None
 
 
 def test_pinned_season_with_no_data_falls_back_to_the_newest(db: Database) -> None:

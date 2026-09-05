@@ -403,7 +403,11 @@ current (explainable) draft sim.
 ## Added 2026-08-27 — end of Season 9
 
 S9 finished 2026-08-17. **Season 10 starts Monday 7 September 2026, 01:00
-BST.** Full analysis and the cutover runbook live in
+BST** — confirmed by FACEIT's announcement on 2026-09-01, along with the rest of
+the season calendar (registration close, bracket generation, roster lock
+12 October, Season Finals 9–15 November, move-ups 17 November). The full table
+is in `AGENTS.md` § Season state; read it before scheduling anything against a
+date. Full analysis and the cutover runbook live in
 `specs/2026-08-10-season10-cutover-design.md` §6; the readiness work that
 executed off it is `specs/2026-08-27-season10-readiness-plan.md`. Do not
 re-derive any of this — those documents carry the evidence.
@@ -444,24 +448,68 @@ the season-scoped export, and the obvious version (ship both seasons inline)
 roughly doubles page weight — the same `--external-data` question the
 Intermediate decision defers. Decide the two together.
 
-### P2 — Operator-gated, around 7 September
+### P2 — Operator-gated, from 2026-09-03 15:30
 
-- **S10 seed room URLs.** One FACEIT match room per division, collected by hand
+Re-dated 2026-09-01 against FACEIT's published S10 calendar (the full table is
+in `AGENTS.md` § Season state). **Bracket generation on 3 September 15:30 is
+what creates the S10 match rooms**, so this section unblocks four days before
+the 7 September season start, not on it. Only round 1 exists that day, and
+FACEIT posts a separate notice when every division's bracket is done — wait for
+it before concluding a division is missing. Note also that the unpaid-team clear
+at 15:00 the same day removes teams irreversibly, so any team list read before
+then is provisional.
+
+- **S10 seed room URLs — the one thing everything else waits on.** A commented
+  block at the foot of `matches.txt` now names every division in scope, one line
+  each: paste a finished match room and uncomment. Re-verified 2026-09-05 that
+  there is no automated path (keyless listing answers `err_f0`, and
+  organizer-filtered needs a key). Note a room seeds nothing until one of its
+  matches is FINISHED, so round-1 rooms are only useful after the first playday.
+  One FACEIT match room per division, collected by hand
   once rooms exist. There is no automated path: FACEIT's keyless
   `championships/v1/championships` refuses offset enumeration (verified
   2026-08-27). Seed NA Advanced, SA Master and OCE Master alongside the existing
   divisions.
-- **The Intermediate call, in week 1 of S10.** Deferred from the boundary
-  deliberately: Intermediate is new, nobody knows its team count, and at
-  Advanced's size it adds ~2.6 MB/region while at Open's it adds ~6.1 MB — the
-  difference between a 17 MB and a 24 MB page. Week 1 is when it becomes
-  countable and there is still almost nothing to back-crawl.
+- **The Intermediate call — now available from 3 September, not week 1.**
+  Deferred from the boundary because nobody knew its team count; the bracket
+  publishes that count on 3 September, and FACEIT has since capped the division
+  at **128 teams per region** (EMEA/NA only), which is the ceiling either way.
+  At Advanced's size it adds ~2.6 MB/region and at Open's ~6.1 MB — the
+  difference between a 17 MB and a 24 MB page. Deciding now still gets the "next
+  to nothing to back-crawl" benefit, a fortnight earlier than planned.
+- ~~**`TIERS` has no `Intermediate`**~~ — **shipped 2026-09-05**, in both the
+  exporter and `tools/build_capture_data.py` (the two tuples are now test-pinned
+  to each other, as REGIONS already was) and in the `--tier` choices. Inert until
+  an Intermediate championship is seeded; the scope decision to exclude one is
+  unchanged. Original entry: (`faceit_sync/export.py:506`). Prerequisite
+  for the item above: without it `_tier_of` returns `None`, and an Intermediate
+  division falls out of its region's switcher and Combined view into the
+  unclassified-name fallback. One entry, strongest-first per the S10 ladder
+  (Master, Expert, Advanced, **Intermediate**, Open). Inert until an
+  Intermediate championship is seeded, so it can land ahead of the decision.
+- **Decide what a "Season Finals" championship is before seeding one.** New in
+  S10 (EMEA/NA, 9–15 November, 12 teams: top 4 Master + top 2 of each lower
+  division). It is not a playoff by `is_playoff_name`, which matches only
+  `playoff`/`knockout`, so today it would export as its own division with its
+  own standings table. Widening that matcher is the easy half; the hard half is
+  that the Finals are **cross-tier**, and the playoff-attachment model keys on a
+  single region+tier division, so there is no existing slot to attach them to.
+  Not urgent — nothing exists to crawl until November — but it is a design
+  question, not a one-line fix.
 - **Register the S10 code-wipe date** when the season-start patch lands
   (`_SEED_WIPES` only).
-- **The cutover commit itself** — three lines, written out verbatim in the
-  design's §6.4 group C, plus a human `wrangler deploy`. Only the export line is
-  protected by the fallback; the merge dir and `CURRENT_SEASON` must move with
-  it or Season 9 comps attach to Season 10 teams by team id.
+- ~~**The cutover commit itself**~~ — **shipped 2026-09-05, in a better shape
+  than three lines.** CI no longer carries a season pin a human has to keep equal
+  in two places: `faceit-sync resolve-season --season s10` returns the season the
+  page will actually render, and the merge directory follows it. So the S9 site
+  keeps its comps until S10 has matches, and then page and comps switch together.
+  See the design's new §7. `CURRENT_SEASON` and `CONTRIB_DIR` moved to `s10` in
+  the same pass.
+- **`wrangler deploy` — outstanding, operator, before 2026-09-07.** Invariant 11:
+  the Worker in the repo says `s10` and the deployed one still says `s9`. Nothing
+  can be lost while no replay code in the league is live; from the first S10
+  playday an upload would land in `data/captures/s9/` and merge into the Season 9
+  page.
 
 ### Shipped 2026-08-27 — `team_rosters` is scoped to the active season
 

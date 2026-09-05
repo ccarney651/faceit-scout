@@ -331,6 +331,19 @@ def test_capture_feed_regions_match_the_exporter(
     assert tuple(mod.REGIONS) == REGIONS
 
 
+def test_capture_feed_tiers_match_the_exporter(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Same drift, one tuple over: the feed's own TIERS builds the app's division
+    list. A tier the site knows and the feed does not is a division nobody can
+    pick a code from, with nothing anywhere to say so."""
+    from faceit_sync.export import TIERS
+
+    db = tmp_path / "feed.sqlite3"
+    _fixture_db(db, "2026-07-28")
+    mod = _load_tool(monkeypatch, db, tmp_path / "out.json")
+    assert tuple(mod.TIERS) == TIERS
+
+
 def test_team_rosters_cover_only_the_active_season(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

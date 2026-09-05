@@ -144,3 +144,52 @@ https://www.faceit.com/en/ow2/room/1-833bb9d5-d5a8-4d42-ad53-70caf541c018
 https://www.faceit.com/en/ow2/room/1-d626511d-01c8-40ef-b946-4ab562855833
 # S9 NA Expert Central - Playoffs
 https://www.faceit.com/en/ow2/room/1-ff098a30-3bb5-4227-a3cf-862f321d9286
+
+# =====================================================================
+# SEASON 10 SEEDS — one finished match room per division, then uncomment.
+#
+# One room is enough: the keyless crawler walks that division's team graph
+# from it and discovers the rest. There is NO automated way to find them —
+# FACEIT's keyless championship listing refuses enumeration (err_f0 "not
+# authorized" / "cannot see unpublished competitions unless you filter by
+# organizer id", re-verified 2026-09-05), and the organizer-filtered call
+# needs a FACEIT_API_KEY. So these come off each division's bracket page by
+# hand. Brackets generated 2026-09-03 15:30; a division whose bracket lagged
+# that time is normal, FACEIT posts a notice once every one is done.
+#
+# A room seeds nothing until one of its matches is FINISHED — an upcoming
+# round-1 room ingests zero games. Season starts 2026-09-07, so expect the
+# first useful crawl after the first playday.
+#
+# When these are filled in, comment out the S9 blocks above: Season 9 is
+# over and frozen at docs/s9/index.html, so its rooms only cost crawl time.
+#
+# Scope is the operator's decision of 2026-08-20: EMEA and NA Master/Expert/
+# Advanced, plus SA Master and OCE Master. Open and Intermediate stay out —
+# see specs/2026-08-10-season10-cutover-design.md §5.
+
+# S10 EMEA Master - Regular Season
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 EMEA Expert - Regular Season
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 EMEA Advanced - Regular Season
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 NA Master - Regular Season
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 NA Expert - Regular Season
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 NA Advanced - Regular Season   (NEW in S10 scope)
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 SA Master - Regular Season     (NEW in S10 scope; SA runs Master + Open only)
+# https://www.faceit.com/en/ow2/room/<match-id>
+# S10 OCE Master - Regular Season    (NEW in S10 scope; OCE runs Master + Open only)
+# https://www.faceit.com/en/ow2/room/<match-id>
+
+# HELD, deliberately — add a room here only if the scope decision changes:
+# S10 EMEA/NA Intermediate - Regular Season (new division, capped 128/region;
+#   TIERS already classifies it, so seeding one is all that is needed)
+# S10 EMEA/NA Open - Regular Season (129+ teams; the reason the page fits)
+
+# Season Finals (EMEA/NA, 9-15 November) have no seed line yet on purpose:
+# they are cross-tier, so the exporter has no division to attach them to.
+# Decide that shape before seeding one — design §6.4 group B.

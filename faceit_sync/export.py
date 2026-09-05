@@ -15,7 +15,7 @@ from typing import Any, TextIO
 from ._dashboard import HTML_TEMPLATE
 from .db import Database
 from .hero_icons import load_hero_icons
-from .models import is_playoff_name, newest_season, season_of
+from .models import is_playoff_name, newest_season, resolve_season, season_of
 from .subroles import SEAT_ORDER, seat_of
 from .team_logos import build_team_logos
 
@@ -503,7 +503,13 @@ def _dashboard_data(db: Database, cid: str,
 # The FACEIT League skill tiers, strongest to weakest. Championship names carry
 # the tier word ("S9 EMEA Master Central …", "… Expert …", "… Advanced …",
 # "… Open …"). Order drives the site's division switcher (strongest first).
-TIERS: tuple[str, ...] = ("Master", "Expert", "Advanced", "Open")
+#
+# Intermediate is new in Season 10 and sits BETWEEN Advanced and Open (EMEA and
+# NA only, capped at 128 teams). The entry is inert until such a championship is
+# seeded, and is kept whether or not one ever is: without it _tier_of returns
+# None for an Intermediate division, which drops it out of its region's switcher
+# and Combined view into the unclassified-name fallback, silently.
+TIERS: tuple[str, ...] = ("Master", "Expert", "Advanced", "Intermediate", "Open")
 
 
 def _tier_of(name: str | None) -> str | None:
@@ -606,7 +612,7 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
                 # exits 1, which under CI's `bash -e` fails the whole job.
                 # An explicit pin always wins when it has data; this only ever
                 # covers the gap.
-                fallback = _newest_season([r["name"] for r in rows])
+                fallback = resolve_season([r["name"] for r in rows], want_season)
                 log.warning("season %s has no data yet - falling back to %s",
                             want_season, fallback or "(no season could be parsed)")
                 rows = ([r for r in rows if _season_of(r["name"]) == fallback]

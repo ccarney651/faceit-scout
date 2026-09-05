@@ -14,6 +14,7 @@ from . import __version__
 from .client import FaceitClient
 from .db import Database
 from .export import REGIONS, export_csv, export_html, export_json, team_stats
+from .models import resolve_season
 from .sync import DEFAULT_BACKFILL_DAYS, EnumerationError, SyncEngine
 from .trials import write_trials_page
 
@@ -122,6 +123,21 @@ def cmd_trials(args: argparse.Namespace) -> int:
         print("no data to build a trials page from yet", file=sys.stderr)
         return 1
     log.info("wrote the trials page for %d division(s) to %s", n, args.out)
+    return 0
+
+
+def cmd_resolve_season(args: argparse.Namespace) -> int:
+    """Print the season a pinned export would ACTUALLY render, one line, no
+    decoration - it is read by CI to pick the captures directory to merge, so
+    that the comps on the page always come from the season the page shows.
+    """
+    with Database(_db_path(args)) as db:
+        rows = db.conn.execute("SELECT name FROM championships").fetchall()
+    season = resolve_season([r["name"] for r in rows], args.season)
+    if season is None:
+        print("no season could be parsed from the database", file=sys.stderr)
+        return 1
+    print(season)
     return 0
 
 
@@ -244,7 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--championship", default=None,
                    help="championship id (optional; auto-detected when only one is stored)")
     e.add_argument("--format", choices=("csv", "json", "html"), required=True)
-    e.add_argument("--tier", choices=("master", "expert", "advanced", "open"), default=None,
+    e.add_argument("--tier", choices=("master", "expert", "advanced", "intermediate", "open"), default=None,
                    help="restrict the HTML dashboard to one skill tier (default: all)")
     # Derived from export.REGIONS rather than restated, so a new region cannot
     # ship on the site while the CLI still refuses to name it.
@@ -258,6 +274,15 @@ def build_parser() -> argparse.ArgumentParser:
                    help="html only: write the data to a sibling data.json the page fetches "
                         "(shell build) instead of inlining it — the seam for future access gating")
     e.set_defaults(func=cmd_export)
+
+    rs = sub.add_parser(
+        "resolve-season",
+        help="print the season a pinned export would actually render (the pin "
+             "when it has data, else the newest season that does)",
+    )
+    rs.add_argument("--season", default=None,
+                    help="the pinned season, e.g. 's10' (default: newest with data)")
+    rs.set_defaults(func=cmd_resolve_season)
 
     s = sub.add_parser("stats", help="team ban tendencies, map picks, win rates")
     s.add_argument("--team", required=True, help="team name")
@@ -283,7 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="output path (default: trials.html)")
     t.add_argument("--championship", default=None,
                    help="restrict to one championship id (default: all)")
-    t.add_argument("--tier", choices=("master", "expert", "advanced", "open"),
+    t.add_argument("--tier", choices=("master", "expert", "advanced", "intermediate", "open"),
                    default=None, help="restrict to one tier (default: all)")
     t.add_argument("--region", choices=tuple(r.lower() for r in REGIONS),
                    default=None, help="restrict to one region (default: all)")

@@ -43,7 +43,10 @@ REGIONS = ("EMEA", "NA", "SA", "OCE")
 # Single source of truth for the league-wide replay-code wipe: owdb.db's
 # LATEST_KNOWN_WIPE (never duplicate it here — bump it in _SEED_WIPES instead).
 CODE_WIPE_DATE = LATEST_KNOWN_WIPE
-TIERS = ("Master", "Expert", "Advanced", "Open")
+# Skill tiers, strongest first, likewise kept in sync with
+# faceit_sync.export.TIERS (a test pins the two together). Intermediate is
+# Season 10's new division, between Advanced and Open.
+TIERS = ("Master", "Expert", "Advanced", "Intermediate", "Open")
 
 
 def _tier(name: str) -> str | None:

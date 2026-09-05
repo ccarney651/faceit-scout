@@ -49,7 +49,11 @@ log = logging.getLogger("owdb.contribute")
 # do not understand rather than silently misreading a contributor's data.
 CONTRIB_FORMAT = 1
 
-CONTRIB_DIR = "data/captures/s9"
+# Where contributions for the CURRENT season live. Season-scoped so one
+# season's comps can never feed the next one's scouting. Bump at a cutover,
+# together with CURRENT_SEASON in infra/upload-worker/worker.js — the Worker
+# writes the files this reads, and a mismatch drops every upload silently.
+CONTRIB_DIR = "data/captures/s10"
 
 # The deployed upload worker. Baked into builds so end users configure
 # NOTHING; empty until the curator deploys infra/upload-worker.

@@ -17,6 +17,117 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-05
+
+### Changed
+
+- **The site now resolves the season it publishes instead of being pinned to
+  one.** New `faceit-sync resolve-season --season s10`: it prints the pin once
+  Season 10 has matches in the DB, and the newest season that does until then.
+  CI reads it once and uses that single value for BOTH the export and the
+  `data/captures/<season>/` directory it merges, so the page's standings and its
+  captured comps can never come from different seasons. The practical effect is
+  that the live site stays on Season 9 today and switches itself to Season 10 —
+  page and comps together — on the first ingested S10 match, with no second
+  commit at a moment nobody is watching. The exporter's own fallback is
+  unchanged; it and the CLI now share one function (`models.resolve_season`)
+  rather than agreeing by hand.
+- **Contribution uploads move to Season 10.** `CURRENT_SEASON` in
+  `infra/upload-worker/worker.js` and `CONTRIB_DIR` in `owdb/contribute.py` are
+  both `s10`, and `data/captures/s10/` exists. **This is not live until someone
+  runs `wrangler deploy`** (invariant 11) — until then the Worker still writes to
+  `data/captures/s9/`, which is harmless while no replay code in the league is
+  live and wrong from the first S10 playday.
+
+### Added
+
+- **`Intermediate` is a known skill tier**, between Advanced and Open, in both
+  `faceit_sync/export.py` and `tools/build_capture_data.py` (a test now pins the
+  two TIERS tuples together, as it already did for REGIONS), and in the
+  `--tier` choices. Season 10's new division is not in the ingest scope, but
+  without this entry seeding one would drop it out of its region's switcher into
+  the unclassified-name fallback, silently. Inert until such a championship
+  exists.
+- **A Season 10 seed block at the foot of `matches.txt`** — one commented line
+  per division in the agreed scope, with what is known about collecting them.
+  The URLs themselves are hand-collected: FACEIT's keyless championship listing
+  refuses enumeration, re-verified 2026-09-05.
+
+## 2026-09-01
+
+### Changed
+
+- **Seed collection for Season 10 unblocks on 3 September, not 7 September.**
+  FACEIT published the S10 calendar: the brackets — and therefore the first S10
+  match rooms — are generated **2026-09-03 15:30**, four days before the season
+  starts. The operator-gated backlog is re-dated to that, with the two caveats
+  that come with it: only round 1 exists on the day, and the unpaid-team clear
+  at 15:00 the same day removes teams irreversibly, so seeds read earlier are
+  provisional. `AGENTS.md` § Season state now carries the full calendar —
+  registration close, the two 3-playday weeks, roster lock 2026-10-12, Season
+  Finals 2026-11-09 → 2026-11-15, move-ups 2026-11-17. The 7 September season
+  start is unchanged, so `NEXT_SEASON_START` is confirmed correct rather than
+  updated.
+- **The Intermediate decision no longer waits for week 1 of Season 10.** It was
+  deferred on the grounds that the division's team count was unknowable until
+  the season ran; the bracket publishes it on 3 September, and FACEIT has capped
+  the division at 128 teams per region regardless. Still deferred, but now
+  decidable a fortnight earlier.
+
+### Notes
+
+- **Two S10 championship names would not classify, documented rather than
+  fixed.** `TIERS` has no `Intermediate`, so such a division would drop out of
+  its region's switcher into the unclassified-name fallback; and a
+  `… - Season Finals` championship is not matched by `is_playoff_name`, so it
+  would export as a standalone division with its own standings — and being
+  cross-tier (top 4 Master plus top 2 of each lower division), it has no single
+  region+tier division for the playoff-attachment step to hang it on. Neither is
+  reachable until the corresponding championship is seeded by hand. Written up
+  in `AGENTS.md` and `specs/BACKLOG.md`; no code changed.
+- **S10 disconnect counts will not be comparable to S9's.** Pause-on-disconnect
+  is gone, replaced by a single manual tech pause per team per map, so a
+  disconnect is now more likely to be played through than restarted. Expect
+  relatively more `dc_games` and fewer `was_restarted` games for the same
+  underlying rate. Neither is charted today — `dc_games` is carried in the
+  payload and never rendered — so nothing on the site is wrong; it is a trap for
+  the first cross-season trend line.
+- **The S10 map pool shipped 2026-08-31 matches the published rulebook**
+  (14 maps, verified name by name against the changelog), so `POOL` needed no
+  correction in this pass.
+
+## 2026-08-31
+
+### Changed
+
+- **Practice coverage now measures you against the FACEIT Season 10 map pool,
+  not the whole game.** S10 pools 14 of the 30 maps, so seeding the coverage
+  panel with all 30 marked 26 maps "never played" that you will never be drawn
+  on, burying the handful of real gaps. `POOL` in `docs/scrims.html` is now
+  Control: Busan, Nepal, Samoa - Escort: Junkertown, Route 66, Shambali
+  Monastery - Hybrid: Eichenwalde, Neon Junction, Paraiso - Push: Colosseo,
+  Esperanca - Flashpoint: Aatlis, New Junk City, Suravasa.
+
+  **No history is lost:** maps you scrimmed that are outside the pool still
+  appear with their counts, because `mapCoverage()` adds any played map it sees.
+  This list needs updating every season.
+
+### Added
+
+- **Aatlis (Flashpoint) and Neon Junction (Hybrid) in the scrim map picker.**
+  Both had been missing since release. `SCRIM_MAPS` in `docs/capture/scrim.html`
+  deliberately stays *every playable map* rather than the league pool: scrims are
+  booked on anything, and the list also backs `bestMapMatch()`, so a map absent
+  from it is a map the replay-history OCR cannot read at all.
+
+### Fixed
+
+- **The scrims viewer's test harness no longer breaks when the page grows.** It
+  ran the page's extracted script through `node -e`, and Windows caps a command
+  line at 32,767 characters - the section had reached ~30 KB, so the next few
+  lines of source would have failed the suite with `WinError 206`. It now writes
+  the script to a temp file.
+
 ## 2026-08-30
 
 ### Added
