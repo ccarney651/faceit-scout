@@ -1459,13 +1459,7 @@ Rules that must not be broken, each with the failure mode it prevents.
     markup and the gate script only ever *removes* it, so a syntax error, a
     blocked script or localStorage being unavailable all leave the page locked.
     A gate that added the overlay instead would open the page on any failure.
-14. **Never commit or publish the trials page.** `faceit-sync trials`
-    (`faceit_sync/trials.py`) writes a private page naming the players you are
-    trialling, which leaks recruiting intent. `/trials.html` is gitignored
-    root-anchored, because `faceit_sync/dashboard/trials.html` is the page's
-    shell and must stay tracked; an unanchored pattern would untrack the shell.
-    The page must never be written under `docs/` (see invariant 10).
-15. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never trust a replay code read through a hand-dragged calibration box.**
     The crop is fractions of that box, and beyond roughly ±2% of strip error the
     read does not fail — it returns a well-formed code belonging to another
     game. The geometry probes in `engine/replaycode.js` now refuse instead, but

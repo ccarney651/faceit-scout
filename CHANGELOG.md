@@ -17,6 +17,20 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-06
+
+### Removed
+
+- **The trialist comparison tool.** `faceit-sync trials`, `faceit_sync/trials.py`,
+  its page shell and UI (`dashboard/trials.html`, `dashboard/trials.js`), its
+  tests and its design document are gone — it had served its purpose and was
+  never part of the site. Nothing else changes: it only ever *read*
+  `build_dashboard_data`, and the numbers it showed came from `dashboard/pure.js`
+  unchanged, so no analysis or shared code left with it. Invariant 14 ("never
+  commit or publish the trials page") retires with the tool, and the replay-code
+  calibration invariant takes its number in both lists. The design and the code
+  remain in git history.
+
 ## 2026-09-05
 
 ### Added
