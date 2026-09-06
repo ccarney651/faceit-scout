@@ -785,18 +785,23 @@ rule "Scoreboard: Create Legend":
     # line and eats runs of spaces - but it does not need to be: it needs to say
     # what the sixth number is, which changes by role and is the one thing a
     # bare row cannot tell you.
-    # Always hudSubtext, never hudSubheader: at the Small preset that is one
-    # size DOWN from the rows, which is what makes a key look like a key rather
-    # than another line of data. SIZE IS THE WHOLE TREATMENT - it is white like
-    # everything else.
+    # The key follows the size setting exactly as the rows do, because
+    # hudSubtext is LARGER than hudSubheader, not smaller - which this file
+    # already says out loud if you read it: the Size setting maps Small to
+    # hudSubheader and Medium to hudSubtext. An attempt to drop the key "one
+    # size down" by pinning it to hudSubtext therefore made it the biggest thing
+    # on the board, which is the opposite of what a key should be.
     #
-    # An earlier version had this orange and the BANS/MAP lines gold. It made
-    # the key the loudest thing on a board where it is the least important line,
-    # and five hues in a fifteen-line block over an uncontrolled background read
-    # as noise rather than hierarchy. Over a scene nobody chooses, luminance is
-    # the only channel that behaves; hue is left to the two TEAM labels, which
-    # is the one place it carries meaning.
-    hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+    # Subheader is the smallest text the HUD offers, so at Small the key cannot
+    # be smaller than the rows; matching them is the closest thing available and
+    # is quieter than any hue would be. An earlier version tried orange here and
+    # gold on BANS/MAP: it made the least important line the loudest, and five
+    # hues in a fifteen-line block over an uncontrolled background read as noise.
+    # Hue is left to the two TEAM labels, the one place it carries meaning.
+    if Scoreboard_Size == 0:
+        hudSubheader(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+    else:
+        hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Team Headers":
