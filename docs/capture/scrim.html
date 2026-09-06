@@ -520,13 +520,34 @@ let LEAGUE_TEAMS=[], FACEIT_ROSTERS={};
 // checkout ships an empty one. Trusting it silently waves every league code
 // through - which is what a real code did during verification.
 let CODE_FEED='loading';
+// Acknowledged-once, per scrim. The block below asks before starting a map it
+// cannot verify, and the honest answer to "can this code be checked" does not
+// change between the maps of one scrim - so asking again on map 2, 3 and 4 is
+// nagging, not consent. Reset when a scrim capture opens or closes, so the
+// question is put once per session and the ctxwarn banner carries the state
+// for the rest of it. Never set for 'loading', which resolves by itself.
+let LEAGUE_CHECK_ACK=false;
 function codeFeedWarn(){
   const el=document.getElementById('ctxwarn'); if(!el) return;
   if(CODE_FEED==='failed'){
     el.textContent='League-code check unavailable — data.json did not load, so league matches cannot be detected.';
   } else if(CODE_FEED==='empty'){
-    el.textContent='League-code check unavailable — data.json carries no codes (a local checkout ships an empty feed; CI publishes the real one).';
+    el.textContent = leagueFeedIsReal()
+      ? 'League-code check unavailable — the league has no live replay codes at all right now'
+        + (LEAGUE_DATA && LEAGUE_DATA.code_wipe_date ? ' (all wiped ' + LEAGUE_DATA.code_wipe_date + ')' : '')
+        + ', so there is nothing to check a code against.'
+      : 'League-code check unavailable — data.json carries no codes (a local checkout ships an empty feed; CI publishes the real one).';
   }
+}
+// Did a REAL feed load and simply carry no codes? Between seasons, and after
+// every patch wipe, CI publishes a perfectly good data.json with codes: [] -
+// which is not the same thing as the stub a local checkout has, and telling an
+// operator to "check the published site" when they ARE on the published site
+// sends them looking for a fault that does not exist. Team rosters are the
+// tell: CI ships 159 of them, a codeless stub ships none.
+function leagueFeedIsReal(){
+  return !!(LEAGUE_DATA && LEAGUE_DATA.team_rosters
+            && Object.keys(LEAGUE_DATA.team_rosters).length);
 }
 // Every team the feed knows, and their rosters keyed by lowercased name.
 //
@@ -1463,8 +1484,8 @@ function fillScrimForm(){ const s=activeScrim||{};
   document.getElementById('scdate').value=s.date||''; document.getElementById('scnotes').value=s.notes||''; }
 async function onScrimPick(){
   const id=document.getElementById('scrimpick').value;
-  if(!id){ activeScrim=null; localStorage.removeItem('owdb_cap_scrim'); fillScrimForm(); renderScrimMaps(); updateBtns(); return; }
-  const scrims=await idbScrims(); activeScrim=scrims.find(s=>s.id===id)||null;
+  if(!id){ activeScrim=null; LEAGUE_CHECK_ACK=false; localStorage.removeItem('owdb_cap_scrim'); fillScrimForm(); renderScrimMaps(); updateBtns(); return; }
+  const scrims=await idbScrims(); activeScrim=scrims.find(s=>s.id===id)||null; LEAGUE_CHECK_ACK=false;
   if(activeScrim) localStorage.setItem('owdb_cap_scrim', activeScrim.id);
   fillScrimForm(); renderScrimMaps(); updateBtns();
 }
@@ -1768,7 +1789,7 @@ async function endScrimCapture(){
   if(session){ toast('finish the current map first','warn'); return; }
   if(!SCRIM_MAP_COUNT){ toast('capture a map first','warn'); return; }
   const name=activeScrim?scrimLabel(activeScrim):'scrim';
-  activeScrim=null; activeScrimMap=null;
+  activeScrim=null; activeScrimMap=null; LEAGUE_CHECK_ACK=false;
   clearBans();
   localStorage.removeItem('owdb_cap_scrim');
   await renderScrimPanel(); await renderScrimMaps(); updateBtns(); renderBans();
@@ -1791,18 +1812,32 @@ async function refuseIfLeagueCode(code){
   // looks like a scrim, and a league map would be recorded privately instead
   // of being published. The user may still proceed, but never unknowingly.
   if(CODE_FEED!=='ready'){
+    // Asked once per scrim - see LEAGUE_CHECK_ACK. The banner keeps saying it.
+    if(LEAGUE_CHECK_ACK) return false;
     const why = CODE_FEED==='loading'
       ? `The league match feed is still loading, so <b>${esc(code)}</b> cannot be checked yet. `
         + `Wait a moment and try again, or start anyway if you are sure this is a scrim.`
       : CODE_FEED==='empty'
-        ? `The league match feed loaded but carries no codes, so <b>${esc(code)}</b> cannot be checked. `
-          + `A local checkout ships an empty <code>data.json</code>; the published site has the real one. `
-          + `If this is a league match, capture it in League capture instead so it gets published.`
+        ? (leagueFeedIsReal()
+            ? `There are no live league replay codes at all right now`
+              + (LEAGUE_DATA.code_wipe_date ? `, because every one of them was wiped on <b>${esc(LEAGUE_DATA.code_wipe_date)}</b>` : ``)
+              + `. Nothing is wrong with the feed and nothing is wrong with <b>${esc(code)}</b> — there is simply nothing `
+              + `to check it against, so a league match cannot be ruled out by code alone. `
+              + `If this IS a league match, capture it in League capture instead so it gets published.`
+            : `The league match feed loaded but carries no codes, so <b>${esc(code)}</b> cannot be checked. `
+              + `A local checkout ships an empty <code>data.json</code>; the published site has the real one. `
+              + `If this is a league match, capture it in League capture instead so it gets published.`)
         : `The league match feed failed to load, so <b>${esc(code)}</b> cannot be checked. `
           + `If this is a league match, capture it in League capture instead so it gets published.`;
-    const go=await uiModal({title:'League codes cannot be checked right now',
-      bodyHtml:why,
+    const title = CODE_FEED==='empty' && leagueFeedIsReal()
+      ? 'No league codes exist to check against'
+      : 'League codes cannot be checked right now';
+    const go=await uiModal({title:title,
+      bodyHtml:why + `<br><br>Asked once per scrim: the rest of this scrim's maps will start without asking again.`,
       actions:[{label:'Start anyway', value:'go'},{label:'Cancel', value:null, ghost:true}]});
+    // 'loading' resolves by itself in a moment, so consent to it would expire
+    // wrong: only a settled unverifiable state is worth remembering.
+    if(go==='go' && CODE_FEED!=='loading') LEAGUE_CHECK_ACK=true;
     return go!=='go';
   }
   const cls=OWDBSession.classifyCode(code, CODE_INDEX, scrimDate());
