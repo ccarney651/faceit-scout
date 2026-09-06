@@ -106,7 +106,6 @@ globalvar Keybind_BanHero 41
 globalvar Debug_DisplayServerLoad 42
 globalvar Ban_HudTo 43
 globalvar Ban_HoldTime 45
-globalvar Colour_Accent 46
 globalvar Keybind_ClearBan 44
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
@@ -259,13 +258,6 @@ rule "Initialisation: Colours":
     Colour_TextTypeA = rgb(255, 255, 255)
     Colour_TextTypeB = rgb(255, 155, 0)
     Colour_TextTypeC = rgb(40, 205, 60)
-    # Warm gold for the block's own headings - BANS and MAP. Chosen on
-    # LUMINANCE, not taste: OCR reads by contrast, and that is what separated
-    # the white lines that read from the team-coloured rows that did not. This
-    # sits at 217 of 255 against white's 255, where team red is 59 and the
-    # orange below is 165. So it reads as a different colour to a human while
-    # staying in the band that survives a bright scene.
-    Colour_Accent = rgb(255, 214, 140)
 
 
 rule "Initialisation: Player":
@@ -685,10 +677,10 @@ def Ban_DrawRows():
     hudSubheader(Ban_HudTo, "BANS  : {0}".format(
                      "NONE" if Ban_Team1 == null and Ban_Team2 == null else
                      "{0} | {1}".format(Ban_Team1, Ban_Team2)),
-                 HudPosition.LEFT, 0.2, Colour_Accent,
+                 HudPosition.LEFT, 0.2, Colour_TextTypeA,
                  HudReeval.STRING, SpecVisibility.ALWAYS)
     hudSubheader(Ban_HudTo, "MAP   : {0}".format(getCurrentMap()),
-                 HudPosition.LEFT, 0.3, Colour_Accent,
+                 HudPosition.LEFT, 0.3, Colour_TextTypeA,
                  HudReeval.STRING, SpecVisibility.ALWAYS)
 
 
@@ -795,10 +787,16 @@ rule "Scoreboard: Create Legend":
     # bare row cannot tell you.
     # Always hudSubtext, never hudSubheader: at the Small preset that is one
     # size DOWN from the rows, which is what makes a key look like a key rather
-    # than another line of data. In orange, because this is the one element the
-    # parser does not read - it recognises the line only to skip it - so hue is
-    # free here in a way it is not anywhere else on the board.
-    hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeB, HudReeval.NONE, SpecVisibility.ALWAYS)
+    # than another line of data. SIZE IS THE WHOLE TREATMENT - it is white like
+    # everything else.
+    #
+    # An earlier version had this orange and the BANS/MAP lines gold. It made
+    # the key the loudest thing on a board where it is the least important line,
+    # and five hues in a fifteen-line block over an uncontrolled background read
+    # as noise rather than hierarchy. Over a scene nobody chooses, luminance is
+    # the only channel that behaves; hue is left to the two TEAM labels, which
+    # is the one place it carries meaning.
+    hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Team Headers":
