@@ -50,12 +50,13 @@ they already know at a lower server cost.
   enforced with `setAllowedHeroes`, the two forced to different roles, and the
   map blocked from starting with exactly one. Drawn on the spectator view as
   text so the capture tool can read it. Toggle under `1. Hero Bans`.
-- **Capture markers** — two green bars bounding the board, so the OWDB capture
-  tool can locate it without a human dragging a crop box over it. Toggle under
-  `5. Spectator Scoreboard > Draw Capture Markers`, default on. Green because it
-  is the only palette colour nothing else draws in-game; 56 characters wide
-  because every HUD line is centred, so a bar wider than the widest line bounds
-  the board horizontally too and two bars are a whole box.
+- **Capture markers** — two green bars above and below the board, so the OWDB
+  capture tool can locate it without a human dragging a crop box over it. Toggle
+  under `5. Spectator Scoreboard > Draw Capture Markers`, default on. They are
+  **progress bars at 100% with no label**, not text: a first version drew a row
+  of 56 dots, which worked and looked like debug output smeared across a view
+  humans watch. Green because it is the only palette colour nothing else draws
+  in-game.
 - **Match time display** + host-spectator scoreboard toggle (Z+Q).
 - The in-game **Settings panel** (ready up / setup phase / map completion /
   scoreboard / keybinds) with Scrimtime's original tunables.

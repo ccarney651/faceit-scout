@@ -696,3 +696,32 @@ mode is rebuilt and uploaded, so the order is: ship the workshop change, capture
 two or three spectator frames, then tune the locator against them. Until that
 exists the manual box remains the only path, and it stays as the fallback for a
 host who switches the markers off.
+
+### 9.1 Dots were ugly; a progress bar is a line
+
+The first build drew each marker as 56 `●` of hud text. It worked exactly as
+designed - solid, green, comfortably wider than the widest board line - and it
+looked like debug output smeared across the spectator view, which is a view
+humans actually watch. Rejected on sight, correctly.
+
+**`progressBarHud` draws a real filled rectangle**, and its `text` parameter is
+documented as "can be blank", so value 100 with no label is a clean line and
+nothing else. The mode already used it for the ready and ban hold bars, so it
+was proven in this code before it was used here.
+
+Screen-space is the constraint that makes this the only alternative. The
+Workshop's other drawing actions - `createIcon`, `createEffect`,
+`createInWorldText`, and the in-world progress bar - all place things in the
+WORLD, so they move with the camera. A spectator camera moves freely, so
+anything world-anchored is useless as a screen-space marker. Hud text and
+progress-bar hud text are the whole of what can be pinned to the screen.
+
+The change also made the detector's job easier rather than harder: a solid bar
+is one uniform block with straight edges, where 56 dots are 56 small blobs
+separated by background.
+
+**One thing it gives up.** A text bar bounded the board horizontally by being
+wider than the widest line. A progress bar is a fixed HUD width, so it cannot be
+relied on for that. The detector therefore takes only the vertical bounds from
+the bars - which is the hard half - and finds the left and right edges by
+profiling ink inside that band, which is easy once the rows are known to be rows.
