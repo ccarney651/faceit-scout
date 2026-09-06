@@ -167,3 +167,74 @@ pretending the first delta is a round.
   paste; the share code it produces is new, because a workshop code cannot
   change owner.
 - Phase 4's Players tab, which consumes this and is its own piece of work.
+
+---
+
+## 8. What the workshop HUD will and will not do (measured 2026-09-06)
+
+Five rebuilds went into finding these. They are properties of the renderer, not
+opinions about layout, and every one of them was learned by measuring a real
+spectator frame after a design built on the opposite assumption failed.
+
+- **Every line is CENTRE-aligned.** In one frame six lines' left edges spanned
+  67 pixels while their centres all landed within three of each other. Columns
+  therefore only line up when every row is the same LENGTH.
+- **Runs of spaces are collapsed at render time.** The compiled output carries
+  the literal `"      "` strings, so the mode sends them and the game discards
+  them. Only a visible character can hold a column open, which means zero
+  padding, which reads worse than the raggedness it fixes.
+- **A name cannot be padded at all.** There is no runtime string length (`len()`
+  compiles to Count Of, which counts array elements) and no substring or slice
+  action. Numbers can be padded because their magnitude is knowable; names
+  cannot.
+- **`hudSubtext` is LARGER than `hudSubheader`.** The Size setting maps Small to
+  hudSubheader and Medium to hudSubtext, which says so plainly. Pinning the
+  column key to hudSubtext to make it "one size down" made it the biggest thing
+  on the board.
+- **The Size setting barely changes glyph height.** Line height measured 15px on
+  Small and 15px again after switching to Medium. Large (`hudText`) is the only
+  untested size lever, and glyph size remains the likeliest cause of the digits
+  that weld together.
+- **`+` is not concatenation.** In the Workshop it compiles to Add, so a string
+  operand coerces to 0 and every pad silently evaluates to nothing. String
+  building is `format()`, and only `format()`.
+
+### 8.1 Colour is luminance, and one team colour had none
+
+The claim that "colour was what separated the lines that read from the lines
+that did not" was overstated when it was first made, and the operator was right
+to challenge it. Measured properly - per row, across five frames, with the team
+classified from the pixels and the background luminance controlled:
+
+| rows | text luminance | background | contrast | numbers recovered |
+| --- | --- | --- | --- | --- |
+| team red | 53.8 | 78.4 | 24.6 | 3.40 / 6 |
+| team blue | 155.8 | 80.5 | 75.3 | 4.55 / 6 |
+| white | 249.2 | 133.5 | 115.7 | 5.39 / 6 |
+
+The dose-response is clean, so colour is real. But blue had three times red's
+contrast and still landed only 30% of rows fully correct, and white at the best
+contrast of all still averages 5.39 of 6 - so colour was never the whole story.
+The residue is adjacent numbers welding into one token (`0017100169`), which is
+a glyph-size problem.
+
+On a dark map the same measurement is brutal: team red came back at **6.4** of
+contrast - the text darker than the background behind it - recovering 2.75
+numbers per row against blue's 5.00 in the same frame. `rgb(250,5,30)` is a dark
+colour wearing a bright one's name. It is now `rgb(255,135,140)` at luminance
+161, matching blue's 160, so both sides are equally readable.
+
+**The rule this leaves behind:** spend hue where the parser does not look (the
+column key, which is recognised only in order to be skipped) and keep luminance
+high everywhere it does (the rows, BANS, MAP, MATCH TIME).
+
+### 8.2 The ban read depended on a colon, and OCR eats colons
+
+A frame whose gold `BANS` heading OCR'd perfectly - label, both hero names, the
+accent folded - still failed with "could not find the BANS row on screen".
+`findRow` required a colon, and the read had lost it. The module's own header
+calls the label a textual anchor and explains that the crop therefore need not
+be precise; the code did not honour that. There is now a colon-free search
+behind the exact one, anchored on the first WORD so `BANSHEE` cannot stand in
+for `BANS`. The frame's verbatim OCR is a test.
+
