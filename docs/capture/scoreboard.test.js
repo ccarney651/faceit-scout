@@ -151,6 +151,7 @@ test('a slot-ordered board reads all ten rows, named, in order', () => {
   ]);
   assert.deepStrictEqual(res.entries[0], {
     k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: 'TANK 1', role: null,
+    team: null,
   });
   assert.strictEqual(res.entries[1].x, '0%', 'a DPS row keeps its accuracy sign');
 });
@@ -197,4 +198,70 @@ test('an unnamed row still parses, for a board built before names existed', () =
   const res = SB.parse(['K • D • DD • DT • DB • UU', '? • 4 • 2 • 100 • 50 • 9 • 1']);
   assert.strictEqual(res.entries[0].name, null);
   assert.strictEqual(res.entries[0].k, 4);
+});
+
+// ---------------------------------------------------------------------------
+// The current board: white, no icons, padded columns, TEAM headers, one legend,
+// and the player's name last. Widths match the pad3/pad3/pad7/pad7/pad7/pad4
+// macros in scrim_owdb.opy.
+const TEAM_BOARD = [
+  'BANS  : NONE',
+  'MAP   : COLOSSEO',
+  '  K  D    DMG    TKN  A/D/H ULT : PLAYER',
+  'TEAM 1',
+  '  6 11  14861   7561    28%   6 : LEXRR',
+  '  8 10   9943   9781    45%   4 : SCRAINE',
+  ' 12  3  14435   4336    190   6 : ASHBORN',
+  '  0  0    362    237  15334   0 : GCB',
+  '  1  0    188    118    272   0 : PIXELS',
+  'TEAM 2',
+  '  4  6   4343   4883    21%   6 : HZL',
+  '  6  9   4858   5013     0%   7 : SOUVLAKI',
+  '  5  7   7618   5535    603   6 : AL7OTHI',
+  '  4  6   8061   5011  13003   6 : JAVI',
+  '  0  1     88    603    156   0 : SOCIAL',
+  'MATCH TIME: 13:58',
+];
+
+test('the team-headed board reads teams from text, not from colour', () => {
+  const res = SB.parse(TEAM_BOARD);
+  assert.strictEqual(res.layout, 'team');
+  assert.strictEqual(res.entries.length, 10);
+  assert.deepStrictEqual(res.entries.map((e) => e.team),
+    ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b']);
+  assert.deepStrictEqual(res.entries.map((e) => e.name), [
+    'LEXRR', 'SCRAINE', 'ASHBORN', 'GCB', 'PIXELS',
+    'HZL', 'SOUVLAKI', 'AL7OTHI', 'JAVI', 'SOCIAL',
+  ]);
+  assert.deepStrictEqual(res.entries[0],
+    { k: 6, d: 11, dd: 14861, dt: 7561, x: '28%', uu: 6, name: 'LEXRR', role: null, team: 'a' });
+});
+
+test('one legend is enough, and padding is not mistaken for a column', () => {
+  const res = SB.parse(TEAM_BOARD);
+  // The single header names no role - the sixth column varies row by row - so
+  // it contributes nothing to roles, and must not be read as a player either.
+  assert.deepStrictEqual(res.roles, []);
+  assert.ok(SB.isColumnHeader(SB.tokenize('  K  D    DMG    TKN  A/D/H ULT : PLAYER')));
+  assert.strictEqual(res.matchTime, '13:58');
+  // Every row still yields exactly six values despite the leading spaces.
+  res.entries.forEach((e) => {
+    assert.ok(Number.isInteger(e.k) && Number.isInteger(e.d), 'k and d are numbers');
+    assert.notStrictEqual(e.uu, null, 'the last column survived the padding');
+  });
+});
+
+test('splitRow puts the name on the correct side of the colon', () => {
+  // Name last: four or more numbers to the left says so.
+  assert.deepStrictEqual(SB.splitRow('  6 11  14861   7561    28%   6 : LEXRR').name, 'LEXRR');
+  // Name first, the format that shipped for an hour.
+  assert.deepStrictEqual(SB.splitRow('LEXRR: 6 • 11 • 14861 • 7561 • 28% • 6').name, 'LEXRR');
+  // No name at all, the format every existing replay renders.
+  assert.strictEqual(SB.splitRow('? • 6 • 11 • 14861 • 7561 • 28% • 6').name, null);
+});
+
+test('a numeric name is still a name, on either side', () => {
+  const last = SB.parse(['TEAM 1', '  6 11  14861   7561    28%   6 : 1337']);
+  assert.strictEqual(last.entries[0].name, '1337');
+  assert.strictEqual(last.entries[0].k, 6, 'the name did not become a stat');
 });

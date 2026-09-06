@@ -117,6 +117,46 @@
     return name || null;
   }
 
+  // The single column header the mode now draws instead of three role legends.
+  // It names no role - the sixth column varies by row - so it is recognised and
+  // SKIPPED rather than pushed into roles. It carries no numbers either, so it
+  // would fall out of entryFromTokens anyway; recognising it explicitly means a
+  // future column rename cannot quietly turn the header into a row.
+  function isColumnHeader(tokens) {
+    var up = tokens.map(function (t) { return t.toUpperCase(); });
+    return up.indexOf('DMG') !== -1 && up.indexOf('TKN') !== -1 && up.indexOf('ULT') !== -1;
+  }
+
+  // "TEAM 1" / "TEAM 2", the header the mode draws over each block. It replaced
+  // the team COLOUR, which OCR could not see at all: the five/five split is now
+  // something the parser reads rather than infers.
+  function teamFromLine(tokens) {
+    if (tokens.length !== 2) return null;
+    if (tokens[0].toUpperCase() !== 'TEAM') return null;
+    if (tokens[1] === '1') return 'a';
+    if (tokens[1] === '2') return 'b';
+    return null;
+  }
+
+  // Split a row into its stats and its player name. Three formats exist in the
+  // wild and all three have to keep working, because a replay renders whatever
+  // the mode drew on the day it was played:
+  //   1. "{icon} 6 • 11 • 14861 ..."          - no name at all
+  //   2. "{icon} LEXRR: 6 • 11 • ..."         - name first, briefly
+  //   3. "  6 11  14861 ...  6 : LEXRR"       - name last, current
+  // Which one this is follows from where the numbers are: four or more of them
+  // to the LEFT of the colon means the name is on the right.
+  function splitRow(raw) {
+    var line = String(raw == null ? '' : raw);
+    var idx = line.lastIndexOf(':');
+    if (idx === -1) return { stats: line, name: null };
+    var left = line.slice(0, idx);
+    var right = line.slice(idx + 1).trim();
+    var leftNums = tokenize(left).filter(looksNumeric).length;
+    if (leftNums >= 4) return { stats: left, name: right || null };
+    return { stats: line.slice(idx + 1), name: nameFromRaw(line) };
+  }
+
   function matchTimeFromTokens(tokens, raw) {
     var joined = tokens.join(' ').toLowerCase();
     if (joined.indexOf('match time') === -1) {
@@ -152,6 +192,8 @@
     // its block, so exactly one legend precedes the first entry; the two
     // team-grouped styles stack all three legends at the top, so three do.
     var legendsBeforeFirstEntry = 0;
+    var currentTeam = null;
+    var sawTeamHeader = false;
 
     for (var i = 0; i < lines.length; i++) {
       var raw = String(lines[i] == null ? '' : lines[i]).trim();
@@ -167,21 +209,31 @@
         continue;
       }
 
+      if (isColumnHeader(tokens)) continue;
+
+      var team = teamFromLine(tokens);
+      if (team) {
+        currentTeam = team;
+        sawTeamHeader = true;
+        continue;
+      }
+
       var mt = matchTimeFromTokens(tokens, raw);
       if (mt) {
         matchTime = mt;
         continue;
       }
 
-      // Stats are read from the RIGHT of the colon when there is one. A name
-      // ending in a digit ("TANK 1") would otherwise contribute that digit as a
-      // stat, and the seven-token icon guard below only rescues that by luck.
-      var name = nameFromRaw(raw);
-      var statTokens = name === null ? tokens : tokenize(raw.slice(raw.indexOf(':') + 1));
-      var entry = entryFromTokens(statTokens);
+      // Stats never include the name: splitRow keeps them apart whichever side
+      // the name is on. Without that, a name ending in a digit ("TANK 1", and
+      // every bot) contributes it as a stat, and an all-digits name - which
+      // Overwatch permits - is indistinguishable from one.
+      var parts = splitRow(raw);
+      var entry = entryFromTokens(tokenize(parts.stats));
       if (entry) {
-        entry.name = name;
+        entry.name = parts.name;
         entry.role = currentRole;
+        entry.team = currentTeam;
         entries.push(entry);
       }
     }
@@ -191,7 +243,10 @@
     // Saying nothing is correct; the caller knows each slot's hero and can say
     // more. One legend is the role-grouped board, where the legend does label
     // its block. Anything else (the legend switched off) leaves it unknown.
-    var layout = legendsBeforeFirstEntry >= 3 ? 'slot'
+    // A board that heads its blocks with TEAM 1 / TEAM 2 has said what it is;
+    // nothing needs inferring from how the legends were counted.
+    var layout = sawTeamHeader ? 'team'
+      : legendsBeforeFirstEntry >= 3 ? 'slot'
       : legendsBeforeFirstEntry === 1 ? 'role' : null;
     if (layout !== 'role') entries.forEach(function (e) { e.role = null; });
 
@@ -225,6 +280,9 @@
   var Scoreboard = {
     tokenize: tokenize,
     nameFromRaw: nameFromRaw,
+    splitRow: splitRow,
+    teamFromLine: teamFromLine,
+    isColumnHeader: isColumnHeader,
     parse: parse,
     parseScoreReadout: parseScoreReadout,
     assignTeams: assignTeams,
