@@ -96,6 +96,7 @@ globalvar Ban_Team2 40
 globalvar Keybind_BanHero 41
 globalvar Debug_DisplayServerLoad 42
 globalvar Ban_HudTo 43
+globalvar Ban_HoldTime 45
 globalvar Keybind_ClearBan 44
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
@@ -135,6 +136,13 @@ globalvar SetupAddTime_Max 37
 
 playervar ReadyUp_PlayerReady 0
 playervar ReadyUp_CurrentHoldTime 1
+# How long this player has been holding the ban (or clear-ban) chord.
+# One variable for both because you cannot hold both at once, and one
+# progress bar reads it.
+playervar Ban_CurrentHoldTime 2
+# The player's scoreboard row, rebuilt on a timer instead of inside the
+# HUD string - see "Scoreboard: Build Row Text".
+playervar Scoreboard_Row 3
 
 #Only remove the following directive if the gamemode does not use tricks such as A+0, A*0, A or "", "am" == "**", etc which would otherwise be optimized out.
 #!optimizeStrict
@@ -170,6 +178,11 @@ rule "Settings: Debug Options":
 
 rule "Settings: Hero Ban Options":
     Ban_Enabled = createWorkshopSettingBool("1. Hero Bans", "Enable Hero Bans", true)
+    # Banning is HELD, not pressed. A ban applies to both teams for the whole
+    # map and force-swaps anyone already on the hero, so a stray keypress in
+    # setup is expensive to undo - and Command+Melee is exactly the kind of
+    # thing a player does by accident while warming up in spawn.
+    Ban_HoldTime = createWorkshopSettingInt("1. Hero Bans", "Ban Hold Time", 2, 1, 5, 1)
 
 
 rule "Settings: Ready Up Options":
@@ -202,7 +215,12 @@ rule "Settings: Map Completion Options":
 rule "Settings: Spectator Scoreboard Options":
     Scoreboard_EnableScoreboard = createWorkshopSettingBool("5. Spectator Scoreboard", "Enable Spectator Scoreboard", true)
     Scoreboard_Size = createWorkshopSettingEnum("5. Spectator Scoreboard", "Size", 0, ["Small", "Medium", "Large"], 1)
-    Scoreboard_GroupMode = createWorkshopSettingEnum("5. Spectator Scoreboard", "Player Grouping Style", 0, ["Group by role, sort by team", "Group by team, sort by role", "Group by team, sort by slot"], 2)
+    # Defaults to slot ordering, which is the one layout the OWDB capture tool
+    # can attribute to a PLAYER: rows sort by slot, the spectator portrait bar is
+    # in slot order too, so row i is slot i and no hero-icon recognition is
+    # needed. The role-grouped layouts leave each team's DPS and support pairs
+    # indistinguishable. See specs/2026-09-06-scoreboard-capture-design.md.
+    Scoreboard_GroupMode = createWorkshopSettingEnum("5. Spectator Scoreboard", "Player Grouping Style", 2, ["Group by role, sort by team", "Group by team, sort by role", "Group by team, sort by slot"], 2)
     Scoreboard_DisplayLegend = createWorkshopSettingBool("5. Spectator Scoreboard", "Display Legend", true, 3)
     Scoreboard_DisplayMatchTime = createWorkshopSettingBool("5. Spectator Scoreboard", "Display Match Time", true, 4)
     Scoreboard_AllowHideScoreboard = createWorkshopSettingBool("5. Spectator Scoreboard", "Allow Host Spectator to Toggle Scoreboard", true, 5)
@@ -271,6 +289,16 @@ rule "HUD Setup: Force Ready Hold Bar":
     progressBarHud(eventPlayer if eventPlayer.ReadyUp_CurrentHoldTime >= 0.2 else null, eventPlayer.ReadyUp_CurrentHoldTime / ReadyUp_ForceTeamReadyHoldTime * 100, null, HudPosition.TOP, 5.5, Colour_TextTypeA, null, ProgressHudReeval.VISIBILITY_VALUES_AND_COLOR, SpecVisibility.NEVER)
 
 
+rule "HUD Setup: Ban Hold Bar":
+    @Event eachPlayer
+    @Condition Ban_Enabled == true
+
+    # Shared by ban and clear-ban - they cannot be held at once. Sort 5.7 puts it
+    # under the ban hints, and the >= 0.2 gate keeps it off the screen until the
+    # hold is deliberate rather than flashing on every brush of the key.
+    progressBarHud(eventPlayer if eventPlayer.Ban_CurrentHoldTime >= 0.2 else null, eventPlayer.Ban_CurrentHoldTime / Ban_HoldTime * 100, null, HudPosition.TOP, 5.7, Colour_TextTypeA, null, ProgressHudReeval.VISIBILITY_VALUES_AND_COLOR, SpecVisibility.NEVER)
+
+
 rule "HUD Setup: Defender Teleport":
     @Event eachPlayer
     @Condition Setup_AllowDefendersTeleport == true
@@ -305,7 +333,7 @@ rule "HUD Setup: Ban Hero":
     # the keys, not something a spectator or the capture tool should see.
     hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(
                      inputBindingString(Keybind_Command), inputBindingString(Keybind_BanHero),
-                     "Ban {0} for both teams".format(eventPlayer.getHero())),
+                     "Hold to ban {0} for both teams".format(eventPlayer.getHero())),
                  HudPosition.TOP, 5.5,
                  Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command)
                      and eventPlayer.isHoldingButton(Keybind_BanHero) else Colour_TextTypeA,
@@ -329,7 +357,7 @@ rule "HUD Setup: Clear Ban":
     # state-dependent condition in the first place.
     hudSubheader(eventPlayer, "[{0} + {1}] {2}".format(
                      inputBindingString(Keybind_Command), inputBindingString(Keybind_ClearBan),
-                     "Clear your team's hero ban"),
+                     "Hold to clear your team's hero ban"),
                  HudPosition.TOP, 5.6,
                  Colour_TextTypeB if eventPlayer.isHoldingButton(Keybind_Command)
                      and eventPlayer.isHoldingButton(Keybind_ClearBan) else Colour_TextTypeA,
@@ -522,6 +550,21 @@ rule "Bans: Toggle Ban On Current Hero":
     #
     # R2: checked on EVERY confirm including a change, or team 1 could ban a
     # tank, wait for team 2 to ban a tank, then switch onto one and collide.
+    # HELD, not pressed. A ban applies to BOTH teams for the whole map and
+    # force-swaps anyone already on the hero, so an accidental one costs a real
+    # undo - and the chord is Command+Melee, which a player warming up in spawn
+    # can hit without meaning to. Mirrors the force-team-ready hold exactly,
+    # including the shared progress bar, so it is one interaction to learn.
+    #
+    # isInSetup() is re-checked after the hold: the condition was true when the
+    # rule fired, and a hold can outlive setup.
+    eventPlayer.Ban_CurrentHoldTime = 0
+    chaseOverTime(eventPlayer.Ban_CurrentHoldTime, Ban_HoldTime, Ban_HoldTime, ChaseTimeReeval.NONE)
+    waitUntil(not (eventPlayer.isHoldingButton(Keybind_Command) and eventPlayer.isHoldingButton(Keybind_BanHero)), Ban_HoldTime)
+    stopChasing(eventPlayer.Ban_CurrentHoldTime)
+    eventPlayer.Ban_CurrentHoldTime = 0
+    if not (eventPlayer.isHoldingButton(Keybind_Command) and eventPlayer.isHoldingButton(Keybind_BanHero)) or not isInSetup():
+        return
     if Ban_SameRole(eventPlayer.getHero(), Ban_Team2 if eventPlayer.getTeam() == Team.1 else Ban_Team1):
         smallMessage(eventPlayer, "That role is already banned by the other team")
     elif eventPlayer.getTeam() == Team.1:
@@ -543,6 +586,16 @@ rule "Bans: Clear Your Team's Ban":
     # with exactly one ban, so a team that bans while the other does not has to
     # be able to undo it - and without this the only escape was the setup timer
     # wiping the lone ban at five seconds.
+    # Held for the same reason and the same duration as banning: clearing is
+    # what lets a map start with no bans at all, so a stray press changes what
+    # both teams are playing against.
+    eventPlayer.Ban_CurrentHoldTime = 0
+    chaseOverTime(eventPlayer.Ban_CurrentHoldTime, Ban_HoldTime, Ban_HoldTime, ChaseTimeReeval.NONE)
+    waitUntil(not (eventPlayer.isHoldingButton(Keybind_Command) and eventPlayer.isHoldingButton(Keybind_ClearBan)), Ban_HoldTime)
+    stopChasing(eventPlayer.Ban_CurrentHoldTime)
+    eventPlayer.Ban_CurrentHoldTime = 0
+    if not (eventPlayer.isHoldingButton(Keybind_Command) and eventPlayer.isHoldingButton(Keybind_ClearBan)) or not isInSetup():
+        return
     if eventPlayer.getTeam() == Team.1:
         Ban_Team1 = null
     else:
@@ -736,6 +789,26 @@ rule "Scoreboard: Create Legend (Standard)":
             hudSubtext(null, "{0} {1}".format(abilityIconString(Hero.BAPTISTE, Button.ABILITY_1), "K • D • DD • DT • HD • UU"), HudPosition.LEFT, 1.3, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
+rule "Scoreboard: Build Row Text":
+    @Event eachPlayer
+    @Condition Scoreboard_EnableScoreboard == true
+
+    # The row's numbers are built HERE, on a timer, instead of inside the HUD
+    # text's own string. A hud text with HudReeval.STRING re-evaluates its whole
+    # expression continuously, and this one is fourteen stat lookups deep - times
+    # ten players, it was the single most expensive thing in the mode. Written to
+    # a player variable four times a second, the HUD's expression becomes one
+    # variable read and the numbers are at most 250 ms stale, which no human and
+    # no capture read can tell apart.
+    #
+    # Measure before and after with "6. Debug > Display Server Load" rather than
+    # trusting this comment.
+    while true:
+        waitUntil(isGameInProgress(), 99999)
+        eventPlayer.Scoreboard_Row = "{0} • {1}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)))
+        wait(0.25)
+
+
 rule "Scoreboard: Create Player Entries (Small)":
     @Event eachPlayer
     @Condition isGameInProgress() == true
@@ -744,11 +817,11 @@ rule "Scoreboard: Create Player Entries (Small)":
     
     wait()
     if Scoreboard_GroupMode == 0:
-        hudSubheader(null, "{0} {1} • {2}".format(heroIcon(eventPlayer.getHero()), "{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0} {1}".format(heroIcon(eventPlayer.getHero()), eventPlayer.Scoreboard_Row), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     elif Scoreboard_GroupMode == 1:
-        hudSubheader(null, "{0} {1} • {2}".format(heroIcon(eventPlayer.getHero()), "{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0} {1}".format(heroIcon(eventPlayer.getHero()), eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudSubheader(null, "{0} {1} • {2}".format(heroIcon(eventPlayer.getHero()), "{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0} {1}".format(heroIcon(eventPlayer.getHero()), eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Medium)":
@@ -759,11 +832,11 @@ rule "Scoreboard: Create Player Entries (Medium)":
     
     wait()
     if Scoreboard_GroupMode == 0:
-        hudSubtext(null, "{0} {1} • {2}".format(heroIcon(eventPlayer.getHero()), "{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0} {1}".format(heroIcon(eventPlayer.getHero()), eventPlayer.Scoreboard_Row), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     elif Scoreboard_GroupMode == 1:
-        hudSubtext(null, "{0} {1} • {2}".format(heroIcon(eventPlayer.getHero()), "{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0} {1}".format(heroIcon(eventPlayer.getHero()), eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudSubtext(null, "{0} {1} • {2}".format(heroIcon(eventPlayer.getHero()), "{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0} {1}".format(heroIcon(eventPlayer.getHero()), eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Large)":
@@ -774,11 +847,11 @@ rule "Scoreboard: Create Player Entries (Large)":
     
     wait()
     if Scoreboard_GroupMode == 0:
-        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, "{1} • {2}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)), null), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     elif Scoreboard_GroupMode == 1:
-        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, "{1} • {2}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)), null), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, "{1} • {2}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)), null), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Host Spectator Toggle":
