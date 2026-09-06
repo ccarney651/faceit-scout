@@ -84,6 +84,21 @@ One crop, one OCR pass, four facts. The workshop draws all of it as one block at
 `readBanRow()` already OCRs a generous fixed region of the left column — the
 same read serves the board, so this is one pass, not two.
 
+**The row names its own player (added 2026-09-06, after the design's first
+draft).** Small and Medium now render `{icon} {name}: {stats}`; Large already
+carried the name as its subheader. This was out of scope while it implied a
+re-upload of its own, and stopped being so the moment the operator decided to
+re-publish the mode from their main account — the marginal cost of carrying it
+in that build is nothing.
+
+It does not replace the slot ordering, it insures it: identity is then read
+rather than inferred, so a lobby where somebody left the grouping style on a
+role-grouped preset still attributes to the right player. **The colon is
+load-bearing.** Overwatch permits an all-digits name, and the existing parser
+identifies the stats by skipping leading non-numeric tokens — which would take
+`1337` for a final-blow count. Splitting on the first colon is what makes a
+numeric name safe.
+
 **Shape validation, adapted from §5.2 to the slot layout.** A read is accepted
 only if: ten entry rows; five of one team colour then five of the other; each
 row six numeric fields, at most one bearing `%`; a `MATCH TIME` line present;
@@ -144,8 +159,11 @@ pretending the first delta is a round.
 
 - The hero-glyph reference set, and per-player attribution on role-grouped
   replays — the operator's decision, §1.
-- Any change to `scrim_owdb.opy`. Adding the player name to the row would make
-  the read self-describing rather than positional, but it costs a recompile, a
-  re-upload and moving every host onto the new code, and the setting change
-  achieves the same thing for nothing.
+- ~~Any change to `scrim_owdb.opy`.~~ **Reversed the same day.** The operator
+  is re-publishing the mode from their main account, so a build was happening
+  anyway: the row now carries the player's name (see §4), the ban chord became
+  hold-to-confirm, the row text moved out of the HUD string onto a timer, and
+  slot ordering became the default. `scrim_owdb.txt` is rebuilt and ready to
+  paste; the share code it produces is new, because a workshop code cannot
+  change owner.
 - Phase 4's Players tab, which consumes this and is its own piece of work.
