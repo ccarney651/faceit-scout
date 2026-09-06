@@ -134,6 +134,52 @@
     return name || null;
   }
 
+  // A self-labelling row: "LEXRR  K3 D0 DMG776 TKN242 ACC50% ULT0".
+  //
+  // The board stopped using columns because the HUD is hostile to them - it
+  // centres every line and collapses runs of spaces, so nothing can be aligned
+  // except by padding with visible characters, which reads worse than the
+  // problem it solves. Labelling each value instead means POSITION CARRIES NO
+  // MEANING: every field is found by its own label, so a misread token damages
+  // one stat rather than shifting the sense of all six, and a row that OCR
+  // half-reads is honestly half-read instead of quietly wrong.
+  //
+  // \bD(\d+) cannot match the D of DMG, because a digit has to follow it.
+  //
+  // The role stat names itself - BLK, HEAL or ACC - so the row now says which
+  // role it is. That used to be inferred from the legend above it, which the
+  // team-grouped layouts made meaningless.
+  // \s* not \s+ between K and D: OCR welds adjacent fields together, measured
+  // on a real frame ("000001" from two separate columns), and "K0D0" must still
+  // read as two values rather than none.
+  var LABELLED = /(?:^|\s)K(\d+)\s*D(\d+)/;
+  function labelledRow(raw) {
+    var line = String(raw == null ? '' : raw);
+    var kd = LABELLED.exec(line);
+    if (!kd) return null;
+    function grab(re) { var m = re.exec(line); return m ? m[1] : null; }
+    // No word boundary on these: the same welding turns "DMG171 TKN169" into
+    // "DMG171TKN169", where \bTKN cannot match because a digit is a word
+    // character. The labels are distinctive enough to find unanchored, and that
+    // is what lets a welded pair still yield BOTH values instead of neither.
+    var dmg = grab(/DMG(\d+)/);
+    var tkn = grab(/TKN(\d+)/);
+    var ult = grab(/ULT(\d+)/);
+    var special = /(BLK|HEAL|ACC)(\d+)(%?)/.exec(line);
+    if (dmg === null && tkn === null && !special) return null;
+    var num = function (v) { return v === null ? null : parseInt(v, 10); };
+    return {
+      k: num(kd[1]),
+      d: num(kd[2]),
+      dd: num(dmg),
+      dt: num(tkn),
+      x: special ? (special[3] ? parseInt(special[2], 10) + '%' : parseInt(special[2], 10)) : null,
+      uu: num(ult),
+      name: line.slice(0, kd.index).trim() || null,
+      role: special ? ({ BLK: 'tank', HEAL: 'support', ACC: 'dps' })[special[1]] : null,
+    };
+  }
+
   // The single column header the mode now draws instead of three role legends.
   // It names no role - the sixth column varies by row - so it is recognised and
   // SKIPPED rather than pushed into roles. It carries no numbers either, so it
@@ -211,6 +257,9 @@
     var legendsBeforeFirstEntry = 0;
     var currentTeam = null;
     var sawTeamHeader = false;
+    // Which entries named their own role, so the legend-era cleanup below does
+    // not wipe a fact the row actually stated.
+    var selfDescribed = {};
 
     for (var i = 0; i < lines.length; i++) {
       var raw = String(lines[i] == null ? '' : lines[i]).trim();
@@ -245,6 +294,15 @@
       // the name is on. Without that, a name ending in a digit ("TANK 1", and
       // every bot) contributes it as a stat, and an all-digits name - which
       // Overwatch permits - is indistinguishable from one.
+      // A labelled row answers everything by itself, including its role.
+      var labelled = labelledRow(raw);
+      if (labelled) {
+        labelled.team = currentTeam;
+        selfDescribed[entries.length] = true;
+        entries.push(labelled);
+        continue;
+      }
+
       var parts = splitRow(raw);
       var entry = entryFromTokens(tokenize(parts.stats));
       if (entry) {
@@ -265,7 +323,9 @@
     var layout = sawTeamHeader ? 'team'
       : legendsBeforeFirstEntry >= 3 ? 'slot'
       : legendsBeforeFirstEntry === 1 ? 'role' : null;
-    if (layout !== 'role') entries.forEach(function (e) { e.role = null; });
+    if (layout !== 'role') {
+      entries.forEach(function (e, i) { if (!selfDescribed[i]) e.role = null; });
+    }
 
     return { roles: roles, entries: entries, matchTime: matchTime,
              layout: layout, raw: lines };
@@ -301,6 +361,7 @@
     teamFromLine: teamFromLine,
     isColumnHeader: isColumnHeader,
     leadingNumber: leadingNumber,
+    labelledRow: labelledRow,
     parse: parse,
     parseScoreReadout: parseScoreReadout,
     assignTeams: assignTeams,

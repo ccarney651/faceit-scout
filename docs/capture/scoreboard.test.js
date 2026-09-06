@@ -317,3 +317,60 @@ test('zero padding is stripped, including from an accuracy', () => {
   assert.strictEqual(res.entries[1].x, '40%', 'the padding is not part of the value');
   assert.strictEqual(res.entries[1].dd, 1045);
 });
+
+// ---------------------------------------------------------------------------
+// The current board: one line per player, every value labelled, nothing
+// depending on position - because the HUD centres lines and eats runs of
+// spaces, so columns cannot be held open without visible padding.
+const LABELLED_BOARD = [
+  'BANS  : NONE',
+  'MAP   : NEPAL',
+  'TEAM 1',
+  'TANK 1  K0 D0 DMG374 TKN287 BLK0 ULT0',
+  'DAMAGE 1  K3 D0 DMG776 TKN242 ACC50% ULT0',
+  'SUPPORT 1  K0 D1 DMG203 TKN618 HEAL271 ULT0',
+  'TEAM 2',
+  'TANK 2  K0 D1 DMG62 TKN647 BLK0 ULT0',
+  'MATCH TIME: 0:39',
+];
+
+test('a labelled row gives player, team, role and every stat', () => {
+  const res = SB.parse(LABELLED_BOARD);
+  assert.strictEqual(res.entries.length, 4);
+  assert.deepStrictEqual(res.entries.map((e) => e.name),
+    ['TANK 1', 'DAMAGE 1', 'SUPPORT 1', 'TANK 2']);
+  assert.deepStrictEqual(res.entries.map((e) => e.team), ['a', 'a', 'a', 'b']);
+  // The role stat names itself, so the row states its own role rather than
+  // inheriting one from a legend that no longer heads anything.
+  assert.deepStrictEqual(res.entries.map((e) => e.role),
+    ['tank', 'dps', 'support', 'tank']);
+  assert.deepStrictEqual(res.entries[1],
+    { k: 3, d: 0, dd: 776, dt: 242, x: '50%', uu: 0, name: 'DAMAGE 1', role: 'dps', team: 'a' });
+});
+
+test('a half-read row is honestly half-read, not quietly wrong', () => {
+  // This is the whole point of labelling: position carries no meaning, so a
+  // mangled label costs exactly its own field. Under columns, one bad token
+  // shifted every value after it and the row still looked plausible.
+  const e = SB.labelledRow('LEXRR  K3 D0 DMG776 TXN242 ACC50% VLT0');
+  assert.strictEqual(e.k, 3);
+  assert.strictEqual(e.dd, 776);
+  assert.strictEqual(e.x, '50%');
+  assert.strictEqual(e.dt, null, 'the mangled TKN label costs only TKN');
+  assert.strictEqual(e.uu, null, 'the mangled ULT label costs only ULT');
+});
+
+test('D of DMG is not read as the deaths column', () => {
+  const e = SB.labelledRow('GCB  K1 D2 DMG3000 TKN40 HEAL5 ULT6');
+  assert.deepStrictEqual([e.k, e.d, e.dd, e.dt, e.x, e.uu], [1, 2, 3000, 40, 5, 6]);
+});
+
+test('welded fields still yield both values', () => {
+  // Every one of these is a real OCR artefact, taken from a spectator frame of
+  // the previous column-based board: adjacent fields merge into one token, and
+  // under columns the result ("0017100169") was a plausible-looking number that
+  // silently replaced two real ones.
+  const welded = SB.labelledRow('LEXRR  K0D0 DMG171TKN169 HEAL530 ULT0');
+  assert.deepStrictEqual([welded.k, welded.d, welded.dd, welded.dt, welded.x, welded.uu],
+    [0, 0, 171, 169, 530, 0]);
+});
