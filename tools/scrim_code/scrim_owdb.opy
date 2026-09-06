@@ -256,7 +256,16 @@ rule "Initialisation: Match":
 
 rule "Initialisation: Colours":
     Colour_TeamOne = rgb(50, 185, 240)
-    Colour_TeamTwo = rgb(250, 5, 30)
+    # Lightened from rgb(250,5,30), which is a DARK colour wearing a bright
+    # one's name: at luminance 54 it read as 6 points of contrast against a
+    # dark map, where the same frame's blue had 99. Measured on that frame, the
+    # blue rows recovered 5.00 of six numbers per row and the red ones 2.75 -
+    # OCR returned "EERE SEMOIRA © (OERIEER?" for a legible line.
+    #
+    # This sits at 161, matching team blue's 156, so the two sides are equally
+    # readable rather than one being decorative. It is still unmistakably the
+    # red team beside the blue one; what it stops being is dark.
+    Colour_TeamTwo = rgb(255, 135, 140)
     Colour_TextTypeA = rgb(255, 255, 255)
     Colour_TextTypeB = rgb(255, 155, 0)
     Colour_TextTypeC = rgb(40, 205, 60)
