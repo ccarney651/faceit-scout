@@ -73,6 +73,16 @@
 
   // Parse an entry row into {k,d,dd,dt,x,uu}; x keeps its '%' when present.
   // Returns null if the row is not an entry (too few numeric columns).
+  // The digits a token STARTS with, when OCR has welded something onto the end
+  // of it. The hero icon sits at the end of a row and is an image, so it comes
+  // back as junk - and when that junk touches the last column the whole token
+  // stops looking numeric ("0Fog"), which would drop a real value. Only used
+  // once numbers have already been seen, so a name is never mistaken for one.
+  function leadingNumber(tok) {
+    var m = /^(\d+%?)\D/.exec(tok);
+    return m ? m[1] : null;
+  }
+
   function entryFromTokens(tokens) {
     var nums = [];
     for (var i = 0; i < tokens.length; i++) {
@@ -82,7 +92,11 @@
       } else {
         // Numeric columns are contiguous after the (optional) hero icon, so a
         // non-numeric token after numbers means we've hit trailing noise.
-        if (nums.length) break;
+        if (nums.length) {
+          var salvaged = leadingNumber(t);
+          if (salvaged !== null) nums.push(salvaged);
+          break;
+        }
       }
     }
     // Drop a leading hero-icon token that OCR rendered as a bare number: an
@@ -283,6 +297,7 @@
     splitRow: splitRow,
     teamFromLine: teamFromLine,
     isColumnHeader: isColumnHeader,
+    leadingNumber: leadingNumber,
     parse: parse,
     parseScoreReadout: parseScoreReadout,
     assignTeams: assignTeams,

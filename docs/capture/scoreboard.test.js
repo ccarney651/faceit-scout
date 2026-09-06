@@ -265,3 +265,40 @@ test('a numeric name is still a name, on either side', () => {
   assert.strictEqual(last.entries[0].name, '1337');
   assert.strictEqual(last.entries[0].k, 6, 'the name did not become a stat');
 });
+
+// ---------------------------------------------------------------------------
+// The current board: no names, hero icon LAST, numbers in fixed-width columns.
+// Every row is the same length, which is what makes centred HUD lines align.
+const ICON_BOARD = [
+  'BANS  : NONE',
+  'MAP   : NEON JUNCTION',
+  '  K  D    DMG    TKN  A/D/H ULT HERO',
+  'TEAM 1',
+  '  0  0    362    237    190   0   &b',
+  '  1  0    188    118     0%   0   Fog',
+  'TEAM 2',
+  '  0  1     88    603      0   0   $',
+  'MATCH TIME: 0:48',
+];
+
+test('the icon trailing a row is discarded, not read as a stat', () => {
+  const res = SB.parse(ICON_BOARD);
+  assert.strictEqual(res.layout, 'team');
+  assert.strictEqual(res.entries.length, 3);
+  assert.deepStrictEqual(res.entries.map((e) => e.team), ['a', 'a', 'b']);
+  res.entries.forEach((e) => assert.strictEqual(e.name, null, 'this board has no names'));
+  assert.deepStrictEqual(res.entries[0],
+    { k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: null, role: null, team: 'a' });
+  assert.strictEqual(res.entries[1].x, '0%');
+});
+
+test('a last column welded to the icon still yields its value', () => {
+  // OCR renders the icon as junk, and when that junk touches the last column
+  // the token stops looking numeric. Dropping it would silently lose ULT.
+  assert.strictEqual(SB.leadingNumber('0Fog'), '0');
+  assert.strictEqual(SB.leadingNumber('12&b'), '12');
+  assert.strictEqual(SB.leadingNumber('45%x'), '45%');
+  assert.strictEqual(SB.leadingNumber('Fog'), null, 'pure junk stays junk');
+  const res = SB.parse(['TEAM 1', '  6 11  14861   7561    28%   6&b']);
+  assert.strictEqual(res.entries[0].uu, 6, 'the welded ULT survived');
+});
