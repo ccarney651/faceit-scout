@@ -72,7 +72,24 @@
       // A legend is all-header text: K D DD DT <marker> UU. Guard against a
       // stray hero-icon token being uppercase text by requiring >=4 tokens
       // and no numeric tokens.
-      if (hasMarker && tokens.length >= 4 && !tokens.some(looksNumeric)) {
+      //
+      // AND it must carry a column name the COLUMN KEY cannot supply. The key
+      // is "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT": it contains ACC,
+      // so marker-plus-token-count alone claims it as a DPS legend. isColumnHeader
+      // catches the intact key, but not a mangled one - measured on a real
+      // Blizzard World frame where ULT came back as "ALeuT", failing the header
+      // test while ACC survived and fired this one. The key shares K and D with a
+      // legend and shares nothing else: it says DMG/TKN/ULT where a legend says
+      // DD/DT/UU. Requiring one of those three is what separates them.
+      //
+      // A legend whose OCR lost all three is then not recognised, and the board
+      // reports no role rather than the wrong one - the direction this parser
+      // errs in everywhere else.
+      var hasLegendColumn = upper.indexOf('DD') !== -1
+        || upper.indexOf('DT') !== -1
+        || upper.indexOf('UU') !== -1;
+      if (hasMarker && hasLegendColumn && tokens.length >= 4
+          && !tokens.some(looksNumeric)) {
         return leg.role;
       }
     }
@@ -281,6 +298,17 @@
       var tokens = tokenize(raw);
       if (!tokens.length) continue;
 
+      // BEFORE legendRole, not after. The single column key the mode draws is
+      // "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", which CONTAINS the
+      // token ACC and so satisfies legendRole's DPS test - many tokens, none
+      // numeric. Checked second, the key was claimed as a DPS legend on every
+      // frame, and on one where the TEAM headers did not survive OCR (Blizzard
+      // World, 2026-09-06) that single miscount flipped layout to 'role',
+      // suppressed the five/five team split and tagged all five surviving rows
+      // 'dps'. A row is then confidently wrong about its role rather than
+      // honestly silent, which is the one outcome this parser is built to avoid.
+      if (isColumnHeader(tokens)) continue;
+
       var role = legendRole(tokens);
       if (role) {
         currentRole = role;
@@ -288,8 +316,6 @@
         if (!entries.length) legendsBeforeFirstEntry++;
         continue;
       }
-
-      if (isColumnHeader(tokens)) continue;
 
       var team = teamFromLine(tokens);
       if (team) {

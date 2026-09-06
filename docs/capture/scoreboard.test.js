@@ -387,3 +387,40 @@ test('welded fields still yield both values', () => {
   assert.deepStrictEqual([welded.k, welded.d, welded.dd, welded.dt, welded.x, welded.uu],
     [0, 0, 171, 169, 530, 0]);
 });
+
+// The column key contains the token ACC, which is also the DPS legend's marker.
+// Read off a real 2026-09-06 Blizzard World frame, where the TEAM headers were
+// lost to OCR and this line was the only thing left steering the layout.
+test('the column key is not mistaken for a DPS legend', () => {
+  const key = 'PLAYER * K * D » DMG + TKN * ACC/BLK/HEAL.s ULT';
+  const parsed = SB.parse([key]);
+  assert.deepEqual(parsed.roles, []);
+  assert.equal(parsed.layout, null);
+});
+
+test('a board that loses its TEAM headers stays silent about role', () => {
+  const parsed = SB.parse([
+    'PLAYER * K * D » DMG + TKN * ACC/BLK/HEAL.s ULT',
+    'DOOMFIST0+0+297 «10-0 * -',
+    'ZARYA*0°+0°92°135:0,0',
+  ]);
+  assert.equal(parsed.layout, null);
+  parsed.entries.forEach(e => assert.equal(e.role, null));
+});
+
+// The intact key is caught by isColumnHeader; a MANGLED one is not, and this
+// is that case. Verbatim from a 2026-09-06 Blizzard World frame where ULT
+// OCR'd as "ALeuT" - the header test fails, ACC survives, and before this the
+// line was claimed as a DPS legend.
+test('a mangled column key is not a DPS legend either', () => {
+  const key = "RLAYER¥'K + D . DMG!» TKN ACC/BLK/H ALeuT";
+  assert.equal(SB.isColumnHeader(SB.tokenize(key)), false);
+  assert.deepEqual(SB.parse([key]).roles, []);
+});
+
+test('a real role legend is still recognised', () => {
+  ['K • D • DD • DT • ACC • UU', 'K • D • DD • DT • DB • UU',
+   'K • D • DD • DT • HD • UU'].forEach((line, i) => {
+    assert.deepEqual(SB.parse([line]).roles, [['dps', 'tank', 'support'][i]]);
+  });
+});

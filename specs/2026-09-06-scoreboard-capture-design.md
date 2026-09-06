@@ -33,7 +33,7 @@ bar read the tool already performs supplies the player and the hero; the
 scoreboard supplies the stats; position joins them.
 
 **This is a workshop SETTING, not the code.** It is changed in the lobby, needs
-no recompile and no re-upload, and `B4GM8` stays as it is.
+no recompile and no re-upload, and the share code stays as it is.
 
 ### What that costs: it only works from the next lobby onwards
 
@@ -221,8 +221,11 @@ a glyph-size problem.
 On a dark map the same measurement is brutal: team red came back at **6.4** of
 contrast - the text darker than the background behind it - recovering 2.75
 numbers per row against blue's 5.00 in the same frame. `rgb(250,5,30)` is a dark
-colour wearing a bright one's name. It is now `rgb(255,135,140)` at luminance
-161, matching blue's 160, so both sides are equally readable.
+colour wearing a bright one's name. It went to `rgb(255,135,140)` at luminance
+161, matching blue's 160, so both sides are equally readable. That lift worked
+and overshot — at blue 140 it reads as pink — and it is now `rgb(255,90,75)`
+at luminance 124 — **and 8.3 shows the rule below inverts on a bright map, so
+read the two together; neither is general on its own.**
 
 **The rule this leaves behind:** spend hue where the parser does not look (the
 column key, which is recognised only in order to be skipped) and keep luminance
@@ -238,3 +241,180 @@ be precise; the code did not honour that. There is now a colon-free search
 behind the exact one, anchored on the first WORD so `BANSHEE` cannot stand in
 for `BANS`. The frame's verbatim OCR is a test.
 
+
+### 8.3 On a bright map the board is not read at all, and the fix is capture-side
+
+Every measurement in 8.1 was taken on dark maps, where the background luminance
+sat at 78–133. Two Busan frames on 2026-09-06 (`151426`, a white lighthouse
+interior; `151437`, open sky) put the background at **200–255**, above every
+text colour on the board, and the shipped read collapses:
+
+```
+                          values      complete rows
+shipped crop (colour)     27 / 96        0 / 16
+```
+
+Zero complete rows. The failure mode is specific and worth naming: the bullet
+separator `•` and the digit `0` both come back as `©`, and the tokenizer treats
+`©` as a separator, so **every zero on the board is deleted rather than
+misread**. `ASHE • 2 • 0 • 419 • 48 • 46% • 0` arrives as
+`ASHE © 2 © © © 419 © 48 o 4% © ©`. A row that loses values positionally is
+exactly the case `fields` exists to refuse, so nothing wrong was stored — the
+board simply went unread.
+
+**This is not a colour problem and cannot be fixed with one.** No text colour is
+simultaneously darker than a white building and lighter than a dark map. It is a
+preprocessing problem, and preprocessing is the half of this the tool controls.
+
+Seventeen variants, both frames, scored on the same 96 values:
+
+| variant | values | complete rows |
+| --- | --- | --- |
+| **saturation channel** (`255 − 1.6·(max−min)`) | **66 / 96** | **7 / 16** |
+| adaptive local saturation, r=6 | 49 / 96 | 4 / 16 |
+| grayscale luminance | 35 / 96 | 2 / 16 |
+| shipped raw crop | 27 / 96 | 0 / 16 |
+| global luminance threshold | 8–28 / 96 | 0–3 / 16 |
+
+The saturation channel wins because the board is saturated and most map pixels
+are not, which holds whichever side of the text the background's *luminance*
+falls on. On `151426` it reads seven of eight rows perfectly, TEAM 2 included.
+
+Two things it does not fix, both measured rather than assumed:
+
+- **A character whitelist makes it worse, every time** — 59/96 against 66/96,
+  and worse in fourteen of sixteen pairings. It was tried because `©` for `0`
+  looks like exactly the error a whitelist should forbid. Tesseract does not
+  substitute the nearest allowed glyph; denied its first choice it degrades the
+  whole line. Do not re-try this.
+- **`151437` (open sky) still fails for TEAM 1 only** — 0–3 of 6 per blue row
+  while the red rows get 4–5. The sky is saturated cyan, so team blue is
+  competing with a background of its own hue in the very channel that rescues
+  everything else. If one team colour is to move next, the evidence points at
+  **blue**, not red.
+
+#### 8.1's rule inverts on a bright map, which is why no colour can fix this
+
+Colours were scored by recolouring the real TEAM 2 rows in place — the real
+font, the real background, the real dark outline, only the glyph colour changed
+— so a colour costs an offline run instead of an in-game round trip
+(`alpha = (P−B)·(T−B)/|T−B|²`, recomposite with the candidate; pixels off the
+B→T line are left alone, which keeps the outline and the blue rows out of it).
+
+A luminance ladder on these two bright frames, against 8.1's dark-map numbers:
+
+| text luminance | raw crop | saturation pass | dark map (8.1) |
+| --- | --- | --- | --- |
+| 54 — `rgb(250,5,30)`, the original | **18 / 48** | 28 / 48 | **2.75 / 6 — worst** |
+| 97 | 14 / 48 | 29 / 48 | |
+| 124 — `rgb(255,90,75)`, shipped | 15 / 48 | 29 / 48 | |
+| 161 — `rgb(255,135,140)`, previous | **18 / 48** | **30 / 48** | **5.00 / 6 — best** |
+| 196 | 8 / 48 | 25 / 48 | |
+| 228 | 7 / 48 | 18 / 48 | |
+
+**The order is inverted.** The colour 8.1 measured as unreadable is joint-best
+here, and the brightest are the worst, because on a white map the board needs to
+be *darker* than its background rather than brighter. Both measurements say the
+same thing — contrast, not colour — and they disagree about the sign because the
+maps do.
+
+So **8.1's rule ("keep luminance high everywhere the parser looks") is not
+general; it is the dark-map half of a rule whose other half is its opposite.**
+No fixed value satisfies both, which is the argument for moving the fix to the
+capture side: the preprocessing change is worth 27 → 66 of 96 on these same
+frames, larger than the entire luminance range above.
+
+A caution against over-reading this table, recorded because it is the mistake
+that was made here first: an earlier sweep of eight *reds* spanning pink to deep
+red scored 12–18/48 raw and 28–33/48 saturated and was written up as "hue does
+not matter to OCR". It does not show that. Those eight all sat at luminance
+97–161 — a band that is flat in the table above — so it measured hue at roughly
+fixed brightness, on frames where every candidate was on the same side of the
+background, and generalised it to colour. Within a flat band, hue is free; that
+is the whole of what was demonstrated.
+
+What luminance 124 buys is the middle of both readable bands rather than the
+optimum of either: 54 is the failure on a dark map, 196+ the failure on a light
+one, and 69–161 is indistinguishable here. That is what leaves the pink-versus-
+red call free to be made on how it looks to the operator, which is how it was
+made.
+
+#### What this changes
+
+`readScoreboard()` in `scrim.html` hands `scoreCanvas()`'s raw colour crop
+straight to tesseract. The measured change is to read the saturation channel
+instead — or, following the replay-code precedent in
+`tools/real_frame_eval/README.md`, both, since neither wins on every frame.
+Unlike the code reader this cannot demand agreement between passes to accept a
+value; the board is ten rows and they fail independently, so the merge rule is
+the open question and it is not answered here.
+
+Not yet done. Two frames, one map, one lineup — enough to show the shipped path
+fails on a bright map and that the fix is capture-side, not enough to fix the
+capture path against.
+
+### 8.4 The correction: the map moves more than the colour does
+
+8.3 was measured on two Busan frames and its conclusion — that the shipped read
+collapses — was stated as though it were about the board. It is about *Busan*.
+Three real frames, real white rows, no recolouring, all through the shipped
+capture path with no preprocessing changes:
+
+| frame | background | values | complete rows | names | teams / time / bans |
+| --- | --- | --- | --- | --- | --- |
+| Nepal `154354` | flat dark surfaces | **45 / 48** | **6 / 8** | 8/8 | all correct |
+| Blizzard World `143627` | lantern-lit roof, high detail | 18 / 48 | 0 / 8 | 8/8 | none |
+| Busan `151426`/`151437` | white interior, bright sky | *(team colour: 27/96)* | 0 / 16 | — | partial |
+
+**Nepal is the best result anything has produced on this board**, and it is the
+plain shipped path — no saturation pass, no whitelist, no ladder. The two
+misses are both `O`-for-`0` in the trailing ULT column, a glyph confusion.
+
+So the colour work in 8.1–8.3 was chasing the wrong variable. Same colour, same
+font, same code, same resolution, a 2.5× spread from **background alone** —
+because the HUD draws this text on no plate, straight over the world. Every
+colour ranking measured so far has reversed itself on the next frame set, and
+this is why.
+
+**The methodological error is worth naming, because it was made twice.** Both
+team-colour experiments were measured against whatever frames arrived next, and
+each new frame set came from a different map. A colour was credited or blamed
+for a difference the map had caused. The rule that follows: **hold the map fixed
+or do not attribute the difference to the colour.** Two frames of one map is not
+a measurement of a colour, and neither is one frame of each of two maps.
+
+There is a second error here specific to how 8.3 was produced: real frames with
+real white rows already existed (`143627`, and later `154354`) and were not
+used. White was *simulated* by recolouring coloured rows, and the simulation was
+then reported as the verdict on white. The simulation is faithful as far as it
+goes, but a real frame was available and is the better evidence.
+
+**Conclusion: keep the rows white.** The remaining problem is Busan-shaped and
+capture-side — a bright or busy background, which no text colour fixes — and
+that is where 8.3's preprocessing work belongs.
+
+### 8.5 The column key was being read as a DPS legend
+
+Found while scoring the Blizzard World frame. The mode draws one column key,
+`PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT`. It contains the token `ACC`,
+which is the DPS legend's marker, and `legendRole()` asked only for the marker,
+four-plus tokens and no digits — so the key satisfied it.
+
+`isColumnHeader()` exists to catch exactly this line, but `parse()` tested it
+*after* `legendRole()`, so it never ran. Two fixes, because the first is not
+enough:
+
+1. **Order.** `isColumnHeader` now runs first. That covers an intact key.
+2. **`legendRole` was too loose.** On this frame `ULT` OCR'd as `ALeuT`, so the
+   header test failed while `ACC` survived and fired the legend test anyway. A
+   legend must now also carry `DD`, `DT` or `UU` — the key says `DMG`/`TKN`/`ULT`
+   and shares only `K` and `D`, so the two separate cleanly. A legend that loses
+   all three to OCR is not recognised, and the board reports no role rather than
+   the wrong one.
+
+The damage it did: on a frame whose `TEAM` headers did not survive, that single
+miscount set `layout: 'role'`, which suppressed the five/five team split and
+tagged all five surviving rows `dps` with `team: null`. Confidently wrong, which
+is the one outcome §3 says this parser exists to avoid. It now returns
+`layout: null` with every role `null`. Nepal is unchanged. Four regression tests,
+verbatim from the frames; 30/30 pass.
