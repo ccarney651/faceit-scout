@@ -106,6 +106,8 @@ globalvar Keybind_BanHero 41
 globalvar Debug_DisplayServerLoad 42
 globalvar Ban_HudTo 43
 globalvar Ban_HoldTime 45
+globalvar Colour_Heading 46
+globalvar Colour_Key 47
 globalvar Keybind_ClearBan 44
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
@@ -258,6 +260,18 @@ rule "Initialisation: Colours":
     Colour_TextTypeA = rgb(255, 255, 255)
     Colour_TextTypeB = rgb(255, 155, 0)
     Colour_TextTypeC = rgb(40, 205, 60)
+    # The board's chrome: gold for its headings, amber for the column key. Two
+    # tones of one hue so they read as one group, separate from the white data
+    # and from the two team labels.
+    #
+    # Picked on LUMINANCE as much as taste, because OCR reads by contrast and
+    # that is what separated the white lines that read from the team-coloured
+    # rows that did not. BANS and MAP are read by engine/banrow.js, so the gold
+    # sits at 194 of 255 - against white's 255, team blue's 160 and team red's
+    # 59. The key is the one line the parser never reads (it recognises it only
+    # to skip it), so the amber can drop to 149 and recede.
+    Colour_Heading = rgb(255, 190, 60)
+    Colour_Key = rgb(200, 145, 45)
 
 
 rule "Initialisation: Player":
@@ -677,10 +691,10 @@ def Ban_DrawRows():
     hudSubheader(Ban_HudTo, "BANS  : {0}".format(
                      "NONE" if Ban_Team1 == null and Ban_Team2 == null else
                      "{0} | {1}".format(Ban_Team1, Ban_Team2)),
-                 HudPosition.LEFT, 0.2, Colour_TextTypeA,
+                 HudPosition.LEFT, 0.2, Colour_Heading,
                  HudReeval.STRING, SpecVisibility.ALWAYS)
     hudSubheader(Ban_HudTo, "MAP   : {0}".format(getCurrentMap()),
-                 HudPosition.LEFT, 0.3, Colour_TextTypeA,
+                 HudPosition.LEFT, 0.3, Colour_Heading,
                  HudReeval.STRING, SpecVisibility.ALWAYS)
 
 
@@ -799,9 +813,9 @@ rule "Scoreboard: Create Legend":
     # hues in a fifteen-line block over an uncontrolled background read as noise.
     # Hue is left to the two TEAM labels, the one place it carries meaning.
     if Scoreboard_Size == 0:
-        hudSubheader(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubheader(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_Key, HudReeval.NONE, SpecVisibility.ALWAYS)
     else:
-        hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_Key, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Team Headers":
