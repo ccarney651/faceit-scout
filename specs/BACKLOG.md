@@ -579,23 +579,29 @@ saw, and is worth more than any description of the symptom.
 
 Bans and the spectator scoreboard only exist in lobbies running our workshop
 code, and scrims today are hosted on a mix of ScrimTime, ScrimTime Lite and
-ours. **`B4GM8`** (see `tools/scrim_code/README.md`) is what fixes that: a host
-loads five characters instead of pasting 60 KB.
+ours. **`B44BZ`** (see `tools/scrim_code/README.md`) is what fixes that: a host
+loads five characters instead of pasting 60 KB. **Anyone still holding the old
+`B4GM8` needs the new five characters** — that code is retired and will never
+be updated again.
 
 Two reasons this is P1 rather than housekeeping. Lite has no spectator
 scoreboard at all, so phase 3's stats read can never work in a Lite-hosted
 scrim. And **codes expire six months after creation** unless imported or
-uploaded to often enough — regular use by the team is what keeps `B4GM8` alive,
-so adoption is also maintenance.
+uploaded to often enough — regular use by the team is what keeps `B44BZ` alive
+(it lapses around 2027-03-06 otherwise), so adoption is also maintenance.
 
-### P2 — Confirm who can update the share code
+### ~~P2 — Confirm who can update the share code~~ — RESOLVED 2026-09-06
 
-`B4GM8` was uploaded from the alt account `ragecomic`, not `gcb`. If updating a
-code requires the account that published it, then that account is the only one
-that can ship workshop changes, and every future ban-logic change has to go
-through it. One test update from `gcb` settles it: if it mints a NEW code
-instead of updating, the team needs to know before hosts are stranded on a
-stale version.
+Resolved by moving the code rather than by testing the old one. `B4GM8` was
+published from the alt account `ragecomic`, which meant only that account could
+ever ship workshop changes. Re-rolling on the main account `gcb` produced
+**`B44BZ`** and put publishing back where the work happens, so the dependency
+the question was about no longer exists.
+
+What this did *not* establish is whether `gcb` could have updated `ragecomic`'s
+code — that test was never run and now never needs to be. The operating rule
+going forward is simply: publish from `gcb`, and always pick "update an existing
+code".
 
 ### P3 — Remaining in-game checks for the ban phase
 

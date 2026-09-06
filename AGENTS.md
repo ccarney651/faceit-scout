@@ -460,7 +460,7 @@ November.
    **Bans and the spectator scoreboard only exist in lobbies running our
    workshop code.** Scrims are hosted on a mix of ScrimTime, ScrimTime Lite and
    ours, and Lite has no scoreboard — so a Lite-hosted scrim can never support
-   the phase 3 stats read. The share code `B4GM8` is what moves hosts onto ours;
+   the phase 3 stats read. The share code `B44BZ` is what moves hosts onto ours;
    see `tools/scrim_code/README.md`.
 
    **Auto map detection (6) is now cheaper than it was**: the code reader can

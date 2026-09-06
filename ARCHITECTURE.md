@@ -1004,7 +1004,7 @@ how the scoreboard renders for a spectator but not a player. Note that
 `getAllPlayers()` paired with `SpecVisibility.NEVER` renders for **nobody** —
 that combination appears nowhere else in `scrim_owdb.opy` and does not display.
 
-**Bans exist only in lobbies running our workshop code.** Share code `B4GM8`
+**Bans exist only in lobbies running our workshop code.** Share code `B44BZ`
 (`tools/scrim_code/README.md`) is how a host loads it without pasting 60 KB.
 ScrimTime Lite has no spectator scoreboard at all, so a Lite-hosted scrim can
 never support the stats read either.

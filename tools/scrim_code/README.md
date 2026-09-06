@@ -214,20 +214,27 @@ Two things were considered and **rejected**, so they do not get re-litigated:
 
 ## The share code
 
-**`B4GM8`** — minted 2026-08-28. Hosts should load this rather than pasting the
-script; it is the only way bans and the spectator scoreboard reach a scrim
-somebody else is hosting.
+**`B44BZ`** — minted 2026-09-06 **from the main account `gcb`**. Hosts should
+load this rather than pasting the script; it is the only way bans and the
+spectator scoreboard reach a scrim somebody else is hosting.
 
-Two things about it that are easy to get wrong:
+**`B4GM8` is dead — do not hand it to anyone.** It was the 2026-08-28 code and
+it lives on the alt account `ragecomic`, so it can only ever be updated from an
+account the team does not normally use. Re-rolling on `gcb` moved publishing to
+the account that actually ships the code, which is worth the one-time cost of
+retiring the old five characters. Anyone still holding `B4GM8` is on a version
+that will never be updated again.
 
-- **It was uploaded from the alt account `ragecomic`, not `gcb`.** Re-uploading
-  from a different account almost certainly mints a NEW code rather than
-  updating this one, which would strand every host on the old version. Confirm
-  before anyone tries. Whoever holds `ragecomic` is the one who can publish
-  workshop changes.
+Two things about the new one that are easy to get wrong:
+
 - **Always pick "update an existing code", never "upload a new one."** It keeps
   the code stable for the team, it does not consume the create-code rate limit,
-  and it counts as activity against expiry.
+  and it counts as activity against expiry. Re-rolling is what retires a code;
+  do it deliberately or not at all.
+- **Publish from `gcb`.** Updating a code appears to require the account that
+  published it, which is exactly why the alt-account arrangement was a problem
+  worth spending a re-roll to escape. Do not upload this mode from any other
+  account.
 
 **The create-code rate limit is about ten codes.** Measured 2026-08-28 while
 rerolling for a memorable one: after roughly ten creations Overwatch returns
@@ -237,8 +244,14 @@ assigns the code randomly - it cannot be chosen - so rerolling is the only
 lever, and it is a budget of about ten. Decide what you will accept before
 spending it.
 
+That budget has now been spent twice, on `ragecomic` (2026-08-28) and on `gcb`
+(2026-09-06). It appears to be per-account, since the second re-roll succeeded
+on a fresh account, but nobody has established whether it resets with time. Treat
+another re-roll on `gcb` as expensive until someone knows.
+
 **Codes expire six months after creation** unless imported or uploaded to often
-enough. Regular use by the team is what keeps this one alive; a code that only
+enough. `B44BZ` was minted 2026-09-06, so it lapses around **2027-03-06** unless
+the team keeps using it. Regular use is what keeps it alive; a code that only
 gets loaded occasionally will quietly die, probably mid-season.
 
 ## Import in Overwatch
