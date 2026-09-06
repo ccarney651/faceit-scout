@@ -632,3 +632,67 @@ against this one.
 - **A two-pass merge of raw and local contrast.** Measured at +10 values and
   +1 row for double the OCR cost. Section 8.3 left the merge rule as an open
   question; the answer is that it is not worth asking.
+
+## 9. Locating the board: capture markers
+
+The crop is not forgiving. Section 8.8's read assumes the box is the board's
+true extent, and it is worth stating what happens when it is not — same frames,
+same preprocessing, margin added on all four sides:
+
+| box | frames accepted | values |
+| --- | --- | --- |
+| true extent | **7 / 8** | **343 / 480** |
+| +10% | 4 / 8 | 300 |
+| +25% | 5 / 8 | 298 |
+| +50% | 4 / 8 | 194 |
+
+**"Roughly the right area" is not good enough**, and `boxes.scoreboard` is drawn
+by hand — so every capture currently depends on a host dragging an accurate
+rectangle over a HUD element. That is the weakest link in the path.
+
+Three ways to remove it were considered:
+
+- **Fixed fractional offsets from `boxes.a`**, as `code_box()` already does for
+  the replay code. Free and retroactive, but the board's height is not fixed —
+  it moves with the Size setting and with how many lines are drawn — and the
+  table above says the slack needed to cover that is expensive.
+- **Self-locating**: profile the ink and crop to its bounding box, the way
+  `rowfind_proto` finds the name rows. Free, retroactive, adapts to any layout.
+  Rejected in favour of the third only because the operator does not need the
+  retroactivity and preferred the simpler detector.
+- **An in-game marker** — chosen. Costs a workshop change and a re-upload, and
+  only works from the next lobby onwards, both of which the operator accepted
+  explicitly.
+
+### What the markers are, and why each choice
+
+Two bars of 56 `●`, drawn at sort 0.1 and 4.5, spectator-and-replay only, behind
+`5. Spectator Scoreboard > Draw Capture Markers` (default on).
+
+- **Green `rgb(40,205,60)`** — the only colour in the mode's palette that nothing
+  draws on the spectator view during a game. Blue and red are the TEAM headers,
+  orange is the chrome, white is the rows; this green is used solely by the
+  ready-up list, which is setup-only. No new colour, nothing to collide with,
+  and it reads as part of a deliberate palette rather than a debug artifact.
+- **A run of dots, not a hue** — this is what keeps green safe. Foliage is green;
+  foliage is also textured, and nothing on an Overwatch map draws a
+  56-character uniform horizontal bar. **The detector must key on the RUN, not
+  the colour alone.** U+25CF specifically because the ready-up list already
+  renders it in this mode, so it is known to exist in the font rather than a
+  guess that costs an in-game test to disprove.
+- **56 wide** — every HUD line is centre-aligned, so a bar wider than the widest
+  line bounds the board horizontally as well as vertically, and two bars are a
+  whole box. The widest line is the column key at 47 characters. Overshooting
+  costs a little background either side, which the local-contrast pass handles;
+  undershooting would clip the key and the longest rows.
+
+The tool crops **strictly between** the two bars, so the markers never enter the
+image handed to OCR and cannot contribute junk lines of their own.
+
+### Not yet built
+
+The detector. It needs frames that HAVE markers, which do not exist until the
+mode is rebuilt and uploaded, so the order is: ship the workshop change, capture
+two or three spectator frames, then tune the locator against them. Until that
+exists the manual box remains the only path, and it stays as the fallback for a
+host who switches the markers off.

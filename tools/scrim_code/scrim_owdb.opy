@@ -122,6 +122,8 @@ globalvar Debug_LoadText 52
 globalvar Debug_LoadHistory 31
 globalvar Debug_LoadSorted 53
 globalvar Debug_LoadText2 54
+# Bounds the board for the capture tool - see "Scoreboard: Create Capture Markers".
+globalvar Scoreboard_CaptureMarkers 55
 globalvar Keybind_ClearBan 44
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
@@ -259,6 +261,12 @@ rule "Settings: Spectator Scoreboard Options":
     Scoreboard_GroupMode = createWorkshopSettingEnum("5. Spectator Scoreboard", "Player Grouping Style", 0, ["Group by team, sort by slot", "Group by team, sort by role"], 2)
     Scoreboard_DisplayMatchTime = createWorkshopSettingBool("5. Spectator Scoreboard", "Display Match Time", true, 4)
     Scoreboard_AllowHideScoreboard = createWorkshopSettingBool("5. Spectator Scoreboard", "Allow Host Spectator to Toggle Scoreboard", true, 5)
+    # Default ON: the markers exist so the capture tool can find the board
+    # without a human drawing a box over it, and the hand-drawn box was
+    # measured to matter - a crop 50% larger than the board halves the read
+    # (7/8 frames accepted at the true extent, 4/8 at +50%). A host who
+    # dislikes them can switch them off; the tool falls back to its manual box.
+    Scoreboard_CaptureMarkers = createWorkshopSettingBool("5. Spectator Scoreboard", "Draw Capture Markers", true, 6)
 
 
 rule "Settings: Keybind Options":
@@ -1022,6 +1030,52 @@ rule "Scoreboard: Create Match Time Display":
         hudSubheader(null, "{0} Match Time: {1}".format(abilityIconString(Hero.LUCIO, Button.ABILITY_2), "{0}:{1}{2}".format(floor(Match_CurrentMatchTime / 60), "0" if Match_CurrentMatchTime % 60 < 10 else "", floor(Match_CurrentMatchTime % 60))), HudPosition.LEFT, 4, Colour_TextTypeA, HudReeval.STRING, SpecVisibility.ALWAYS)
     else:
         hudSubtext(null, "{0} Match Time: {1}".format(abilityIconString(Hero.LUCIO, Button.ABILITY_2), "{0}:{1}{2}".format(floor(Match_CurrentMatchTime / 60), "0" if Match_CurrentMatchTime % 60 < 10 else "", floor(Match_CurrentMatchTime % 60))), HudPosition.LEFT, 4, Colour_TextTypeA, HudReeval.STRING, SpecVisibility.ALWAYS)
+
+
+# TWO GREEN BARS THAT BOUND THE BOARD, so the capture tool can find it without
+# a human dragging a box over it. Everything about them is chosen for a machine
+# that has to locate them in a frame full of Overwatch.
+#
+# WHY AT ALL: the crop is not forgiving. Measured over the eight Colosseo frames,
+# the true extent accepts 7 of 8 frames; the same crop with a 50% margin accepts
+# 4 and halves the values recovered. "Roughly the right area" is not good enough,
+# and asking every host to drag an accurate box is not a plan.
+#
+# WHY GREEN: it is the only colour in this mode's palette that nothing draws on
+# the spectator view DURING A GAME. Blue and red are the TEAM headers, orange is
+# the chrome, white is the rows; Colour_TextTypeC is used solely by the ready-up
+# list, which is setup-only. So the markers cost no new colour, sit inside a
+# palette a human already reads as deliberate, and cannot be confused with any
+# other line on the board.
+#
+# WHY A ROW OF DOTS: a solid glyph gives large blocks of near-pure colour, which
+# is what makes the detector cheap - and it is the SHAPE that keeps green safe.
+# Foliage is green, but foliage is textured; nothing on an Overwatch map draws a
+# 56-character uniform horizontal bar. The detector looks for a long run, not
+# for a hue. U+25CF is used deliberately over a block character: the ready-up
+# list already renders it in this mode, so it is known to exist in the font
+# rather than being a guess that costs an in-game test to disprove.
+#
+# WHY 56 WIDE: every HUD line is CENTRE-aligned, so a bar wider than the widest
+# line bounds the board horizontally as well as vertically, and two bars are a
+# whole box. The widest line is the column key at 47 characters; overshooting
+# costs a little background either side, which the capture side's local-contrast
+# pass handles, while undershooting would CLIP the key and the longest rows.
+#
+# The tool crops strictly BETWEEN the two bars, so the markers never enter the
+# image handed to OCR and cannot add junk lines of their own.
+rule "Scoreboard: Create Capture Markers":
+    @Condition Scoreboard_CaptureMarkers == true
+    @Condition Scoreboard_EnableScoreboard == true
+    @Condition isGameInProgress() == true
+
+    wait()
+    if Scoreboard_Size == 0:
+        hudSubheader(null, "●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●", HudPosition.LEFT, 0.1, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubheader(null, "●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●", HudPosition.LEFT, 4.5, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
+    else:
+        hudSubtext(null, "●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●", HudPosition.LEFT, 0.1, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubtext(null, "●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●", HudPosition.LEFT, 4.5, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
 # Setting first, isGameInProgress() second - see the block above
