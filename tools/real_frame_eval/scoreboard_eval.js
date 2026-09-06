@@ -55,6 +55,26 @@ function pair(entries) {
   return out;
 }
 
+// THE SCORE PRODUCTION ACTUALLY GETS. The tool joins a row to a player by SLOT
+// POSITION - row i is slot i, which is the whole premise of design section 1 -
+// so a row whose NAME came back mangled is not lost at all, and scoring by name
+// understates the read badly. It is only safe when all ten rows parsed: with
+// nine, nobody knows WHICH is missing, and every row below the gap would be
+// attributed to the wrong player. A frame that does not yield ten rows is
+// therefore refused rather than scored, which is the honest reading of what the
+// capture path does with it.
+function scorePositional(parsed) {
+  if (parsed.entries.length !== ROWS.length) return null;
+  var v = 0, rows = 0;
+  parsed.entries.forEach(function (e, i) {
+    var hit = 0;
+    for (var ci = 0; ci < COLS.length; ci++)
+      if (String(e[PARSED[COLS[ci]]]) === String(ROWS[i][COLS[ci]])) hit++;
+    v += hit; if (hit === COLS.length) rows++;
+  });
+  return { values: v, rows: rows };
+}
+
 function score(parsed) {
   const s = { names: 0, values: 0, rows: 0, teams: 0, entries: parsed.entries.length,
               matchTime: parsed.matchTime === TRUTH.board.matchTime };
@@ -83,6 +103,7 @@ function score(parsed) {
     const lines = (data.text || '').split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
     const parsed = SB.parse(lines);
     const s = score(parsed);
+    s.pos = scorePositional(parsed);
     (byVariant[variant] = byVariant[variant] || []).push(s);
     console.log(
       stem.padEnd(8), variant.padEnd(9),
@@ -104,4 +125,17 @@ function score(parsed) {
   for (const [v, val, rows, names, teams, time] of rank)
     console.log(v.padEnd(9), String(val).padStart(7), String(rows).padStart(8),
                 String(names).padStart(8), String(teams).padStart(8), String(time).padStart(7));
+
+  console.log('\n== as production reads it: slot join, ten-row frames only ==');
+  console.log('variant   frames    values      rows');
+  for (const [v, a] of Object.entries(byVariant)) {
+    const ok = a.filter(s => s.pos);
+    const val = ok.reduce((t, s) => t + s.pos.values, 0);
+    const rws = ok.reduce((t, s) => t + s.pos.rows, 0);
+    const pct = ok.length ? (100 * val / (ok.length * ROWS.length * COLS.length)).toFixed(0) : '-';
+    console.log(v.padEnd(9), (ok.length + '/' + a.length).padStart(6),
+      (val + '/' + ok.length * ROWS.length * COLS.length).padStart(10),
+      ('  ' + pct + '%').padStart(6),
+      (rws + '/' + ok.length * ROWS.length).padStart(9));
+  }
 })();

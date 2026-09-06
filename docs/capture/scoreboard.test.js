@@ -449,3 +449,60 @@ test('both TEAM headers read still gives the same five/five split', () => {
   assert.deepEqual(parsed.entries.map(e => e.team),
                    ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b']);
 });
+
+// The most common OCR error the board produces. Verbatim fragments from the
+// 2026-09-06 Colosseo frames.
+test('a lone O after the first digit is a zero', () => {
+  assert.equal(SB.zeroise('WINSTON | 2 « 0 » 526 * 403 *» 508 + O'),
+                          'WINSTON | 2 « 0 » 526 * 403 *» 508 + 0');
+  assert.equal(SB.zeroise('TRACER « O » 3 + 275 « 843 « O% * O'),
+                          'TRACER « 0 » 3 + 275 « 843 « 0% * 0');
+});
+
+test('zeroise leaves prose alone', () => {
+  // Four O's across two lines and no stats tail on either: both survive intact.
+  assert.equal(SB.zeroise('BANS : NONE'), 'BANS : NONE');
+  assert.equal(SB.zeroise('MAP : COLOSSEO'), 'MAP : COLOSSEO');
+  // A trailing lone O with no digit behind it is not a stats tail either.
+  assert.equal(SB.zeroise('TEAM O'), 'TEAM O');
+});
+
+// A row whose FIRST stat is a zero puts the lone O before every digit on the
+// line - "TRACER . O . 3 . 275 ...". This is why the rule anchors on the stats
+// TAIL and not on the first digit: anchored on the digit it cannot see the one
+// value most likely to be a zero.
+test('a leading zero-kill column is still recovered', () => {
+  assert.equal(SB.zeroise('DOOMFIST O | 1 | 2'), 'DOOMFIST 0 | 1 | 2');
+});
+
+test('zeroise does not touch an O inside a word', () => {
+  // A name may contain a digit and then an O; that O is not a lone token.
+  assert.equal(SB.zeroise('R3TR0 MOON « 4 « 0'), 'R3TR0 MOON « 4 « 0');
+});
+
+test('an O in the ULT column is recovered as a value', () => {
+  const p = SB.parse(['WINSTON | 2 « 0 » 526 * 403 * 508 + O']);
+  assert.equal(p.entries.length, 1);
+  assert.equal(p.entries[0].uu, 0);
+  assert.equal(p.entries[0].fields, 6);
+});
+
+// A zero in the kills column comes back as a round LETTER, and not always the
+// same one - "O", "Q", "QO", "OQ" all appear across the 2026-09-06 Colosseo
+// frames. The two-character welds matter most: "BASTION » 1 «QO » 585 ..."
+// banks one number, hits QO, falls under the four-column minimum and the whole
+// row is dropped. Replacing only the token's first character would leave "0O",
+// which is still not a number and still loses the row.
+test('a round-letter zero is recovered, welded or not', () => {
+  const cases = [
+    ['BASTION » 1 «QO » 585 ¢« 276 » 37% + 0', { k: 1, d: 0, uu: 0 }],
+    ['REAPER * OQ « 3 « 701 = 915 + 13% « 0', { k: 0, d: 3, uu: 0 }],
+    ['TRACER » Q » 3 ¢ 275 « 843 « O% * O', { k: 0, d: 3, x: '0%', uu: 0 }],
+  ];
+  for (const [line, want] of cases) {
+    const e = SB.parse([line]).entries[0];
+    assert.ok(e, `row dropped entirely: ${line}`);
+    assert.equal(e.fields, 6, `not six fields: ${line}`);
+    for (const k of Object.keys(want)) assert.equal(e[k], want[k], `${k} in ${line}`);
+  }
+});

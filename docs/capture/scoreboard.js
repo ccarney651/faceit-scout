@@ -63,6 +63,72 @@
     return /^\d+(\.\d+)?%?$/.test(tok);
   }
 
+  // A LONE "O" AFTER THE FIRST DIGIT ON A LINE IS A ZERO. Measured across the
+  // eight Colosseo frames, this is the single most common OCR error the board
+  // produces - "508 + O", "« O » 3", "O%" - and it is worth +27 values and +4
+  // complete rows on its own, from 286/480 to 313/480.
+  //
+  // It is safe because of where it is allowed to apply, and both halves matter:
+  //
+  // IN THE STATS TAIL, meaning the trailing run of tokens that are already
+  // numeric or are themselves a lone O. A row is a name followed by six
+  // numbers, so that run is the numbers and everything before it is the name.
+  // Anchoring on the tail rather than on the first digit is not a detail: a row
+  // whose FIRST stat is a zero reads "TRACER « O » 3 • 275 ...", where the lone
+  // O precedes every digit on the line. Anchoring on the first digit cannot see
+  // it, which is exactly the value most likely to be a zero in the first place.
+  //
+  // The run must contain a real digit somewhere, so a line of pure prose that
+  // happens to end in a lone O is left alone.
+  //
+  // LONE, meaning a whole token. A name that contains a digit and then an O
+  // ("R3TR0") has that O inside a word and is never matched; only a token that
+  // is entirely O, or O%, is. Names sit outside the run anyway - this is the
+  // second guard, not the first.
+  //
+  // Deliberately NOT extended to l/I/| for 1, or S for 5. Those appear INSIDE
+  // multi-digit numbers, where a substitution invents a plausible stat rather
+  // than failing loudly. O earns its place by being a whole token by itself,
+  // which is what makes it certainly wrong rather than probably wrong.
+  function zeroise(line) {
+    var re = /[0-9A-Za-zÀ-ɏ%:]+/g, m, toks = [];
+    while ((m = re.exec(line)) !== null) toks.push({ t: m[0], i: m.index });
+    // O, Q, and the two-character welds of them. Measured on the Colosseo
+    // frames, a zero in the kills column comes back as any of "O", "Q", "QO",
+    // "OQ" - the glyph is round and OCR picks a round letter, not always the
+    // same one. Restricted to O and Q because those are the two it actually
+    // produced; "co" and "ce" also appear on those lines but are misread
+    // SEPARATORS rather than digits, and turning a separator into a zero
+    // invents a column.
+    //
+    // A whole row hangs on this. "BASTION » 1 «QO » 585 ..." stops at QO with
+    // one number banked, falls under the four-column minimum and is dropped
+    // entirely; "REAPER * OQ « 3 ..." keeps going but every value lands one
+    // column left, so k reads 3 where the truth is 0.
+    var isO = function (t) { return /^[OoQq]{1,2}%?$/.test(t); };
+    var start = toks.length, sawDigit = false;
+    while (start > 0 && (looksNumeric(toks[start - 1].t) || isO(toks[start - 1].t))) {
+      if (looksNumeric(toks[start - 1].t)) sawDigit = true;
+      start--;
+    }
+    if (!sawDigit) return line;
+    // The WHOLE token is replaced, not just its first character. "QO" is two
+    // characters and a zero is one, so the remainder is blanked to spaces -
+    // which tokenize() treats as a separator, exactly like the bullet that
+    // should have been there. Overwriting only the first character would leave
+    // "0O", which is still not a number and still loses the row.
+    var out = line.split('');
+    for (var j = start; j < toks.length; j++) {
+      var tk = toks[j];
+      if (!isO(tk.t)) continue;
+      var rep = tk.t.charAt(tk.t.length - 1) === '%' ? '0%' : '0';
+      for (var c = 0; c < tk.t.length; c++) {
+        out[tk.i + c] = c < rep.length ? rep.charAt(c) : ' ';
+      }
+    }
+    return out.join('');
+  }
+
   // The role of a legend line, or null if the line is not a legend.
   function legendRole(tokens) {
     var upper = tokens.map(function (t) { return t.toUpperCase(); });
@@ -293,7 +359,7 @@
     var selfDescribed = {};
 
     for (var i = 0; i < lines.length; i++) {
-      var raw = String(lines[i] == null ? '' : lines[i]).trim();
+      var raw = zeroise(String(lines[i] == null ? '' : lines[i]).trim());
       if (!raw) continue;
       var tokens = tokenize(raw);
       if (!tokens.length) continue;
@@ -444,6 +510,7 @@
     splitRow: splitRow,
     teamFromLine: teamFromLine,
     isColumnHeader: isColumnHeader,
+    zeroise: zeroise,
     leadingNumber: leadingNumber,
     labelledRow: labelledRow,
     parse: parse,

@@ -552,3 +552,83 @@ to read poorly and the parser must not depend on them.
 
 Two regression tests, one for the half-read board and one asserting the override
 agrees with a fully-read one; 32/32 pass.
+
+### 8.8 The scorer was measuring the wrong thing, and the round-letter zero
+
+Two corrections and one fix, all from the same eight frames.
+
+#### The harness understated the read, because it joined by name
+
+`scoreboard_eval.js` originally paired a parsed row to its truth row by fuzzy
+NAME match, and discarded any row whose name OCR'd too badly to pair. **That is
+not how the tool joins.** Section 1 is explicit: row *i* is slot *i*, the
+spectator portrait bar is in slot order too, and the join needs no name at all.
+A row whose name came back as garbage is not lost in production; only its label
+is, and the label was never load-bearing.
+
+The harness now reports both. The name-matched score stays, because it is the
+right diagnostic for name OCR specifically. The **positional** score is the one
+that describes production, and it is reported only for frames that yielded
+exactly ten rows — with nine, nobody knows *which* is missing, so every row below
+the gap would attach to the wrong player and the frame has to be refused rather
+than guessed at. Refusing is the correct behaviour, so the metric counts it.
+
+#### A zero in the kills column is a round LETTER, and not always the same one
+
+The single most common OCR error on this board, by a wide margin. Across the
+eight frames a `0` comes back as `O`, `Q`, `QO` or `OQ`, and the two-character
+welds are the expensive ones:
+
+```
+BASTION » 1 «QO » 585 ¢« 276 » 37% + 0     row DROPPED - one number banked,
+                                            then QO, then under the 4-column
+                                            minimum
+REAPER  * OQ « 3 « 701 = 915 + 13% « 0     row SHIFTED - k reads 3, truth is 0
+```
+
+`zeroise()` rewrites these, and three details each cost something:
+
+- **It anchors on the stats TAIL, not on the first digit.** A row whose first
+  stat is a zero puts the offending letter before every digit on the line, so a
+  digit anchor cannot see the value most likely to be a zero.
+- **It replaces the WHOLE token.** Overwriting the first character of `QO`
+  leaves `0O`, which is still not a number and still loses the row. The
+  remainder is blanked to a space, which tokenize treats as the separator that
+  should have been there.
+- **It is restricted to O and Q.** `co` and `ce` appear on the same lines and
+  are misread *separators*; turning one into a zero invents a column.
+
+Deliberately not extended to `l`/`I` for 1 or `S` for 5. Those occur INSIDE
+multi-digit numbers, where a substitution invents a plausible stat instead of
+failing loudly. A round letter alone in a numeric column is certainly wrong; a
+letter inside a number is only probably wrong, and this parser errs toward
+silence.
+
+#### Where that leaves the read
+
+| | frames accepted | values | complete rows |
+| --- | --- | --- | --- |
+| raw crop, before any of this | 2 / 8 | 88% | 11 / 20 |
+| **local contrast + zeroise** | **7 / 8** | **90%** | **53 / 70** |
+
+**The preprocessing did not make individual reads much more accurate — it made
+three and a half times as many frames readable at all.** Per-frame accuracy on
+an accepted frame was already 88%; what changed is how often the board is
+legible enough to accept.
+
+The one frame still refused is `202418`, which yields eight rows. Its background
+is mid-bright stone at high detail and the losses are two rows destroyed by
+background texture welding into the glyphs, not a systematic error with a rule
+behind it. Frames from a second map are worth more now than further tuning
+against this one.
+
+#### What is no longer worth doing
+
+- **Splitting fields on word bounding boxes.** This was the planned next step,
+  to defend against a lost `•` welding two values together. After `zeroise`
+  there are **zero** rows with fewer than six fields across all eight frames -
+  the missing fields were the dropped round letters all along, not lost
+  separators. The problem it was going to solve does not currently exist.
+- **A two-pass merge of raw and local contrast.** Measured at +10 values and
+  +1 row for double the OCR cost. Section 8.3 left the merge rule as an open
+  question; the answer is that it is not worth asking.
