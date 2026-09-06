@@ -1013,6 +1013,58 @@ Bans are only recorded in lobbies running **this** workshop code. Scrims hosted
 on stock ScrimTime or ScrimTime Lite have no ban row, and Lite has no spectator
 scoreboard either, so it can never support the stats read.
 
+**The board tells the capture tool where it is.** `scrim_owdb.opy` draws two
+thin green rules (25×U+2500) bracketing the scoreboard, and
+`Scoreboard.findMarkerBox()` finds them and returns the region between;
+`readScoreboard()` prefers that over the hand-drawn `boxes.scoreboard` and falls
+back to it when the detector returns null. This exists because **the crop is not
+forgiving** — measured over eight real frames, the board's true extent gets 7 of
+8 accepted, the same crop with a 50% margin gets 4 and halves the values
+recovered — and a host dragging an accurate rectangle over a HUD element was the
+weakest link in the path.
+
+The detector looks for a band that is **wide, dense and thin**, not for a colour
+and not for a contiguous run. Contiguity fails outright: U+2500 glyphs do *not*
+join, and the rule measures 531 matching pixels over a 555px span with a longest
+unbroken run of 22 — one glyph. Wide-and-dense is what makes green safe to use
+at all, since foliage is green but does not fill 80% of a span hundreds of
+pixels wide; thin is the strongest test, because a rule is one or two rows tall.
+The HUD also renders the marker darker than requested (`rgb(26,191,56)` against
+`rgb(40,205,60)`), so the test is green *dominance*, never an exact value.
+
+**The scoreboard crop is preprocessed with local contrast**, in `scoreCanvas()`:
+luminance minus its own local mean, gain 6, inverted to dark-on-light, at a
+radius that scales with the crop so it survives other capture resolutions. The
+board is white text on **no plate**, drawn straight over the world, so the only
+reliable signal is being brighter than the immediate surroundings — being
+brighter than a fixed value is false the moment a white wall is behind it. This
+took frames readable at all from **2 in 8 to 7 in 8**. A saturation channel was
+recommended earlier and is **withdrawn**: it assumes the board is the saturated
+thing on screen, which was true of team-coloured rows and is false of white
+ones, so it erases exactly the text it was meant to rescue.
+
+**The parser errs toward silence, and several fixes are that principle applied.**
+A ten-row board is five and five in slot order, so position now *overrides* the
+TEAM headers rather than only filling a null — a frame where `TEAM 2` OCR'd as
+`BAM 2` had put all ten rows on team A. `isColumnHeader` runs before
+`legendRole`, because the column key contains `ACC` and was being claimed as a
+DPS legend. And three OCR repairs are each gated so they cannot invent a column:
+a round letter alone in a numeric position is a zero, an all-zeros token two or
+more long is that many columns, and a bare `|` becomes `1` **only** as a retry
+on a row that came back one column short, converting only the first — because
+OCR renders the bullet separator as `|` too, and promoting a separator shifts
+every value in the row.
+
+Rows join to players by **slot position, not by name** (design section 1), which
+is why a mangled name costs nothing and why a frame yielding other than ten rows
+is refused rather than guessed at: with nine, nobody knows which is missing and
+every row below the gap would attach to the wrong player.
+
+**Measurements are reproducible.** `tools/real_frame_eval/scoreboard_truth.json`
+plus `scoreboard_crop.py` and `scoreboard_eval.js` re-run the whole comparison
+over the fixture frames and report both a name-matched score and the positional
+score production actually gets. Everything before them was prose.
+
 **Three features still carry `WIP` badges**: auto side-detection, the scoreboard
 OCR read, and the score-box read. Side detection has since worked end to end in
 the field (2026-08-19, all ten slots), but one confirmed run is not a track

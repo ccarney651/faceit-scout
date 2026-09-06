@@ -603,6 +603,38 @@ code — that test was never run and now never needs to be. The operating rule
 going forward is simply: publish from `gcb`, and always pick "update an existing
 code".
 
+### P2b — Verify the scoreboard read in a LIVE capture — 2026-09-06
+
+Everything about the scoreboard read is verified against **still frames** in a
+real browser: 46 unit tests, 129 browser checks, and end-to-end runs producing
+10/10 rows and 95% of values on a marked frame. None of it has run against a
+**screen-share video stream**, which is what a real capture reads.
+
+Two things changed on the critical path and have never seen live video.
+`scoreCanvas()` now does real per-snapshot work where it previously only
+upscaled, and `autoBoardBox()` runs a full-frame `getImageData` that has so far
+only ever been handed decoded PNGs.
+
+**What to check on the first live run:** the read reports
+`boxSource: 'markers'`. If it says `'manual'` the detector did not find the
+rules and the tool is quietly falling back to the hand-drawn box — a safe
+failure, but one worth knowing about, and it would mean either the host has not
+reloaded `B44BZ` or the markers are switched off in `5. Spectator Scoreboard`.
+
+### P2c — Frames from a second map — 2026-09-06
+
+The preprocessing parameters (blur radius 12, gain 6) were tuned on eight frames
+of **one map**, and the marker detector validated on two frames of **one other**.
+The family choice — local contrast over saturation — is supported by three
+controls and by the mechanism, so it is not in doubt. The specific numbers could
+be Colosseo-shaped.
+
+This is design §8.4's overfitting trap wearing a new hat, and the guard is
+cheap: a few spectator frames from a different map, dropped into `screenshots/`
+with their truth added to `scoreboard_truth.json`. The radius sweep was flat
+(236/239/235), which suggests it is not knife-edge, so this is insurance rather
+than a suspicion.
+
 ### P3 — Remaining in-game checks for the ban phase
 
 Not blockers, but unverified. `setAllowedHeroes` force-swapping a player already

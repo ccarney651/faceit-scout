@@ -457,6 +457,33 @@ November.
    with `SpecVisibility.NEVER` rendering for nobody at all. Read it before
    touching workshop HUD code.
 
+   **The scoreboard read shipped 2026-09-06, and it is measured, not guessed.**
+   Three rules, each of which cost a wrong turn to learn:
+
+   - **Hold the map fixed, and the board too, or the number means nothing.**
+     Every colour ranking taken before this reversed itself on the next frame
+     set, because each was measured on a different map. The experiment that
+     works is ONE PAUSED BOARD shot from several camera angles, so the text is
+     identical and the background is the only variable. Re-run it with
+     `python tools/real_frame_eval/scoreboard_crop.py scoreboard_crops` then
+     `node tools/real_frame_eval/scoreboard_eval.js scoreboard_crops`.
+   - **Read the POSITIONAL score, not the name-matched one.** Rows join to
+     players by slot, so a row whose name OCR'd badly is not lost in production.
+     The harness reports both; only frames yielding exactly ten rows are scored,
+     because at nine nobody knows which is missing.
+   - **The saturation channel in design §8.3 is WITHDRAWN.** It assumes the
+     board is the saturated thing on screen — true of team-coloured rows, false
+     of white ones, so it erases them. What ships is local contrast on
+     luminance. Do not reinstate it, and do not re-try a character whitelist
+     either (§8.3 measured it worse in fourteen of sixteen pairings).
+
+   **The board carries its own crop box.** Two green rules bracket it and
+   `Scoreboard.findMarkerBox()` finds them, because the crop is not forgiving —
+   the true extent gets 7 of 8 frames accepted, a 50% margin gets 4. Hosts must
+   reload `B44BZ` to get the markers; the hand-drawn box remains the fallback.
+   When debugging a live capture, check `boxSource` on the read: `'markers'`
+   means the detector worked, `'manual'` means it silently fell back.
+
    **Bans and the spectator scoreboard only exist in lobbies running our
    workshop code.** Scrims are hosted on a mix of ScrimTime, ScrimTime Lite and
    ours, and Lite has no scoreboard — so a Lite-hosted scrim can never support

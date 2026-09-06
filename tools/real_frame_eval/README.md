@@ -418,3 +418,34 @@ strip conventions in `code_truth.py` differ by 6–23% on the same HUD, an order
 magnitude outside the ±2% envelope — the guard now refuses there instead of
 inventing a code.
 
+
+
+## The scrim scoreboard harness
+
+Separate fixtures, same idea: `scoreboard_truth.json`, `scoreboard_crop.py`,
+`scoreboard_eval.js`.
+
+```bash
+python tools/real_frame_eval/scoreboard_crop.py scoreboard_crops
+node   tools/real_frame_eval/scoreboard_eval.js scoreboard_crops
+```
+
+**The fixtures are eight frames of ONE PAUSED BOARD**, screenshotted from eight
+camera angles on Colosseo, so the text is byte-identical in every one and the
+background is the only variable — medians spanning luminance 0-193 and
+saturation 0-126. That design is the whole point. Every scoreboard measurement
+before it was taken against whatever frames arrived next, each from a different
+map, so a colour or a preprocessor was repeatedly credited for a difference the
+*map* had caused. Two separate conclusions had to be retracted that way. Hold
+the map fixed, and the board too, or do not attribute the difference.
+
+**Read the second table, not the first.** The name-matched score pairs a parsed
+row to its truth row by fuzzy name and is the right diagnostic for name OCR. It
+is *not* what production gets: rows join to players by slot position, so a row
+whose name came back as garbage is not lost. The positional table scores only
+frames that yielded exactly ten rows — at nine, nobody knows which is missing,
+every row below the gap would attach to the wrong player, and the frame has to
+be refused rather than guessed at.
+
+Like `screenshots/`, the fixture frames are gitignored, so a fresh clone cannot
+run this either.

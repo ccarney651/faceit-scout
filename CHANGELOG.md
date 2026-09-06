@@ -17,6 +17,76 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-06
+
+### Added
+
+- **The scrim scoreboard now finds itself.** `tools/scrim_code/scrim_owdb.opy`
+  draws two thin green rules bracketing the board (`5. Spectator Scoreboard >
+  Draw Capture Markers`, default on) and `Scoreboard.findMarkerBox()` locates
+  them, so the capture tool no longer depends on a host dragging an accurate
+  crop box over a HUD element. That box was the weakest link in the path: the
+  board's true extent gets 7 of 8 real frames accepted, the same crop with a
+  50% margin gets 4 and halves the values recovered. The hand-drawn box stays as
+  the fallback for a lobby without markers. **Operators must reload `B44BZ`** to
+  get the markers.
+
+- **A reproducible harness for the scoreboard read**, matching the one the
+  replay-code reader already had: `tools/real_frame_eval/scoreboard_truth.json`,
+  `scoreboard_crop.py` and `scoreboard_eval.js`. Every measurement in design
+  sections 8.1-8.3 was prose with no way to re-run it; these are re-runnable and
+  report both a name-matched score and the **positional** score production
+  actually gets.
+
+- **A server-load tracker in the workshop code**, behind `6. Debug`, off by
+  default. Every value Overwatch exposes is a two-second window, so nothing told
+  you what a whole map did; this keeps a true high-water mark, a true mean, the
+  share of the map spent above 200, and exact percentiles.
+
+### Changed
+
+- **The scoreboard is read through local contrast, not the raw crop.** The board
+  is white text drawn on no plate, straight over the world, so the only reliable
+  signal is being brighter than the immediate surroundings - never brighter than
+  a fixed value, which is false the moment a white wall is behind it. Measured
+  over eight frames of one paused board shot from eight angles: **frames
+  readable at all went from 2 in 8 to 7 in 8**, at 88-90% of values on an
+  accepted frame. This **withdraws** the previous recommendation of a saturation
+  channel, which was measured when the rows were team-coloured and erases them
+  now they are white.
+
+- **The scrim workshop code was tuned for server load** - sort order cached in a
+  player variable, the three size rules collapsed, per-player loops de-synced,
+  constant settings promoted to first condition, four literal HUD texts dropped
+  to `VISIBILITY`, and the player's name folded into the row variable. All
+  verified byte-identical in emitted strings, HUD positions and colours.
+
+- **The share code is `B44BZ`, published from the main account.** `B4GM8` is
+  retired: it lived on an alt account, so only that account could ever ship
+  workshop changes. Anyone still holding `B4GM8` needs the new code.
+
+- **Board colours**: stat rows white, TEAM 2 back to the original deep red, and
+  the column key unified with the `BANS`/`MAP` orange.
+
+### Fixed
+
+- **A half-read board no longer puts every row on one team.** On a real frame
+  `TEAM 2` OCR'd as `BAM 2`, so all ten rows inherited team A and five were
+  confidently wrong - the five/five fallback only filled a *null* team, and
+  `TEAM 1` had read. Position now overrides the headers at ten rows.
+
+- **The column key is no longer read as a DPS legend.** It contains the token
+  `ACC`, and the header test ran *after* the legend test so it never fired. On a
+  frame whose `TEAM` headers did not survive, that one miscount tagged five rows
+  `dps` with no team.
+
+- **Three OCR failures that silently lost values**: a zero in the kills column
+  arrives as a round letter (`O`, `Q`, `QO`, `OQ`) and could destroy a whole row;
+  an all-zero board welds `0 . 0 . 0` into `000000`; and the ULT column's `1`
+  arrives as `|`, which the tokenizer deleted as punctuation.
+
+---
+
 ## 2026-09-05
 
 ### Added
