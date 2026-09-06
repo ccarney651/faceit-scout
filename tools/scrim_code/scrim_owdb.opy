@@ -108,6 +108,20 @@ globalvar Ban_HudTo 43
 globalvar Ban_HoldTime 45
 globalvar Colour_Heading 46
 globalvar Colour_Key 47
+# Session-wide server load statistics. Every value Overwatch exposes is a
+# TWO-SECOND window - getAverageServerLoad() and getPeakServerLoad() both say so
+# in their own tooltips - so "peak" decays and nothing tells you what a whole map
+# actually did. These accumulate instead, and only exist while 6. Debug is on.
+globalvar Debug_LoadMax 48
+globalvar Debug_LoadSum 49
+globalvar Debug_LoadSamples 50
+globalvar Debug_LoadOver200 51
+globalvar Debug_LoadText 52
+# Raw samples, kept so the DISTRIBUTION can be reported and not just its mean.
+# Capped at 1200 (20 minutes at 1 Hz); n on the readout shows whether you hit it.
+globalvar Debug_LoadHistory 31
+globalvar Debug_LoadSorted 53
+globalvar Debug_LoadText2 54
 globalvar Keybind_ClearBan 44
 globalvar Colour_TeamOne 5
 globalvar Colour_TeamTwo 6
@@ -153,6 +167,13 @@ playervar Ban_CurrentHoldTime 2
 # The player's scoreboard row, rebuilt on a timer instead of inside the
 # HUD string - see "Scoreboard: Build Row Text".
 playervar Scoreboard_Row 3
+# The row's SORT ORDER, rebuilt on the same timer and for the same reason.
+# A hud text created with SORT_ORDER re-evaluation resolves its sort
+# expression continuously, and in the role-grouped layout that expression
+# was two Array Contains scans over the hero lists - per player, forever.
+# Resolving a variable instead is, in Blizzard's own words about Event
+# Player, "practically free". See "Scoreboard: Build Row Text".
+playervar Scoreboard_Sort 4
 
 #Only remove the following directive if the gamemode does not use tricks such as A+0, A*0, A or "", "am" == "**", etc which would otherwise be optimized out.
 #!optimizeStrict
@@ -256,22 +277,79 @@ rule "Initialisation: Match":
 
 rule "Initialisation: Colours":
     Colour_TeamOne = rgb(50, 185, 240)
-    # Lightened from rgb(250,5,30), which is a DARK colour wearing a bright
-    # one's name: at luminance 54 it read as 6 points of contrast against a
-    # dark map, where the same frame's blue had 99. Measured on that frame, the
-    # blue rows recovered 5.00 of six numbers per row and the red ones 2.75 -
-    # OCR returned "EERE SEMOIRA © (OERIEER?" for a legible line.
+    # Since the stat rows went back to white this colours the TEAM 2 HEADER and
+    # the ready-up subtext, not a row of digits - so its job is now to be read
+    # by a human and by teamFromLine(), one short word and one digit.
     #
-    # This sits at 161, matching team blue's 156, so the two sides are equally
-    # readable rather than one being decorative. It is still unmistakably the
-    # red team beside the blue one; what it stops being is dark.
-    Colour_TeamTwo = rgb(255, 135, 140)
+    # Was rgb(250,5,30) - a DARK colour wearing a bright one's name, at
+    # luminance 54 - then rgb(255,135,140) to lift it. The lift worked and
+    # overshot: at blue 140 it reads as PINK rather than red.
+    #
+    # BACK TO THE ORIGINAL DEEP RED on 2026-09-06, on the operator's call after
+    # seeing all three in game. Both lifts were chasing an OCR problem that this
+    # colour no longer has: it stopped being a row of digits when the stat rows
+    # went white, and what it now carries is the word "TEAM 2" and its digit.
+    #
+    # The cost is real but bounded, and the measurements below say where it
+    # lands. Luminance 54 was the WORST value tested on a dark map (2.75 of six
+    # numbers per row against 5.00 at luminance 156) and the JOINT-BEST on a
+    # bright one. So this is not simply the worse choice - it is the better half
+    # of a trade that reverses with the map, taken on a line whose only reader
+    # is teamFromLine(), matching one short word rather than six numbers.
+    #
+    # What to watch: if team detection starts failing on DARK maps specifically,
+    # this is the first thing to suspect, and lifting it is the known fix.
+    #
+    # The rest of this block is the measurement record for that trade. Luminance
+    # 124 was the middle choice it replaces, and the reason a middle existed at
+    # all is that THERE IS NO LUMINANCE THAT WINS ON BOTH KINDS OF MAP.
+    #
+    # Measured on the two 2026-09-06 Busan frames - a BRIGHT map, where the
+    # background sits at 200-255, above every colour this board can draw - by
+    # recolouring the real TEAM 2 rows in place, same font, same background,
+    # same outline, only the glyph colour changed. Those rows are white now, so
+    # read this as a luminance curve for the board's text generally, which is
+    # what it is; the header sits on the same pixels:
+    #
+    #   luminance   54    97   124   161   196   228
+    #   raw crop    18    14    15    18     8     7   of 48 values
+    #   sat pass    28    29    29    30    25    18
+    #
+    # The ORDER IS INVERTED against the dark-map measurement above. There,
+    # luminance 54 recovered 2.75 numbers per row and 156 recovered 5.00. Here,
+    # 54 is joint-best and the two brightest are the worst - because on a white
+    # map the text needs to be DARKER than its background, not brighter.
+    #
+    # Both measurements say the same thing: contrast, not colour. They disagree
+    # about the sign because the maps do. A fixed colour cannot satisfy both, so
+    # the fix belongs on the CAPTURE side, where the same frames go from 27 to
+    # 66 of 96 values on a preprocessing change alone - larger than the whole
+    # luminance range above. See specs/2026-09-06-scoreboard-capture-design.md.
+    #
+    # What 124 buys is the middle: inside the readable band at both ends (69-161
+    # is flat here; 54 is the failure on a dark map, 196+ the failure on a light
+    # one) rather than optimal at either. Hue within that band does not separate,
+    # which is what leaves the pink-vs-red call free to be made on looks.
+    #
+    # Against team blue's 160 and the orange heading's 165, the deep red is the
+    # darkest thing on the board by a wide margin, which is exactly what makes
+    # it unmistakable as the red team and impossible to confuse with the orange
+    # chrome. That separation is what it was picked for.
+    Colour_TeamTwo = rgb(250, 5, 30)
     Colour_TextTypeA = rgb(255, 255, 255)
     Colour_TextTypeB = rgb(255, 155, 0)
     Colour_TextTypeC = rgb(40, 205, 60)
-    # The board's chrome: gold for its headings, amber for the column key. Two
-    # tones of one hue so they read as one group, separate from the white data
-    # and from the two team labels.
+    # The board's chrome: ONE orange for the headings and the column key alike,
+    # so BANS, MAP and the key read as a single block, separate from the white
+    # data and from the two team labels.
+    #
+    # This was two tones - the key dropped to rgb(205,140,45) to recede - and is
+    # one again on 2026-09-06, on the operator's call after seeing it in game.
+    # Note it is NOT the arrangement rejected further down under "Create Legend":
+    # that one made the KEY the loudest line by giving it orange while the
+    # headings took a duller gold. Levelling them removes the hierarchy rather
+    # than inverting it, which is a different thing and a defensible one - the
+    # key is a heading, so it can look like the other headings.
     #
     # Colour_Heading is Overwatch's own orange, the same value the ready-up
     # hints use (Colour_TextTypeB), because that is the look being matched.
@@ -285,9 +363,12 @@ rule "Initialisation: Colours":
     # missing entirely, which is what a real frame did.
     #
     # The key is the one line the parser never reads - it recognises it only in
-    # order to skip it - so it can drop to 147 and recede.
+    # order to skip it - so its colour is free to be chosen on looks alone.
     Colour_Heading = rgb(255, 155, 0)
-    Colour_Key = rgb(205, 140, 45)
+    # Assigned FROM the heading rather than repeating the literal, so the two
+    # cannot drift apart: change the heading and the key follows. Kept as its
+    # own variable so they can be split again without touching every call site.
+    Colour_Key = Colour_Heading
 
 
 rule "Initialisation: Player":
@@ -301,11 +382,20 @@ rule "HUD Setup: Setup Info":
     @Condition (getMatchRound() == 1 or ReadyUp_FreqMode == 0) == true
     @Condition isInSetup() == true
     
-    hudSubtext(getAllPlayers(), "OWDB SCRIM", HudPosition.LEFT, 0, Colour_TextTypeB, HudReeval.VISIBILITY_AND_STRING)
-    hudSubheader(getAllPlayers(), "Countdown will start when", HudPosition.LEFT, 0.1, Colour_TextTypeA, HudReeval.VISIBILITY_AND_STRING)
+    # FOUR OF THESE FIVE ARE HudReeval.VISIBILITY, NOT VISIBILITY_AND_STRING.
+    # Their strings are literals - a title, a fixed sentence, and the two team
+    # constants - so re-evaluating the string re-derives a value that cannot
+    # have changed. Visibility still re-evaluates, because getAllPlayers() is
+    # genuinely dynamic: somebody joining or leaving has to be picked up.
+    #
+    # The ready counter below keeps its string re-evaluation. It is the one
+    # line here whose text actually changes, and it changing live is the point
+    # of it.
+    hudSubtext(getAllPlayers(), "OWDB SCRIM", HudPosition.LEFT, 0, Colour_TextTypeB, HudReeval.VISIBILITY)
+    hudSubheader(getAllPlayers(), "Countdown will start when", HudPosition.LEFT, 0.1, Colour_TextTypeA, HudReeval.VISIBILITY)
     hudSubheader(getAllPlayers(), "both teams are ready" if ReadyUp_CaptainMode == 1 else "{2} [{0}/{1}]".format(len(getAllPlayers().filter(lambda player: player.ReadyUp_PlayerReady)), max(getNumberOfPlayers(Team.ALL), ReadyUp_MinimumPlayersToStart), "all players are ready"), HudPosition.LEFT, 0.1, Colour_TextTypeA, HudReeval.VISIBILITY_AND_STRING)
-    hudSubtext(getAllPlayers(), Team.1, HudPosition.LEFT, 1, Colour_TeamOne, HudReeval.VISIBILITY_AND_STRING)
-    hudSubtext(getAllPlayers(), Team.2, HudPosition.LEFT, 3, Colour_TeamTwo, HudReeval.VISIBILITY_AND_STRING)
+    hudSubtext(getAllPlayers(), Team.1, HudPosition.LEFT, 1, Colour_TeamOne, HudReeval.VISIBILITY)
+    hudSubtext(getAllPlayers(), Team.2, HudPosition.LEFT, 3, Colour_TeamTwo, HudReeval.VISIBILITY)
 
 
 rule "HUD Setup: Ready Toggle":
@@ -566,11 +656,136 @@ rule "Debug: Display Server Load":
     # Drawn on the RIGHT deliberately: the capture tool OCRs the top-left of the
     # frame for the BANS row, and a debug readout in that crop is noise it does
     # not need to parse around.
+    #
+    # BOTH LINES READ A VARIABLE, not live values. The strings are built on the
+    # sampler's own timer below, so the readout costs one variable resolve per
+    # line instead of re-deriving arithmetic continuously. A measuring
+    # instrument that changes what it measures is worth avoiding, and 2 Hz is
+    # easier to read off a screen than a number flickering at frame rate.
     wait()
     hudSubheader(getAllPlayers(), "{0} cur / {1} avg / {2} peak server load".format(
                      getServerLoad(), getAverageServerLoad(), getPeakServerLoad()),
                  HudPosition.RIGHT, 100, Colour_TextTypeA,
                  HudReeval.VISIBILITY_AND_STRING, SpecVisibility.ALWAYS)
+    hudSubheader(getAllPlayers(), Debug_LoadText,
+                 HudPosition.RIGHT, 101, Colour_TextTypeB,
+                 HudReeval.VISIBILITY_AND_STRING, SpecVisibility.ALWAYS)
+    hudSubheader(getAllPlayers(), Debug_LoadText2,
+                 HudPosition.RIGHT, 102, Colour_TextTypeC,
+                 HudReeval.VISIBILITY_AND_STRING, SpecVisibility.ALWAYS)
+
+
+# THE NUMBERS OVERWATCH GIVES YOU ARE ALL TWO-SECOND WINDOWS. getPeakServerLoad()
+# is "the highest CPU load ... over the last two seconds", not a high-water mark,
+# and getAverageServerLoad() averages the same two seconds. So the built-in
+# readout tells you what just happened and then forgets it, which makes a whole
+# map impossible to characterise by eye - the numbers move faster than you can
+# read them and every run looks different.
+#
+# This samples twice a second and keeps what the built-ins throw away:
+#
+#   max   - a REAL high-water mark. Sampling the 2 s peak every 0.5 s cannot
+#           miss a spike, because every 2 s window gets looked at four times.
+#   mean  - the true average over the whole map, not over two seconds.
+#   >200% - the share of the map spent above 200, which is the number that
+#           actually predicts whether a mode is in trouble. A single 255 spike
+#           in ten minutes and a mode sitting at 255 look identical on the
+#           built-in readout and are completely different problems.
+#   n     - sample count, so you can see the run was long enough to mean
+#           anything and that the sampler is alive.
+#
+# Instantaneous load feeds mean and the threshold count (a proper duty cycle);
+# the 2 s peak feeds max (so nothing is missed between samples). Mixing them is
+# deliberate, not an oversight.
+#
+# COST: one global rule, ~8 variable operations at 2 Hz, and it only runs with
+# 6. Debug switched on. Off by default, so a normal scrim never pays for it.
+rule "Debug: Track Server Load":
+    @Condition Debug_DisplayServerLoad == true
+
+    while true:
+        waitUntil(isGameInProgress(), 99999)
+        Debug_LoadMax = max(Debug_LoadMax, getPeakServerLoad())
+        Debug_LoadSum += getServerLoad()
+        Debug_LoadSamples += 1
+        if getServerLoad() > 200:
+            Debug_LoadOver200 += 1
+        Debug_LoadText = "max {0} / mean {1} / {2}".format(
+            Debug_LoadMax,
+            round(Debug_LoadSum / Debug_LoadSamples),
+            "{0}% over 200 / n {1}".format(
+                round(Debug_LoadOver200 / Debug_LoadSamples * 100),
+                Debug_LoadSamples))
+        wait(0.5)
+
+
+# THE DISTRIBUTION, because a mean hides exactly what you are hunting. The FPS
+# benchmarking convention is the right instinct here: nobody quotes average
+# framerate alone, because a run that averages 120 with vicious stutter and a
+# run that sits flat at 120 are the same number and completely different
+# experiences. Server load is the same, and worse - "mean 75" was true of both
+# builds measured on 2026-09-06 while the live readout was flashing 255.
+#
+#   best1%  - the 1st percentile. What the server looks like when nothing is
+#             happening; the floor the mode sits on.
+#   med     - the median. More honest than the mean, which a handful of 255s
+#             drags upward.
+#   worst1% - the 99th percentile: the load exceeded 1% of the time. THIS IS
+#             THE ONE THAT MATTERS, and it is the direct analogue of the "1%
+#             low" in an FPS benchmark - the difference being that for load,
+#             worse means HIGHER.
+#
+# Exact percentiles off the real samples, not buckets: the samples go into an
+# array and Sorted Array does the work, which the workshop.codes guide names as
+# the cheap way to do array work ("iterating with For Global Variable can be a
+# lot more expensive than doing the exact same thing with Mapped Array /
+# Filtered Array / Sorted Array").
+#
+# SAMPLED AT 1 Hz AND SORTED EVERY FIFTH SAMPLE, both deliberately slow. A
+# 1200-element sort is not free, and an instrument that shifts what it is
+# measuring is worse than no instrument. Five seconds between sorts makes the
+# cost unmeasurable while still converging quickly - after a minute there are
+# already 60 samples behind the number.
+#
+# THE ONE THING THIS CANNOT SEE is a spike between two samples: at 1 Hz a 200 ms
+# burst is invisible to it. That is exactly what `max` on the line above is for,
+# because that reads getPeakServerLoad(), a 2-second window sampled every 0.5 s,
+# which cannot miss one. Read the two together - percentiles for the shape, max
+# for "did anything ever hit the ceiling".
+rule "Debug: Track Load Distribution":
+    @Condition Debug_DisplayServerLoad == true
+
+    while true:
+        waitUntil(isGameInProgress(), 99999)
+        if len(Debug_LoadHistory) < 1200:
+            Debug_LoadHistory.append(getServerLoad())
+            # Recompute inside the cap check, so a full history stops re-sorting
+            # instead of sorting 1200 elements a second forever for a number
+            # that can no longer change.
+            if len(Debug_LoadHistory) >= 20 and len(Debug_LoadHistory) % 5 == 0:
+                Debug_LoadSorted = sorted(Debug_LoadHistory, key=lambda sample: sample)
+                Debug_LoadText2 = "best1% {0} / med {1} / {2}".format(
+                    Debug_LoadSorted[floor(len(Debug_LoadSorted) * 0.01)],
+                    Debug_LoadSorted[floor(len(Debug_LoadSorted) * 0.5)],
+                    "worst1% {0}".format(Debug_LoadSorted[min(len(Debug_LoadSorted) - 1, floor(len(Debug_LoadSorted) * 0.99))]))
+        wait(1)
+
+
+# Per MAP, not per session: the stats reset when round 1 starts, so each map you
+# test gives its own independent figure and you are never averaging a scoreboard
+# -on map together with a scoreboard-off one. Rounds 2+ keep accumulating, which
+# is what you want - a map is the unit being characterised.
+rule "Debug: Reset Load Stats At Map Start":
+    @Condition Debug_DisplayServerLoad == true
+    @Condition getMatchRound() == 1
+    @Condition isGameInProgress() == true
+
+    Debug_LoadMax = 0
+    Debug_LoadSum = 0
+    Debug_LoadSamples = 0
+    Debug_LoadOver200 = 0
+    Debug_LoadHistory = []
+    Debug_LoadSorted = []
 
 
 rule "Bans: Toggle Ban On Current Hero":
@@ -666,11 +881,15 @@ rule "Bans: New Map Clears Them, Later Rounds Keep Them":
     Ban_Apply()
 
 
+# The ban test leads and the CLOCK trails, which is the opposite of the order
+# this shipped with. Match time changes continuously, so leading with it meant
+# re-checking this rule for the whole setup phase; a lone ban is a state that
+# changes when somebody presses a key, and is usually false.
 rule "Bans: Clear A Lone Ban Before The Timer Expires":
     @Condition Ban_Enabled == true
     @Condition isInSetup() == true
-    @Condition getMatchTime() <= 5
     @Condition (Ban_Team1 == null) != (Ban_Team2 == null)
+    @Condition getMatchTime() <= 5
 
     # R3's guard only blocks the READY path; setup time expiring ends setup
     # regardless. Clearing keeps the invariant (no map starts with exactly one
@@ -805,9 +1024,11 @@ rule "Scoreboard: Create Match Time Display":
         hudSubtext(null, "{0} Match Time: {1}".format(abilityIconString(Hero.LUCIO, Button.ABILITY_2), "{0}:{1}{2}".format(floor(Match_CurrentMatchTime / 60), "0" if Match_CurrentMatchTime % 60 < 10 else "", floor(Match_CurrentMatchTime % 60))), HudPosition.LEFT, 4, Colour_TextTypeA, HudReeval.STRING, SpecVisibility.ALWAYS)
 
 
+# Setting first, isGameInProgress() second - see the block above
+# "Scoreboard: Create Player Entries (Small)" for why that order.
 rule "Scoreboard: Create Legend":
-    @Condition isGameInProgress() == true
     @Condition Scoreboard_EnableScoreboard == true
+    @Condition isGameInProgress() == true
 
     wait()
     # One line, in the row's own order, so a reader can map value to meaning by
@@ -823,11 +1044,18 @@ rule "Scoreboard: Create Legend":
     # on the board, which is the opposite of what a key should be.
     #
     # Subheader is the smallest text the HUD offers, so at Small the key cannot
-    # be smaller than the rows; matching them is the closest thing available and
-    # is quieter than any hue would be. An earlier version tried orange here and
-    # gold on BANS/MAP: it made the least important line the loudest, and five
-    # hues in a fifteen-line block over an uncontrolled background read as noise.
-    # Hue is left to the two TEAM labels, the one place it carries meaning.
+    # be smaller than the rows; matching them is the closest thing available.
+    #
+    # COLOUR is a separate question from size, and the answer changed on
+    # 2026-09-06: the key now takes the heading's orange exactly (Colour_Key is
+    # assigned from Colour_Heading), so BANS, MAP and this line read as one
+    # block of chrome. What is still rejected is the arrangement that made this
+    # line the LOUDEST - orange here against a duller gold on BANS/MAP. Equal is
+    # fine; louder than the headings is not, and five competing hues in a
+    # fifteen-line block over an uncontrolled background read as noise.
+    #
+    # Hue still carries meaning in exactly one place, the two TEAM labels, and
+    # the chrome staying a single hue is what keeps that signal legible.
     if Scoreboard_Size == 0:
         hudSubheader(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_Key, HudReeval.NONE, SpecVisibility.ALWAYS)
     else:
@@ -835,15 +1063,15 @@ rule "Scoreboard: Create Legend":
 
 
 rule "Scoreboard: Create Team Headers":
-    @Condition isGameInProgress() == true
     @Condition Scoreboard_EnableScoreboard == true
+    @Condition isGameInProgress() == true
 
     wait()
     # In team colour, because these are the two lines that can afford it: they
     # are for a human, they carry no digits, and the parser does not depend on
     # reading them - a ten-row board with no team headers is split five and five
-    # by position instead. The stat rows stay white, where colour was measured
-    # to be the difference between a row that OCRs and one that does not.
+    # by position instead. The stat rows are white; see the block above the
+    # "Scoreboard: Build Row Text" rule for what that is and is not measured on.
     #
     # Rows sort
     # to 2.x and 3.x by team, so 1.9 and 2.9 head their blocks. This is a
@@ -858,14 +1086,38 @@ rule "Scoreboard: Create Team Headers":
 
 
 # EVERY SCOREBOARD ROW IS WHITE, AND CARRIES NO HERO ICON. Both are OCR
-# decisions, measured against a real spectator frame rather than assumed:
-# running tesseract over one frame, the white lines - BANS, MAP, MATCH TIME and
-# the three legends - came back correct, while the team-coloured stat rows in
-# the same frame, same font, same region, same background, came back as
-# "Og 0 1856 © 499 © 19% © @". Upscaling 3x did not fix it, greyscale and
-# autocontrast did not fix it, a character whitelist did not fix it, and
-# colour-keying the text out of the scene made it worse. Colour was the one
-# variable that separated the lines that read from the lines that did not.
+# decisions, measured against real spectator frames rather than assumed. White
+# is the best-scoring text colour there is ON A DARK MAP: per row, across five
+# frames, with the background luminance controlled, white recovered 5.39 of six
+# numbers against team blue's 4.55 and team red's 3.40.
+#
+# The rows were tried in team colour on 2026-09-06 and are back to white the
+# same day. Three REAL frames, real white rows, no simulation, all read through
+# the shipped capture path with no preprocessing changes:
+#
+#   Nepal            flat dark surfaces    45/48 values  6/8 rows  8/8 names
+#   Blizzard World   lantern-lit roof      18/48         0/8       8/8
+#   Busan            white interior        (team colour there: 27/96, 0 rows)
+#
+# Nepal is the best result anything has produced on this board. So white is not
+# the problem, and neither is colour.
+#
+# THE DOMINANT VARIABLE IS WHAT IS BEHIND THE BOARD. Same colour, same font,
+# same code, same resolution - a 2.5x spread from background alone. The HUD
+# draws this text on NO PLATE, straight over the world, so the map decides the
+# read. That is why the two team-colour experiments both produced confusing
+# numbers: each was measured on a different map from the one before it, and the
+# map moved more than the colour did.
+#
+# What follows from that: a colour change is not a lever worth pulling again
+# without holding the map fixed, and the real lever is capture-side
+# preprocessing - specs/2026-09-06-scoreboard-capture-design.md section 8.3.
+#
+# What is NOT claimed any more: the original note here said colour was "the one
+# variable that separated the lines that read from the lines that did not". It
+# was not, and neither is luminance on its own. Contrast against a background
+# that changes every map is - which is why every colour ranking measured so far
+# has reversed itself on the next frame set.
 #
 # The hero icon went for the same reason: it is an image, so OCR emits junk for
 # it ("&b", "Fog", "$'"), and that junk merges into the first number of the row.
@@ -891,72 +1143,126 @@ rule "Scoreboard: Build Row Text":
     # Measure before and after with "6. Debug > Display Server Load" rather than
     # trusting this comment.
     #
-    # THE ROW CARRIES NO NAME, and that follows from how the HUD lays itself
-    # out: every line is CENTRE-aligned. Measured on a real frame, six lines'
-    # left edges span 67 pixels while their centres all land within three of
-    # each other. Columns therefore only line up when every row is the same
-    # LENGTH - and a name is variable length, so one name in a row throws every
-    # column in that row sideways by half the difference.
+    # THE ROW CARRIES ITS PLAYER'S NAME, FIRST, AND THE NAME IS BUILT IN HERE
+    # rather than added by the hud text. Both halves of that are deliberate and
+    # both replace an earlier decision, so the reasoning is worth keeping.
     #
-    # Identity comes from position instead: rows sort by slot, and the spectator
-    # portrait bar directly above the board is in slot order too and already
-    # shows every name.
+    # The name is on the row because the alternative lost on measurement. The
+    # argument against it was real: the HUD centres every line, so columns only
+    # align when rows are the same LENGTH, and a name is variable length - on a
+    # real frame, six lines' left edges span 67 pixels while their centres land
+    # within three of each other. Identity was supposed to come from slot
+    # position and the spectator portrait bar instead. But the frames in the
+    # block above read 8/8 NAMES on the same rows where they read 6/8 sets of
+    # numbers, which makes the name the most reliable thing on the row. A row
+    # that names itself needs no cross-reference to be worth anything.
     #
-    # THE HERO ICON GOES LAST, after a three-space gap. It is an image, so OCR
-    # emits junk for it - measured: "&b", "Fog", "$'" - and LEADING junk merges
-    # into the first number, which is what made the old board unreadable. After
-    # the numbers, that same junk is just the non-numeric token that ends the
-    # row, which the parser already stops at. One glyph, so rows stay identical
-    # in length.
+    # It is built INTO this variable because of what the alternative cost the
+    # server. A hud text re-evaluates its string continuously, so while the name
+    # was joined on at the hud text, that was a Custom String concatenation
+    # re-resolved per player forever - to attach a name that never changes to a
+    # variable that changes four times a second. Folded in here, the hud text's
+    # string is one bare variable read and the join happens on the timer.
+    #
+    # That was measured, not assumed: with 10 bots on one map this mode peaked
+    # at 121 server load with the scoreboard OFF against 190 with it ON, so
+    # everything on this path is the dominant cost in the whole mode and worth
+    # being fussy about.
+    #
+    # The hero icon that used to end the row is gone entirely - see the block
+    # above this rule for why.
+    #
+    # THE SORT ORDER IS BUILT HERE TOO, for the same reason the numbers are.
+    # The three "Create Player Entries" rules used to carry the sort expression
+    # inline, under HudReeval.SORT_ORDER_AND_STRING - so in the role-grouped
+    # layout the server re-resolved `Array Contains(All Damage Heroes, Hero Of
+    # (Event Player))` and then the tank list, per player, for as long as the
+    # board existed. The value it computes changes only on a hero swap.
+    #
+    # Computing it here means the hud text resolves one player variable. It also
+    # collapses each of those three rules from an If/Else pair down to a single
+    # Create HUD Text, because the group mode is now read once, here.
+    #
+    # The expression is the two originals verbatim, selected by group mode - NOT
+    # merged with the role test in the row below. They disagree on a null hero
+    # (the row falls through to accuracy, the sort falls through to 3) and that
+    # difference is preserved rather than tidied away.
+    #
+    # THE WAIT IS 0.200-0.245, A RANGE RATHER THAN A FLAT 0.25, and the spread
+    # is the only part of it that is an optimisation.
+    #
+    # Ten Ongoing-Each-Player loops on an identical period all land on the same
+    # server frame - ten rebuilds at once and nothing in between, which is the
+    # shape the workshop.codes stability guide warns about when it says "a quick
+    # peak from 100 to 255 server load can be worse than a consistent 200". Five
+    # ms between neighbours de-phases them within a second of the round starting
+    # and keeps them apart. Every period is <= the 0.25 s this replaced, so the
+    # spread costs no freshness at all.
+    #
+    # THIS RAN AT 0.90-0.99 s FOR PART OF 2026-09-06 AND WAS PUT BACK, and the
+    # reason is worth keeping because it is the one number in this file that was
+    # actually priced. The operator authorised a full second of staleness on the
+    # assumption the loop was expensive. Measuring it against a build with the
+    # wait cranked to 0.016 - 60x the rate - moved the whole distribution by a
+    # near-uniform +17 (mean 51 to 68, median 46 to 63, worst1% 125 to 142),
+    # which works out at about 0.28 load per rebuild-per-second-per-player.
+    #
+    # At this period that is a cost of roughly 0.3 against a mean of 51: about
+    # 0.6% of the mode. The full second bought back around one single load unit.
+    # It was not worth a quarter-second of extra lag on the board, so the lag
+    # went back. Do not trade freshness here again without pricing it first -
+    # the tools are in the README under "Measuring server load".
     while true:
         waitUntil(isGameInProgress(), 99999)
-        eventPlayer.Scoreboard_Row = "{0} • {1}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)))
-        wait(0.25)
+        eventPlayer.Scoreboard_Sort = (eventPlayer.getSlot() if Scoreboard_GroupMode == 0 else (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3)) * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3)
+        eventPlayer.Scoreboard_Row = "{0} • {1}".format(eventPlayer, "{0} • {1}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED))))
+        wait(0.2 + (eventPlayer.getSlot() * 2 + (0 if eventPlayer.getTeam() == Team.1 else 1)) * 0.005)
 
 
+# THE SIZE CHECK IS THE FIRST CONDITION IN ALL THREE OF THESE RULES, and that
+# ordering is deliberate. Conditions are checked in order and short-circuit on
+# the first false one, so whichever condition leads decides how much work the
+# other rules do. These three used to lead with isGameInProgress(), which is
+# the worst possible choice: it is the condition they all share and the one
+# that changes, so every round start walked into all three rules before the
+# size setting ruled two of them out.
+#
+# Leading with the size setting - fixed for the whole lobby - means two of the
+# three stop at their first condition and stay stopped. The workshop.codes
+# stability guide names both halves of this: "avoid multiple rules sharing the
+# same conditions as the first condition", and put "the least frequently
+# changing condition first".
+#
+# The group-mode branch is gone from all three: the sort order is a player
+# variable now, built alongside the row. See "Scoreboard: Build Row Text".
 rule "Scoreboard: Create Player Entries (Small)":
     @Event eachPlayer
-    @Condition isGameInProgress() == true
-    @Condition Scoreboard_EnableScoreboard == true
     @Condition Scoreboard_Size == 0
-    
+    @Condition Scoreboard_EnableScoreboard == true
+    @Condition isGameInProgress() == true
+
     wait()
-    # 0 is slot ordering, 1 is role-within-team. The interleaved
-    # role-grouped layout is gone - see the setting for why.
-    if Scoreboard_GroupMode == 0:
-        hudSubheader(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
-    else:
-        hudSubheader(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+    hudSubheader(null, eventPlayer.Scoreboard_Row, HudPosition.LEFT, eventPlayer.Scoreboard_Sort, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Medium)":
     @Event eachPlayer
-    @Condition isGameInProgress() == true
-    @Condition Scoreboard_EnableScoreboard == true
     @Condition Scoreboard_Size == 1
-    
+    @Condition Scoreboard_EnableScoreboard == true
+    @Condition isGameInProgress() == true
+
     wait()
-    # 0 is slot ordering, 1 is role-within-team. The interleaved
-    # role-grouped layout is gone - see the setting for why.
-    if Scoreboard_GroupMode == 0:
-        hudSubtext(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
-    else:
-        hudSubtext(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+    hudSubtext(null, eventPlayer.Scoreboard_Row, HudPosition.LEFT, eventPlayer.Scoreboard_Sort, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Large)":
     @Event eachPlayer
-    @Condition isGameInProgress() == true
-    @Condition Scoreboard_EnableScoreboard == true
     @Condition Scoreboard_Size == 2
-    
+    @Condition Scoreboard_EnableScoreboard == true
+    @Condition isGameInProgress() == true
+
     wait()
-    # 0 is slot ordering, 1 is role-within-team. The interleaved
-    # role-grouped layout is gone - see the setting for why.
-    if Scoreboard_GroupMode == 0:
-        hudText(null, null, null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
-    else:
-        hudText(null, null, null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+    hudText(null, null, null, eventPlayer.Scoreboard_Row, HudPosition.LEFT, eventPlayer.Scoreboard_Sort, Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Host Spectator Toggle":
@@ -989,12 +1295,16 @@ rule "Map Completion: Save Team Scores on Round End":
         MapComp_TeamTwoScore = teamScore(Team.2)
 
 
+# Gamemode before round state, so that on Control, Flashpoint and Push this
+# rule stops at its second condition for the whole map instead of waking up at
+# every round transition. "Save Team Scores on Round End" above already orders
+# it this way; this rule did not.
 rule "Map Completion: Ensure Map Completion (Assault, Escort and Hybrid)":
     @Condition MapComp_EnableMapCompletion == true
-    @Condition isMatchBetweenRounds() == true
     @Condition getCurrentGamemode() != Gamemode.CONTROL
     @Condition getCurrentGamemode() != Gamemode.FLASHPOINT
     @Condition getCurrentGamemode() != Gamemode.PUSH
+    @Condition isMatchBetweenRounds() == true
     @Condition (teamScore(Team.1 if isTeamOnOffense(Team.1) else Team.2)) < (2 if getCurrentGamemode() == Gamemode.ASSAULT else 3)
     
     wait()
