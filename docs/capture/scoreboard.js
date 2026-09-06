@@ -44,8 +44,16 @@
   // separators (the workshop bullet is U+2022 •; OCR often renders it as
   // '.', '|' or 'l').
   function tokenize(line) {
+    // Anything that is not a letter, a digit or a percent sign is a separator.
+    // The board draws U+2022 between fields and OCR renders it as whatever it
+    // feels like - measured on one frame: + * = / and the guillemets - so
+    // enumerating the substitutes is a losing game. Names survive because they
+    // are letters and digits; the punctuation some carry is dropped, which
+    // costs nothing since a name is matched fuzzily anyway. The colon stays:
+    // "MATCH TIME: 9:57" needs it, and it is the one punctuation the board
+    // draws deliberately.
     return line
-      .replace(/[•·|–-]+/g, ' ')
+      .replace(/[^0-9A-Za-zÀ-ɏ%:]+/g, ' ')
       .split(/\s+/)
       .map(function (t) { return t.trim(); })
       .filter(Boolean);
@@ -116,6 +124,12 @@
       dt: parseInt(nums[3], 10),
       x: x,
       uu: nums.length >= 6 ? parseInt(nums[5], 10) : null,
+      // How many of the six columns were actually there. A row is POSITIONAL,
+      // so a value that OCR dropped does not leave a hole - every later value
+      // slides left into the wrong column and the row still looks plausible.
+      // Measured: a "1" read as "|" costs one field and shifts the rest. The
+      // count is what lets a caller refuse such a row instead of storing it.
+      fields: nums.length,
     };
   }
 

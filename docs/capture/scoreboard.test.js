@@ -151,7 +151,7 @@ test('a slot-ordered board reads all ten rows, named, in order', () => {
   ]);
   assert.deepStrictEqual(res.entries[0], {
     k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: 'TANK 1', role: null,
-    team: 'a',
+    team: 'a', fields: 6,
   });
   // Slot ordering is team ordering, so a ten-row board splits five and five
   // even though this layout never wrote TEAM 1 / TEAM 2 at all.
@@ -205,7 +205,10 @@ test('a row from an icon board still parses, and its junk is only a candidate', 
   // stray glyph simply fails to match. The stats, which is what the row is for,
   // are unaffected either way.
   const res = SB.parse(['K • D • DD • DT • DB • UU', '? • 4 • 2 • 100 • 50 • 9 • 1']);
-  assert.strictEqual(res.entries[0].name, '?');
+  // Junk that is pure punctuation disappears in tokenisation, so this row keeps
+  // no name at all. Junk that happens to look like letters would be captured
+  // and then fail to match a roster, which is the same outcome one step later.
+  assert.strictEqual(res.entries[0].name, null);
   assert.strictEqual(res.entries[0].k, 4);
   assert.strictEqual(res.entries[0].role, 'tank', 'the legend above it still labels it');
 });
@@ -244,7 +247,7 @@ test('the team-headed board reads teams from text, not from colour', () => {
     'HZL', 'SOUVLAKI', 'AL7OTHI', 'JAVI', 'SOCIAL',
   ]);
   assert.deepStrictEqual(res.entries[0],
-    { k: 6, d: 11, dd: 14861, dt: 7561, x: '28%', uu: 6, name: 'LEXRR', role: null, team: 'a' });
+    { k: 6, d: 11, dd: 14861, dt: 7561, x: '28%', uu: 6, name: 'LEXRR', role: null, team: 'a', fields: 6 });
 });
 
 test('one legend is enough, and padding is not mistaken for a column', () => {
@@ -298,7 +301,7 @@ test('the icon trailing a row is discarded, not read as a stat', () => {
   assert.deepStrictEqual(res.entries.map((e) => e.team), ['a', 'a', 'b']);
   res.entries.forEach((e) => assert.strictEqual(e.name, null, 'this board has no names'));
   assert.deepStrictEqual(res.entries[0],
-    { k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: null, role: null, team: 'a' });
+    { k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: null, role: null, team: 'a', fields: 6 });
   assert.strictEqual(res.entries[1].x, '0%');
 });
 
@@ -323,7 +326,7 @@ test('zero padding is stripped, including from an accuracy', () => {
     '003 000 01045 00205 0040% 000  Fog',
   ]);
   assert.deepStrictEqual(res.entries[0],
-    { k: 0, d: 1, dd: 944, dt: 1594, x: 0, uu: 0, name: null, role: null, team: 'a' });
+    { k: 0, d: 1, dd: 944, dt: 1594, x: 0, uu: 0, name: null, role: null, team: 'a', fields: 6 });
   assert.strictEqual(res.entries[1].x, '40%', 'the padding is not part of the value');
   assert.strictEqual(res.entries[1].dd, 1045);
 });
