@@ -702,6 +702,7 @@ logic is owned once:
 | `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
 | `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
 | `engine/replaycode.js` | The replay code on the HUD banner: its Crockford Base32 alphabet, where it sits relative to the calibrated portrait strip, and whether a read is a code at all |
+| `engine/boardreads.js` | The scoreboard-row-to-player join and the delta arithmetic. Holds the WHOLE read decision (`evaluateRead`) so `scrim.html` orchestrates and renders but never decides |
 | `engine/heroes.js` | Which role each hero plays, and `byRole()` for grouping a catalogue by it. The ONE copy of the role table — `docs/scrims.html` imports it too, which is that page's only external script |
 | `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
 
@@ -1064,6 +1065,48 @@ every row below the gap would attach to the wrong player.
 plus `scoreboard_crop.py` and `scoreboard_eval.js` re-run the whole comparison
 over the fixture frames and report both a name-matched score and the positional
 score production actually gets. Everything before them was prose.
+
+**The board is read at every round boundary, and the reads are stored raw.**
+`captureBoardRead()` in `scrim.html` runs on *Next round* and on *Finish map* -
+never on a timer, because in a replay the operator controls time and the
+authoritative frame is the one they scrubbed to. Each read goes into
+`board_reads` on the scrim map record as a **cumulative** snapshot; the board
+accumulates over a map, so a round is the difference between consecutive reads,
+and that subtraction happens in `OWDBBoardReads.deltas()` at analysis time. Same
+rule the contribution merge follows: store observations, derive reports, so an
+improvement to the arithmetic applies retroactively.
+
+**The row-to-player join is name-first, position-second, and the order is
+load-bearing.** `engine/boardreads.js` holds the whole decision - the page
+orchestrates and renders, it does not decide. Two coordinate systems meet there
+and confusing them is the bug the module exists to prevent: the board's `team`
+is TEAM 1 / TEAM 2 (a game concept, the first five rows and the last five),
+while the bar's `a`/`b` are the LEFT and RIGHT screen strips. Nothing guarantees
+TEAM 1 is the left strip - a spectator changing POV in a replay flips it - so
+`stripForBlock()` **derives** the mapping from the name matches rather than
+assuming it, and withholds identity entirely when no name matches. The
+positional fallback additionally rests on the portrait bar being in slot order,
+which is Overwatch's own HUD and is **not verified**; the mode's own sort key IS
+(`GroupMode 0`, the default: `getSlot()*0.1 + (2 if Team.1 else 3)`, so rows 1-5
+are Team 1 slots 0-4 and rows 6-10 are Team 2 slots 0-4). A role-grouped board
+is attributed to team and role only.
+
+**A failed read blocks the advance and only failures interrupt.** The board is
+gone once the round ends, so a silent failure is unrecoverable - the operator is
+stopped while they can still scrub back, and the only way past is an explicit
+Skip, which records `boardSkips` so the next good read carries
+`rounds_covered: 2`. A clean read updates the status line and does not open
+anything: a confirmation per round per map is exactly the pop-up problem the
+operator already reported. `Scoreboard.detectOcclusion()` separates "the replay
+events panel is covering the board" from "the board did not parse", because the
+remedies differ and the operator can only act on the one they are told.
+
+**Two code concepts live on this page and they are deliberately worded apart.**
+The **workshop code** (`B44BZ`) is what the lobby runs, and bans and scoreboard
+stats are readable only in it - stated on the page itself now, not just in
+`tools/scrim_code/README.md`. The **replay code** is FACEIT's, and
+`refuseIfLeagueCode()` uses it to stop a league match being recorded as a private
+scrim. Same word, opposite meaning, opposite remedy.
 
 **Three features still carry `WIP` badges**: auto side-detection, the scoreboard
 OCR read, and the score-box read. Side detection has since worked end to end in

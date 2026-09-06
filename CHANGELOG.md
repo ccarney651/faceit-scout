@@ -21,6 +21,37 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Added
 
+- **Per-round scoreboard stats.** The board is now read at every round
+  boundary - on *Next round* and on *Finish map*, never on a timer, because in a
+  replay the operator controls time and the authoritative frame is the one they
+  scrubbed to. Each read is stored raw and cumulative in a new `board_reads`
+  array on the scrim map record; `OWDBBoardReads.deltas()` turns them into
+  per-round stats **at analysis time**, so a later fix to that arithmetic
+  reaches every capture already taken. Design:
+  `specs/2026-09-06-scrim-board-reads-design.md`.
+- **Rows join to players by name, with slot position as the fallback.** The
+  mode's sort key was confirmed from source - `GroupMode 0`, the default, puts
+  Team 1 slots 0-4 in rows 1-5 and Team 2 slots 0-4 in rows 6-10 - but the
+  positional join also needs the portrait bar to be in slot order (Overwatch's
+  HUD, unverified) and a Team-1-to-strip mapping that did not exist anywhere.
+  The row's own name is the reliable half, so `OWDBBoardReads.joinRows()` matches
+  on it first and **derives** the strip mapping from those matches, falling back
+  to position only for rows the names could not place. A role-grouped board is
+  attributed to team and role only, never guessed to a player.
+- **The replay events panel is now a named failure.** It covers exactly the left
+  column where the board is drawn, and `Scoreboard.detectOcclusion()` recognises
+  it by its own text plus the missing `MATCH TIME` anchor, so the operator is
+  told to close it rather than left with a generic misread.
+- **A failed board read blocks the advance, with an explicit Skip.** The board is
+  gone once the round ends, so a silent failure is unrecoverable. A skip is
+  recorded, and the next good read carries `rounds_covered: 2` rather than
+  attributing two rounds' stats to one. **Only failures interrupt** - a clean
+  read updates the status line and the round advances untouched.
+- **The capture page now names the workshop code it depends on.** `B44BZ`, and
+  the fact that bans and scoreboard stats are readable only in a lobby running
+  it, were documented only in `tools/scrim_code/README.md`. The league warnings
+  now say **replay code** so the two cannot be confused.
+
 - **The scrim scoreboard now finds itself.** `tools/scrim_code/scrim_owdb.opy`
   draws two thin green rules bracketing the board (`5. Spectator Scoreboard >
   Draw Capture Markers`, default on) and `Scoreboard.findMarkerBox()` locates
