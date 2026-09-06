@@ -775,21 +775,43 @@ rule "Scoreboard: Create Match Time Display":
         hudSubtext(null, "{0} Match Time: {1}".format(abilityIconString(Hero.LUCIO, Button.ABILITY_2), "{0}:{1}{2}".format(floor(Match_CurrentMatchTime / 60), "0" if Match_CurrentMatchTime % 60 < 10 else "", floor(Match_CurrentMatchTime % 60))), HudPosition.LEFT, 4, Colour_TextTypeA, HudReeval.STRING, SpecVisibility.ALWAYS)
 
 
+rule "Scoreboard: Create Legend":
+    @Condition isGameInProgress() == true
+    @Condition Scoreboard_EnableScoreboard == true
+
+    wait()
+    # One line, in the row's own order, so a reader can map value to meaning by
+    # counting across. It cannot be ALIGNED with the rows - the HUD centres every
+    # line and eats runs of spaces - but it does not need to be: it needs to say
+    # what the sixth number is, which changes by role and is the one thing a
+    # bare row cannot tell you.
+    if Scoreboard_Size == 0:
+        hudSubheader(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+    else:
+        hudSubtext(null, "PLAYER • K • D • DMG • TKN • ACC/BLK/HEAL • ULT", HudPosition.LEFT, 1.5, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+
+
 rule "Scoreboard: Create Team Headers":
     @Condition isGameInProgress() == true
     @Condition Scoreboard_EnableScoreboard == true
 
     wait()
-    # What team colour used to say, said in text so OCR can read it. Rows sort
+    # In team colour, because these are the two lines that can afford it: they
+    # are for a human, they carry no digits, and the parser does not depend on
+    # reading them - a ten-row board with no team headers is split five and five
+    # by position instead. The stat rows stay white, where colour was measured
+    # to be the difference between a row that OCRs and one that does not.
+    #
+    # Rows sort
     # to 2.x and 3.x by team, so 1.9 and 2.9 head their blocks. This is a
     # better anchor than colour ever was: the five/five split stops being
     # inferred from pixels and becomes something the parser can simply see.
     if Scoreboard_Size == 0:
-        hudSubheader(null, "TEAM 1", HudPosition.LEFT, 1.9, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
-        hudSubheader(null, "TEAM 2", HudPosition.LEFT, 2.9, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubheader(null, "TEAM 1", HudPosition.LEFT, 1.9, Colour_TeamOne, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubheader(null, "TEAM 2", HudPosition.LEFT, 2.9, Colour_TeamTwo, HudReeval.NONE, SpecVisibility.ALWAYS)
     else:
-        hudSubtext(null, "TEAM 1", HudPosition.LEFT, 1.9, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
-        hudSubtext(null, "TEAM 2", HudPosition.LEFT, 2.9, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubtext(null, "TEAM 1", HudPosition.LEFT, 1.9, Colour_TeamOne, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubtext(null, "TEAM 2", HudPosition.LEFT, 2.9, Colour_TeamTwo, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
 # EVERY SCOREBOARD ROW IS WHITE, AND CARRIES NO HERO ICON. Both are OCR
@@ -845,7 +867,7 @@ rule "Scoreboard: Build Row Text":
     # in length.
     while true:
         waitUntil(isGameInProgress(), 99999)
-        eventPlayer.Scoreboard_Row = "{0} {1}".format("K{0} D{1} DMG{2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "TKN{0} {1} ULT{2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), "BLK{0}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED))) if eventPlayer.getHero() in getTankHeroes() else "HEAL{0}".format(round(eventPlayer.getStatistic(Stat.HEALING_DEALT))) if eventPlayer.getHero() in getSupportHeroes() else "ACC{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)))
+        eventPlayer.Scoreboard_Row = "{0} • {1}".format("{0} • {1} • {2}".format(eventPlayer.getStatistic(Stat.FINAL_BLOWS), eventPlayer.getStatistic(Stat.DEATHS), round(eventPlayer.getStatistic(Stat.HERO_DAMAGE_DEALT))), "{0} • {1} • {2}".format(round(eventPlayer.getStatistic(Stat.DAMAGE_TAKEN)), round(eventPlayer.getStatistic(Stat.DAMAGE_BLOCKED)) if eventPlayer.getHero() in getTankHeroes() else round(eventPlayer.getStatistic(Stat.HEALING_DEALT)) if eventPlayer.getHero() in getSupportHeroes() else "{0}%".format(round(eventPlayer.getHeroStatistic(eventPlayer.getHero(), HeroStat.WEAPON_ACCURACY) * 100)), eventPlayer.getStatistic(Stat.ULTIMATES_USED)))
         wait(0.25)
 
 
@@ -859,9 +881,9 @@ rule "Scoreboard: Create Player Entries (Small)":
     # 0 is slot ordering, 1 is role-within-team. The interleaved
     # role-grouped layout is gone - see the setting for why.
     if Scoreboard_GroupMode == 0:
-        hudSubheader(null, "{0}  {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudSubheader(null, "{0}  {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Medium)":
@@ -874,9 +896,9 @@ rule "Scoreboard: Create Player Entries (Medium)":
     # 0 is slot ordering, 1 is role-within-team. The interleaved
     # role-grouped layout is gone - see the setting for why.
     if Scoreboard_GroupMode == 0:
-        hudSubtext(null, "{0}  {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudSubtext(null, "{0}  {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Large)":
@@ -889,9 +911,9 @@ rule "Scoreboard: Create Player Entries (Large)":
     # 0 is slot ordering, 1 is role-within-team. The interleaved
     # role-grouped layout is gone - see the setting for why.
     if Scoreboard_GroupMode == 0:
-        hudText(null, null, null, "{0}  {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, null, null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudText(null, null, null, "{0}  {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, null, null, "{0} • {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Host Spectator Toggle":

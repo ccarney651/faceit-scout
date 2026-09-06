@@ -151,8 +151,12 @@ test('a slot-ordered board reads all ten rows, named, in order', () => {
   ]);
   assert.deepStrictEqual(res.entries[0], {
     k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: 'TANK 1', role: null,
-    team: null,
+    team: 'a',
   });
+  // Slot ordering is team ordering, so a ten-row board splits five and five
+  // even though this layout never wrote TEAM 1 / TEAM 2 at all.
+  assert.deepStrictEqual(res.entries.map((e) => e.team),
+    ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b']);
   assert.strictEqual(res.entries[1].x, '0%', 'a DPS row keeps its accuracy sign');
 });
 
@@ -194,10 +198,16 @@ test('nameFromRaw drops what the hero icon made OCR emit in front of the name', 
   assert.strictEqual(SB.nameFromRaw('no colon here'), null);
 });
 
-test('an unnamed row still parses, for a board built before names existed', () => {
+test('a row from an icon board still parses, and its junk is only a candidate', () => {
+  // Boards built before names existed lead with a hero ICON, which OCR renders
+  // as junk. Textually that is indistinguishable from a name, so it is captured
+  // as one - and is matched fuzzily against a known roster downstream, where a
+  // stray glyph simply fails to match. The stats, which is what the row is for,
+  // are unaffected either way.
   const res = SB.parse(['K • D • DD • DT • DB • UU', '? • 4 • 2 • 100 • 50 • 9 • 1']);
-  assert.strictEqual(res.entries[0].name, null);
+  assert.strictEqual(res.entries[0].name, '?');
   assert.strictEqual(res.entries[0].k, 4);
+  assert.strictEqual(res.entries[0].role, 'tank', 'the legend above it still labels it');
 });
 
 // ---------------------------------------------------------------------------

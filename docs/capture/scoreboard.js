@@ -304,6 +304,23 @@
       }
 
       var parts = splitRow(raw);
+      // No colon: the row leads with the player's name and then its numbers,
+      // separated by bullets. Whatever sits before the first number is the
+      // name - which on a board that still draws a hero icon is icon junk
+      // instead, so this is matched fuzzily against a known roster downstream,
+      // never trusted as an exact string.
+      if (parts.name === null) {
+        // Counted from the END, not the start: a row is a name followed by six
+        // numbers, and taking the leading non-numeric tokens instead truncates
+        // any name containing a digit after a space - every bot is called
+        // "TANK 1". Real BattleTags cannot contain spaces, but the six-from-the-
+        // right rule costs nothing and does not depend on that being true.
+        var toks = tokenize(parts.stats);
+        var end = toks.length;
+        var seen = 0;
+        while (end > 0 && seen < 6 && looksNumeric(toks[end - 1])) { end--; seen++; }
+        if (seen === 6 && end > 0) parts.name = toks.slice(0, end).join(' ');
+      }
       var entry = entryFromTokens(tokenize(parts.stats));
       if (entry) {
         entry.name = parts.name;
@@ -323,6 +340,17 @@
     var layout = sawTeamHeader ? 'team'
       : legendsBeforeFirstEntry >= 3 ? 'slot'
       : legendsBeforeFirstEntry === 1 ? 'role' : null;
+
+    // The TEAM headers are drawn in team colour now, and colour is exactly what
+    // OCR loses. A full board that lost them is still a full board: ten rows in
+    // team order split five and five, which is what the header would have said.
+    //
+    // Not on a role-grouped board, where the two teams interleave inside each
+    // role block and position says nothing about side. And it fills a gap
+    // rather than overriding: a team already read from a header stands.
+    if (layout !== 'role' && entries.length === 10) {
+      entries.forEach(function (e, i) { if (e.team == null) e.team = i < 5 ? 'a' : 'b'; });
+    }
     if (layout !== 'role') {
       entries.forEach(function (e, i) { if (!selfDescribed[i]) e.role = null; });
     }
