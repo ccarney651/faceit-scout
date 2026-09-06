@@ -117,3 +117,84 @@ test('parseScoreReadout reads a-centre score', () => {
   assert.deepStrictEqual(SB.parseScoreReadout('SCORE 2–3'), { a: 2, b: 3 });
   assert.strictEqual(SB.parseScoreReadout('nothing here'), null);
 });
+
+// ---------------------------------------------------------------------------
+// The slot-ordered board, as it renders since scrim_owdb.opy started naming the
+// player in each row. Transcribed from a live spectator frame, 2026-09-06.
+const SLOT_BOARD = [
+  'BANS  : NONE',
+  'MAP   : NUMBANI',
+  'K • D • DD • DT • ACC • UU',
+  'K • D • DD • DT • DB • UU',
+  'K • D • DD • DT • HD • UU',
+  'TANK 1: 0 • 0 • 362 • 237 • 190 • 0',
+  'DAMAGE 1: 1 • 0 • 188 • 118 • 0% • 0',
+  'DAMAGE 2: 1 • 0 • 360 • 70 • 14% • 0',
+  'SUPPORT 1: 0 • 0 • 0 • 100 • 272 • 0',
+  'SUPPORT 2: 1 • 0 • 655 • 15 • 154 • 0',
+  'TANK 2: 0 • 1 • 88 • 603 • 0 • 0',
+  'DAMAGE 3: 0 • 1 • 120 • 250 • 0% • 0',
+  'DAMAGE 4: 0 • 0 • 217 • 318 • 0% • 0',
+  'SUPPORT 3: 0 • 1 • 115 • 278 • 157 • 0',
+  'SUPPORT 4: 0 • 0 • 0 • 115 • 156 • 0',
+  'MATCH TIME: 0:23',
+];
+
+test('a slot-ordered board reads all ten rows, named, in order', () => {
+  const res = SB.parse(SLOT_BOARD);
+  assert.strictEqual(res.layout, 'slot');
+  assert.strictEqual(res.entries.length, 10);
+  assert.strictEqual(res.matchTime, '0:23');
+  assert.deepStrictEqual(res.entries.map((e) => e.name), [
+    'TANK 1', 'DAMAGE 1', 'DAMAGE 2', 'SUPPORT 1', 'SUPPORT 2',
+    'TANK 2', 'DAMAGE 3', 'DAMAGE 4', 'SUPPORT 3', 'SUPPORT 4',
+  ]);
+  assert.deepStrictEqual(res.entries[0], {
+    k: 0, d: 0, dd: 362, dt: 237, x: 190, uu: 0, name: 'TANK 1', role: null,
+  });
+  assert.strictEqual(res.entries[1].x, '0%', 'a DPS row keeps its accuracy sign');
+});
+
+test('a slot-ordered board claims no role, because the legends do not label it', () => {
+  // All three legends sit at the top, so the one above a row says nothing about
+  // it. The caller knows each slot's hero and can say more; guessing 'support'
+  // for all ten - which is what reading the last legend gives - is worse than
+  // saying nothing.
+  const res = SB.parse(SLOT_BOARD);
+  res.entries.forEach((e) => assert.strictEqual(e.role, null));
+  assert.deepStrictEqual(res.roles, ['dps', 'tank', 'support']);
+});
+
+test('the role-grouped board still labels its rows from the legend above them', () => {
+  const res = SB.parse(fullBoard());
+  assert.strictEqual(res.layout, 'role');
+  assert.ok(res.entries.every((e) => e.role));
+});
+
+test('a name ending in a digit does not become a stat', () => {
+  // "TANK 1" is why the stats are read from the RIGHT of the colon. Reading the
+  // whole line leaves seven numbers, and the leading-icon guard only rescues
+  // that by coincidence.
+  const one = SB.parse(['K • D • DD • DT • DB • UU', 'TANK 1: 4 • 2 • 100 • 50 • 9 • 1']);
+  assert.deepStrictEqual(
+    { k: one.entries[0].k, d: one.entries[0].d, name: one.entries[0].name },
+    { k: 4, d: 2, name: 'TANK 1' },
+  );
+  // An all-digits name is legal in Overwatch, and is the case a leading
+  // non-numeric skip cannot survive at all.
+  const two = SB.parse(['K • D • DD • DT • DB • UU', '1337: 4 • 2 • 100 • 50 • 9 • 1']);
+  assert.strictEqual(two.entries[0].name, '1337');
+  assert.strictEqual(two.entries[0].k, 4);
+});
+
+test('nameFromRaw drops what the hero icon made OCR emit in front of the name', () => {
+  assert.strictEqual(SB.nameFromRaw('@ gcb: 1 • 2'), 'gcb');
+  assert.strictEqual(SB.nameFromRaw('LÚCIOMAIN: 1 • 2'), 'LÚCIOMAIN');
+  assert.strictEqual(SB.nameFromRaw('no colon here'), null);
+});
+
+test('an unnamed row still parses, for a board built before names existed', () => {
+  const res = SB.parse(['K • D • DD • DT • DB • UU', '? • 4 • 2 • 100 • 50 • 9 • 1']);
+  assert.strictEqual(res.entries[0].name, null);
+  assert.strictEqual(res.entries[0].k, 4);
+});

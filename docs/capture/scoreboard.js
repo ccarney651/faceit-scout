@@ -102,6 +102,21 @@
     };
   }
 
+  // The row now names its player: "{icon} {name}: {K} • {D} • ...". Everything
+  // left of the first colon is the name, minus whatever the hero icon made OCR
+  // emit in front of it - the character class drops that noise by keeping only
+  // the trailing run of name-ish characters. The result is meant to be matched
+  // FUZZILY against a known roster, not compared for equality: an icon can bleed
+  // a character into it and Overwatch names carry accents and punctuation.
+  function nameFromRaw(raw) {
+    var i = String(raw || '').indexOf(':');
+    if (i === -1) return null;
+    var left = String(raw).slice(0, i);
+    var m = left.match(/[A-Za-z0-9À-ɏ#_\-. ]+$/);
+    var name = (m ? m[0] : left).trim();
+    return name || null;
+  }
+
   function matchTimeFromTokens(tokens, raw) {
     var joined = tokens.join(' ').toLowerCase();
     if (joined.indexOf('match time') === -1) {
@@ -132,6 +147,11 @@
     var entries = [];
     var matchTime = null;
     var currentRole = null;
+    // How the board is laid out, read off the board itself rather than off a
+    // setting the tool cannot see. "Group by role" interleaves one legend with
+    // its block, so exactly one legend precedes the first entry; the two
+    // team-grouped styles stack all three legends at the top, so three do.
+    var legendsBeforeFirstEntry = 0;
 
     for (var i = 0; i < lines.length; i++) {
       var raw = String(lines[i] == null ? '' : lines[i]).trim();
@@ -143,6 +163,7 @@
       if (role) {
         currentRole = role;
         roles.push(role);
+        if (!entries.length) legendsBeforeFirstEntry++;
         continue;
       }
 
@@ -152,14 +173,30 @@
         continue;
       }
 
-      var entry = entryFromTokens(tokens);
-      if (entry && currentRole) {
+      // Stats are read from the RIGHT of the colon when there is one. A name
+      // ending in a digit ("TANK 1") would otherwise contribute that digit as a
+      // stat, and the seven-token icon guard below only rescues that by luck.
+      var name = nameFromRaw(raw);
+      var statTokens = name === null ? tokens : tokenize(raw.slice(raw.indexOf(':') + 1));
+      var entry = entryFromTokens(statTokens);
+      if (entry) {
+        entry.name = name;
         entry.role = currentRole;
         entries.push(entry);
       }
     }
 
-    return { roles: roles, entries: entries, matchTime: matchTime, raw: lines };
+    // Three legends before any entry means the rows are team-grouped, and their
+    // role does NOT come from the legend above them - all three sit at the top.
+    // Saying nothing is correct; the caller knows each slot's hero and can say
+    // more. One legend is the role-grouped board, where the legend does label
+    // its block. Anything else (the legend switched off) leaves it unknown.
+    var layout = legendsBeforeFirstEntry >= 3 ? 'slot'
+      : legendsBeforeFirstEntry === 1 ? 'role' : null;
+    if (layout !== 'role') entries.forEach(function (e) { e.role = null; });
+
+    return { roles: roles, entries: entries, matchTime: matchTime,
+             layout: layout, raw: lines };
   }
 
   // Best-effort team split: within each role block, GroupMode 0 stacks team1
@@ -187,6 +224,7 @@
 
   var Scoreboard = {
     tokenize: tokenize,
+    nameFromRaw: nameFromRaw,
     parse: parse,
     parseScoreReadout: parseScoreReadout,
     assignTeams: assignTeams,
