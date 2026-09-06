@@ -789,6 +789,25 @@ rule "Scoreboard: Create Legend (Standard)":
             hudSubtext(null, "{0} {1}".format(abilityIconString(Hero.BAPTISTE, Button.ABILITY_1), "K • D • DD • DT • HD • UU"), HudPosition.LEFT, 1.3, Colour_TextTypeA, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
+# EVERY SCOREBOARD ROW IS WHITE, AND CARRIES NO HERO ICON. Both are OCR
+# decisions, measured against a real spectator frame rather than assumed:
+# running tesseract over one frame, the white lines - BANS, MAP, MATCH TIME and
+# the three legends - came back correct, while the team-coloured stat rows in
+# the same frame, same font, same region, same background, came back as
+# "Og 0 1856 © 499 © 19% © @". Upscaling 3x did not fix it, greyscale and
+# autocontrast did not fix it, a character whitelist did not fix it, and
+# colour-keying the text out of the scene made it worse. Colour was the one
+# variable that separated the lines that read from the lines that did not.
+#
+# The hero icon went for the same reason: it is an image, so OCR emits junk for
+# it ("&b", "Fog", "$'"), and that junk merges into the first number of the row.
+# The row names its player now, so the icon was carrying no information the row
+# did not already have. The Large preset still draws it, on its own line where
+# it cannot corrupt a number.
+#
+# The cost is that a human loses the team colour cue. Slot ordering keeps the
+# two teams in two blocks of five and every row is named, so the information is
+# still there - it is just no longer carried by colour.
 rule "Scoreboard: Build Row Text":
     @Event eachPlayer
     @Condition Scoreboard_EnableScoreboard == true
@@ -824,11 +843,11 @@ rule "Scoreboard: Create Player Entries (Small)":
     
     wait()
     if Scoreboard_GroupMode == 0:
-        hudSubheader(null, "{0} {1}: {2}".format(heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0}: {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     elif Scoreboard_GroupMode == 1:
-        hudSubheader(null, "{0} {1}: {2}".format(heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0}: {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudSubheader(null, "{0} {1}: {2}".format(heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubheader(null, "{0}: {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Medium)":
@@ -839,11 +858,11 @@ rule "Scoreboard: Create Player Entries (Medium)":
     
     wait()
     if Scoreboard_GroupMode == 0:
-        hudSubtext(null, "{0} {1}: {2}".format(heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0}: {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     elif Scoreboard_GroupMode == 1:
-        hudSubtext(null, "{0} {1}: {2}".format(heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0}: {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudSubtext(null, "{0} {1}: {2}".format(heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudSubtext(null, "{0}: {1}".format(eventPlayer, eventPlayer.Scoreboard_Row), HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Create Player Entries (Large)":
@@ -854,11 +873,11 @@ rule "Scoreboard: Create Player Entries (Large)":
     
     wait()
     if Scoreboard_GroupMode == 0:
-        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, (1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) + (0.1 if eventPlayer.getTeam() == Team.1 else 0.2), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     elif Scoreboard_GroupMode == 1:
-        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, ((1 if eventPlayer.getHero() in getDamageHeroes() else 2 if eventPlayer.getHero() in getTankHeroes() else 3) * 0.1) + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
     else:
-        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TeamOne if eventPlayer.getTeam() == Team.1 else Colour_TeamTwo, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
+        hudText(null, heroIcon(eventPlayer.getHero()), eventPlayer, eventPlayer.Scoreboard_Row, HudPosition.LEFT, eventPlayer.getSlot() * 0.1 + (2 if eventPlayer.getTeam() == Team.1 else 3), Colour_TextTypeA, Colour_TextTypeA, Colour_TextTypeA, HudReeval.SORT_ORDER_AND_STRING, SpecVisibility.ALWAYS)
 
 
 rule "Scoreboard: Host Spectator Toggle":
