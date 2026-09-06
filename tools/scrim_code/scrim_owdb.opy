@@ -28,10 +28,14 @@
 # not count characters) and no string slicing, so there is no way to pad a name
 # to a fixed width. That is why the name goes LAST in a row, after everything
 # that needs to line up.
-#!define pad3(v) ("  " if v < 10 else " " if v < 100 else "") + v
-#!define pad4(v) ("   " if v < 10 else "  " if v < 100 else " " if v < 1000 else "") + v
-#!define pad6(v) ("     " if v < 10 else "    " if v < 100 else "   " if v < 1000 else "  " if v < 10000 else " " if v < 100000 else "") + v
-#!define pad7(v) ("      " if v < 10 else "     " if v < 100 else "    " if v < 1000 else "   " if v < 10000 else "  " if v < 100000 else " ") + v
+# NOTE THE format(): `"  " + v` is not concatenation. In the Workshop `+` is
+# Add, the string coerces to 0, and every pad silently evaluated to nothing -
+# which is how the board briefly rendered "01608118000" with no gaps at all.
+# String building is Custom String, i.e. format(), and only format().
+#!define pad3(v) "{0}{1}".format("  " if v < 10 else " " if v < 100 else "", v)
+#!define pad4(v) "{0}{1}".format("   " if v < 10 else "  " if v < 100 else " " if v < 1000 else "", v)
+#!define pad6(v) "{0}{1}".format("     " if v < 10 else "    " if v < 100 else "   " if v < 1000 else "  " if v < 10000 else " " if v < 100000 else "", v)
+#!define pad7(v) "{0}{1}".format("      " if v < 10 else "     " if v < 100 else "    " if v < 1000 else "   " if v < 10000 else "  " if v < 100000 else " ", v)
 
 settings {
     "main": {
