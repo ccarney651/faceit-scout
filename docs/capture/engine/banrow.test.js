@@ -81,3 +81,25 @@ test('an unreadable hero abstains instead of guessing a near match', () => {
   assert.strictEqual(r.ok, false);
   assert.match(r.why, /SOMBKA/);
 });
+
+test('finds the row when OCR drops the colon', () => {
+  // Verbatim from a live spectator frame, 2026-09-06: the gold BANS heading
+  // read perfectly - label, both hero names, the accent folded - and the read
+  // still failed, because findRow required a colon that OCR had eaten. The
+  // label is a textual anchor by design, so it has to survive its own
+  // punctuation going missing.
+  const line = String.fromCharCode(45, 32, 174) + ' BANS LUCIO | GENJI '
+    + String.fromCharCode(92);
+  const text = [line, ': Ne', 'o Map BLZZARDIWORLD (WINTER) NS']
+    .join(String.fromCharCode(10));
+  const res = B.parseBans(text, IDX, ROLE);
+  assert.strictEqual(res.ok, true, res.why);
+  assert.deepStrictEqual(res.bans.map((b) => b.g), ['g-lucio', 'g-genji']);
+});
+
+test('a longer word starting with the label is not the label', () => {
+  // The colon-free search anchors on the first WORD, so BANSHEE cannot stand
+  // in for BANS - which a prefix match would have allowed.
+  assert.strictEqual(B.findRow('BANSHEE LUCIO', 'BANS'), null);
+  assert.strictEqual(B.findRow('BANS  : LUCIO | ANRAN', 'BANS'), 'LUCIO | ANRAN');
+});

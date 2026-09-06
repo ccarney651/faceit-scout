@@ -264,14 +264,21 @@ rule "Initialisation: Colours":
     # tones of one hue so they read as one group, separate from the white data
     # and from the two team labels.
     #
-    # Picked on LUMINANCE as much as taste, because OCR reads by contrast and
-    # that is what separated the white lines that read from the team-coloured
-    # rows that did not. BANS and MAP are read by engine/banrow.js, so the gold
-    # sits at 194 of 255 - against white's 255, team blue's 160 and team red's
-    # 59. The key is the one line the parser never reads (it recognises it only
-    # to skip it), so the amber can drop to 149 and recede.
-    Colour_Heading = rgb(255, 190, 60)
-    Colour_Key = rgb(200, 145, 45)
+    # Colour_Heading is Overwatch's own orange, the same value the ready-up
+    # hints use (Colour_TextTypeB), because that is the look being matched.
+    #
+    # It sits at luminance 165 of 255, which is lower than the 194 this was
+    # first set to and worth stating plainly: OCR reads by contrast, and 160 is
+    # roughly where the team-coloured stat ROWS stopped being readable. BANS
+    # survives it where a row would not, for reasons measured rather than hoped
+    # - it is one short line of larger text, and engine/banrow.js finds it by a
+    # textual anchor that tolerates a mangled read, including the colon going
+    # missing entirely, which is what a real frame did.
+    #
+    # The key is the one line the parser never reads - it recognises it only in
+    # order to skip it - so it can drop to 147 and recede.
+    Colour_Heading = rgb(255, 155, 0)
+    Colour_Key = rgb(205, 140, 45)
 
 
 rule "Initialisation: Player":

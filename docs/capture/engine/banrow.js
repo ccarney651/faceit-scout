@@ -62,6 +62,24 @@
       if (normalizeHeroName(lines[i].slice(0, at)) !== wanted) continue;
       return lines[i].slice(at + 1).trim();
     }
+    // Same search again, without requiring the colon. OCR drops it: measured on
+    // a real frame where the row came back as "- (R) BANS LUCIO | ANRAN" and the
+    // read failed with "could not find the BANS row on screen" despite every
+    // hero name being perfectly legible. The label is a TEXTUAL anchor by
+    // design, so it has to survive its own punctuation going missing.
+    //
+    // Anchored on the first WORD rather than a prefix match, so "BANSHEE"
+    // cannot stand in for "BANS"; junk before it is skipped, which is what a
+    // hero icon and the crop's own edge leave behind.
+    for (var j = 0; j < lines.length; j++) {
+      var words = lines[j].split(/\s+/);
+      for (var k = 0; k < words.length; k++) {
+        var norm = normalizeHeroName(words[k]);
+        if (!norm) continue;
+        if (norm === wanted) return words.slice(k + 1).join(' ').trim();
+        break;
+      }
+    }
     return null;
   }
 
