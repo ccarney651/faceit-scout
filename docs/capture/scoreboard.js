@@ -105,7 +105,10 @@
     if (nums.length === 7) nums.shift();
     if (nums.length < 4) return null;
     var x = nums.length >= 5 ? nums[4] : null;
-    if (x !== null && x.indexOf('%') === -1) x = parseInt(x, 10);
+    // The board zero-pads to hold its columns open, so "0040%" is 40% with
+    // padding on it, not a different number. The zeros are a rendering detail
+    // and do not belong in stored data; parseInt drops them either way.
+    if (x !== null) x = x.indexOf('%') === -1 ? parseInt(x, 10) : parseInt(x, 10) + '%';
     return {
       k: parseInt(nums[0], 10),
       d: parseInt(nums[1], 10),

@@ -302,3 +302,18 @@ test('a last column welded to the icon still yields its value', () => {
   const res = SB.parse(['TEAM 1', '  6 11  14861   7561    28%   6&b']);
   assert.strictEqual(res.entries[0].uu, 6, 'the welded ULT survived');
 });
+
+test('zero padding is stripped, including from an accuracy', () => {
+  // The board pads with zeros because Overwatch collapses runs of spaces, so
+  // every stored value would otherwise carry a rendering artefact.
+  const res = SB.parse([
+    'KIL DTH DAMAG TAKEN A/D/H ULT',
+    'TEAM 1',
+    '000 001 00944 01594 00000 000  &b',
+    '003 000 01045 00205 0040% 000  Fog',
+  ]);
+  assert.deepStrictEqual(res.entries[0],
+    { k: 0, d: 1, dd: 944, dt: 1594, x: 0, uu: 0, name: null, role: null, team: 'a' });
+  assert.strictEqual(res.entries[1].x, '40%', 'the padding is not part of the value');
+  assert.strictEqual(res.entries[1].dd, 1045);
+});
