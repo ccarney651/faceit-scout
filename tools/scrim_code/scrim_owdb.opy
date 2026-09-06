@@ -1032,39 +1032,46 @@ rule "Scoreboard: Create Match Time Display":
         hudSubtext(null, "{0} Match Time: {1}".format(abilityIconString(Hero.LUCIO, Button.ABILITY_2), "{0}:{1}{2}".format(floor(Match_CurrentMatchTime / 60), "0" if Match_CurrentMatchTime % 60 < 10 else "", floor(Match_CurrentMatchTime % 60))), HudPosition.LEFT, 4, Colour_TextTypeA, HudReeval.STRING, SpecVisibility.ALWAYS)
 
 
-# TWO BARS THAT BOUND THE BOARD, so the capture tool can find it without a human
-# dragging a box over it.
+# TWO THIN GREEN RULES BRACKETING THE BOARD, so the capture tool can find it
+# without a human dragging a box over it.
 #
-# WHY AT ALL: the crop is not forgiving. Measured over the eight Colosseo frames,
-# the board's true extent accepts 7 of 8 frames; the same crop with a 50% margin
-# accepts 4 and halves the values recovered. "Roughly the right area" is not good
-# enough, and asking every host to drag an accurate rectangle is not a plan.
+# WHY AT ALL: the crop is not forgiving. Over the eight Colosseo frames the
+# board's true extent accepts 7 of 8; the same crop with a 50% margin accepts 4
+# and halves the values recovered. "Roughly the right area" is not good enough,
+# and asking every host to drag an accurate rectangle is not a plan.
 #
-# THESE ARE PROGRESS BARS, NOT TEXT, and that is the whole of what makes them
-# tolerable to look at. The first version drew 56 U+25CF as hud text: it worked -
-# solid, green, comfortably wider than the board - and it looked like debug vomit
-# across the spectator view, which is a view humans watch. progressBarHud draws
-# an actual filled rectangle and its `text` parameter is documented as "can be
-# blank", so at value 100 with no label it is a clean line and nothing else.
+# THE GLYPH WAS MEASURED, NOT CHOSEN. Text is the only screen-space primitive
+# the Workshop has - createIcon, createEffect and createInWorldText all anchor in
+# the WORLD and slide around under a spectator camera - and progressBarHud cannot
+# be made subtle, because its empty TRACK is a fixed-width widget so a low value
+# just leaves a full-width outline. That leaves the glyph, and which glyphs the
+# game font actually has is documented nowhere trustworthy. So four candidates
+# were drawn at once and measured off the frame:
 #
-# The shape is also a BETTER detector target than the dots were. A solid bar is a
-# large uniform block with straight edges, where 56 dots are 56 small blobs
-# separated by background. More pure-colour pixels and a simpler geometry to
-# recognise, from the change made for looks.
+#   glyph            thickness   px/char
+#   _  U+005F           3 px      11.0
+#   ▬  U+25AC          16 px       5.9    a chunky bar, not a line
+#   ─  U+2500           2 px      22.2    <- a true hairline
+#   ▁  U+2581          16 px       5.9    a chunky bar, not a line
+#
+# All four render. U+2500 is the only one that is actually a LINE, and its
+# neighbours join seamlessly, so a run of them is one unbroken 2px rule.
+#
+# WIDTH IS ALSO MEASURED. The board's widest element is the column key at 504px;
+# 25 characters is ~555px, about 10% wider. That is enough margin to read as a
+# deliberate rule bracketing the board rather than a coincidence, and - since the
+# rule and the key are both drawn at whichever size the Size setting selects, so
+# they scale together - enough that the rules bound the board HORIZONTALLY as
+# well as vertically. Two lines are therefore a whole box, and the detector does
+# not have to profile ink for the left and right edges after all.
 #
 # WHY GREEN: it is the only colour in this mode's palette that nothing draws on
-# the spectator view DURING A GAME. Blue and red are the TEAM headers, orange is
+# the spectator view during a game. Blue and red are the TEAM headers, orange is
 # the chrome, white is the rows; Colour_TextTypeC is used solely by the ready-up
 # list, which is setup-only. No new colour, and nothing on the board it can be
 # confused with.
 #
-# HORIZONTAL EXTENT IS NOT ASSUMED. A progress bar is a fixed HUD width, so
-# unlike a text bar it does NOT bound the board horizontally by being wider than
-# the widest line. The detector gets the hard half - the vertical bounds - from
-# the two bars, and finds the left and right edges by profiling ink INSIDE that
-# band, which is an easy problem once the rows are known to be rows.
-#
-# The tool crops strictly BETWEEN the bars, so they never enter the image handed
+# The tool crops strictly BETWEEN the rules, so they never enter the image handed
 # to OCR and cannot add junk of their own.
 rule "Scoreboard: Create Capture Markers":
     @Condition Scoreboard_CaptureMarkers == true
@@ -1072,8 +1079,12 @@ rule "Scoreboard: Create Capture Markers":
     @Condition isGameInProgress() == true
 
     wait()
-    progressBarHud(null, 100, null, HudPosition.LEFT, 0.1, Colour_TextTypeC, null, ProgressHudReeval.NONE, SpecVisibility.ALWAYS)
-    progressBarHud(null, 100, null, HudPosition.LEFT, 4.5, Colour_TextTypeC, null, ProgressHudReeval.NONE, SpecVisibility.ALWAYS)
+    if Scoreboard_Size == 0:
+        hudSubheader(null, "─────────────────────────", HudPosition.LEFT, 0.1, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubheader(null, "─────────────────────────", HudPosition.LEFT, 4.5, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
+    else:
+        hudSubtext(null, "─────────────────────────", HudPosition.LEFT, 0.1, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
+        hudSubtext(null, "─────────────────────────", HudPosition.LEFT, 4.5, Colour_TextTypeC, HudReeval.NONE, SpecVisibility.ALWAYS)
 
 
 # Setting first, isGameInProgress() second - see the block above

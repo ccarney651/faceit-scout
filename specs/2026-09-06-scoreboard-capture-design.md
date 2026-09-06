@@ -725,3 +725,38 @@ wider than the widest line. A progress bar is a fixed HUD width, so it cannot be
 relied on for that. The detector therefore takes only the vertical bounds from
 the bars - which is the hard half - and finds the left and right edges by
 profiling ink inside that band, which is easy once the rows are known to be rows.
+
+### 9.2 Four glyphs on screen at once, then measured
+
+9.1 settled on a progress bar and that was wrong too: its empty TRACK is a
+fixed-width widget, so a low value leaves a full-width outline rather than a
+shorter bar. There is no subtle version of it.
+
+The mistake underneath both rejections was treating "text" as settled after the
+dots failed, when the real variable was WHICH GLYPH. Text can draw a hairline;
+`●` was simply the chunkiest option available, picked because it was known to
+render.
+
+Which glyphs the game font actually has is documented nowhere trustworthy - the
+Steam "valid characters" lists are about battletags, a different font path, and
+OverPy compiles any of them without complaint because it does not validate
+against the game. So four candidates were drawn at once, in-game, and measured
+off the frame:
+
+| glyph | thickness | px/char | verdict |
+| --- | --- | --- | --- |
+| `_` U+005F | 3 px | 11.0 | renders, a little heavy |
+| `▬` U+25AC | 16 px | 5.9 | renders; a bar, not a line |
+| **`─` U+2500** | **2 px** | **22.2** | **a true hairline, joins seamlessly** |
+| `▁` U+2581 | 16 px | 5.9 | renders; a bar, not a line |
+
+All four render, so Box Drawing and Block Elements are both available and not
+only Geometric Shapes. U+2500 is the only one that is actually a line.
+
+**Width was measured too.** The board's widest element is the column key at
+504px; 25 characters is ~555px, about 10% wider. Wide enough to read as a
+deliberate rule rather than a coincidence, and - because the rule and the key
+are drawn at whichever size the Size setting selects, so they scale together -
+wide enough that the two rules bound the board HORIZONTALLY as well as
+vertically. That restores what 9.1 gave up: two lines are a whole box again, and
+the detector does not need to profile ink for the left and right edges.
