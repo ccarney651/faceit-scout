@@ -418,3 +418,137 @@ tagged all five surviving rows `dps` with `team: null`. Confidently wrong, which
 is the one outcome §3 says this parser exists to avoid. It now returns
 `layout: null` with every role `null`. Nepal is unchanged. Four regression tests,
 verbatim from the frames; 30/30 pass.
+
+### 8.6 The controlled experiment, and what it overturns
+
+8.4 ended by saying that no colour measurement means anything unless the map is
+held fixed. This is that experiment, and it required nothing from the game but
+patience: **one board, paused, screenshotted eight times from eight camera
+angles.** The text is byte-identical in all eight — same stats, same
+`MATCH TIME: 3:02` — so the background is the only variable there is.
+
+Colosseo, ten bots plus the operator, 2026-09-06. Background medians span the
+whole usable range:
+
+| frame | background | luminance | saturation |
+| --- | --- | --- | --- |
+| `202453` | black | 0 | 0 |
+| `202412` | dark interior, flat | 16 | 4 |
+| `202431` | dark, strongly saturated | 79 | 106 |
+| `202447` | mid, saturated | 111 | 76 |
+| `202418` | mid-bright stone | 155 | 36 |
+| `202425` | bright saturated sky | 185 | 126 |
+| `202507` | bright, unsaturated / white | 187 | 10 |
+| `202439` | bright saturated | 193 | 76 |
+
+Truth, harness and scoring live in `tools/real_frame_eval/`
+(`scoreboard_truth.json`, `scoreboard_crop.py`, `scoreboard_eval.js`), so unlike
+every measurement in 8.1–8.3 this one is reproducible by anyone with the frames.
+
+#### 8.3's recommendation is withdrawn
+
+**The saturation channel does not work on the board we ship, and cannot.** It
+separates board from map by assuming the board is the saturated thing on screen.
+That was true when the rows were team-coloured. The rows are white now, and
+white is the least saturated colour there is, so the channel erases precisely
+the text it was introduced to rescue. On `202412` its output is complete and
+damning:
+
+```
+BANS : NONE
+MAP : COLOSSEO
+PLAYER * K * D * DMG ¢ TKN * ACC/BLK/HEAL « ULT
+TEAM 1
+TEAM 2
+```
+
+Four chrome lines, which are orange and survive; **zero of ten rows.** Across
+all eight frames it scored 80/480 values against the shipped path's 109.
+
+This is not a new mistake, it is 8.4's mistake again: 8.3 measured a preprocessor
+against frames whose rows were coloured and reported the result as a property of
+the preprocessor. The rule holds in both directions — hold the board fixed too.
+
+#### What actually works: local contrast on luminance
+
+The rows are white, i.e. maximum luminance, and the failure case is a *bright*
+background. So the question worth asking a pixel is not "are you bright" but
+**"are you brighter than what immediately surrounds you"** — which is the one
+question a global threshold cannot answer on text drawn over an uncontrolled
+world.
+
+Luminance minus its own local mean (box blur r=12), gain 6, inverted to
+dark-on-light:
+
+| frame | shipped raw | **localg6** |
+| --- | --- | --- |
+| `202412` | 30 / 60 | **48 / 60** |
+| `202418` | 0 | **12** |
+| `202425` | 0 | **24** |
+| `202431` | 42 | **54** |
+| `202439` | 5 | **18** |
+| `202447` | 14 | **17** |
+| `202453` | 18 | **53** |
+| `202507` | 0 | **60 / 60 — every value, every name, every team** |
+| **total values** | **109 / 480** | **286 / 480** |
+| **complete rows** | 16 / 80 | **45 / 80** |
+| **names** | 19 / 80 | **45 / 80** |
+| **match time** | 7 / 8 | **8 / 8** |
+
+**2.6x, no frame regresses, and three frames go from completely unreadable to
+readable.** `202507` — a white background, the case 8.3 correctly identified as
+hopeless for any text colour — goes from nothing to a perfect read.
+
+Three controls establish *why* it wins rather than just that it does:
+
+- **`gray`** (plain luminance, 82/480) — the win is not merely dropping colour.
+- **`lumhi`** (hard global bright threshold, 118/480, and **5/80 teams**) — the
+  win is locality, not a bias toward bright pixels. A global bright cut also
+  erases the coloured TEAM headers entirely, which is what the teams column says.
+- **`tophat`** (morphological white top-hat, 86/480) — locality helps; this
+  particular morphology does not, at r=11.
+
+Both parameters are measured. Radius at fixed gain (6/12/20) gave 236/239/235 —
+flat, so it need only be roughly glyph-scale. Gain at fixed radius (4/6/8/12)
+gave 239/**286**/225/160, a real peak: below it faint strokes never reach ink,
+above it background texture does. **In `scoreCanvas()` the radius scales with
+crop width**, because a glyph is only ~12px on a 2560-wide capture and a fixed
+radius would be wrong at any other resolution.
+
+#### What it does not fix
+
+The pass optimises for the white rows, which is the data. **The orange chrome
+comes out worse** — `BANS`, `MAP`, the column key and the TEAM headers are all
+mid-luminance colour, and they degrade (`ANS : NONI NE`, `LAYER ) ® DIG TIN`).
+That is the right trade, but it means the board's own labels are no longer
+something the parser can lean on, which is what makes 8.7 necessary.
+
+Residual failures at value level are glyph confusions rather than contrast:
+`O` for `0` is the most common by far, and a lost separator welds two values
+into one (`138 • 0` → `1380`), which is the dangerous kind because it is silent.
+
+### 8.7 One surviving TEAM header was worse than none
+
+Found by the same frames. On `202431` the OCR is otherwise near-perfect, but
+`TEAM 2` came back as `BAM 2`. The consequence was that **all ten rows reported
+`team: 'a'`** — five of them confidently wrong.
+
+The cause is that `parse()` already had the right idea and applied it too
+timidly. A ten-row team-grouped board is five and five in slot order, and the
+parser knew that, but only used it to fill a `null`. Here `TEAM 1` *had* read,
+so `currentTeam` was still `'a'` when rows six to ten were parsed and every one
+of them inherited it. Nothing was null, so the fallback declined to act.
+
+**Position now overrides the headers outright when there are ten entries.** That
+cannot disagree with headers that both survived — where they are right they say
+exactly this — and where they are not, position is the more reliable of the two,
+because it does not depend on OCR recovering coloured text, which is the first
+thing OCR loses. Ten rows only: a nine-player lobby has no five/five to appeal
+to, and there the headers are all there is.
+
+This matters more after 8.6, not less. The local-contrast pass deliberately
+trades the coloured chrome for the white rows, so the headers are now *expected*
+to read poorly and the parser must not depend on them.
+
+Two regression tests, one for the half-read board and one asserting the override
+agrees with a fully-read one; 32/32 pass.

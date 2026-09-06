@@ -1323,10 +1323,61 @@ async function idbScrimMaps(){ return idbGetAll('scrim_maps'); }
 async function finishMap(){ if(!session||!session.snaps.length) return; const c=session.code;
   if(c&&c.scrim) return finishScrimMap(c);
 }
+// LOCAL CONTRAST, NOT THE RAW COLOUR CROP. The board is white text drawn on no
+// plate, straight over the world, so the only thing that reliably separates it
+// from the map is that it is brighter than whatever immediately surrounds it -
+// never that it is brighter than some fixed value, which is false the moment a
+// white wall or a bright sky is behind it.
+//
+// Subtracting the crop's own local mean and inverting to dark-on-light measured
+// 286/480 values and 45/80 complete rows, against 109 and 16 for the raw crop
+// this replaces: 2.6x. Eight frames of ONE PAUSED BOARD shot from eight angles,
+// so the text was identical and the background was the only variable - see
+// specs/2026-09-06-scoreboard-capture-design.md section 8.6 and re-run it with
+// tools/real_frame_eval/scoreboard_crop.py + scoreboard_eval.js.
+//
+// This replaces section 8.3's saturation-channel recommendation, which was
+// measured when the rows were TEAM COLOURED and does not survive their being
+// white - white is the least saturated colour there is, so that channel erased
+// the rows and kept only the orange chrome. Do not reinstate it.
+//
+// RADIUS SCALES WITH THE CROP because it has to be the size of a glyph, and a
+// glyph is only 12px-ish on a 2560-wide capture. A fixed radius would be wrong
+// on any other capture resolution. Gain is a measured peak, not a preference:
+// 4/6/8/12 scored 239/286/225/160.
 function scoreCanvas(frame, box, sc){ sc=sc||8;
+  const w=Math.max(1,Math.round(box.w)), h=Math.max(1,Math.round(box.h));
+  const src=document.createElement('canvas'); src.width=w; src.height=h;
+  const sx=src.getContext('2d',{willReadFrequently:true});
+  sx.drawImage(frame, box.x,box.y,box.w,box.h, 0,0,w,h);
+  const img=sx.getImageData(0,0,w,h), d=img.data;
+  const g=new Float32Array(w*h);
+  for(let i=0,p=0;i<g.length;i++,p+=4) g[i]=0.299*d[p]+0.587*d[p+1]+0.114*d[p+2];
+  const r=Math.max(3,Math.round(w/53));
+  const blur=boxBlurGray(g,w,h,r);
+  for(let i=0,p=0;i<g.length;i++,p+=4){
+    const v=Math.max(0,Math.min(255, 255-(g[i]-blur[i])*6));
+    d[p]=d[p+1]=d[p+2]=v; d[p+3]=255; }
+  sx.putImageData(img,0,0);
   const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(box.w*sc)); cv.height=Math.max(1,Math.round(box.h*sc));
   const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  cx.drawImage(frame, box.x,box.y,box.w,box.h, 0,0,cv.width,cv.height); return cv; }
+  cx.drawImage(src, 0,0,w,h, 0,0,cv.width,cv.height); return cv; }
+
+// Separable running-sum box blur: two O(n) passes rather than one O(n*r^2), so
+// the radius is free and this stays a few ms on a 640x520 crop. Edges clamp to
+// the last in-bounds column/row, which keeps the border from darkening and
+// inventing a line of ink down the side of the crop.
+function boxBlurGray(src,w,h,r){
+  const tmp=new Float32Array(w*h), out=new Float32Array(w*h), n=2*r+1;
+  for(let y=0;y<h;y++){ const o=y*w; let sum=0;
+    for(let i=-r;i<=r;i++) sum+=src[o+Math.min(w-1,Math.max(0,i))];
+    for(let x=0;x<w;x++){ tmp[o+x]=sum/n;
+      sum+=src[o+Math.min(w-1,x+r+1)]-src[o+Math.min(w-1,Math.max(0,x-r))]; } }
+  for(let x=0;x<w;x++){ let sum=0;
+    for(let i=-r;i<=r;i++) sum+=tmp[Math.min(h-1,Math.max(0,i))*w+x];
+    for(let y=0;y<h;y++){ out[y*w+x]=sum/n;
+      sum+=tmp[Math.min(h-1,y+r+1)*w+x]-tmp[Math.min(h-1,Math.max(0,y-r))*w+x]; } }
+  return out; }
 async function readScoreboard(frame){
   try{
     if(!window.Scoreboard) return null;

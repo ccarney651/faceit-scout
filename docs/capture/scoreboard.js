@@ -386,10 +386,26 @@
     // team order split five and five, which is what the header would have said.
     //
     // Not on a role-grouped board, where the two teams interleave inside each
-    // role block and position says nothing about side. And it fills a gap
-    // rather than overriding: a team already read from a header stands.
+    // role block and position says nothing about side.
+    //
+    // POSITION OVERRIDES THE HEADERS HERE, and it used only to fill a null.
+    // That was wrong in a way a half-read board makes dangerous. Measured on a
+    // real Colosseo frame, 2026-09-06: TEAM 1 read correctly and TEAM 2 came
+    // back as "BAM 2", so currentTeam was still 'a' when rows six to ten were
+    // parsed and every one of them inherited it. Nothing was null, so the fill
+    // declined to act, and the board reported ten rows on team A - five of them
+    // confidently wrong. A HALF-READ SET OF HEADERS WAS WORSE THAN NONE.
+    //
+    // Overriding is safe because it cannot disagree with headers that both read:
+    // a ten-row team-grouped board IS five and five in slot order, so where the
+    // headers are right they say exactly this. Where they are not, position is
+    // the more reliable of the two - it does not depend on OCR recovering
+    // coloured text, which is the thing OCR loses first.
+    //
+    // Ten rows only. A nine-player lobby has no five/five to appeal to, and
+    // there the headers are all there is.
     if (layout !== 'role' && entries.length === 10) {
-      entries.forEach(function (e, i) { if (e.team == null) e.team = i < 5 ? 'a' : 'b'; });
+      entries.forEach(function (e, i) { e.team = i < 5 ? 'a' : 'b'; });
     }
     if (layout !== 'role') {
       entries.forEach(function (e, i) { if (!selfDescribed[i]) e.role = null; });

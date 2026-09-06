@@ -1,0 +1,51 @@
+{
+  "_comment": [
+    "Ground truth for the scrim scoreboard read. Captured 2026-09-06 on Colosseo,",
+    "ten bots plus the operator, PAUSED AT ONE POINT and screenshotted eight times",
+    "from different camera angles. The board content is therefore IDENTICAL in every",
+    "frame and the background is the only variable - which is the experiment section",
+    "8.4 of the design says had never been run, and without which no colour or",
+    "preprocessing number can be attributed to anything.",
+    "",
+    "Every frame is 2557x1437 and shows the shipped layout: white named rows, slot",
+    "ordering, orange chrome, blue/deep-red TEAM headers.",
+    "",
+    "'x' is the sixth column, whose meaning is role-dependent (ACC/BLK/HEAL). It is",
+    "stored as the literal string because that is what OCR has to reproduce - the",
+    "trailing % on a DPS row is part of the read, not a formatting detail."
+  ],
+  "box": {
+    "_comment": "Fraction of frame width/height. Operator-drawn in the real tool; fixed here so preprocessing is the only variable.",
+    "x": 0.045,
+    "y": 0.155,
+    "w": 0.25,
+    "h": 0.36
+  },
+  "frames": {
+    "202412": { "bg": "dark interior, flat and unsaturated", "bg_lum": 16, "bg_sat": 4 },
+    "202418": { "bg": "mid-bright stone", "bg_lum": 155, "bg_sat": 36 },
+    "202425": { "bg": "bright saturated sky", "bg_lum": 185, "bg_sat": 126 },
+    "202431": { "bg": "dark but strongly saturated", "bg_lum": 79, "bg_sat": 106 },
+    "202439": { "bg": "bright saturated", "bg_lum": 193, "bg_sat": 76 },
+    "202447": { "bg": "mid, saturated", "bg_lum": 111, "bg_sat": 76 },
+    "202453": { "bg": "black", "bg_lum": 0, "bg_sat": 0 },
+    "202507": { "bg": "bright, unsaturated / white", "bg_lum": 187, "bg_sat": 10 }
+  },
+  "board": {
+    "bans": "NONE",
+    "map": "COLOSSEO",
+    "matchTime": "3:02",
+    "rows": [
+      { "team": 1, "name": "GCB",      "k": 7, "d": 0, "dmg": 3740, "tkn": 199,  "x": "1099", "ult": 1 },
+      { "team": 1, "name": "WINSTON",  "k": 2, "d": 0, "dmg": 526,  "tkn": 403,  "x": "508",  "ult": 0 },
+      { "team": 1, "name": "HANZO",    "k": 2, "d": 0, "dmg": 382,  "tkn": 242,  "x": "28%",  "ult": 0 },
+      { "team": 1, "name": "BASTION",  "k": 1, "d": 0, "dmg": 585,  "tkn": 276,  "x": "37%",  "ult": 0 },
+      { "team": 1, "name": "ZENYATTA", "k": 4, "d": 0, "dmg": 672,  "tkn": 574,  "x": "276",  "ult": 0 },
+      { "team": 2, "name": "ZARYA",    "k": 0, "d": 3, "dmg": 532,  "tkn": 2098, "x": "982",  "ult": 0 },
+      { "team": 2, "name": "REAPER",   "k": 0, "d": 3, "dmg": 701,  "tkn": 915,  "x": "13%",  "ult": 0 },
+      { "team": 2, "name": "TRACER",   "k": 0, "d": 3, "dmg": 275,  "tkn": 843,  "x": "0%",   "ult": 0 },
+      { "team": 2, "name": "MOIRA",    "k": 0, "d": 4, "dmg": 94,   "tkn": 1032, "x": "138",  "ult": 0 },
+      { "team": 2, "name": "BAPTISTE", "k": 0, "d": 3, "dmg": 83,   "tkn": 1031, "x": "290",  "ult": 0 }
+    ]
+  }
+}

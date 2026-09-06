@@ -424,3 +424,28 @@ test('a real role legend is still recognised', () => {
     assert.deepEqual(SB.parse([line]).roles, [['dps', 'tank', 'support'][i]]);
   });
 });
+
+// Verbatim from a 2026-09-06 Colosseo frame. TEAM 1 read; TEAM 2 came back as
+// "BAM 2". Before the fix, currentTeam was still 'a' when rows six to ten were
+// parsed, so all ten inherited it - and because nothing was null, the ten-row
+// five/five fallback declined to correct them. Five rows confidently wrong
+// about their side is worse than the headers never having been read at all.
+test('one surviving TEAM header does not put the whole board on one team', () => {
+  const rows = ['GCB', 'WINSTON', 'HANZO', 'BASTION', 'ZENYATTA',
+                'ZARYA', 'REAPER', 'TRACER', 'MOIRA', 'BAPTISTE']
+    .map((n, i) => `${n} * ${i} * 0 * 500 * 200 * 300 * 0`);
+  const parsed = SB.parse(['TEAM 1', ...rows.slice(0, 5), 'BAM 2', ...rows.slice(5)]);
+  assert.equal(parsed.entries.length, 10);
+  assert.deepEqual(parsed.entries.map(e => e.team),
+                   ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b']);
+});
+
+// The override must agree with headers that both survived, or it is not an
+// override but a bug of its own.
+test('both TEAM headers read still gives the same five/five split', () => {
+  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+    .map((n, i) => `${n} * ${i} * 0 * 500 * 200 * 300 * 0`);
+  const parsed = SB.parse(['TEAM 1', ...rows.slice(0, 5), 'TEAM 2', ...rows.slice(5)]);
+  assert.deepEqual(parsed.entries.map(e => e.team),
+                   ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b']);
+});
