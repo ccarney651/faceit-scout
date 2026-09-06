@@ -1378,13 +1378,41 @@ function boxBlurGray(src,w,h,r){
     for(let y=0;y<h;y++){ out[y*w+x]=sum/n;
       sum+=tmp[Math.min(h-1,y+r+1)*w+x]-tmp[Math.min(h-1,Math.max(0,y-r))*w+x]; } }
   return out; }
+// Find the board from the two green rules the mode draws around it, so the
+// operator does not have to drag a crop box over a HUD element by hand - which
+// was the weakest link in this path, because the crop is not forgiving: the
+// true extent gets 7 of 8 real frames accepted, the same crop with a 50% margin
+// gets 4 and halves the values recovered.
+//
+// Costs one full-frame getImageData per capture. That is per SNAPSHOT, not per
+// video frame, so it is a few ms in a path that is about to run tesseract.
+//
+// Returns null on anything unexpected and lets the caller fall back to the
+// hand-drawn box: markers switched off in the mode, an older lobby without
+// them, a frame that is not a game.
+function autoBoardBox(frame){
+  try{
+    if(!window.Scoreboard || !Scoreboard.findMarkerBox) return null;
+    const w=frame.videoWidth||frame.naturalWidth||frame.width;
+    const h=frame.videoHeight||frame.naturalHeight||frame.height;
+    if(!w||!h) return null;
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const cx=cv.getContext('2d',{willReadFrequently:true});
+    cx.drawImage(frame,0,0,w,h);
+    return Scoreboard.findMarkerBox(cx.getImageData(0,0,w,h).data,w,h);
+  }catch(e){ return null; }
+}
 async function readScoreboard(frame){
   try{
     if(!window.Scoreboard) return null;
-    const sb=boxes.scoreboard, sr=boxes.score_readout;
+    // The markers win when present: they are the board's own statement of where
+    // it is, and they track it across resolutions and Size settings without
+    // anyone re-calibrating. boxes.scoreboard stays as the fallback.
+    const auto=autoBoardBox(frame);
+    const sb=auto||boxes.scoreboard, sr=boxes.score_readout;
     if(!sb&&!sr) return null;
     const w=await ocrWorker();
-    const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser' };
+    const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser', boxSource: auto?'markers':'manual' };
     if(sb){
       await w.setParameters({ tessedit_pageseg_mode:'6' });
       const {data}=await ocrRead(w, scoreCanvas(frame,sb));

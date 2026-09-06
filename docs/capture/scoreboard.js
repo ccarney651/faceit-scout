@@ -112,21 +112,127 @@
       start--;
     }
     if (!sawDigit) return line;
-    // The WHOLE token is replaced, not just its first character. "QO" is two
-    // characters and a zero is one, so the remainder is blanked to spaces -
-    // which tokenize() treats as a separator, exactly like the bullet that
-    // should have been there. Overwriting only the first character would leave
-    // "0O", which is still not a number and still loses the row.
-    var out = line.split('');
+    // Rewritten by SEGMENT rather than in place, because one of the two
+    // substitutions is longer than what it replaces.
+    //
+    // A token of nothing but zeros, two or more long, is that many zeros with
+    // their separators lost. "ANA * 000000" is six columns, not one; a real
+    // stat is never written "00", because the board does not pad. This only
+    // shows up on an all-zero board - adjacent identical glyphs with a thin
+    // bullet between them - which is exactly what every capture taken in the
+    // first minute of a map looks like. Measured on a real Aatlis frame at
+    // 0:24, it is the difference between 6 rows parsing and 10.
+    //
+    // "QO" -> "0" is the other, and shorter: the leftover is simply dropped
+    // here instead of being blanked to a space.
+    var out = '', at = 0;
     for (var j = start; j < toks.length; j++) {
-      var tk = toks[j];
-      if (!isO(tk.t)) continue;
-      var rep = tk.t.charAt(tk.t.length - 1) === '%' ? '0%' : '0';
-      for (var c = 0; c < tk.t.length; c++) {
-        out[tk.i + c] = c < rep.length ? rep.charAt(c) : ' ';
+      var tk = toks[j], rep = null;
+      if (isO(tk.t)) rep = tk.t.charAt(tk.t.length - 1) === '%' ? '0%' : '0';
+      else if (/^0{2,}$/.test(tk.t)) rep = new Array(tk.t.length + 1).join('0 ').trim();
+      if (rep === null) continue;
+      out += line.slice(at, tk.i) + rep;
+      at = tk.i + tk.t.length;
+    }
+    return out + line.slice(at);
+  }
+
+  // A BARE "|" WHERE A SIXTH VALUE SHOULD BE IS A 1. The ULT column is the last
+  // thing on a row and is very often 1, and a lone "1" in this font comes back
+  // as "|" or "\\" - measured on a real Aatlis frame, five of ten rows lost
+  // their ULT this way, and tokenize() deletes the character because it is
+  // punctuation.
+  //
+  // THIS CANNOT BE APPLIED BLINDLY, which is why it is not part of zeroise().
+  // OCR renders the BULLET SEPARATOR as "|" too - tokenize's own comment says
+  // so - and promoting a separator to a digit invents a column and shifts every
+  // value in the row, which is the confidently-wrong failure this parser exists
+  // to avoid. Converting only rescues a value when one is actually missing.
+  //
+  // So the caller applies it as a RETRY, gated on the row having come back with
+  // exactly five of its six columns, and keeps the result only if it then has
+  // six. A row that already parsed cleanly is never touched, and a row that is
+  // still wrong after the retry is discarded rather than kept.
+  // ONLY THE FIRST such token is converted, and that is not a detail either.
+  // A row can carry more than one - "TORBJORN * 6 + 0 + 3256 = 761 + 31% * | |"
+  // has the digit AND a stray mark the background contributed. Converting both
+  // reaches SEVEN numbers, which then trips the leading-hero-icon rule, drops
+  // the real first column and returns a plausible, wrong row. Converting one
+  // reaches six and the trailing junk is discarded as the separator it looks
+  // like. The caller retries only while a column is missing, so one is always
+  // the right number to convert.
+  function pipesToOnes(stats) {
+    var done = false;
+    return String(stats).replace(/(^|[^0-9A-Za-z])[|\\/]{1,2}(?=$|[^0-9A-Za-z])/g,
+      function (m, pre) {
+        if (done) return m;
+        done = true;
+        return pre + '1';
+      });
+  }
+
+  // FIND THE BOARD FROM ITS OWN MARKERS, so nobody has to drag a crop box over
+  // a HUD element by hand. The mode draws two thin green rules bracketing the
+  // board (scrim_owdb.opy, "Scoreboard: Create Capture Markers"); this finds
+  // them and returns the region between.
+  //
+  // Why it is worth doing: the crop is not forgiving. Measured over eight real
+  // frames, the board's true extent gets 7 of 8 accepted; the same crop with a
+  // 50% margin gets 4 and halves the values recovered.
+  //
+  // GREEN DOMINANCE, NOT AN EXACT COLOUR. The mode asks for rgb(40,205,60) and
+  // the HUD renders it darker - measured off a real frame, the rule's pixels
+  // average rgb(26,191,56) and span g=97..224 as anti-aliasing thins the ends.
+  // Matching the requested value exactly would find almost nothing.
+  //
+  // A WIDE, DENSE, THIN BAND - and each of those three words is doing work.
+  //
+  // NOT a contiguous run, which is what this tried first and why it failed on
+  // the first real frame. U+2500 glyphs do NOT join seamlessly: measured on the
+  // rule, 531 matching pixels spread over a 555px span, but the longest
+  // unbroken run is 22 - one glyph. There is a sub-pixel gap at every character
+  // boundary that anti-aliasing drops below any sane threshold. A run test
+  // finds nothing.
+  //
+  // WIDE and DENSE together are what make green safe to use at all. Foliage is
+  // green, but green scattered through a row of leaves does not fill 80% of a
+  // span hundreds of pixels wide. THIN is the strongest of the three: a rule is
+  // one or two rows tall, where anything in the world with that much green in
+  // it is tall as well as wide.
+  //
+  // Returns null rather than guessing whenever the evidence is not two matching
+  // rules - markers switched off, an obscured board, a green wall. The caller
+  // falls back to the hand-drawn box, which is why that box still exists.
+  function findMarkerBox(data, w, h) {
+    var minSpan = Math.max(40, Math.round(w * 0.08));
+    var bands = [], cur = null;
+    for (var y = 0; y < h; y++) {
+      var n = 0, x0 = -1, x1 = -1;
+      for (var x = 0; x < w; x++) {
+        var i = (y * w + x) * 4, r = data[i], g = data[i + 1], b = data[i + 2];
+        if (g > 150 && r < 120 && b < 130 && g - r > 60 && g - b > 50) {
+          if (x0 === -1) x0 = x;
+          x1 = x; n++;
+        }
+      }
+      var span = x1 - x0 + 1;
+      if (x0 !== -1 && span >= minSpan && n / span >= 0.8) {
+        if (cur && y - cur.y1 <= 2) { cur.y1 = y; cur.x0 = Math.min(cur.x0, x0); cur.x1 = Math.max(cur.x1, x1); }
+        else { cur = { y0: y, y1: y, x0: x0, x1: x1 }; bands.push(cur); }
       }
     }
-    return out.join('');
+    // A rule is thin. Anything thick enough to be a wall is not a rule.
+    bands = bands.filter(function (b) { return b.y1 - b.y0 <= 6; });
+    if (bands.length < 2) return null;
+    var top = bands[0], bot = bands[bands.length - 1];
+    // The two rules are the SAME string, so they must agree on width and centre.
+    // Anything that does not is not a pair of rules, whatever else it may be.
+    var wTop = top.x1 - top.x0, wBot = bot.x1 - bot.x0;
+    if (Math.abs(wTop - wBot) > 0.15 * Math.max(wTop, wBot)) return null;
+    if (Math.abs((top.x0 + top.x1) - (bot.x0 + bot.x1)) / 2 > 0.05 * w) return null;
+    if (bot.y0 - top.y1 < 20) return null;
+    var x = Math.min(top.x0, bot.x0), xr = Math.max(top.x1, bot.x1);
+    return { x: x, y: top.y1 + 2, w: xr - x + 1, h: bot.y0 - top.y1 - 4 };
   }
 
   // The role of a legend line, or null if the line is not a legend.
@@ -428,6 +534,11 @@
         if (seen === 6 && end > 0) parts.name = toks.slice(0, end).join(' ');
       }
       var entry = entryFromTokens(tokenize(parts.stats));
+      // See pipesToOnes: only when a column is genuinely missing.
+      if (entry && entry.fields === 5) {
+        var retry = entryFromTokens(tokenize(pipesToOnes(parts.stats)));
+        if (retry && retry.fields === 6) { retry.name = entry.name; entry = retry; }
+      }
       if (entry) {
         entry.name = parts.name;
         entry.role = currentRole;
@@ -510,6 +621,8 @@
     splitRow: splitRow,
     teamFromLine: teamFromLine,
     isColumnHeader: isColumnHeader,
+    pipesToOnes: pipesToOnes,
+    findMarkerBox: findMarkerBox,
     zeroise: zeroise,
     leadingNumber: leadingNumber,
     labelledRow: labelledRow,

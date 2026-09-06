@@ -506,3 +506,105 @@ test('a round-letter zero is recovered, welded or not', () => {
     for (const k of Object.keys(want)) assert.equal(e[k], want[k], `${k} in ${line}`);
   }
 });
+
+// --- findMarkerBox -------------------------------------------------------
+// Synthetic frames: the detector is pure, so it can be exercised without a
+// browser or a real screenshot.
+function frame(w, h, paint) {
+  const d = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) { d[i * 4 + 3] = 255; }
+  paint((x, y, r, g, b) => {
+    const i = (y * w + x) * 4; d[i] = r; d[i + 1] = g; d[i + 2] = b;
+  });
+  return d;
+}
+// The mode renders the rule darker than the rgb(40,205,60) it asks for -
+// measured at about rgb(26,191,56) on a real frame - so the fixtures use the
+// rendered value, not the requested one.
+const RULE = [26, 191, 56];
+
+function withRules(w, h, yTop, yBot, x0, x1) {
+  return frame(w, h, set => {
+    for (const y of [yTop, yBot])
+      for (let x = x0; x <= x1; x++) set(x, y, RULE[0], RULE[1], RULE[2]);
+  });
+}
+
+test('findMarkerBox returns the region between two rules', () => {
+  const w = 1000, h = 600;
+  const box = SB.findMarkerBox(withRules(w, h, 100, 400, 200, 700), w, h);
+  assert.ok(box, 'no box found');
+  assert.equal(box.x, 200);
+  assert.ok(box.y > 100 && box.y < 110, `y ${box.y} should sit just below the top rule`);
+  assert.ok(box.y + box.h < 400, 'box must end above the bottom rule');
+  assert.equal(box.w, 501);
+});
+
+test('findMarkerBox ignores green that is not a long run', () => {
+  // Foliage: lots of green pixels, none of them an unbroken horizontal line.
+  const w = 1000, h = 600;
+  const d = frame(w, h, set => {
+    for (let i = 0; i < 40000; i++) {
+      const x = (i * 7919) % w, y = (i * 104729) % h;
+      set(x, y, RULE[0], RULE[1], RULE[2]);
+    }
+  });
+  assert.equal(SB.findMarkerBox(d, w, h), null);
+});
+
+test('findMarkerBox needs two rules, not one', () => {
+  const w = 1000, h = 600;
+  const d = frame(w, h, set => {
+    for (let x = 200; x <= 700; x++) set(x, 100, RULE[0], RULE[1], RULE[2]);
+  });
+  assert.equal(SB.findMarkerBox(d, w, h), null);
+});
+
+test('findMarkerBox rejects two runs that disagree on width', () => {
+  // Two green lines that are not a pair of rules - the mode draws one string
+  // twice, so a mismatch in width means these are something else.
+  const w = 1000, h = 600;
+  const d = frame(w, h, set => {
+    for (let x = 200; x <= 700; x++) set(x, 100, RULE[0], RULE[1], RULE[2]);
+    for (let x = 200; x <= 350; x++) set(x, 400, RULE[0], RULE[1], RULE[2]);
+  });
+  assert.equal(SB.findMarkerBox(d, w, h), null);
+});
+
+// An all-zero board welds its adjacent zeros: "0 • 0 • 0" comes back as
+// "000000" or "00-00-00". A real stat is never written "00" - the board does
+// not pad - so an all-zeros token two or more long is that many columns.
+// Measured on a real Aatlis frame at 0:24, this is 6 rows parsing versus 10,
+// and every capture taken early in a map looks like that.
+test('welded zeros on an all-zero board are split back into columns', () => {
+  for (const line of ['ANA * 000000', 'BAPTISTE 00-00-00']) {
+    const e = SB.parse([line]).entries[0];
+    assert.ok(e, `dropped: ${line}`);
+    assert.equal(e.fields, 6, `not six columns: ${line}`);
+    assert.deepEqual([e.k, e.d, e.dd, e.dt, e.x, e.uu], [0, 0, 0, 0, 0, 0]);
+  }
+});
+
+// The ULT column is the last thing on a row and is very often 1, and a lone
+// "1" comes back as "|" - which tokenize deletes as punctuation. Verbatim from
+// a real Aatlis frame where five of ten rows lost their ULT this way.
+test('a bare pipe standing in for a missing sixth column is a 1', () => {
+  const e = SB.parse(['SYMMETRA « 15 + 0 » 3053 + 1098 * 34% * |']).entries[0];
+  assert.deepEqual([e.k, e.d, e.dd, e.dt, e.x, e.uu], [15, 0, 3053, 1098, '34%', 1]);
+});
+
+// Only the FIRST is converted. This row carries the digit AND a stray mark the
+// background contributed; converting both reaches seven numbers, trips the
+// leading-hero-icon rule, drops the real first column and returns a plausible
+// wrong row.
+test('a second stray pipe does not become a seventh column', () => {
+  const e = SB.parse(['TORBJORN * 6 + 0 + 3256 = 761 + 31% * | |']).entries[0];
+  assert.deepEqual([e.k, e.d, e.dd, e.dt, e.x, e.uu], [6, 0, 3256, 761, '31%', 1]);
+});
+
+// A row that already has all six columns must never be touched by the retry -
+// that is the guard that stops a bullet misread as "|" from inventing a column.
+test('a complete row is not altered by the pipe retry', () => {
+  const e = SB.parse(['BRIGITTE * 2 + 4 « 1005 * 1621 » 987 + 0']).entries[0];
+  assert.deepEqual([e.k, e.d, e.dd, e.dt, e.x, e.uu], [2, 4, 1005, 1621, 987, 0]);
+});

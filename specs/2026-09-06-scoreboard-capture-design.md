@@ -760,3 +760,73 @@ are drawn at whichever size the Size setting selects, so they scale together -
 wide enough that the two rules bound the board HORIZONTALLY as well as
 vertically. That restores what 9.1 gave up: two lines are a whole box again, and
 the detector does not need to profile ink for the left and right edges.
+
+## 10. The detector, and what two marked frames taught
+
+`Scoreboard.findMarkerBox()` finds the two green rules and returns the region
+between them; `readScoreboard()` prefers it over `boxes.scoreboard` and falls
+back to the hand-drawn box when it returns null. Measured end to end in a real
+browser on two marked frames.
+
+### The glyphs do not join, so "a long run" finds nothing
+
+The first detector looked for a long CONTIGUOUS run of marker green and found
+nothing at all on the first real frame. Measured on the rule: **531 matching
+pixels spread over a 555px span, longest unbroken run 22** — one glyph. U+2500
+characters do *not* join seamlessly; there is a sub-pixel gap at every character
+boundary that anti-aliasing drops below any usable threshold. Section 9 claimed
+they join; that was wrong and is corrected here.
+
+What works is **wide, dense and thin**, and each word carries weight. Wide and
+dense together are what make green safe: foliage is green, but green scattered
+through leaves does not fill 80% of a span hundreds of pixels wide. Thin is the
+strongest of the three — a rule is one or two rows tall, and anything in the
+world with that much green is tall as well as wide.
+
+Green also renders **darker than requested** — the mode asks for rgb(40,205,60)
+and the rule's pixels average rgb(26,191,56), spanning g=97..224. The detector
+keys on green *dominance*, not on the value the mode asked for.
+
+### Two OCR failures the marked frames exposed
+
+**Welded zeros.** An all-zero board renders `0 • 0 • 0` and OCR returns
+`000000` or `00-00-00`. A real stat is never written `00` because the board does
+not pad, so an all-zeros token two or more characters long is that many columns.
+On a real Aatlis frame at 0:24 this was the difference between **6 rows parsing
+and 9**. Every capture taken in the first minute of a map looks like this.
+
+**The ULT column read as a pipe.** `1` in this font comes back as `|` or `\`,
+and tokenize deletes it as punctuation - five of ten rows lost their ULT on one
+frame. This CANNOT be fixed blindly: OCR renders the bullet separator as `|`
+too, and promoting a separator to a digit invents a column and shifts the row,
+which is the confidently-wrong failure this parser exists to prevent. It is
+applied as a **retry gated on the row having exactly five of six columns**, and
+kept only if the retry yields six. And **only the first** such token converts:
+one row carried the digit *and* a stray mark from the background, and converting
+both reached seven numbers, tripped the leading-hero-icon rule and returned a
+plausible wrong row.
+
+### Where the automatic path lands
+
+Aatlis, 8:46, real varied stats, no hand-drawn box anywhere in the path:
+
+| | |
+| --- | --- |
+| box found | `{x:103, y:247, w:555, h:506}` — the rules' span, between them |
+| rows parsed | **10 / 10** |
+| values | **57 / 60 (95%)** |
+| teams | 10 / 10 |
+| match time | correct |
+
+The eight Colosseo frames are unchanged at 377/420 on 7 of 8 accepted, so
+nothing regressed. The detector also adapted to a different window width between
+the two marked frames (2557 then 2537) without any recalibration, which is the
+property the hand-drawn box never had.
+
+### Still worth knowing
+
+The board's text spans ~447px inside a 555px crop, so ~50px of world either side
+sits inside the OCR image and contributes the stray `\` and `|` marks seen
+above. Tightening that would need the rules to be sized to the content rather
+than 10% wider, which would risk clipping the column key. Left as it is,
+because the parser now discards those marks correctly.
