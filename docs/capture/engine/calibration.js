@@ -315,7 +315,31 @@
         //
         // Cost is unchanged: five cells per candidate instead of ten, and two
         // searches instead of one.
-        var COARSE = 0.005, SPAN_X = 4, SPAN_Y = 16, FINE = 0.0025, FINE_SPAN = 2, STARTS = 2;
+        // THE FINE STEP MUST BE FINER THAN THE MATCHER'S TOLERANCE.
+        //
+        // Measured on the operator's own crops 2026-09-07, sliding one strip
+        // horizontally a pixel at a time against the real references:
+        //
+        //   LEFT  +8px  distinct=1   +10px distinct=3   +12px distinct=4
+        //         +14px distinct=1
+        //   RIGHT  +0px distinct=5    -4px distinct=0    +4px distinct=4
+        //
+        // The window in which a strip reads at all is about FOUR PIXELS wide.
+        // The old fine step of 0.0025 is 6.4px on a 2570-wide frame and the
+        // coarse step 12.85px, so the grid straddled that window and landed on
+        // +6px or +19px - both distinct=1. It could not reach the answer.
+        //
+        // This is also why the right strip has always worked and the left never
+        // has: AUTO_STRIPS' right fraction happens to be accurate, and its left
+        // fraction is about 4px out - an error smaller than the step that was
+        // supposed to correct it.
+        //
+        // FINE_SPAN 3 at 0.001 covers +/-0.003, more than the 0.0025 worst-case
+        // distance from a coarse grid point. Over screenshots/, by distinct
+        // heroes: 0.0025/span2 6.71, 0.001/span3 7.47, 0.001/span5 7.50,
+        // 0.0005/span6 7.53 - the last two cost 2.5x and 3.5x the fine passes
+        // for 0.03 and 0.06, which is noise.
+        var COARSE = 0.005, SPAN_X = 4, SPAN_Y = 16, FINE = 0.001, FINE_SPAN = 3, STARTS = 2;
         var betterS = function (r, cur) {
           return r.distinct > cur.distinct
                  || (r.distinct === cur.distinct && r.sum > cur.sum);

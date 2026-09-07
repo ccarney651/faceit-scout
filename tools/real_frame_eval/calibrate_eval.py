@@ -215,8 +215,8 @@ def detect_content_rect(img: Image.Image):
     return (l * sx, t * sy, (r - l + 1) * sx, (b - t + 1) * sy)
 
 
-def auto_calibrate(img, coarse=0.005, span_x=4, span_y=16, fine=0.0025,
-                   fine_span=2, starts=2):
+def auto_calibrate(img, coarse=0.005, span_x=4, span_y=16, fine=0.001,
+                   fine_span=3, starts=2):
     """EACH STRIP IS SEARCHED INDEPENDENTLY.
 
     A single shared (dx, dy) shifts both strips together, which cannot correct a
@@ -228,8 +228,13 @@ def auto_calibrate(img, coarse=0.005, span_x=4, span_y=16, fine=0.0025,
     left strip wrong (only one of five right). Searched independently the left
     strip lands on the operator's own hand-set box.
 
-    Cost is unchanged: each candidate scores five cells instead of ten, and
-    there are two searches instead of one.
+    THE FINE STEP MUST BE FINER THAN THE MATCHER'S TOLERANCE. Sliding a strip
+    a pixel at a time against the real references, on crops the operator
+    exported 2026-09-07, the window in which a strip reads at all is about FOUR
+    pixels wide: LEFT reads distinct=4 at +12px and distinct=1 at both +8 and
+    +14. The old fine step of 0.0025 is 6.4px on a 2570-wide frame, so the grid
+    straddled that window entirely. By distinct heroes over screenshots/:
+    0.0025/span2 6.71, 0.001/span3 7.47, 0.001/span5 7.50, 0.0005/span6 7.53.
     """
     W, H = img.size
     R = detect_content_rect(img)
