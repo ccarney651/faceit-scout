@@ -204,11 +204,6 @@
       if (REFS.length) {
         var frame = grabFrame();
         var FW = ctx.video.videoWidth, FH = ctx.video.videoHeight;
-        // RANK BY CONFIDENT CELLS FIRST, summed score only as a tie-break.
-        // The sum rewards ten mediocre correlations over nine good ones, which
-        // put the coarse pass in the wrong basin in the field - it settled on
-        // 8/10 while a placement 4px away scored 10/10, and the fine pass only
-        // searches around the coarse winner so it could not recover.
         var rank = function (cand) {
           if (!withinFrame(cand, FW, FH)) return null;
           return scoreCandidate(frame, cand);
@@ -217,34 +212,53 @@
           return r && (r.ok > cur.ok || (r.ok === cur.ok && r.sum > cur.sum));
         };
         var bestRank = rank(best) || { ok: -1, sum: -Infinity };
-        var bx = 0, by = 0;
-        // COARSE PASS, then a FINE one around its winner. A single 0.01 pass
-        // cannot resolve an offset smaller than 0.01 of the reference height,
-        // and the real residual measured in the field was about half a step -
-        // so the coarse pass alone is guaranteed to stop a few pixels out, on
-        // whichever side happens to score better. Two passes cost 85 + 49
-        // candidates against the 85 this replaces.
-        var sweep = function (step, spanX, spanY, cx, cy) {
-          for (var dyi = -spanY; dyi <= spanY; dyi++) {
-            for (var dxi = -spanX; dxi <= spanX; dxi++) {
-              var dx = cx + dxi * step, dy = cy + dyi * step;
-              if (dx === bx && dy === by) continue;
-              var cand = boxesFromStrips(R, dx, dy), r = rank(cand);
-              if (better(r, bestRank)) { bestRank = r; best = cand; bx = dx; by = dy; }
+
+        // THE SEARCH SHAPE IS MEASURED, NOT CHOSEN. Scored over the 36 real
+        // frames in screenshots/ with tools/real_frame_eval/calibrate_eval.py -
+        // re-run it before changing any number here:
+        //
+        //   coarse .01  x2/y8   1 start   mean 7.67  8+: 26/36  4-: 4  ~110
+        //   coarse .005 x2/y16  1 start   mean 8.08  8+: 28/36  4-: 2  ~190
+        //   coarse .005 x4/y16  1 start   mean 8.11  8+: 28/36  4-: 2  ~322
+        //   coarse .005 x2/y16  top-2     mean 8.19  8+: 28/36  4-: 2  ~215
+        //   coarse .005 x4/y16  top-2     mean 8.22  8+: 28/36  4-: 2  ~347 <-
+        //
+        // The old .01 single-start grid was not merely coarse, it was WRONG on
+        // two frames: it settled on dy=+0.075 where the answer was -0.055,
+        // losing six portraits on one and five on the other. A fine pass that
+        // may only search around the coarse winner cannot leave a false basin,
+        // so the top TWO coarse candidates are refined instead of just one.
+        //
+        // The x range stays at the shipped +/-0.02. Halving it scores the same
+        // on these frames and costs a third less, but no frame here exercises a
+        // large horizontal offset - and narrowing a range on that basis is how
+        // the tool breaks for the one operator who needs it.
+        var COARSE = 0.005, SPAN_X = 4, SPAN_Y = 16, FINE = 0.0025, FINE_SPAN = 2, STARTS = 2;
+
+        var cands = [];
+        for (var dyi = -SPAN_Y; dyi <= SPAN_Y; dyi++) {
+          for (var dxi = -SPAN_X; dxi <= SPAN_X; dxi++) {
+            var dx = dxi * COARSE, dy = dyi * COARSE;
+            var cand = boxesFromStrips(R, dx, dy), r = rank(cand);
+            if (r) cands.push({ r: r, dx: dx, dy: dy, boxes: cand });
+          }
+        }
+        cands.sort(function (p, q) { return (q.r.ok - p.r.ok) || (q.r.sum - p.r.sum); });
+
+        for (var si = 0; si < STARTS && si < cands.length; si++) {
+          var seed = cands[si];
+          if (better(seed.r, bestRank)) { bestRank = seed.r; best = seed.boxes; }
+          for (var fyi = -FINE_SPAN; fyi <= FINE_SPAN; fyi++) {
+            for (var fxi = -FINE_SPAN; fxi <= FINE_SPAN; fxi++) {
+              var c2 = boxesFromStrips(R, seed.dx + fxi * FINE, seed.dy + fyi * FINE);
+              var r2 = rank(c2);
+              if (better(r2, bestRank)) { bestRank = r2; best = c2; }
             }
           }
-        };
-        // The coarse range stays WIDE on purpose. A window capture offsets the
-        // game inside the captured surface by an amount no fraction of the
-        // frame predicts - measured at -83px in the field - so the sweep is
-        // load-bearing there rather than a refinement, and narrowing it would
-        // break the case it exists to serve.
-        sweep(0.01, 2, 8, 0, 0);
-        // Span 2, not 3: the fine step is 0.0025 and the coarse step 0.01, so
-        // +/-2 fine steps already bridges half a coarse step, which is the most
-        // the coarse winner can be out by. Span 3 was 49 candidates for no extra
-        // reach. 85 + 25 passes, against the 85 this whole sweep started at.
-        sweep(0.0025, 2, 2, bx, by);
+          // Nothing can beat every cell reading confidently, so stop paying for
+          // a second seed once the first one is perfect.
+          if (bestRank.ok === 10) break;
+        }
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two
