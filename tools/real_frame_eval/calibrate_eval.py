@@ -26,6 +26,19 @@ What it is good for is COMPARISON - does a change to AUTO_STRIPS, to the sweep's
 range, or to its step size make more of these frames read, or fewer. Run it
 before and after, and never trust an improvement measured on one frame.
 
+THE FRAMES ARE NOT IN THE REPOSITORY. screenshots/ is gitignored, same as the
+other real_frame_eval tools' inputs, so the numbers in this file's docstrings
+and in engine/calibration.js are a record of what WAS measured rather than
+something a fresh clone can reproduce. Keep the frames that produced a decision;
+a frame that shows a failure is worth more than ten that pass. To add one from a
+live session, with the replay showing the board:
+
+    grabFrame().toBlob(b => { const a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = 'frame.png'; a.click(); });
+
+That is the real captured frame, not a screenshot of the browser, and it is the
+only input that reproduces what the tool actually sees.
+
 Usage:
     .venv/Scripts/python.exe tools/real_frame_eval/calibrate_eval.py
     .venv/Scripts/python.exe tools/real_frame_eval/calibrate_eval.py --sweep
@@ -75,6 +88,38 @@ REF_W, REF_H, LF, TF, PACKED = load_refs()
 WORK_W, WORK_H = REF_W + 2 * PAD, REF_H + 2 * PAD
 
 
+def strip_box(R, side, dx, dy):
+    """One strip. Each is searched independently - see auto_calibrate."""
+    rx, ry, rw, _ = R
+    ref_h = rw * 9 / 16
+    fx, fy, fw, fh = AUTO_STRIPS[side]
+    return (rx + (fx + dx) * rw, ry + (fy + dy) * ref_h, fw * rw, fh * ref_h)
+
+
+def score_strip(img, b, side):
+    """{distinct, sum} over one strip's five cells."""
+    seen, total = set(), 0.0
+    x, y, w, h = b
+    for i in range(5):
+        g = cell_gray_padded(img, (x + i * w / 5, y, w / 5, h))
+        win = g[PAD:PAD + REF_H, PAD:PAD + REF_W].ravel()
+        c = win - win.mean()
+        if np.sqrt((c * c).mean()) < MIN_RMS:
+            continue
+        n = np.sqrt((c * c).sum()) or 1.0
+        names, mat = PACKED[side]
+        v = mat @ c / n
+        j = int(v.argmax())
+        total += float(v[j])
+        if v[j] >= CONFIDENT:
+            seen.add(names[j])
+    return len(seen), total
+
+
+def in_frame(b, W, H):
+    return b[0] >= 0 and b[1] >= 0 and b[0] + b[2] <= W and b[1] + b[3] <= H
+
+
 def boxes_from_strips(R, dx, dy):
     """engine/calibration.js boxesFromStrips - vertical fractions against width."""
     rx, ry, rw, rh = R
@@ -101,25 +146,49 @@ def cell_gray_padded(img: Image.Image, cell):
     return 0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]
 
 
+MIN_RMS = 12.0
+
 def best_score(gray, variant):
-    """engine/refs.js bestMatch with fast=true: the centre offset only."""
+    """engine/refs.js bestMatch with fast=true: the centre offset only.
+
+    Returns (score, hero) and refuses a crop with no contrast. A near-uniform
+    crop - a white team banner, a black bar - has a tiny L2 norm, and dividing
+    by it turns noise into a confident-looking correlation. Measured over these
+    frames, real portrait cells never fall below 25.8 RMS, so 12 discards none
+    of them.
+    """
     win = gray[PAD:PAD + REF_H, PAD:PAD + REF_W].ravel()
     c = win - win.mean()
+    if np.sqrt((c * c).mean()) < MIN_RMS:
+        return -1.0, None
     n = np.sqrt((c * c).sum()) or 1.0
-    _, mat = PACKED[variant]
-    return float((mat @ c).max() / n)
+    names, mat = PACKED[variant]
+    v = mat @ c / n
+    i = int(v.argmax())
+    return float(v[i]), names[i]
 
 
 def score_candidate(img, cand, W, H):
-    """engine/calibration.js scoreCandidate: {ok, sum} in one pass."""
+    """engine/calibration.js scoreCandidate: {ok, sum} in one pass.
+
+    A hero may not appear twice on one team - OW2 is role locked - so a side
+    that returns the same hero for several cells is not reading portraits, it is
+    reading noise that happens to sit nearest one reference. Only the best cell
+    of a duplicated hero counts as confident. This is what catches a placement
+    on the white team banners, where every cell came back the same hero at the
+    same score just above threshold.
+    """
     ok, total = 0, 0.0
     for side, b in cand.items():
         x, y, w, h = b
+        seen = {}
         for i in range(5):
-            s = best_score(cell_gray_padded(img, (x + i * w / 5, y, w / 5, h)), side)
-            total += s
-            if s >= CONFIDENT:
-                ok += 1
+            s, hero = best_score(cell_gray_padded(img, (x + i * w / 5, y, w / 5, h)), side)
+            total += max(s, 0.0)
+            if s >= CONFIDENT and hero is not None:
+                if s > seen.get(hero, -1):
+                    seen[hero] = s
+        ok += len(seen)
     return ok, total
 
 
@@ -148,55 +217,49 @@ def detect_content_rect(img: Image.Image):
 
 def auto_calibrate(img, coarse=0.005, span_x=4, span_y=16, fine=0.0025,
                    fine_span=2, starts=2):
-    """The real two-pass sweep: a fine-ish coarse grid, then the top N refined.
+    """EACH STRIP IS SEARCHED INDEPENDENTLY.
 
-    Chosen by measurement over these frames, not by taste:
+    A single shared (dx, dy) shifts both strips together, which cannot correct a
+    WIDTH error: the resulting offset is f*(R.w - true_w), small at the left
+    strip's f=0.05 and large at the right strip's f=0.69. Measured on a frame
+    the operator exported 2026-09-07, the two strips wanted dx values 0.005
+    apart - about 13px - and the joint search compromised, placing the right
+    strip correctly (Mauga/Hanzo/Mei/Mercy/Lucio, all confirmed correct) and the
+    left strip wrong (only one of five right). Searched independently the left
+    strip lands on the operator's own hand-set box.
 
-        coarse .01  x2/y8   1 start   mean 7.67   8+: 26/36   4-: 4  ~110 passes
-        coarse .005 x2/y16  1 start   mean 8.08   8+: 28/36   4-: 2  ~190
-        coarse .005 x4/y16  1 start   mean 8.11   8+: 28/36   4-: 2  ~322
-        coarse .005 x2/y16  top-2     mean 8.19   8+: 28/36   4-: 2  ~215
-        coarse .005 x4/y16  top-2     mean 8.22   8+: 28/36   4-: 2  ~347  <-
-
-    The single-start .01 grid was not merely coarse, it was WRONG on two frames:
-    it settled on dy=+0.075 where the answer was -0.055, losing six portraits on
-    one and five on the other, because the fine pass may only search around the
-    coarse winner and so cannot leave a false basin. Refining the top TWO
-    coarse candidates is what buys that back.
-
-    x4 keeps the horizontal range at the shipped +/-0.02. x2 scores about the
-    same on these frames and costs a third less, but halving a range no frame
-    here exercises is how a tool breaks for the one operator who needs it.
+    Cost is unchanged: each candidate scores five cells instead of ten, and
+    there are two searches instead of one.
     """
     W, H = img.size
     R = detect_content_rect(img)
-    best = boxes_from_strips(R, 0, 0)
-    best_rank = score_candidate(img, best, W, H) if within_frame(best, W, H) else (-1, -1e9)
-
-    cand_list = []
-    for iy in range(-span_y, span_y + 1):
-        for ix in range(-span_x, span_x + 1):
-            dx, dy = ix * coarse, iy * coarse
-            cand = boxes_from_strips(R, dx, dy)
-            if not within_frame(cand, W, H):
-                continue
-            cand_list.append((score_candidate(img, cand, W, H), dx, dy, cand))
-    cand_list.sort(key=lambda t: t[0], reverse=True)
-
-    bx = by = 0.0
-    for r, dx, dy, cand in cand_list[:starts]:
-        if r > best_rank:
-            best_rank, best, bx, by = r, cand, dx, dy
-        for iy in range(-fine_span, fine_span + 1):
-            for ix in range(-fine_span, fine_span + 1):
-                ndx, ndy = dx + ix * fine, dy + iy * fine
-                c = boxes_from_strips(R, ndx, ndy)
-                if not within_frame(c, W, H):
+    out, oks = {}, 0
+    for side in ("a", "b"):
+        best = (-1, -1e9)
+        best_box = strip_box(R, side, 0, 0)
+        cands = []
+        for iy in range(-span_y, span_y + 1):
+            for ix in range(-span_x, span_x + 1):
+                dx, dy = ix * coarse, iy * coarse
+                b = strip_box(R, side, dx, dy)
+                if not in_frame(b, W, H):
                     continue
-                rr = score_candidate(img, c, W, H)
-                if rr > best_rank:
-                    best_rank, best, bx, by = rr, c, ndx, ndy
-    return best_rank[0], bx, by, best
+                cands.append((score_strip(img, b, side), dx, dy, b))
+        cands.sort(key=lambda t: t[0], reverse=True)
+        for r, dx, dy, b in cands[:starts]:
+            if r > best:
+                best, best_box = r, b
+            for iy in range(-fine_span, fine_span + 1):
+                for ix in range(-fine_span, fine_span + 1):
+                    b2 = strip_box(R, side, dx + ix * fine, dy + iy * fine)
+                    if not in_frame(b2, W, H):
+                        continue
+                    rr = score_strip(img, b2, side)
+                    if rr > best:
+                        best, best_box = rr, b2
+        out[side] = best_box
+        oks += best[0]
+    return oks, 0.0, 0.0, out
 
 
 def main() -> int:

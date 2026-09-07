@@ -96,9 +96,18 @@ global.detectContentRect=()=>({x:0,y:0,w:1920,h:1080});
 // stubbed - only the free variables the module still calls out to can be.
 // readComp backs calOk's "N/10 confident" read; mirror the old calOk stub's
 // 9-of-10 result whenever both boxes are present.
+//
+// The names matter now and did not before. calOk counts DISTINCT confident
+// heroes per side, because a placement that reads the same hero ten times was
+// being reported to the operator as "9/10 portraits confident" - Overwatch 2 is
+// role locked, so five cells on a side must be five different heroes. Real
+// readComp always sets a name ('??' when it is not confident); this stub used
+// to return bare scores, which is data the real function never produces.
 global.readComp=(bx)=>{ if(!bx||!bx.a||!bx.b) return null;
-  return { a:[{score:0.9},{score:0.9},{score:0.9},{score:0.9},{score:0.9}],
-           b:[{score:0.9},{score:0.9},{score:0.9},{score:0.9},{score:0.1}] }; };
+  return { a:[{name:'Ana',score:0.9},{name:'Genji',score:0.9},{name:'Mercy',score:0.9},
+              {name:'Reaper',score:0.9},{name:'Zarya',score:0.9}],
+           b:[{name:'Ashe',score:0.9},{name:'Mei',score:0.9},{name:'Hanzo',score:0.9},
+              {name:'Lucio',score:0.9},{name:'??',score:0.1}] }; };
 global.updateBtns=()=>{ global._update=1; };
 global.selfTest=()=>{ global._selftest=1; };
 global.setStageHint=()=>{};

@@ -102,6 +102,31 @@
     //
     // `dy` is a fraction of that same reference height, so the sweep's steps
     // stay proportional to the HUD rather than to the frame.
+    // ONE strip. Each is searched INDEPENDENTLY - see autoCalibrate.
+    function stripBox(R, side, dx, dy) {
+      var st = AUTO_STRIPS[side], refH = R.w * 9 / 16;
+      return { x: R.x + (st[0] + dx) * R.w, y: R.y + (st[1] + dy) * refH,
+               w: st[2] * R.w, h: st[3] * refH };
+    }
+
+    function boxInFrame(b, W, H) {
+      return !!b && b.x >= 0 && b.y >= 0 && b.x + b.w <= W && b.y + b.h <= H;
+    }
+
+    // {distinct, sum} over ONE strip's five cells.
+    function scoreStrip(frame, b, side) {
+      ensureWork();
+      var seen = {}, distinct = 0, sum = 0, i;
+      for (i = 0; i < 5; i++) {
+        var gp = cellGrayPadded(frame, { x: b.x + i * b.w / 5, y: b.y, w: b.w / 5, h: b.h });
+        if (cellRms(gp) < MIN_RMS) continue;
+        var m = bestMatch(gp, side, true);
+        sum += m.score;
+        if (m.score >= CONFIDENT && !seen[m.name]) { seen[m.name] = 1; distinct++; }
+      }
+      return { distinct: distinct, sum: sum };
+    }
+
     function boxesFromStrips(R, dx, dy) {
       var o = {}, refH = R.w * 9 / 16;
       ['a', 'b'].forEach(function (s) {
@@ -149,19 +174,63 @@
     // the matcher is allowed to slide is a box that is not aligned.
     var CONFIDENT = 0.55;
 
+    // RANKING COUNTS DISTINCT HEROES PER SIDE, NOT CONFIDENT CELLS.
+    //
+    // Overwatch 2 is role locked, so a team cannot field the same hero twice:
+    // five cells on one side must resolve to five different heroes. Noise
+    // cannot fake that. A confident-CELL count can be faked trivially, and was
+    // - measured on a real frame the operator exported on 2026-09-07:
+    //
+    //   ok=6 distinct=2  y=48.0   "Torbjorn" x8            <- won on ok
+    //   ok=5 distinct=5  y=127.5  the actual ten portraits  <- lost
+    //   ok=5 distinct=2  y=37.2   "Ashe" x8
+    //
+    // The correct placement read ten plausible distinct heroes and was beaten
+    // by one reading the same hero eight times, because ten barely-passing
+    // cells outrank nine strong ones. Scored over the 36 frames in
+    // screenshots/ by distinct heroes - the honest measure, since it is not the
+    // quantity being optimised:
+    //
+    //   rank by ok        mean 4.50   8+: 11/38
+    //   rank by sum       mean 5.74   8+: 17/38
+    //   rank by distinct  mean 6.16   8+: 18/38   <- shipped
+    //
+    // A low-contrast crop is refused outright: a near-uniform region has a tiny
+    // L2 norm, and dividing by it turns noise into a confident correlation.
+    // Real portrait cells never measured below 25.8 RMS over those frames, so
+    // 12 discards none of them. It does NOT catch the case above - those crops
+    // are textured, just not portraits - which is why the distinct test carries
+    // the weight and this only closes the flat-region hole.
+    var MIN_RMS = 12;
+
+    function cellRms(gp) {
+      var W = REF_W + 2 * PAD, m = 0, ss = 0, n = REF_W * REF_H, i, x, y, v;
+      for (y = 0; y < REF_H; y++) for (x = 0; x < REF_W; x++) m += gp[(y + PAD) * W + x + PAD];
+      m /= n;
+      for (y = 0; y < REF_H; y++) for (x = 0; x < REF_W; x++) { v = gp[(y + PAD) * W + x + PAD] - m; ss += v * v; }
+      return Math.sqrt(ss / n);
+    }
+
+    // {ok, distinct, sum} in ONE pass over the ten cells - see the note above
+    // scoreBoxes for why this may not call calOk() per candidate.
     function scoreCandidate(frame, bxs) {
       ensureWork();
-      var sum = 0, ok = 0;
+      var sum = 0, ok = 0, distinct = 0;
       ['a', 'b'].forEach(function (side) {
-        var b = bxs[side];
-        for (var i = 0; i < 5; i++) {
+        var b = bxs[side], seen = {}, i;
+        for (i = 0; i < 5; i++) {
           var cell = { x: b.x + i * b.w / 5, y: b.y, w: b.w / 5, h: b.h };
-          var s = bestMatch(cellGrayPadded(frame, cell), side, true).score;
-          sum += s;
-          if (s >= CONFIDENT) ok++;
+          var gp = cellGrayPadded(frame, cell);
+          if (cellRms(gp) < MIN_RMS) continue;
+          var m = bestMatch(gp, side, true);
+          sum += m.score;
+          if (m.score >= CONFIDENT) {
+            ok++;
+            if (!seen[m.name]) { seen[m.name] = 1; distinct++; }
+          }
         }
       });
-      return { ok: ok, sum: sum };
+      return { ok: ok, distinct: distinct, sum: sum };
     }
 
     // Sum of the 10 cells' best centre-match scores - higher = better aligned.
@@ -173,10 +242,22 @@
     // Confidence helper shared by the post-commit self-test and the
     // pre-commit preview: how many of the 10 portrait cells score
     // confidently (>= 0.55).
+    // DISTINCT confident heroes per side, for the same reason the sweep ranks
+    // that way: the operator was shown "9/10 portraits confident" over a
+    // placement that had read the same hero ten times. A number that can say 9
+    // when every row is wrong is worse than no number.
     function calOk(bx) {
       var comp = readComp(bx);
       if (!comp) return null;
-      return comp.a.concat(comp.b).filter(function (s) { return s.score >= 0.55; }).length;
+      var total = 0;
+      [comp.a, comp.b].forEach(function (side) {
+        var seen = {};
+        side.forEach(function (s) {
+          if (s.score >= 0.55 && s.name && s.name !== '??') seen[s.name] = 1;
+        });
+        total += Object.keys(seen).length;
+      });
+      return total;
     }
 
     function calMsg(ok) {
@@ -204,61 +285,72 @@
       if (REFS.length) {
         var frame = grabFrame();
         var FW = ctx.video.videoWidth, FH = ctx.video.videoHeight;
-        var rank = function (cand) {
-          if (!withinFrame(cand, FW, FH)) return null;
-          return scoreCandidate(frame, cand);
-        };
-        var better = function (r, cur) {
-          return r && (r.ok > cur.ok || (r.ok === cur.ok && r.sum > cur.sum));
-        };
-        var bestRank = rank(best) || { ok: -1, sum: -Infinity };
 
-        // THE SEARCH SHAPE IS MEASURED, NOT CHOSEN. Scored over the 36 real
-        // frames in screenshots/ with tools/real_frame_eval/calibrate_eval.py -
-        // re-run it before changing any number here:
+        // EACH STRIP IS SEARCHED INDEPENDENTLY.
         //
-        //   coarse .01  x2/y8   1 start   mean 7.67  8+: 26/36  4-: 4  ~110
-        //   coarse .005 x2/y16  1 start   mean 8.08  8+: 28/36  4-: 2  ~190
-        //   coarse .005 x4/y16  1 start   mean 8.11  8+: 28/36  4-: 2  ~322
-        //   coarse .005 x2/y16  top-2     mean 8.19  8+: 28/36  4-: 2  ~215
-        //   coarse .005 x4/y16  top-2     mean 8.22  8+: 28/36  4-: 2  ~347 <-
+        // A single shared (dx, dy) shifts both strips together, which cannot
+        // correct a WIDTH error: the offset it leaves is f*(R.w - true_w),
+        // small at the left strip's f=0.05 and large at the right strip's
+        // f=0.69. On a frame the operator exported 2026-09-07 the two strips
+        // wanted dx values 0.005 apart - about 13px - and the joint search
+        // split the difference, placing the RIGHT strip correctly (five heroes,
+        // all confirmed right by the operator) and the LEFT strip wrong (one of
+        // five). Searched independently the left strip lands on the box that
+        // operator had drawn by hand.
         //
-        // The old .01 single-start grid was not merely coarse, it was WRONG on
-        // two frames: it settled on dy=+0.075 where the answer was -0.055,
-        // losing six portraits on one and five on the other. A fine pass that
-        // may only search around the coarse winner cannot leave a false basin,
-        // so the top TWO coarse candidates are refined instead of just one.
+        // RANKED BY DISTINCT HEROES, not by confident cells. Overwatch 2 is
+        // role locked, so five cells on a side must be five different heroes
+        // and noise cannot fake that; a confident-CELL count can be, and was -
+        // a placement reading "Torbjorn" eight times outranked the real
+        // portraits because ten barely-passing cells beat nine strong ones.
         //
-        // The x range stays at the shipped +/-0.02. Halving it scores the same
-        // on these frames and costs a third less, but no frame here exercises a
-        // large horizontal offset - and narrowing a range on that basis is how
-        // the tool breaks for the one operator who needs it.
+        // Scored over screenshots/ with tools/real_frame_eval/calibrate_eval.py,
+        // by distinct heroes (the honest measure - it is not what the search
+        // optimises when ranking by ok or sum):
+        //
+        //   joint,     rank by ok        mean 4.50   <- what this replaces
+        //   joint,     rank by sum       mean 5.74
+        //   joint,     rank by distinct  mean 6.16
+        //   per-strip, rank by distinct  mean 6.71   <- shipped
+        //
+        // Cost is unchanged: five cells per candidate instead of ten, and two
+        // searches instead of one.
         var COARSE = 0.005, SPAN_X = 4, SPAN_Y = 16, FINE = 0.0025, FINE_SPAN = 2, STARTS = 2;
+        var betterS = function (r, cur) {
+          return r.distinct > cur.distinct
+                 || (r.distinct === cur.distinct && r.sum > cur.sum);
+        };
 
-        var cands = [];
-        for (var dyi = -SPAN_Y; dyi <= SPAN_Y; dyi++) {
-          for (var dxi = -SPAN_X; dxi <= SPAN_X; dxi++) {
-            var dx = dxi * COARSE, dy = dyi * COARSE;
-            var cand = boxesFromStrips(R, dx, dy), r = rank(cand);
-            if (r) cands.push({ r: r, dx: dx, dy: dy, boxes: cand });
-          }
-        }
-        cands.sort(function (p, q) { return (q.r.ok - p.r.ok) || (q.r.sum - p.r.sum); });
-
-        for (var si = 0; si < STARTS && si < cands.length; si++) {
-          var seed = cands[si];
-          if (better(seed.r, bestRank)) { bestRank = seed.r; best = seed.boxes; }
-          for (var fyi = -FINE_SPAN; fyi <= FINE_SPAN; fyi++) {
-            for (var fxi = -FINE_SPAN; fxi <= FINE_SPAN; fxi++) {
-              var c2 = boxesFromStrips(R, seed.dx + fxi * FINE, seed.dy + fyi * FINE);
-              var r2 = rank(c2);
-              if (better(r2, bestRank)) { bestRank = r2; best = c2; }
+        ['a', 'b'].forEach(function (side) {
+          var bestBox = stripBox(R, side, 0, 0);
+          var bestS = boxInFrame(bestBox, FW, FH)
+            ? scoreStrip(frame, bestBox, side) : { distinct: -1, sum: -Infinity };
+          var list = [];
+          for (var dyi = -SPAN_Y; dyi <= SPAN_Y; dyi++) {
+            for (var dxi = -SPAN_X; dxi <= SPAN_X; dxi++) {
+              var bx = stripBox(R, side, dxi * COARSE, dyi * COARSE);
+              if (!boxInFrame(bx, FW, FH)) continue;
+              list.push({ s: scoreStrip(frame, bx, side), dx: dxi * COARSE, dy: dyi * COARSE, box: bx });
             }
           }
-          // Nothing can beat every cell reading confidently, so stop paying for
-          // a second seed once the first one is perfect.
-          if (bestRank.ok === 10) break;
-        }
+          list.sort(function (p, q) {
+            return (q.s.distinct - p.s.distinct) || (q.s.sum - p.s.sum);
+          });
+          for (var si = 0; si < STARTS && si < list.length; si++) {
+            var seed = list[si];
+            if (betterS(seed.s, bestS)) { bestS = seed.s; bestBox = seed.box; }
+            for (var fy = -FINE_SPAN; fy <= FINE_SPAN; fy++) {
+              for (var fx = -FINE_SPAN; fx <= FINE_SPAN; fx++) {
+                var b2 = stripBox(R, side, seed.dx + fx * FINE, seed.dy + fy * FINE);
+                if (!boxInFrame(b2, FW, FH)) continue;
+                var r2 = scoreStrip(frame, b2, side);
+                if (betterS(r2, bestS)) { bestS = r2; bestBox = b2; }
+              }
+            }
+            if (bestS.distinct === 5) break;   // nothing can beat five of five
+          }
+          best[side] = bestBox;
+        });
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two
@@ -374,6 +466,8 @@
       boxesFromStrips: boxesFromStrips,
       scoreBoxes: scoreBoxes,
       scoreCandidate: scoreCandidate,
+      scoreStrip: scoreStrip,
+      stripBox: stripBox,
       withinFrame: withinFrame,
       pickBox: pickBox,
       commitCal: commitCal,

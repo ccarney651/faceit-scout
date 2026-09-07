@@ -75,3 +75,31 @@ test('a box flush against the frame edges is still inside it', () => {
   assert.strictEqual(cal.withinFrame({ a: { x: 0, y: 0, w: 100, h: 97 },
                                        b: { x: 2470, y: 1296, w: 100, h: 97 } }, 2570, 1393), true);
 });
+
+// ---------- per-strip independence ----------
+//
+// The strips must be placeable at DIFFERENT offsets. A single shared (dx, dy)
+// cannot correct a width error, because the offset it leaves is
+// f*(R.w - true_w) - small at the left strip's f=0.0506, large at the right
+// strip's f=0.6912. Measured on a real frame 2026-09-07 the two strips wanted
+// dx values 0.005 apart, about 13px, and the joint search placed the right
+// strip correctly while putting the left one on the wrong row entirely.
+
+test('a strip can be offset without moving the other', () => {
+  const R = { x: 0, y: 0, w: 2570, h: 1393 };
+  const a0 = cal.stripBox(R, 'a', 0, 0);
+  const a1 = cal.stripBox(R, 'a', 0.005, 0);
+  const b0 = cal.stripBox(R, 'b', 0, 0);
+  assert.ok(Math.abs(a1.x - a0.x - 0.005 * R.w) < 0.01, 'the strip moved by dx*R.w');
+  assert.strictEqual(cal.stripBox(R, 'b', 0, 0).x, b0.x, 'the other strip did not move');
+});
+
+test('stripBox agrees with boxesFromStrips when both strips share an offset', () => {
+  const R = { x: 0, y: 0, w: 2560, h: 1440 };
+  const joint = cal.boxesFromStrips(R, 0.003, -0.004);
+  ['a', 'b'].forEach(side => {
+    const one = cal.stripBox(R, side, 0.003, -0.004);
+    ['x', 'y', 'w', 'h'].forEach(k =>
+      assert.ok(Math.abs(one[k] - joint[side][k]) < 1e-9, side + '.' + k));
+  });
+});
