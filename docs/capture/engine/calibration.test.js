@@ -44,3 +44,34 @@ test('it lands near the live 2570x1393 window capture', () => {
   assert.ok(Math.abs(b.y - 125.5) <= 7, 'y was ' + b.y);
   assert.ok(Math.abs(b.h - 100.4) <= 4, 'h was ' + b.h);
 });
+
+// ---------- the frame guard ----------
+//
+// Measured in the field 2026-09-07: a sweep candidate at y=-27.9 - partly ABOVE
+// the top of the video - scored 10/10 confident, beating the real portraits at
+// y=37.2. An out-of-frame crop comes back uniform black, and centred and
+// L2-normalised that correlates strongly with almost any reference, so the
+// scorer's most confident answer was a box not looking at the picture at all.
+//
+// The only reason calibration did not lock onto it is that the offset was
+// outside the coarse sweep's range. That is luck, not a guard.
+
+test('a box hanging off the top of the frame is refused', () => {
+  assert.strictEqual(cal.withinFrame({ a: { x: 10, y: -27.9, w: 100, h: 97 },
+                                       b: { x: 500, y: -27.9, w: 100, h: 97 } }, 2570, 1393), false);
+});
+
+test('a box running off the right edge is refused', () => {
+  assert.strictEqual(cal.withinFrame({ a: { x: 10, y: 40, w: 100, h: 97 },
+                                       b: { x: 2500, y: 40, w: 100, h: 97 } }, 2570, 1393), false);
+});
+
+test('a box fully inside the frame is allowed', () => {
+  assert.strictEqual(cal.withinFrame({ a: { x: 175, y: 40.8, w: 662, h: 97 },
+                                       b: { x: 1774, y: 40.8, w: 662, h: 97 } }, 2570, 1393), true);
+});
+
+test('a box flush against the frame edges is still inside it', () => {
+  assert.strictEqual(cal.withinFrame({ a: { x: 0, y: 0, w: 100, h: 97 },
+                                       b: { x: 2470, y: 1296, w: 100, h: 97 } }, 2570, 1393), true);
+});

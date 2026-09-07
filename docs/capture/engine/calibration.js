@@ -111,6 +111,25 @@
       return o;
     }
 
+    // EVERY CELL MUST BE INSIDE THE FRAME BEFORE IT IS SCORED.
+    //
+    // Measured in the field on 2026-09-07: a candidate at y=-27.9, hanging off
+    // the top of the video, scored 10/10 confident and beat the real portraits
+    // at y=37.2. drawImage outside the source bounds yields uniform black, and
+    // centred and L2-normalised that correlates strongly with almost any
+    // reference - so the most confident placement the scorer could find was one
+    // not looking at the picture at all.
+    //
+    // Calibration only escaped it because that offset lay outside the coarse
+    // sweep's range. That is luck, and it is the reason the range must not be
+    // widened without this guard in front of it.
+    function withinFrame(cand, W, H) {
+      return ['a', 'b'].every(function (side) {
+        var b = cand[side];
+        return !!b && b.x >= 0 && b.y >= 0 && b.x + b.w <= W && b.y + b.h <= H;
+      });
+    }
+
     // Sum of the 10 cells' best centre-match scores - higher = better aligned.
     function scoreBoxes(frame, bxs) {
       ensureWork();
@@ -157,7 +176,22 @@
       // the most portraits. No refs or no improvement => the base strips
       // (previous behaviour). Blind-safe.
       if (REFS.length) {
-        var frame = grabFrame(), bestScore = scoreBoxes(frame, best);
+        var frame = grabFrame();
+        var FW = ctx.video.videoWidth, FH = ctx.video.videoHeight;
+        // RANK BY CONFIDENT CELLS FIRST, summed score only as a tie-break.
+        // The sum rewards ten mediocre correlations over nine good ones, which
+        // put the coarse pass in the wrong basin in the field - it settled on
+        // 8/10 while a placement 4px away scored 10/10, and the fine pass only
+        // searches around the coarse winner so it could not recover.
+        var rank = function (cand) {
+          if (!withinFrame(cand, FW, FH)) return null;
+          var ok = calOk(cand);
+          return { ok: ok == null ? -1 : ok, sum: scoreBoxes(frame, cand) };
+        };
+        var better = function (r, cur) {
+          return r && (r.ok > cur.ok || (r.ok === cur.ok && r.sum > cur.sum));
+        };
+        var bestRank = rank(best) || { ok: -1, sum: -Infinity };
         var bx = 0, by = 0;
         // COARSE PASS, then a FINE one around its winner. A single 0.01 pass
         // cannot resolve an offset smaller than 0.01 of the reference height,
@@ -165,24 +199,23 @@
         // so the coarse pass alone is guaranteed to stop a few pixels out, on
         // whichever side happens to score better. Two passes cost 85 + 49
         // candidates against the 85 this replaces.
-        var sweep = function (step, span, cx, cy) {
-          for (var dyi = -span; dyi <= span; dyi++) {
-            for (var dxi = -span; dxi <= span; dxi++) {
+        var sweep = function (step, spanX, spanY, cx, cy) {
+          for (var dyi = -spanY; dyi <= spanY; dyi++) {
+            for (var dxi = -spanX; dxi <= spanX; dxi++) {
               var dx = cx + dxi * step, dy = cy + dyi * step;
               if (dx === bx && dy === by) continue;
-              var cand = boxesFromStrips(R, dx, dy), sc = scoreBoxes(frame, cand);
-              if (sc > bestScore) { bestScore = sc; best = cand; bx = dx; by = dy; }
+              var cand = boxesFromStrips(R, dx, dy), r = rank(cand);
+              if (better(r, bestRank)) { bestRank = r; best = cand; bx = dx; by = dy; }
             }
           }
         };
-        for (var dyi = -8; dyi <= 8; dyi++) {
-          for (var dxi = -2; dxi <= 2; dxi++) {
-            if (!dyi && !dxi) continue;
-            var cand = boxesFromStrips(R, dxi * 0.01, dyi * 0.01), sc = scoreBoxes(frame, cand);
-            if (sc > bestScore) { bestScore = sc; best = cand; bx = dxi * 0.01; by = dyi * 0.01; }
-          }
-        }
-        sweep(0.0025, 3, bx, by);
+        // The coarse range stays WIDE on purpose. A window capture offsets the
+        // game inside the captured surface by an amount no fraction of the
+        // frame predicts - measured at -83px in the field - so the sweep is
+        // load-bearing there rather than a refinement, and narrowing it would
+        // break the case it exists to serve.
+        sweep(0.01, 2, 8, 0, 0);
+        sweep(0.0025, 3, 3, bx, by);
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two
@@ -297,6 +330,7 @@
       autoCalibrate: autoCalibrate,
       boxesFromStrips: boxesFromStrips,
       scoreBoxes: scoreBoxes,
+      withinFrame: withinFrame,
       pickBox: pickBox,
       commitCal: commitCal,
       renderCalPreview: renderCalPreview,
