@@ -85,11 +85,28 @@
       return (ctx.boxKeys || []).filter(function (k) { return k !== 'a' && k !== 'b'; });
     }
 
+    // THE VERTICAL FRACTIONS ARE PROJECTED AGAINST WIDTH, NOT HEIGHT.
+    //
+    // AUTO_STRIPS was measured on 16:9, where height === width * 9/16, so this
+    // is algebraically identical there - a no-op on every capture that already
+    // worked, which is why it is safe. It only differs when the frame is NOT
+    // 16:9, and a window capture routinely is not: the game renders the HUD to
+    // the width it is given, so a squashed frame must not drag the HUD upward.
+    //
+    // Measured against a live 2570x1393 window capture (aspect 1.845) on
+    // 2026-09-07, the height-relative form put the strips 10-12px too high and
+    // 6px too short, and auto-calibrate plateaued at 4/10 portraits. It could
+    // not correct itself because the sweep below stepped by 0.01 of height -
+    // 13.9px there, COARSER THAN THE ERROR, so it could only choose between
+    // 10px short and 4px over. Hence the finer second pass, too.
+    //
+    // `dy` is a fraction of that same reference height, so the sweep's steps
+    // stay proportional to the HUD rather than to the frame.
     function boxesFromStrips(R, dx, dy) {
-      var o = {};
+      var o = {}, refH = R.w * 9 / 16;
       ['a', 'b'].forEach(function (s) {
         var st = AUTO_STRIPS[s], fx = st[0], fy = st[1], fw = st[2], fh = st[3];
-        o[s] = { x: R.x + (fx + dx) * R.w, y: R.y + (fy + dy) * R.h, w: fw * R.w, h: fh * R.h };
+        o[s] = { x: R.x + (fx + dx) * R.w, y: R.y + (fy + dy) * refH, w: fw * R.w, h: fh * refH };
       });
       return o;
     }
@@ -141,13 +158,31 @@
       // (previous behaviour). Blind-safe.
       if (REFS.length) {
         var frame = grabFrame(), bestScore = scoreBoxes(frame, best);
+        var bx = 0, by = 0;
+        // COARSE PASS, then a FINE one around its winner. A single 0.01 pass
+        // cannot resolve an offset smaller than 0.01 of the reference height,
+        // and the real residual measured in the field was about half a step -
+        // so the coarse pass alone is guaranteed to stop a few pixels out, on
+        // whichever side happens to score better. Two passes cost 85 + 49
+        // candidates against the 85 this replaces.
+        var sweep = function (step, span, cx, cy) {
+          for (var dyi = -span; dyi <= span; dyi++) {
+            for (var dxi = -span; dxi <= span; dxi++) {
+              var dx = cx + dxi * step, dy = cy + dyi * step;
+              if (dx === bx && dy === by) continue;
+              var cand = boxesFromStrips(R, dx, dy), sc = scoreBoxes(frame, cand);
+              if (sc > bestScore) { bestScore = sc; best = cand; bx = dx; by = dy; }
+            }
+          }
+        };
         for (var dyi = -8; dyi <= 8; dyi++) {
           for (var dxi = -2; dxi <= 2; dxi++) {
             if (!dyi && !dxi) continue;
             var cand = boxesFromStrips(R, dxi * 0.01, dyi * 0.01), sc = scoreBoxes(frame, cand);
-            if (sc > bestScore) { bestScore = sc; best = cand; }
+            if (sc > bestScore) { bestScore = sc; best = cand; bx = dxi * 0.01; by = dyi * 0.01; }
           }
         }
+        sweep(0.0025, 3, bx, by);
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two

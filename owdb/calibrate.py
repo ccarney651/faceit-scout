@@ -122,8 +122,21 @@ def auto_profile(
     fall back to manual."""
     def strip(side: str) -> Rect:
         fx, fy, fw, fh = AUTO_STRIPS[side]
-        return Rect(round(fx * width), round(fy * height),
-                    round(fw * width), round(fh * height))
+        # The VERTICAL fractions are projected against width, not height.
+        #
+        # They were measured on 16:9, where height == width * 9/16, so this is
+        # algebraically identical there - a no-op on every capture that already
+        # worked. It only differs when the frame is NOT 16:9, which a window
+        # capture routinely is not: the game renders the HUD to the width it is
+        # given, so a squashed frame does not move the HUD down.
+        #
+        # Measured against a live 2570x1393 window capture (aspect 1.845) the
+        # height-relative form put the strips 10-12px too high and 6px too
+        # short, which the browser tool's offset sweep could not correct because
+        # it steps by 0.01 of height - 13.9px there, coarser than the error.
+        ref_h = width * 9 / 16
+        return Rect(round(fx * width), round(fy * ref_h),
+                    round(fw * width), round(fh * ref_h))
     return build_profile(
         resolution_w=width, resolution_h=height, hud_variant=hud_variant,
         team_size=team_size, left_strip=strip(SIDE_LEFT),
