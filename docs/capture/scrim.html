@@ -247,7 +247,7 @@
       <div class="sidetoggle"><a href="../scrims.html">Data</a><span class="on">Capture</span></div>
     </div>
   </div>
-  <div class="sub">Zero-install scrim scouting: share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser — <b>everything stays private</b> on this machine. <span class="warn" id="ctxwarn"></span></div>
+  <div class="sub">Zero-install scrim scouting: share your <b>whole screen</b> (or just the Overwatch window), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser — <b>everything stays private</b> on this machine. <span class="warn" id="ctxwarn"></span></div>
 </header>
 <main>
   <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-md);padding:9px 13px;font-size:13px"></div>
@@ -266,14 +266,14 @@
   <details id="howto" class="howto">
     <summary>How it works — 30-second guide</summary>
     <div class="steps">
-      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
-      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
+      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>windowed or borderless</b> (not exclusive fullscreen) with a replay open.</div>
+      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → <b>whole screen</b> on two monitors, or <b>the Overwatch window</b> on one — window sharing keeps the game in frame while you work in the browser.</div>
       <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits, shows you the confidence, and you confirm (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
       <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below and press <b>Save scrim</b> — the floating panel opens, and the map, bans and capture all happen there so you never alt-tab out of the game.</div>
       <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — use the side radios or <b>Swap teams</b> to set which team is on the left. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Save</span></div><b>Finish + save</b> — the map is saved privately in this browser. Review, export, or import scrims under the scrim panel.</div>
     </div>
-    <p class="status" style="margin:4px 0 2px">Tips: use borderless, not exclusive fullscreen. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button.</p>
+    <p class="status" style="margin:4px 0 2px">Tips: windowed or borderless both work — not exclusive fullscreen, which cannot be window-shared. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button.</p>
     <p class="status warn" style="margin:4px 0 2px"><b>Use Overwatch's default team colors (blue/red)</b> — if your in-game UI colors are customized, accuracy drops noticeably.</p>
   </details>
   <div class="layout" id="layout">
@@ -292,7 +292,7 @@
       <button id="hidep" class="ghost" disabled>Hide preview</button>
       <button id="stopcap" class="ghost" disabled>Stop capture</button>
     </div>
-    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
+    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b>, or <b>the Overwatch window</b> if you only have one monitor, then click <b>Auto-calibrate</b>. On one screen, sharing the whole screen shows the browser rather than the game — share the window instead.</div>
   </div>
 
   <div class="card" id="scrimpane">
@@ -1040,7 +1040,7 @@ function tourDefs(){
       body:'Welcome! In the next minute you\'ll <b>share your screen</b>, <b>auto-calibrate</b> the hero boxes, <b>set up a scrim map</b> and <b>capture</b> its comps. Everything stays private on this browser.',
       done:()=>false},
     {t:'Share your screen', target:'share',
-      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9). Auto-calibrate needs the full frame.',
+      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> — or <b>the Overwatch window</b> if you only have one monitor.',
       done:()=>!!vid.srcObject},
     {t:'Auto-calibrate', target:'autocal',
       body:'Click <b>Auto-calibrate</b> \u2014 it finds the 10 hero portraits, then <b>review the result</b> and click <b>Use these boxes</b> to confirm. Nothing is saved until you do.',

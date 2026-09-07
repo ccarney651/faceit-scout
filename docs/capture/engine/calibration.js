@@ -137,7 +137,7 @@
     function calMsg(ok) {
       return ok >= 8 ? '<span class="ok">calibration looks good — ' + ok + '/10 portraits recognised.</span>'
         : ok >= 5 ? 'calibration: ' + ok + '/10 recognised — usable; nudge the boxes if some read ??.'
-        : '<span class="warn">only ' + ok + '/10 recognised — boxes look misaligned; try Auto-calibrate, or drag them right on the portraits (OW must be borderless/fullscreen, 16:9).</span>';
+        : '<span class="warn">only ' + ok + '/10 recognised — boxes look misaligned; try Auto-calibrate, or drag them right on the portraits. If the preview is not showing the game at all, share the Overwatch window instead of the whole screen.</span>';
     }
 
     // Auto-calibrate: the HUD sits at fixed fractions of the screen (mirror

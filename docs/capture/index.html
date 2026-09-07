@@ -220,7 +220,7 @@ button:disabled{opacity:.45;cursor:default}
       <div class="sidetoggle"><a href="../">Data</a><span class="on">Capture</span></div>
     </div>
   </div>
-  <div class="sub">Zero-install scouting: share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
+  <div class="sub">Zero-install scouting: share your <b>whole screen</b> (or just the Overwatch window), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser. <span class="warn" id="ctxwarn"></span></div>
   <div id="welcome" class="welcome" style="display:none"></div>
 </header>
 <main>
@@ -228,14 +228,14 @@ button:disabled{opacity:.45;cursor:default}
   <details id="howto" class="howto">
     <summary>How it works — 30-second guide</summary>
     <div class="steps">
-      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
-      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
+      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>windowed or borderless</b> (not exclusive fullscreen) with a replay open.</div>
+      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → <b>whole screen</b> on two monitors, or <b>the Overwatch window</b> on one — window sharing keeps the game in frame while you work in the browser.</div>
       <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits, shows you the confidence, and you confirm (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
       <div class="step"><div class="sh"><span class="n">4</span><span class="st">Pick a code</span></div><b>Pick a replay</b> (filter by division / opponent), <b>Copy code</b>, paste it into Overwatch and load it. Done maps drop off; a <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><rect x="3.4" y="7.3" width="9.2" height="5.9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.4 7.3V5.7a2.6 2.6 0 0 1 5.2 0v1.6" stroke="currentColor" stroke-width="1.5"/></svg> = someone's scouting it now.</div>
       <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — the first press per map auto-detects which team is on the left and tags players from the HUD names; if it can't tell, it'll say so and ask you to set the LEFT team / <b>Swap teams</b> before it captures anything. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Control panel</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Publish</span></div><b>Finish + save</b> → auto-fetches the next code. <b>Publish</b> when done; the site updates in ~2 min.</div>
     </div>
-    <p class="status" style="margin:4px 0 2px">Tips: use borderless, not exclusive fullscreen; re-scouting an already-covered map still adds player data. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button before publishing.</p>
+    <p class="status" style="margin:4px 0 2px">Tips: windowed or borderless both work — not exclusive fullscreen, which cannot be window-shared; re-scouting an already-covered map still adds player data. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button before publishing.</p>
     <p class="status warn" style="margin:4px 0 2px"><b>Use Overwatch's default team colors (blue/red)</b> — if your in-game UI colors are customized, accuracy drops noticeably.</p>
   </details>
   <div class="layout" id="layout">
@@ -248,7 +248,7 @@ button:disabled{opacity:.45;cursor:default}
       <button id="setL" class="ghost" disabled title="Drag the LEFT/blue box over the 5 hero portraits on the left of the HUD">Left box (blue)</button>
       <button id="setR" class="ghost" disabled title="Drag the RIGHT/red box over the 5 hero portraits on the right of the HUD">Right box (red)</button>
     </div>
-    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
+    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b>, or <b>the Overwatch window</b> if you only have one monitor, then click <b>Auto-calibrate</b>. On one screen, sharing the whole screen shows the browser rather than the game — share the window instead.</div>
     <details class="status" style="margin-top:6px"><summary>More setup options</summary>
       <div class="row" style="margin-top:6px">
         <button id="fscal" class="ghost" disabled title="Enlarge the preview to the whole screen so the boxes are easy to place">Fullscreen <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M3 6.5V3h3.5M10 3h3v3.5M13 9.5V13H9.5M6 13H3V9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -828,7 +828,7 @@ function updateGuide(){ const g=document.getElementById('guide'); if(!g) return;
   if(!HAS_CAPTURE){ g.innerHTML=ico('nophone')+' <b>Capture needs a desktop browser</b> — open this on your PC (you scout while watching Overwatch). Browse the data on the main site from mobile.'; return; }
   const fv=isFirstVisit();
   const steps=[
-        {t:'Share screen', done:!!vid.srcObject, hint:fv?'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) — auto-calibrate needs the full frame.':'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) — auto-calibrate needs the full frame.'},
+        {t:'Share screen', done:!!vid.srcObject, hint:fv?'Click <b>Share my screen</b> — pick your <b>whole screen</b>, or <b>the Overwatch window</b> if you only have one monitor.':'Click <b>Share my screen</b> — pick your <b>whole screen</b>, or <b>the Overwatch window</b> if you only have one monitor.'},
         {t:'Calibrate', done:!!(boxes.a&&boxes.b), hint:fv?'<b>Click Auto-calibrate</b> — it finds the 10 hero portraits, shows the confidence, then <b>Use these boxes</b> to confirm.':'Click <b>Auto-calibrate</b> (or drag the LEFT/RIGHT boxes by hand).'},
         {t:'Pick a code', done:!!selectedCode(), hint:fv?'Pick a replay from the dropdown — <b>Copy code</b>, paste it into Overwatch to load it. Done maps drop off; look for ones that say <em>needs capture</em>.':'Pick a replay code in step 2 — Copy code, then paste into Overwatch.'},
         {t:'Capture &amp; publish', done:!!(session&&session.snaps.length), hint:fv?'Press <b>Snapshot</b> to read the hero comp, <b>Next round</b> as the game advances, then <b>Finish + save</b>. When done, <b>Publish</b> to put your capture on the site — it\'ll rebuild in ~2 minutes.':'<b>Snapshot</b> each comp (or pop out the <b>Control panel</b> for no alt-tab), then <b>Finish + save</b>, then <b>Publish</b>.'}];
@@ -856,7 +856,7 @@ function tourDefs(){
       body:'Welcome! In the next minute you\'ll <b>share your screen</b>, <b>auto-calibrate</b> the hero boxes, <b>pick a replay</b> and <b>capture</b> its comps. Everything runs in this browser — Overwatch just needs to be open.',
       done:()=>false},
     {t:'Share your screen', target:'share',
-      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9). Auto-calibrate needs the full frame.',
+      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> — or <b>the Overwatch window</b> if you only have one monitor.',
       done:()=>!!vid.srcObject},
     {t:'Auto-calibrate', target:'autocal',
       body:'Click <b>Auto-calibrate</b> — it finds the 10 hero portraits, then <b>review the result</b> and click <b>Use these boxes</b> to confirm. Nothing is saved until you do.',
