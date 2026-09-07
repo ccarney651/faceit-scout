@@ -130,18 +130,44 @@
       });
     }
 
-    // Sum of the 10 cells' best centre-match scores - higher = better aligned.
-    function scoreBoxes(frame, bxs) {
+    // BOTH ranking metrics from ONE pass over the ten cells.
+    //
+    // The sweep needs the confident-cell count as well as the summed score, and
+    // the obvious way to get it - calling calOk() per candidate - is a trap that
+    // cost a measured, user-visible freeze on the Auto-calibrate button.
+    // calOk() goes through readComp(), which per call does a FULL-FRAME
+    // grabFrame() (3.6 megapixels here), builds ten DOM rows with innerHTML,
+    // and matches with fast=false, which tries NINE offsets per cell instead of
+    // one. Over a hundred-plus candidates that is roughly a hundredfold blowup
+    // of what the sweep is supposed to cost.
+    //
+    // So: count here, in the loop that is already computing the scores, using
+    // the same centre-only match the sweep has always used. The threshold is
+    // CONFIDENT, matching calOk's. Centre-only scores run at or below
+    // best-of-nine, which makes this if anything a stricter test - and stricter
+    // is what a calibration sweep wants, because a box that only matches when
+    // the matcher is allowed to slide is a box that is not aligned.
+    var CONFIDENT = 0.55;
+
+    function scoreCandidate(frame, bxs) {
       ensureWork();
-      var sum = 0;
+      var sum = 0, ok = 0;
       ['a', 'b'].forEach(function (side) {
         var b = bxs[side];
         for (var i = 0; i < 5; i++) {
           var cell = { x: b.x + i * b.w / 5, y: b.y, w: b.w / 5, h: b.h };
-          sum += bestMatch(cellGrayPadded(frame, cell), side, true).score;
+          var s = bestMatch(cellGrayPadded(frame, cell), side, true).score;
+          sum += s;
+          if (s >= CONFIDENT) ok++;
         }
       });
-      return sum;
+      return { ok: ok, sum: sum };
+    }
+
+    // Sum of the 10 cells' best centre-match scores - higher = better aligned.
+    // Kept as-is for callers outside the sweep.
+    function scoreBoxes(frame, bxs) {
+      return scoreCandidate(frame, bxs).sum;
     }
 
     // Confidence helper shared by the post-commit self-test and the
@@ -185,8 +211,7 @@
         // searches around the coarse winner so it could not recover.
         var rank = function (cand) {
           if (!withinFrame(cand, FW, FH)) return null;
-          var ok = calOk(cand);
-          return { ok: ok == null ? -1 : ok, sum: scoreBoxes(frame, cand) };
+          return scoreCandidate(frame, cand);
         };
         var better = function (r, cur) {
           return r && (r.ok > cur.ok || (r.ok === cur.ok && r.sum > cur.sum));
@@ -215,7 +240,11 @@
         // load-bearing there rather than a refinement, and narrowing it would
         // break the case it exists to serve.
         sweep(0.01, 2, 8, 0, 0);
-        sweep(0.0025, 3, 3, bx, by);
+        // Span 2, not 3: the fine step is 0.0025 and the coarse step 0.01, so
+        // +/-2 fine steps already bridges half a coarse step, which is the most
+        // the coarse winner can be out by. Span 3 was 49 candidates for no extra
+        // reach. 85 + 25 passes, against the 85 this whole sweep started at.
+        sweep(0.0025, 2, 2, bx, by);
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two
@@ -330,6 +359,7 @@
       autoCalibrate: autoCalibrate,
       boxesFromStrips: boxesFromStrips,
       scoreBoxes: scoreBoxes,
+      scoreCandidate: scoreCandidate,
       withinFrame: withinFrame,
       pickBox: pickBox,
       commitCal: commitCal,
