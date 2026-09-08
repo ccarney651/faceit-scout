@@ -614,9 +614,13 @@ function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   
 // wrong code, which foldCode cannot detect - but it is unlikely to yield the
 // SAME wrong code under different preprocessing.
 const CODE_CONTRASTS=[1.0, 1.45, 1.9];
-let LAST_CODE_READ={why:null, raw:null, box:null};
+// weak: a code every crop that COULD read agreed on, when some crops could not.
+// Never a return value - readReplayCode still returns null for it - because the
+// corpus says this shape is not safe to act on. It is kept so the page can ASK.
+// See the abstain branch of ensureCodeChecked.
+let LAST_CODE_READ={why:null, raw:null, box:null, weak:null};
 async function readReplayCode(){
-  LAST_CODE_READ={why:null, raw:null, box:null};
+  LAST_CODE_READ={why:null, raw:null, box:null, weak:null};
   if(!vid.srcObject){ LAST_CODE_READ.why='share your screen first'; return null; }
   if(!boxes.a){ LAST_CODE_READ.why='calibrate first — the code is found relative to the left team portraits'; return null; }
   const box=OWDBReplayCode.codeBox(boxes.a);
@@ -663,6 +667,13 @@ async function readReplayCode(){
       return null;
     }
     if(distinct.length===1){
+      // Unanimous among the crops that could read, but not all of them could.
+      // STILL NULL. Measured over code_guard_crops (5 probes x 3 contrasts x
+      // injected strip errors): accepting this shape passes a WRONG code -
+      // a 0.97 scale error read H6R64E for H6R64B on three probes with two
+      // silent, which is the same shape as a correct partial read, so no
+      // threshold separates them. Carried as `weak` instead, for asking only.
+      LAST_CODE_READ.weak=distinct[0];
       LAST_CODE_READ.why='only some crops could read a code ('+distinct[0]
         +') — not recording it on one reading';
       return null;
@@ -676,6 +687,13 @@ async function readReplayCode(){
   }
 }
 function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
+// Two codes from one match differ only by map and game number, so a bare code
+// tells the operator nothing they can check against their own screen.
+function codeLabel(code){
+  const c=(DATA.codes||[]).find(x=>x.code===code);
+  if(!c) return code;
+  return code+' — '+(c.map||'?')+(c.game_no?', game '+c.game_no:'');
+}
 
 // matchReadCode and the verdict built on it now live in engine/replaycode.js,
 // where they can be exercised by node:test without a browser or an OCR pass.
@@ -1227,7 +1245,10 @@ function renderCodeVerdict(){
 // Returns false: onCode() restarts the map, so the snapshot that triggered this
 // is void and the operator presses again. Nothing has been captured yet, which
 // is exactly why this runs on the map's FIRST snapshot.
-function switchToScreenCode(code, wasNear){
+// confirmed: the operator answered a question rather than the read deciding.
+// The switch is then right because they looked at their own screen, but the
+// READ still failed, so the capture stays unverified and says so.
+function switchToScreenCode(code, wasNear, confirmed){
   const findIdx=()=>currentCodes().findIndex(c=>c.code===code);
   let idx=findIdx();
   if(idx===-1){
@@ -1247,7 +1268,9 @@ function switchToScreenCode(code, wasNear){
   const done=full?isDone(full):false;
   const el=document.getElementById('code'); el.value=String(idx); onCode();
   // onCode() rebuilt the session, so the verdict is set AFTER it, on the new one.
-  setCodeVerdict(true, 'switched to '+code+' — the replay you have open'
+  if(confirmed) setCodeVerdict(false, 'switched to '+code+' — you confirmed it; '
+    +'the read was not conclusive, so this stays unverified');
+  else setCodeVerdict(true, 'switched to '+code+' — the replay you have open'
     +(wasNear?' (read was one character off)':''));
   // Already scouted is a heads-up, not a wall: re-capturing a map is allowed and
   // sometimes wanted, and the operator has better things to do than be blocked.
@@ -1382,6 +1405,34 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
       return true;
     }
     if(v.status==='abstain'){
+      // A read too weak to ACT on can still be strong enough to ASK about, and
+      // throwing it away is how 04C5WM (Nepal, game 1) got captured off a
+      // D5T959 (Neon Junction, game 3) replay on 2026-09-08. Both codes were in
+      // the feed, from the SAME match: same two teams, same rosters, so side
+      // detection and every player name resolved perfectly and nothing else on
+      // this page could tell them apart. Three of five crops had read D5T959.
+      //
+      // It asks rather than switching because the corpus is unambiguous that
+      // this shape is not safe to act on (see readReplayCode). The operator can
+      // see which map they are watching; the page cannot.
+      const weak=LAST_CODE_READ.weak;
+      const wv=weak?OWDBReplayCode.checkAgainstSelected(weak, DATA.codes, sel.code):null;
+      if(wv && wv.status==='mismatch' && !wv.near){
+        const act=await uiModal({ title:'Which replay is this?',
+          bodyHtml:'The code did not read cleanly enough to act on by itself — but every crop that could read it read <b>'+esc(weak)+'</b>.'
+            +'<br><br>On screen may be <b>'+esc(codeLabel(weak))+'</b>'
+            +'<br>You selected <b>'+esc(codeLabel(sel.code))+'</b>'
+            +'<br><br>Check the map you are watching. These can be the same two teams in the same match, in which case nothing else on this page can tell them apart.',
+          escapeValue:'keep',
+          actions:[{label:'Keep '+sel.code, value:'keep', ghost:true},
+                   {label:'Use '+weak, value:'switch'}] });
+        if(session!==s) return true;
+        s.codeChecked=true;             // asked once per map; do not nag every snapshot
+        if(act==='switch') return switchToScreenCode(wv.code, false, true);
+        setCodeVerdict(false, 'screen may be showing '+weak+' — capturing as '
+          +sel.code+' unverified');
+        return true;
+      }
       s.codeTries=(s.codeTries||0)+1;
       const last=s.codeTries>=CODE_CHECK_TRIES;
       if(last) s.codeChecked=true;    // stand down; retrying forever costs an OCR pass a snapshot

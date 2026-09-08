@@ -1014,10 +1014,80 @@ async function main() {
     check('code guard: the right code does not interrupt',
       agree.ok === true && agree.modal === false, JSON.stringify(agree));
 
+    // A READ TOO WEAK TO ACT ON IS STILL WORTH ASKING ABOUT. On 2026-09-08 the
+    // operator captured 04C5WM (Nepal, game 1) off a D5T959 (Neon Junction,
+    // game 3) replay: both in the feed, same match, same two teams, so every
+    // roster name and the side detection resolved perfectly. Three of the five
+    // crops had read D5T959 and the page discarded it as "code unreadable".
+    // It must not switch on that (code_guard_crops proves the same shape can
+    // carry a wrong code) - it must ask.
+    await setup();
+    await p.evaluate(() => {
+      window.__switched = null;
+      window.onCode = () => { window.__switched = window.__sel; };
+      window.__read = null;                       // the read itself failed...
+      LAST_CODE_READ = { why: 'partial', raw: '', box: null, weak: 'D9X9N2' };
+      window.__g = ensureCodeChecked();
+    });
+    await p.waitForTimeout(120);
+    const weakAsk = await p.evaluate(() => ({
+      modal: !!document.querySelector('#mback.open'),
+      body: (document.querySelector('#mback .mbody') || {}).textContent || '',
+      switched: window.__switched,
+    }));
+    check('code guard: a weak read asks instead of discarding it',
+      weakAsk.modal === true && /D9X9N2/.test(weakAsk.body),
+      JSON.stringify(weakAsk).slice(0, 220));
+    check('code guard: it has not switched anything before the answer',
+      weakAsk.switched === null, JSON.stringify(weakAsk).slice(0, 160));
+
+    // Keeping the selection is the ESCAPE default - a weak read must never
+    // change the filing on its own - and the capture is unverified either way.
+    await p.evaluate(() => {
+      [...document.querySelectorAll('#mback .mrow button')]
+        .find(b => /^Keep/.test(b.textContent)).click();
+    });
+    const weakKept = await p.evaluate(async () => ({ ok: await window.__g,
+      switched: window.__switched, verdict: session.codeVerdict }));
+    check('code guard: keeping the pick does not block, and says it is unverified',
+      weakKept.ok === true && weakKept.switched === null
+        && weakKept.verdict && weakKept.verdict.ok === false
+        && /unverified/i.test(weakKept.verdict.text),
+      JSON.stringify(weakKept).slice(0, 220));
+
+    // Answering "Use" switches - but the READ still failed, so the map is
+    // filed correctly and stays unverified. A green tick here would claim the
+    // page confirmed something the operator did.
+    await setup();
+    await p.evaluate(() => {
+      window.__switched = null;
+      window.onCode = () => { window.__switched = window.__sel; };
+      Object.defineProperty(document.getElementById('code'), 'value', {
+        configurable: true,
+        set(v) { window.__sel = window.__feed[+v] && window.__feed[+v].code; },
+        get() { return '1'; },
+      });
+      window.__read = null;
+      LAST_CODE_READ = { why: 'partial', raw: '', box: null, weak: 'D9X9N2' };
+      window.__g = ensureCodeChecked();
+    });
+    await p.waitForTimeout(120);
+    await p.evaluate(() => {
+      [...document.querySelectorAll('#mback .mrow button')]
+        .find(b => /^Use/.test(b.textContent)).click();
+    });
+    const weakUsed = await p.evaluate(async () => ({ ok: await window.__g,
+      switched: window.__switched, verdict: session.codeVerdict }));
+    check('code guard: answering Use switches, and stays unverified',
+      weakUsed.switched === 'D9X9N2' && weakUsed.ok === false
+        && weakUsed.verdict && weakUsed.verdict.ok === false,
+      JSON.stringify(weakUsed).slice(0, 220));
+
     // An unreadable code must NEVER block - the banner is not always on screen,
     // and a guard that can make capture impossible is worse than the bug.
     await setup();
-    await p.evaluate(() => { window.__read = null; window.__g = ensureCodeChecked(); });
+    await p.evaluate(() => { window.__read = null; LAST_CODE_READ = { why: null, raw: null, box: null, weak: null };
+      window.__g = ensureCodeChecked(); });
     const unread = await p.evaluate(async () => ({ ok: await window.__g,
       modal: !!document.querySelector('#mback.open') }));
     check('code guard: an unreadable code abstains rather than blocking',
