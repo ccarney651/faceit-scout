@@ -46,6 +46,39 @@ test('a side that never swapped has a pool of exactly its five', () => {
   assert.deepStrictEqual(rounds[0].pool.b, POKE.slice().sort());
 });
 
+// The opening comp is one frame's word, so a single bad read lands straight in
+// it. The voted comp asks every frame of the round instead. This is the case
+// that matters: the noise is on the FIRST sample, where `opening` is defenceless.
+test('the voted comp survives a bad read that lands on the opening frame', () => {
+  const bad = ['Freja'].concat(DIVE.slice(1));
+  const rounds = S.rounds([
+    obs({ t: 0, heroes_a: bad }),
+    obs({ t: 30, heroes_a: DIVE.slice() }),
+    obs({ t: 60, heroes_a: DIVE.slice() }),
+    obs({ t: 90, heroes_a: DIVE.slice() }),
+  ], { mapCategory: 'Control' });
+
+  assert.strictEqual(rounds[0].opening.a[0], 'Freja', 'opening still reports what it saw');
+  assert.strictEqual(rounds[0].voted.a[0], 'Winston', 'the vote overrules the outlier');
+});
+
+test('a slot nobody disputes votes to itself', () => {
+  const rounds = S.rounds([obs({ t: 0 }), obs({ t: 30 })], { mapCategory: 'Control' });
+  assert.deepStrictEqual(rounds[0].voted.b, POKE);
+});
+
+// A real mid-round swap must not be flattened into a majority answer without
+// saying so, or a genuine hero change becomes invisible.
+test('a slot split down the middle is flagged contested', () => {
+  const swapped = ['Reinhardt'].concat(DIVE.slice(1));
+  const rounds = S.rounds([
+    obs({ t: 0, heroes_a: DIVE.slice() }),
+    obs({ t: 30, heroes_a: swapped }),
+  ], { mapCategory: 'Control' });
+  assert.strictEqual(rounds[0].contested.a[0], true);
+  assert.strictEqual(rounds[0].contested.a[1], false, 'the untouched slots are not contested');
+});
+
 test('a score change ends the round and starts the next', () => {
   const rounds = S.rounds([
     obs({ t: 0, score_a: 0, score_b: 0 }),

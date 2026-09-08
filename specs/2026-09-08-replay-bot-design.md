@@ -131,6 +131,30 @@ work.
 Control is first-to-N with a resetting clock, while Escort and Hybrid advance
 by checkpoint and need their own rule.
 
+### 4.1b One machine, two team colours
+
+The capture page supports recoloured teams and sweeps for them during
+calibration. The bot never meets that case: one rig, fixed settings, default
+colours, so the left strip is always the blue `a` variant and the right always
+red `b`. `refs.json`'s 106 refs are exactly 53 heroes × those two variants, and
+no custom-colour branch is needed anywhere in the bot.
+
+### 4.1c The sweep's redundancy is spent on voting
+
+A slot is sampled many times per round, which an operator snapshotting once per
+round never gets. `vote.js` resolves each slot by agreement across those frames,
+and `segment.js` reports it as the round's `voted` comp beside `opening`.
+
+This cannot be replaced by a confidence threshold. Measured on the bootstrap
+frame, correct reads on the red plate ran as low as **0.805** — so any cut-off
+strict enough to reject a bad read would reject good ones too. Agreement across
+frames separates noise from signal where a single number cannot.
+
+A slot split badly enough to be a real hero swap rather than noise is flagged
+`contested` instead of being resolved silently, because "this read was noisy"
+and "they swapped mid-round" are different facts and only the caller knows which
+one matters.
+
 ### 4.2 Comps are sets, and pools are not comps
 
 `owdb/comps.py` defines `comp_id_for()` as the sha1 of the *sorted* hero guids,

@@ -23,6 +23,8 @@
 (function (global) {
   'use strict';
 
+  var Vote = require('./vote.js');
+
   // The five heroes each side opened the round with.
   function opening(samples) {
     return {
@@ -42,12 +44,37 @@
     return { a: Array.from(seen.a).sort(), b: Array.from(seen.b).sort() };
   }
 
+  // Each slot resolved by agreement across every frame of the round, rather
+  // than by whichever frame happened to be first. Returns the five heroes and,
+  // alongside them, which slots were split badly enough that the answer is a
+  // judgement call rather than a reading.
+  function tally(samples) {
+    var out = { voted: { a: [], b: [] }, contested: { a: [], b: [] } };
+    ['a', 'b'].forEach(function (side) {
+      var key = side === 'a' ? 'heroes_a' : 'heroes_b';
+      for (var i = 0; i < 5; i++) {
+        var readings = samples.map(function (s) { return s[key][i]; });
+        var v = Vote.slot(readings);
+        out.voted[side].push(v.name);
+        out.contested[side].push(v.contested);
+      }
+    });
+    return out;
+  }
+
   function round(samples, index) {
+    var t = tally(samples);
     return {
       index: index,
       from_t: samples[0].t,
       to_t: samples[samples.length - 1].t,
+      // What the round's first frame said. Kept because "what they started on"
+      // is a real question, but it is one frame's word and nothing more.
       opening: opening(samples),
+      // What the round as a whole said. Prefer this wherever a single answer
+      // is wanted; it is the same data with the noise voted out.
+      voted: t.voted,
+      contested: t.contested,
       pool: pool(samples),
       samples: samples.length,
     };
