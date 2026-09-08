@@ -933,6 +933,83 @@ async function main() {
     check('board: rows join to players by name', clean.named === 10, JSON.stringify(clean));
 
     await ctx.close();
+
+  // ---- the replay-code guard, on the LEAGUE page ------------------------
+  //
+  // The wrong-match guard stopped being a button on 2026-09-08 and now runs on
+  // a map's first snapshot. Everything it protects is downstream and invisible:
+  // a capture filed against the wrong match names the wrong teams and players
+  // and gets published, with nothing afterwards to say it happened. So the one
+  // thing worth proving in a browser is that a disagreement actually STOPS the
+  // snapshot, and that agreement does not interrupt.
+  //
+  // readReplayCode is a top-level declaration and so stubbable; the modal is
+  // driven through its real DOM, as above.
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto(BASE + '/capture/index.html', { waitUntil: 'load' });
+    await p.waitForTimeout(800);
+
+    check('code guard: the manual Read code button is gone',
+      await p.evaluate(() => !document.getElementById('readcode')));
+    check('code guard: OWDBReplayCode exposes the verdict',
+      await p.evaluate(() => typeof (window.OWDBReplayCode || {}).checkAgainstSelected === 'function'));
+
+    // Two codes that both exist in the feed: one selected, a different one on
+    // screen. That is the case the guard exists for - a read matching nothing
+    // abstains and must never block.
+    const setup = () => p.evaluate(() => {
+      window.__feed = [{ code: 'D9X9N2', match_id: 'm1', team_a: 'Alpha', team_b: 'Bravo' },
+                       { code: 'B4K2M1', match_id: 'm2', team_a: 'Delta', team_b: 'Echo' }];
+      window.currentCodes = () => window.__feed;
+      window.selectedCode = () => window.__feed[1];          // operator picked B4K2M1
+      window.readReplayCode = async () => window.__read;
+      session = { code: window.__feed[1], submaps: [], phased: false, round: 1,
+        sub: null, attacker: null, attackerConfirmed: true, sideResolved: true,
+        snaps: [], lastKept: null, history: [], codeChecked: false, codeTries: 0 };
+    });
+
+    await setup();
+    await p.evaluate(() => { window.__read = 'D9X9N2'; window.__g = ensureCodeChecked(); });
+    let blocked = true;
+    try { await p.waitForSelector('#mback.open', { timeout: 5000 }); }
+    catch (e) { blocked = false; }
+    check('code guard: a different code on screen blocks with a modal', blocked);
+    const body = await p.evaluate(() =>
+      (document.querySelector('#mback .mbody') || {}).textContent || '');
+    check('code guard: the modal names BOTH codes, so the choice is informed',
+      /D9X9N2/.test(body) && /B4K2M1/.test(body), body.slice(0, 160));
+
+    // Keeping the selection is a real answer, not a dismissal: capture proceeds
+    // against what the operator chose.
+    await p.evaluate(() => [...document.querySelectorAll('#mback button')]
+      .find(b => /keep/i.test(b.textContent)).click());
+    check('code guard: Keep lets the snapshot through',
+      await p.evaluate(() => window.__g) === true);
+    check('code guard: the verdict is not re-asked for this map',
+      await p.evaluate(() => session.codeChecked === true));
+
+    // Agreement must be silent. This page already had a pop-up problem; a
+    // confirmation on every map's first snapshot would be a regression.
+    await setup();
+    await p.evaluate(() => { window.__read = 'B4K2M1'; window.__g = ensureCodeChecked(); });
+    const agree = await p.evaluate(async () => ({ ok: await window.__g,
+      modal: !!document.querySelector('#mback.open') }));
+    check('code guard: the right code does not interrupt',
+      agree.ok === true && agree.modal === false, JSON.stringify(agree));
+
+    // An unreadable code must NEVER block - the banner is not always on screen,
+    // and a guard that can make capture impossible is worse than the bug.
+    await setup();
+    await p.evaluate(() => { window.__read = null; window.__g = ensureCodeChecked(); });
+    const unread = await p.evaluate(async () => ({ ok: await window.__g,
+      modal: !!document.querySelector('#mback.open') }));
+    check('code guard: an unreadable code abstains rather than blocking',
+      unread.ok === true && unread.modal === false, JSON.stringify(unread));
+
+    await ctx.close();
+  }
   }
 
   await browser.close();

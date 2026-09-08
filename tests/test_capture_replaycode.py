@@ -18,14 +18,24 @@ import pytest
 APP = Path(__file__).resolve().parents[1] / "docs" / "capture" / "index.html"
 
 
+ENGINE = APP.parent / "engine" / "replaycode.js"
+
+
 def _run(body: str) -> object:
+    """Run a snippet against the SHIPPED engine module.
+
+    matchReadCode used to be lifted out of index.html by string surgery. It moved
+    into engine/replaycode.js on 2026-09-08, where node:test can reach it without
+    a browser, so this loads the real module rather than a slice of a page.
+    """
     node = shutil.which("node")
     if not node:
         pytest.skip("node not available")
-    html = APP.read_text(encoding="utf-8")
-    start = html.index("function matchReadCode(")
-    end = html.index("\n}", start) + 2
-    src = html[start:end] + "\nconsole.log(JSON.stringify((()=>{" + body + "})()));"
+    mod = json.dumps(str(ENGINE).replace("\\", "/"))
+    src = ("const R = require(" + mod + ");\n"
+           "const matchReadCode = R.matchReadCode;\n"
+           "const checkAgainstSelected = R.checkAgainstSelected;\n"
+           "console.log(JSON.stringify((()=>{" + body + "})()));")
     tmp = Path("code_match_tmp.js")
     tmp.write_text(src, encoding="utf-8")
     try:
@@ -66,7 +76,31 @@ def test_a_failed_read_matches_nothing() -> None:
     assert _run(f"return matchReadCode(null, {FEED});")["kind"] == "none"
 
 
-def test_the_wrong_match_guard_is_wired_to_a_button() -> None:
+def test_the_wrong_match_guard_runs_on_the_first_snapshot() -> None:
+    """The guard stopped being a button on 2026-09-08.
+
+    The codes are fed to the operator, so there was never anything to look UP -
+    what is worth checking is that the replay actually on screen is the match
+    they picked. Asking for that by hand means it gets skipped exactly when it
+    matters, so it runs on a map's first snapshot instead.
+    """
     html = APP.read_text(encoding="utf-8")
-    assert 'id="readcode"' in html, "no way to trigger the read"
-    assert "matchReadCode(" in html.replace(" ", "").replace("\n", "") or "matchReadCode(" in html
+    assert 'id="readcode"' not in html, "the manual button should be gone"
+    assert "ensureCodeChecked()" in html, "the guard is not wired to anything"
+    assert 'src="engine/replaycode.js"' in html, "the engine module is not loaded"
+
+
+def test_the_guard_runs_before_sides_are_resolved() -> None:
+    """Order matters. Resolving sides on the wrong replay spends an OCR pass and
+    can teach the map's roster the wrong names, and the answer is worthless
+    either way if the code disagrees."""
+    html = APP.read_text(encoding="utf-8")
+    body = html[html.index("async function snapshot("):]
+    assert body.index("ensureCodeChecked()") < body.index("ensureSideResolved()")
+
+
+def test_the_guard_state_resets_with_the_map() -> None:
+    """A verdict is about the replay on screen now, so it cannot outlive the map."""
+    flat = APP.read_text(encoding="utf-8").replace(" ", "")
+    assert "codeChecked:false" in flat
+    assert "codeTries:0" in flat

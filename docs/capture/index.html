@@ -1444,7 +1444,11 @@ function startMap(){ const c=selectedCode();
   // input needed; round 3+ is decided by time bank, not parity, so it starts
   // false each such round and gates snapshots until the operator confirms.
   session={code:c, submaps, phased, round:1, sub: submaps.length?null:null,
-    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[]};
+    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[],
+    // The replay-code guard, per map: whether it has reached a verdict, and how
+    // many times it has tried to. Both reset with the map, because the answer
+    // is about the replay now on screen - see ensureCodeChecked.
+    codeChecked:false, codeTries:0};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
   document.getElementById('subpill').style.display=submaps.length?'':'none';
   refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
@@ -1502,6 +1506,10 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   // Checked FIRST so the operator gets instant feedback ("pick a sub-map")
   // instead of waiting through OCR only to be refused afterwards.
   if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
+  // Is the screen the match that was picked? BEFORE sides: resolving sides on
+  // the wrong replay spends an OCR pass and can teach this map's roster the
+  // wrong names, and the answer is worthless either way if the code disagrees.
+  if(!(await ensureCodeChecked())) return;
   // Auto-detect sides on this map's first snapshot (see ensureSideResolved).
   // Fast path: once resolved, this is a synchronous no-op on every later call.
   if(!(await ensureSideResolved())) return;

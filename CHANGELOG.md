@@ -21,6 +21,27 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Added
 
+- **The league capture page checks the replay code itself, on a map's first
+  snapshot.** The codes are fed to the operator, so there was never anything to
+  look *up* - what is worth checking is that the replay actually on screen is the
+  match they picked, and asking for that by hand meant it was skipped exactly
+  when it mattered. Picking the wrong code from a dropdown of lookalike
+  six-character strings files every comp captured afterwards against the wrong
+  match, teams and players, and publishes it with nothing to say it happened.
+
+  The guard only ever REFUSES, never reassigns: a disagreement names both codes
+  and puts the choice to the operator. It runs before side detection, because
+  resolving sides on the wrong replay spends an OCR pass and can teach the map's
+  roster the wrong names. Anything it cannot settle - an unreadable banner, a
+  read matching no feed code, a tie - abstains and lets capture proceed, capped
+  at three attempts per map: a guard that can make capture impossible would be
+  worse than the bug it prevents. The manual **Read code** button is gone.
+
+  `matchReadCode` moved out of `index.html` into `engine/replaycode.js`, where
+  node:test reaches it without a browser. 29 unit tests there, and 8 new checks
+  in `tools/verify_capture_browser.js` (144 total) driving the real modal DOM -
+  the blocking path, both codes named, Keep, silence on agreement, and abstain.
+
 - **Every division FACEIT runs for the season now has a page, played or not.**
   The export skipped any championship with no finished match, so in the week
   Season 10 opened the site carried EMEA Expert, Advanced and Intermediate and
