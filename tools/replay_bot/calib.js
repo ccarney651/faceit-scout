@@ -33,6 +33,20 @@
     // the refs library, so they are recorded from the live page, not the
     // literals in index.html.
     ref: { REF_W: 64, REF_H: 36, LF: 0.42, TF: 0.45, PAD: 2 },
+
+    // The replay scrubber, measured on the same rig and frame. y0..y1 are the
+    // bar's core rows, found by scanning for the band of steady mid luminance
+    // (~73) that sits below the event-tick band (~1230-1246) and above the
+    // controls.
+    //
+    // blueLead is how far the blue channel must exceed red for a pixel to read
+    // as a between-round break. Breaks are detected by COLOUR because the bar's
+    // brightness is polluted by ticks and the playhead, which are bright white.
+    //
+    // minRunPx discards runs too narrow to be a real break - the playhead knob
+    // is a few pixels of blue, and taking it for a boundary would cut a round
+    // in half and invent a segment that never happened.
+    timeline: { x0: 73, x1: 2449, y0: 1254, y1: 1262, blueLead: 20, minRunPx: 15 },
   };
 
   // The five portrait crops for one side, left to right.

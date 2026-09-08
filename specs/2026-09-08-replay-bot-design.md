@@ -115,6 +115,38 @@ Per code:
 4. Terminate on N consecutive frames yielding no valid HUD read, or a hard cap.
 5. `driver.close()`. Retain every PNG.
 
+### 4.0 The scrubber already knows where the rounds are
+
+**Supersedes the uniform sweep below, 2026-09-08.** The replay bar draws
+between-round breaks in a different colour from play time, so a map's round
+structure is sitting in the UI and does not need inferring at all.
+
+Measured on the rig against a 17:42 three-round Control replay, the bar spans
+x=73..2449 and shows exactly two coloured runs. Decoded:
+
+| | Time | Length |
+|---|---|---|
+| Round 1 | 0:00 – 6:46 | 406s |
+| break | 6:46 – 8:46 | 120s |
+| Round 2 | 8:46 – 12:23 | 217s |
+| break | 12:23 – 13:25 | 62s |
+| Round 3 | 13:25 – 17:42 | 257s |
+
+Breaks are found by **colour, not brightness**: the bar's luminance is polluted
+by event ticks and the playhead, which are bright white, while the blue
+channel's lead over red is clean. Runs narrower than `minRunPx` are discarded,
+since the playhead knob is a few pixels of blue and taking it for a boundary
+would cut a round in half.
+
+Sampling is then **3 points per play segment** where a map has rounds, and
+**5 across the single segment** where it does not (Push, Flashpoint). Points sit
+strictly inside a segment, never on its edges, because a round's first and last
+instants are setup and aftermath where portraits are absent or mid-transition.
+
+That takes the measured Control replay from roughly 35 uniform samples to **9**,
+and every one lands in live play. The scrubber's printed duration also settles
+§11's open question about how the sweep knows when to stop.
+
 ### 4.1 Round boundaries are derived, not sought
 
 Seeking *to* round starts would require knowing where they are, and the replay

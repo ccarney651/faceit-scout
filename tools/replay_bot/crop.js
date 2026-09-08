@@ -57,9 +57,40 @@
     return out;
   }
 
+  // Per-pixel break flags along the replay scrubber, for timeline.js to turn
+  // into rounds. The pixel reading lives here, with the rest of the canvas
+  // work, so timeline.js can stay pure and testable on plain arrays.
+  //
+  // Rows are averaged across the bar's core to shrug off single-row noise, and
+  // a break is decided on the blue channel's lead over red rather than on
+  // brightness - ticks and the playhead are bright, and would otherwise read
+  // as structure.
+  function barFlags(img, calib) {
+    var t = calib.FROZEN.timeline;
+    var w = img.width;
+    var cv = createCanvas(w, img.height);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    var d = cx.getImageData(0, 0, w, img.height).data;
+
+    var out = [];
+    for (var x = t.x0; x <= t.x1; x++) {
+      var r = 0, b = 0, n = 0;
+      for (var y = t.y0; y <= t.y1; y++) {
+        var i = (y * w + x) * 4;
+        r += d[i];
+        b += d[i + 2];
+        n++;
+      }
+      out.push((b / n) - (r / n) > t.blueLead);
+    }
+    return out;
+  }
+
   var Mod = {
     cell: cell,
     all: all,
+    barFlags: barFlags,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
