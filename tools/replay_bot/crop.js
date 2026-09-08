@@ -1,0 +1,67 @@
+// tools/replay_bot/crop.js
+// Turning a region of a captured frame into the 64x36 greyscale buffer the
+// hero matcher compares against. See specs/2026-09-08-replay-bot-design.md §3.1.
+//
+// THIS FILE DELIBERATELY MIRRORS learnCrop() IN docs/capture/engine/refs.js,
+// STEP FOR STEP, and that is the whole point of it.
+//
+// Every reference portrait in refs.json was produced by drawing into a canvas
+// with imageSmoothingEnabled/imageSmoothingQuality='high' and then taking luma
+// at 0.299/0.587/0.114. The matcher does not compare pictures; it compares
+// numbers that came out of that exact pipeline. Resample differently - a
+// hand-rolled bilinear, a box filter, BT.709 weights - and the crop still looks
+// perfectly fine to a human while scoring differently against every stored
+// template. Nothing fails; matching just quietly gets worse.
+//
+// So the resampler is a real canvas rather than arithmetic of our own, and the
+// base64 encoder is util.js's shipped bytesToB64 rather than a copy. The bot
+// runs the same code the browser does, and cannot drift from it.
+
+(function (global) {
+  'use strict';
+
+  var createCanvas = require('@napi-rs/canvas').createCanvas;
+  var U = require('../../docs/capture/engine/util.js');
+
+  // One portrait cell, as base64 of REF_W*REF_H greyscale bytes.
+  //
+  // `img` is anything canvas will draw - a decoded image or another canvas.
+  // `rect` is the region in frame coordinates, from calib.cells().
+  function cell(img, rect, ref) {
+    var w = ref.REF_W;
+    var h = ref.REF_H;
+
+    var cv = createCanvas(w, h);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.imageSmoothingEnabled = true;
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(img, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
+
+    var d = cx.getImageData(0, 0, w, h).data;
+    var px = new Uint8Array(w * h);
+    for (var j = 0, k = 0; j < d.length; j += 4, k++) {
+      px[k] = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+    }
+    return U.bytesToB64(px);
+  }
+
+  // All ten cells of a frame, side 'a' slots 0-4 then side 'b' slots 0-4, which
+  // is the order the rest of the bot expects them in.
+  function all(img, calib) {
+    var out = { a: [], b: [] };
+    ['a', 'b'].forEach(function (side) {
+      calib.cells(side).forEach(function (rect) {
+        out[side].push(cell(img, rect, calib.FROZEN.ref));
+      });
+    });
+    return out;
+  }
+
+  var Mod = {
+    cell: cell,
+    all: all,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
+  else global.OWDBReplayCrop = Mod;
+})(typeof self !== 'undefined' ? self : this);
