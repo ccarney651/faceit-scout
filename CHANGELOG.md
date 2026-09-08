@@ -17,6 +17,48 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-08
+
+### Fixed
+
+- **Auto-calibrate finds the portrait strips by the HUD's own structure.** It
+  placed the two boxes at fixed fractions of the frame, hand-measured once off a
+  1440p capture, and nudged them with a translation-only sweep. That cannot
+  survive a change of display mode: the HUD scales with the game's *content*
+  height, so a title bar's ~29px makes borderless tiles ~7% larger than windowed
+  ones on the same monitor, and a sweep that only translates can never resize a
+  box. Measured over four capture/display configurations of one replay, it read
+  10/10 on the one it had been fitted to and 4-6/10 on the other three.
+
+  It now locates the five team-coloured tiles per side and takes their **pitch**,
+  which *is* the scale — `w = 5 × pitch`, `h` from the strip's aspect ratio, `y`
+  from the band's top row. Resolution, aspect ratio, UI scale, windowed vs
+  borderless and whole-screen vs single-window all stop being assumptions.
+  Confirmed live across all four configurations at 10/10, and on a deliberately
+  shrunken game window.
+
+- **Colorblind and custom team colors work.** Auto-calibrate keyed on blue and
+  red, so a contributor running OW's accessibility palette got nothing from it.
+  A second pass now sweeps hue windows instead of assuming the colors, with the
+  hero matcher choosing between the proposals — **154 of the 156 selectable
+  friendly/enemy color pairs resolve**. Confirmed live on orange/lime and on
+  neon-blue/magenta, the latter over a purple map, at 10/10.
+
+  Known gaps, both failing honestly rather than reporting confidence over a bad
+  placement: magenta against purple, which differ in brightness rather than hue
+  (and which a player could not tell apart either), and inverting the
+  friendly/enemy defaults, which leaves the right strip correct and misplaces
+  the left.
+
+### Changed
+
+- **The capture pages no longer tell you to use the default team colors.** The
+  warning said accuracy drops noticeably with customized UI colors. That is no
+  longer true, and the replacement names the two combinations that genuinely do
+  not work.
+
+---
+
 ## 2026-09-06
 
 ### Added

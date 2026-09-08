@@ -266,10 +266,470 @@
         : '<span class="warn">only ' + ok + '/10 recognised — boxes look misaligned; try Auto-calibrate, or drag them right on the portraits. If the preview is not showing the game at all, share the Overwatch window instead of the whole screen.</span>';
     }
 
-    // Auto-calibrate: the HUD sits at fixed fractions of the screen (mirror
-    // of owdb/calibrate.py AUTO_STRIPS), so the two 5-portrait strips derive
-    // from the captured resolution - no dragging. Self-test then confirms
-    // alignment.
+    // ------------------------------------------------ HUD structure detection
+    //
+    // THE HUD IS LOCATED BY ITS OWN STRUCTURE, NOT BY A FRACTION OF THE FRAME.
+    //
+    // AUTO_STRIPS is a hand measurement off one 1440p capture, and a fixed
+    // fraction cannot survive a change of display mode. Measured 2026-09-07
+    // over four configurations of the same replay on the same machine:
+    //
+    //   config                     frame       true band rows   tile pitch
+    //   SCREEN   + windowed      2560x1440       120..195         132.5
+    //   SCREEN   + borderless    2560x1440        98..179         141.5
+    //   OW window + borderless   2560x1440        98..179         141.5
+    //   OW window + windowed     2570x1385       120..195         132.5
+    //
+    // Borderless tiles are ~7% larger than windowed ones on the same monitor
+    // because the HUD scales with the game's CONTENT HEIGHT, and a title bar
+    // takes 29px of it away. The old sweep can translate a box but never
+    // resize it, so it read 4/10 on the borderless frames and 10/10 on the one
+    // windowed configuration it was measured against.
+    //
+    // What survives all four: the five tiles are a periodic run of team-colour
+    // blobs, and their PITCH gives the scale directly. Measured run starts -
+    //
+    //   SCREEN + windowed     132  266  398  530  662   -> pitch 132.5
+    //   SCREEN + borderless    56  198  340  480  622   -> pitch 141.5
+    //
+    // Everything else follows: w = 5*pitch, h = w * the strip's own aspect
+    // ratio (taken from AUTO_STRIPS, the one thing in it that IS scale-free),
+    // y = the band's top row.
+    //
+    // Confirmed in the field 2026-09-08: all four configurations read 10/10,
+    // and so did a deliberately SHRUNKEN game window - a content height, and
+    // therefore a HUD scale and a pitch, that no table could have held. That
+    // run was also on a swept palette, so both stages composed.
+    //
+    // KNOWN GAP, accepted rather than fixed: inverting OW's defaults (friendly
+    // RED, enemy BLUE) leaves the right strip correct and misplaces the left.
+    // It degrades honestly - the preview reported 6/10 - and it needs a
+    // deliberate settings change to reach. See
+    // tests/test_capture_strip_detect.py's swapped-defaults test.
+    //
+    // NOTE THIS KEYS ON RUN STARTS, NOT RUN WIDTHS. An earlier attempt measured
+    // the band's horizontal EXTENT and blew the width out to 945-1199 against a
+    // true 659, because the centre objective bar is the same blue as the left
+    // team. A run's START is immune to that: the objective bar can only ever
+    // extend a run to the right, never move where it began.
+    var TILES = 5;
+
+    // Team-colour tests. Deliberately not a hue bucket: a straight
+    // channel-dominance test measured cleanly on all four configurations, and
+    // the hue-generic versions tried alongside it did not (the map background
+    // wins a hue histogram). This is the reason detectStrips can fail and the
+    // sweep below is kept as a fallback rather than deleted.
+    var SAT_MIN = 60;
+    function isTeamA(r, g, b) { return b > 110 && b - r > 50 && b - g > 20; }
+    function isTeamB(r, g, b) { return r > 110 && r - b > 50 && r - g > 50; }
+
+    // A strip's height as a fraction of its width, from AUTO_STRIPS itself -
+    // the vertical fractions are projected against width*9/16 (see stripBox),
+    // so this ratio is the part of the table that does not depend on scale.
+    function stripAspect(side) {
+      var st = AUTO_STRIPS[side];
+      return st[3] * 9 / 16 / st[2];
+    }
+
+    // The box's left edge sits slightly left of the first colour run: the tile
+    // art starts before its coloured header does. Measured 2.5px at pitch
+    // 132.5 on the frame whose hand-set box the operator confirmed.
+    var EDGE_LEAD = 2.5 / 132.5;
+
+    // Contiguous stretches of `cols` above `thr`, merging gaps of <= `gap`.
+    function profileRuns(cols, thr, gap) {
+      var out = [], s = -1, last = -1, x;
+      for (x = 0; x < cols.length; x++) {
+        if (cols[x] <= thr) continue;
+        if (s < 0) { s = x; last = x; continue; }
+        if (x > last + gap) { out.push([s, last]); s = x; }
+        last = x;
+      }
+      if (s >= 0) out.push([s, last]);
+      return out;
+    }
+
+    function coefVar(a) {
+      var n = a.length, m = 0, i, v, ss = 0;
+      for (i = 0; i < n; i++) m += a[i];
+      m /= n;
+      if (!m) return Infinity;
+      for (i = 0; i < n; i++) { v = a[i] - m; ss += v * v; }
+      return Math.sqrt(ss / n) / Math.abs(m);
+    }
+
+    // Five evenly spaced colour blobs => {x0, pitch}. The evenness test is what
+    // separates the tiles from the rest of a busy HUD row: five runs whose
+    // spacing varies by more than 6% are not a portrait strip.
+    function fiveRuns(cols, thr, minWide) {
+      var all = profileRuns(cols, thr, 4), rs = [], i, k;
+      for (i = 0; i < all.length; i++) {
+        if (all[i][1] - all[i][0] + 1 >= minWide) rs.push(all[i]);
+      }
+      var best = null;
+      for (i = 0; i + TILES <= rs.length; i++) {
+        var st = [], wd = [], d = [], bad = false;
+        for (k = 0; k < TILES; k++) { st.push(rs[i + k][0]); wd.push(rs[i + k][1] - rs[i + k][0] + 1); }
+        for (k = 1; k < TILES; k++) { d.push(st[k] - st[k - 1]); if (st[k] <= st[k - 1]) bad = true; }
+        if (bad) continue;
+        var cv = coefVar(d);
+        if (cv > 0.06 || coefVar(wd) > 0.25) continue;
+        var m = 0;
+        for (k = 0; k < d.length; k++) m += d[k];
+        if (!best || cv < best.cv) best = { cv: cv, x0: st[0], pitch: m / d.length };
+      }
+      return best;
+    }
+
+    // Phase of a five-tooth comb at a KNOWN pitch. Used for the side whose own
+    // runs are too broken to measure - on a frame where one team's colour bleeds
+    // into the map, the other team still fixes the pitch, and only the offset is
+    // left to find.
+    function combPhase(cols, pitch) {
+      var n = cols.length, cs = new Float64Array(n + 1), i, x;
+      for (i = 0; i < n; i++) cs[i + 1] = cs[i] + cols[i];
+      var seg = function (a, b) {
+        a = Math.max(0, Math.min(n, Math.round(a)));
+        b = Math.max(0, Math.min(n, Math.round(b)));
+        return b > a ? cs[b] - cs[a] : 0;
+      };
+      var tooth = 0.55 * pitch, span = (TILES - 1) * pitch + tooth;
+      var bestV = -Infinity, bestX = 0;
+      for (x = 0; x <= n - span; x++) {
+        var on = 0, off = 0;
+        for (i = 0; i < TILES; i++) on += seg(x + i * pitch, x + i * pitch + tooth);
+        for (i = 0; i < TILES - 1; i++) off += seg(x + i * pitch + tooth, x + (i + 1) * pitch);
+        var v = on - 1.2 * off;
+        if (v > bestV) { bestV = v; bestX = x; }
+      }
+      return bestX;
+    }
+
+    // Candidate row ranges where BOTH halves carry team colour, longest first.
+    //
+    // Requiring both halves is what keeps the "TEAM 1" banner above the tiles
+    // out of the band: measured on frame.png, a one-sided test called the band
+    // 18px too tall, and 18px is four times the matcher's tolerance.
+    //
+    // TWO THINGS THIS MUST NOT DO, both measured on the operator's
+    // colourblind capture of 2026-09-08 (orange vs lime):
+    //
+    // - Take the single longest run. The strongest run in that frame is rows
+    //   26..79, ABOVE the tiles, and it beat the real band outright.
+    // - Trust a run to be contiguous. The real band at 98..147 broke into runs
+    //   of 13, 12 and 10 rows, because a tile is only team-coloured at its
+    //   header and name plate - the portrait art in the middle is not - so the
+    //   density dips mid-tile and falls under the threshold.
+    //
+    // So: merge across small gaps, and return several candidates rather than
+    // betting on one. The hero matcher is what settles which is right, and it
+    // already scores every proposal.
+    var BAND_GAP = 14;        // rows; spans the mid-tile dip measured above
+    var BAND_TRIES = 3;
+
+    function bandCandidates(rowA, rowB, H) {
+      var maxA = 0, maxB = 0, y;
+      for (y = 0; y < H; y++) {
+        if (rowA[y] > maxA) maxA = rowA[y];
+        if (rowB[y] > maxB) maxB = rowB[y];
+      }
+      if (maxA < 20 || maxB < 20) return [];
+      var both = new Float64Array(H), maxBoth = 0;
+      for (y = 0; y < H; y++) {
+        both[y] = Math.min(rowA[y] / maxA, rowB[y] / maxB);
+        if (both[y] > maxBoth) maxBoth = both[y];
+      }
+      if (maxBoth < 0.2) return [];
+      var thr = 0.35 * maxBoth, raw = [];
+      y = 0;
+      while (y < H) {
+        if (both[y] <= thr) { y++; continue; }
+        var j = y;
+        while (j + 1 < H && both[j + 1] > thr) j++;
+        raw.push([y, j]);
+        y = j + 1;
+      }
+      var merged = [], i;
+      for (i = 0; i < raw.length; i++) {
+        if (merged.length && raw[i][0] - merged[merged.length - 1][1] <= BAND_GAP) {
+          merged[merged.length - 1][1] = raw[i][1];
+        } else merged.push([raw[i][0], raw[i][1]]);
+      }
+      // Merged spans first - the fragmented real band only exists as one of
+      // these - then the raw runs, in case a merge joined two real structures.
+      var out = [], seen = {};
+      [merged, raw].forEach(function (list) {
+        list.slice().sort(function (p, q) { return (q[1] - q[0]) - (p[1] - p[0]); })
+          .forEach(function (r) {
+            var key = r[0] + ':' + r[1];
+            if (seen[key] || r[1] - r[0] + 1 < 8) return;
+            seen[key] = 1;
+            out.push({ y0: r[0], y1: r[1], h: r[1] - r[0] + 1 });
+          });
+      });
+      return out.slice(0, BAND_TRIES);
+    }
+
+    // Column occupancy for the band's rows only, under a pair of colour tests.
+    function bandColumns(data, W, H, band, inA, inB) {
+      var half = W >> 1, colA = new Float64Array(half), colB = new Float64Array(W - half);
+      var y, x, i, r, g, b;
+      for (y = band.y0; y <= band.y1; y++) {
+        for (x = 0; x < W; x++) {
+          i = (y * W + x) * 4;
+          r = data[i]; g = data[i + 1]; b = data[i + 2];
+          if (Math.max(r, g, b) - Math.min(r, g, b) <= SAT_MIN) continue;
+          if (x < half) { if (inA(r, g, b)) colA[x]++; }
+          else if (inB(r, g, b)) colB[x - half]++;
+        }
+      }
+      return { a: colA, b: colB };
+    }
+
+    // Two column profiles + a band => the two boxes, or null.
+    function colMax(c) {
+      var m = 0, i;
+      for (i = 0; i < c.length; i++) if (c[i] > m) m = c[i];
+      return m;
+    }
+
+    // THE COLUMN THRESHOLD COMES FROM THE COLUMN PROFILE, NOT THE BAND HEIGHT.
+    //
+    // A column count can never exceed the band's height, so band.h * 0.30 is
+    // only the right threshold when the band hugs the tiles. Let the band run
+    // tall - which it does the moment two candidate bands merge - and the
+    // threshold climbs past anything the tiles can reach, so fiveRuns finds
+    // nothing and the placement is silently lost rather than scored badly.
+    function stripsFromBand(cols, band, W) {
+      var half = W >> 1, minWide = Math.max(4, 0.01 * W);
+      var fa = fiveRuns(cols.a, 0.30 * colMax(cols.a), minWide);
+      var fb = fiveRuns(cols.b, 0.30 * colMax(cols.b), minWide);
+      if (!fa && !fb) return null;
+      // The cleaner side sets the pitch; a side whose own reading disagrees by
+      // more than 3% is not trusted with it and gets the comb instead.
+      var lead = (!fb || (fa && fa.cv <= fb.cv)) ? fa : fb;
+      var pitch = lead.pitch;
+      if (pitch * TILES > half + 0.10 * W) return null;
+      var out = { pitch: pitch, bandTop: band.y0 };
+      [['a', fa, cols.a, 0], ['b', fb, cols.b, half]].forEach(function (t) {
+        var side = t[0], f = t[1], c = t[2], off = t[3];
+        var x0 = (f && Math.abs(f.pitch - pitch) / pitch < 0.03) ? f.x0 : combPhase(c, pitch);
+        var w = TILES * pitch;
+        out[side] = { x: x0 + off - EDGE_LEAD * pitch, y: band.y0, w: w, h: stripAspect(side) * w };
+      });
+      return out;
+    }
+
+    // {a, b, pitch, bandTop} or null. `data` is RGBA for the TOP of the frame
+    // (H rows of W pixels) - the HUD never sits below that, and scanning the
+    // whole frame would cost several times as much for nothing.
+    //
+    // Pure: no DOM, no canvas, no module state. That is what lets a node test
+    // drive it over synthetic pixels; see tests/test_capture_strip_detect.py.
+    function detectStrips(data, W, H) {
+      var half = W >> 1, y, x, i, r, g, b;
+      var rowA = new Float64Array(H), rowB = new Float64Array(H);
+      for (y = 0; y < H; y++) {
+        var ca = 0, cb = 0;
+        for (x = 0; x < W; x++) {
+          i = (y * W + x) * 4;
+          r = data[i]; g = data[i + 1]; b = data[i + 2];
+          if (Math.max(r, g, b) - Math.min(r, g, b) <= SAT_MIN) continue;
+          if (x < half) { if (isTeamA(r, g, b)) ca++; }
+          else if (isTeamB(r, g, b)) cb++;
+        }
+        rowA[y] = ca; rowB[y] = cb;
+      }
+      var bands = bandCandidates(rowA, rowB, H), bi;
+      for (bi = 0; bi < bands.length; bi++) {
+        var got = stripsFromBand(
+          bandColumns(data, W, H, bands[bi], isTeamA, isTeamB), bands[bi], W);
+        if (got) return got;
+      }
+      return null;
+    }
+
+    // ---------------------------------------------- custom / colourblind UI
+    //
+    // OW's accessibility options let a player recolour the team and enemy UI,
+    // and some of the people this tool is for run it that way. detectStrips
+    // above keys on blue and red, so for them it finds nothing at all.
+    //
+    // The structure is the same whatever the colours are - five evenly spaced
+    // tiles of ONE colour on the left and five of ANOTHER on the right - so
+    // this sweeps hue instead of assuming it. What it must NOT do is pick the
+    // hue by mass: measured 2026-09-07, the two most common saturated hues in
+    // the top of a frame are the MAP, and choosing that way failed on all six
+    // real capture frames. The palette is chosen by whether it yields a band
+    // and five evenly spaced runs, and the hero matcher settles the rest.
+    //
+    // 24 windows of 30 degrees at 15-degree steps, so a team colour that
+    // straddles a boundary is still covered whole by some window.
+    var HUE_BINS = 24;
+    // The two windows must not OVERLAP - that is all. A window spans two bins,
+    // so two bins apart is the whole requirement, and anything stricter starts
+    // discarding real palettes: measured on a frame the operator captured
+    // 2026-09-08 with OW's accessibility colours on, the teams were orange
+    // (bin 1, 15 degrees) and lime (bin 4, 60 degrees), THREE bins apart. A
+    // 60-degree rule rejected the true pair before it was ever scored, and
+    // auto-calibrate fell through to the sweep and read 2/10.
+    var HUE_SEP = 2;
+    // THE MATCHER RANKS THE PALETTES, NOT THEIR PIXEL MASS.
+    //
+    // Mass was the obvious ranking and it is the wrong one, for the same
+    // reason picking the hue by mass was: the map outweighs the HUD. Measured
+    // on a magenta team over a purple map, the four highest-mass pairs were
+    // all the BACKGROUND rather than the tiles - and their runs pass the
+    // evenness test, because the holes the tiles punch in a background are as
+    // periodic as the tiles themselves. The correct pair was fifth.
+    //
+    // So mass only decides what gets LOOKED at. Scoring a candidate where it
+    // stands costs ten cell matches, against the ~770 a refine costs, so the
+    // shortlist can be wide as long as only the best of it is refined.
+    var PALETTE_TRIES = 24;   // proposals scored where they stand
+    var PALETTE_REFINE = 2;   // ...of which this many earn a refine
+
+    function hueBin(r, g, b) {
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b), s = mx - mn;
+      if (s <= SAT_MIN || mx <= 100) return -1;
+      var h;
+      if (mx === r) h = ((g - b) / s + 6) % 6;
+      else if (mx === g) h = (b - r) / s + 2;
+      else h = (r - g) / s + 4;
+      var k = Math.floor(h * HUE_BINS / 6);
+      return ((k % HUE_BINS) + HUE_BINS) % HUE_BINS;
+    }
+
+    function inHueWindow(w) {
+      var w1 = (w + 1) % HUE_BINS;
+      return function (r, g, b) { var k = hueBin(r, g, b); return k === w || k === w1; };
+    }
+
+    // Per-row counts for every hue bin and both halves, in ONE pass. The pair
+    // search that follows then works on H-length arrays instead of pixels,
+    // which is what keeps a 576-pair sweep affordable.
+    function hueRowCounts(data, W, H) {
+      var half = W >> 1, acc = new Float64Array(2 * HUE_BINS * H), y, x, i, k;
+      for (y = 0; y < H; y++) {
+        for (x = 0; x < W; x++) {
+          i = (y * W + x) * 4;
+          k = hueBin(data[i], data[i + 1], data[i + 2]);
+          if (k < 0) continue;
+          acc[((x < half ? 0 : 1) * HUE_BINS + k) * H + y]++;
+        }
+      }
+      return acc;
+    }
+
+    // Candidate placements under swept team colours, best palette first.
+    function detectStripsByHue(data, W, H) {
+      var acc = hueRowCounts(data, W, H), profs = [[], []], s, w, y;
+      for (s = 0; s < 2; s++) {
+        for (w = 0; w < HUE_BINS; w++) {
+          var p = new Float64Array(H);
+          var b0 = (s * HUE_BINS + w) * H, b1 = (s * HUE_BINS + (w + 1) % HUE_BINS) * H;
+          for (y = 0; y < H; y++) p[y] = acc[b0 + y] + acc[b1 + y];
+          profs[s].push(p);
+        }
+      }
+      var pairs = [], wa, wb, sep;
+      for (wa = 0; wa < HUE_BINS; wa++) {
+        for (wb = 0; wb < HUE_BINS; wb++) {
+          sep = Math.abs(wa - wb);
+          if (Math.min(sep, HUE_BINS - sep) < HUE_SEP) continue;
+          var bands = bandCandidates(profs[0][wa], profs[1][wb], H);
+          for (var bi = 0; bi < bands.length; bi++) {
+            var band = bands[bi], mass = 0;
+            for (y = band.y0; y <= band.y1; y++) mass += profs[0][wa][y] + profs[1][wb][y];
+            pairs.push({ wa: wa, wb: wb, band: band, mass: mass });
+          }
+        }
+      }
+      pairs.sort(function (p, q) { return q.mass - p.mass; });
+      // DEDUPE BY PLACEMENT, NOT BY PALETTE.
+      //
+      // Adjacent hue windows overlap by a bin, so a team colour sitting near a
+      // boundary is caught by two of them and yields the SAME boxes twice.
+      // Measured on the operator's neon-blue/magenta frame, the shortlist held
+      // about twelve distinct placements in twenty-four slots, and the correct
+      // one came twenty-first - it only just survived the cap. Deduping on the
+      // geometry rather than the hues doubles what a slot is worth.
+      var out = [];
+      var same = function (g) {
+        return out.some(function (h) {
+          return Math.abs(h.bandTop - g.bandTop) <= 3
+            && Math.abs(h.pitch - g.pitch) / g.pitch < 0.01
+            && Math.abs(h.a.x - g.a.x) <= 3 && Math.abs(h.b.x - g.b.x) <= 3;
+        });
+      };
+      for (var i = 0; i < pairs.length && out.length < PALETTE_TRIES; i++) {
+        var pr = pairs[i];
+        var cols = bandColumns(data, W, H, pr.band, inHueWindow(pr.wa), inHueWindow(pr.wb));
+        var got = stripsFromBand(cols, pr.band, W);
+        if (got && !same(got)) { got.hues = [pr.wa, pr.wb]; out.push(got); }
+      }
+      return out;
+    }
+
+    // Detection lands within a few pixels; the matcher closes the last of it.
+    // The window in which a strip reads at all is about four pixels wide, so
+    // this is a nudge, not a search - 7x11 placements against the sweep's 300+.
+    function refineStrip(frame, box, side, W, H) {
+      var best = { s: { distinct: -1, sum: -Infinity }, box: box }, dx, dy;
+      for (dx = -3; dx <= 3; dx++) {
+        for (dy = -5; dy <= 5; dy++) {
+          var b = { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h };
+          if (!boxInFrame(b, W, H)) continue;
+          var s = scoreStrip(frame, b, side);
+          if (s.distinct > best.s.distinct || (s.distinct === best.s.distinct && s.sum > best.s.sum)) {
+            best = { s: s, box: b };
+          }
+        }
+      }
+      return best;
+    }
+
+    // What a proposal reads WHERE IT STANDS - ten cell matches, no search.
+    // Cheap enough to run over every proposal, which is what lets the matcher
+    // rather than pixel mass decide which ones are worth refining.
+    function scoreDetection(frame, det, W, H) {
+      if (!det) return -1;
+      var total = 0;
+      ['a', 'b'].forEach(function (side) {
+        if (!boxInFrame(det[side], W, H)) return;
+        total += Math.max(scoreStrip(frame, det[side], side).distinct, 0);
+      });
+      return total;
+    }
+
+    // Refine both strips of a proposed placement and report what it reads.
+    // {ok} alone when the proposal is empty, so a caller can compare stages
+    // without special-casing null.
+    function takeDetection(frame, det, W, H) {
+      var out = { ok: 0 };
+      if (!det) return out;
+      ['a', 'b'].forEach(function (side) {
+        var rr = refineStrip(frame, det[side], side, W, H);
+        out[side] = rr.box;
+        out.ok += Math.max(rr.s.distinct, 0);
+      });
+      return out;
+    }
+
+    // Read the top of the frame once, for detectStrips. 30% is well clear of
+    // the band in every configuration measured (the lowest was 130/1393).
+    function topPixels(frame, W, H) {
+      var h = Math.max(1, Math.round(H * 0.30));
+      return { data: frame.getContext('2d').getImageData(0, 0, W, h).data, w: W, h: h };
+    }
+
+    // Structure detection is right or it is nothing, so a partial read hands
+    // over to the sweep rather than being averaged with it.
+    var DETECT_ACCEPT = 8;
+
+    // Auto-calibrate: locate the two 5-portrait strips from the HUD's own
+    // structure (detectStrips), falling back to the fixed-fraction sweep when
+    // that finds nothing. Self-test then confirms alignment.
     function autoCalibrate() {
       if (!ctx.video.videoWidth) {
         var w = '<span class="warn">Share your screen first.</span>';
@@ -285,6 +745,51 @@
       if (REFS.length) {
         var frame = grabFrame();
         var FW = ctx.video.videoWidth, FH = ctx.video.videoHeight;
+
+        // A CASCADE, CHEAPEST FIRST, AND THE MATCHER DECIDES.
+        //
+        // Stage 1 finds the HUD by its own structure on the default palette.
+        // Measured over the six real capture frames in screenshots/, by
+        // distinct heroes: 10/10 on all six, where stage 3 reads 10, 6, 6, 6,
+        // 4, 4. It costs one pass over the top of the frame plus ~800 cell
+        // matches, against the sweep's 3000+.
+        //
+        // Stage 2 sweeps the team colours for a player running OW's
+        // accessibility palette, and only runs when stage 1 came up short - so
+        // the common case never pays for it.
+        //
+        // Stage 3 is the fixed-fraction sweep that shipped before. It cannot
+        // correct a scale error, so it is a floor, not a second opinion.
+        //
+        // No stage is trusted on its own say-so: every candidate is scored by
+        // the hero matcher, and the best-scoring placement wins whichever
+        // stage proposed it.
+        var top = null;
+        try { top = topPixels(frame, FW, FH); }
+        catch (e) { top = null; }     // tainted or zero-sized frame: skip to the sweep
+        var bestDet = null, found = 0;
+        var consider = function (det) {
+          if (!det) return;
+          var t = takeDetection(frame, det, FW, FH);
+          if (t.a && t.ok > found) { found = t.ok; bestDet = t; }
+        };
+        if (top) {
+          consider(detectStrips(top.data, top.w, top.h));       // stage 1
+          if (found < DETECT_ACCEPT) {                          // stage 2
+            var pal = detectStripsByHue(top.data, top.w, top.h), pi;
+            var ranked = [];
+            for (pi = 0; pi < pal.length; pi++) {
+              ranked.push({ det: pal[pi], s: scoreDetection(frame, pal[pi], FW, FH) });
+            }
+            ranked.sort(function (p, q) { return q.s - p.s; });
+            for (pi = 0; pi < ranked.length && pi < PALETTE_REFINE
+                         && found < DETECT_ACCEPT; pi++) consider(ranked[pi].det);
+          }
+        }
+        if (bestDet && found >= DETECT_ACCEPT) { best.a = bestDet.a; best.b = bestDet.b; }
+
+        var sweepOk = 0;
+        if (found < DETECT_ACCEPT) {                            // stage 3
 
         // EACH STRIP IS SEARCHED INDEPENDENTLY.
         //
@@ -374,7 +879,13 @@
             if (bestS.distinct === 5) break;   // nothing can beat five of five
           }
           best[side] = bestBox;
+          sweepOk += Math.max(bestS.distinct, 0);
         });
+
+        // A partial structure detection still beats a worse sweep - the sweep
+        // is the floor, not the tie-breaker.
+        if (bestDet && found > sweepOk) { best.a = bestDet.a; best.b = bestDet.b; }
+        }
       }
       // scrim.html only: carry forward any already-set scoreboard/
       // score_readout boxes - auto-calibrate only re-places the two
@@ -488,6 +999,10 @@
     return {
       autoCalibrate: autoCalibrate,
       boxesFromStrips: boxesFromStrips,
+      detectStrips: detectStrips,
+      detectStripsByHue: detectStripsByHue,
+      fiveRuns: fiveRuns,
+      stripAspect: stripAspect,
       scoreBoxes: scoreBoxes,
       scoreCandidate: scoreCandidate,
       scoreStrip: scoreStrip,

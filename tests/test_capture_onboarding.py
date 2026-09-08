@@ -195,7 +195,16 @@ def test_auto_calibrate_previews_before_committing() -> None:
         + "\nconst OWDBCalibration = module.exports;\n"
         + _CAL_BODY
     )
-    proc = subprocess.run([node, "-e", src], capture_output=True, text=True)
+    # Written to a temp file rather than passed via `node -e`: calibration.js
+    # grew past Windows' CreateProcess command-line limit when structure
+    # detection landed ("[WinError 206] The filename or extension is too
+    # long"). Same reason, and the same fix, as test_capture_autocalibrate.py.
+    script = Path(__file__).resolve().parent / "_tmp_calpreview_check.js"
+    script.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(script)], capture_output=True, text=True)
+    finally:
+        script.unlink(missing_ok=True)
     assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
     results = json.loads(proc.stdout)
     failed = [r["name"] for r in results if not r["ok"]]
