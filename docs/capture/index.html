@@ -1197,7 +1197,19 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
   try{
     const got=await readReplayCode();
     if(session!==s) return true;      // the operator changed code or map mid-read
-    const v=OWDBReplayCode.checkAgainstSelected(got, currentCodes(), sel.code);
+    // DATA.codes, NOT currentCodes(). The division / opponent / hide-done
+    // filters exist to help the operator choose what to scout NEXT; they say
+    // nothing about what replay is on screen. Asking the filtered list to
+    // identify a code makes the guard fail in the cases it exists for: on
+    // 2026-09-08 the screen showed QPC797 against a selected DE8N10 - same
+    // division, both real - and the guard abstained, because QPC797 had already
+    // been captured that night and "hide done" had removed it from the working
+    // list. Re-watching a replay you already did is precisely a wrong match.
+    //
+    // It also makes the near-match safer: one character is resolved against
+    // every real code, so a miss cannot land on some other code merely because
+    // the right one was filtered out of view.
+    const v=OWDBReplayCode.checkAgainstSelected(got, DATA.codes, sel.code);
     if(v.status==='ok'){
       s.codeChecked=true;
       snapMsg('screen shows '+esc(v.code)+' — the match you picked');
@@ -1205,11 +1217,20 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
     }
     if(v.status==='abstain'){
       s.codeTries=(s.codeTries||0)+1;
-      if(s.codeTries>=CODE_CHECK_TRIES){
-        s.codeChecked=true;           // stand down, but say so - silence here is what hid the last one
-        snapMsg('could not verify the replay code ('+esc(got?('read '+got):codeReadProblem())
-          +') — check yourself that this is '+esc(sel.code), true);
-      }
+      const last=s.codeTries>=CODE_CHECK_TRIES;
+      if(last) s.codeChecked=true;    // stand down; retrying forever costs an OCR pass a snapshot
+      // SAY IT EVERY TIME, not just on the last try. The first version was
+      // silent until the third attempt, on the theory that a map transition can
+      // fail once harmlessly. What that actually produced was a guard
+      // indistinguishable from no guard at all: the operator ran two full
+      // wrong-match tests, saw nothing, and reasonably reported it as "not
+      // reading the replay code at all". An unverified capture is worth one
+      // line every time it happens.
+      snapMsg((got
+          ? 'screen reads '+esc(got)+', which is not a code in the feed'
+          : 'could not read the replay code ('+esc(codeReadProblem())+')')
+        +' — this capture is NOT verified as '+esc(sel.code)
+        +(last?'' : ' · will retry on the next snapshot'), true);
       return true;                    // NEVER blocks
     }
     // A real disagreement. Both codes exist in this division's feed, so one of
@@ -1229,10 +1250,30 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
     if(session!==s) return true;
     s.codeChecked=true;
     if(act==='switch'){
-      const cs=currentCodes(), idx=cs.findIndex(c=>c.code===v.code);
-      if(idx!==-1){ const el=document.getElementById('code'); el.value=String(idx); onCode(); }
-      snapMsg('switched to '+esc(v.code)+' — snapshot again to capture it', true);
-      return false;                   // onCode() restarted the map; this snapshot is void
+      // The dropdown holds the FILTERED list, and the code on screen is often
+      // filtered out of it - that is how this bug was found. Clearing "hide
+      // done" is enough for the common case (re-watching a replay already
+      // captured); an opponent filter can hide it too, so that is cleared as
+      // well. Both are the operator's own view settings, and they just asked to
+      // switch to this code, which is consent to show it.
+      const findIdx=()=>currentCodes().findIndex(c=>c.code===v.code);
+      let idx=findIdx();
+      if(idx===-1){
+        const hide=document.getElementById('hide'), opp=document.getElementById('opp');
+        if(hide && hide.checked){ hide.checked=false; savePref('hide'); }
+        if(opp && opp.value && opp.value!=='all'){ opp.value='all'; savePref('opp'); }
+        refreshCodes(); idx=findIdx();
+      }
+      if(idx!==-1){
+        const el=document.getElementById('code'); el.value=String(idx); onCode();
+        snapMsg('switched to '+esc(v.code)+' — snapshot again to capture it', true);
+        return false;                 // onCode() restarted the map; this snapshot is void
+      }
+      // Still not reachable: it belongs to another division, which this page
+      // cannot change on the operator's behalf without discarding their whole
+      // context. Say so rather than reporting a switch that did not happen.
+      snapMsg(esc(v.code)+' is in another division — change the division to capture it', true);
+      return false;
     }
     snapMsg('keeping '+esc(sel.code)+' — capturing against your selection', true);
     return true;
@@ -1502,14 +1543,22 @@ function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
 async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
-  // Control maps: capture needs to know which sub-map the round is played on.
-  // Checked FIRST so the operator gets instant feedback ("pick a sub-map")
-  // instead of waiting through OCR only to be refused afterwards.
-  if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
-  // Is the screen the match that was picked? BEFORE sides: resolving sides on
-  // the wrong replay spends an OCR pass and can teach this map's roster the
-  // wrong names, and the answer is worthless either way if the code disagrees.
+  // WHICH MATCH IS THIS? Asked first, before every other check on a map's first
+  // snapshot, because every one of them is meaningless if the answer is "not the
+  // one you picked" - and one of them actively does harm. Side detection reads
+  // the HUD names against the SELECTED match's roster, so on the wrong replay it
+  // cannot succeed: it either fails and sends the operator hunting a calibration
+  // fault that does not exist, or it half-matches and teaches the map the wrong
+  // names. The operator hit exactly that twice on 2026-09-08 and said so:
+  // "it will always fail if it's a code from the wrong game entirely".
+  //
+  // The line above is a precondition, not a check - there is no frame to read a
+  // code from without a stream and calibrated boxes.
   if(!(await ensureCodeChecked())) return;
+  // Control maps: capture needs to know which sub-map the round is played on.
+  // After the code, because "pick a sub-map" is advice about the wrong match
+  // when the replay on screen is not the one selected.
+  if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   // Auto-detect sides on this map's first snapshot (see ensureSideResolved).
   // Fast path: once resolved, this is a synchronous no-op on every later call.
   if(!(await ensureSideResolved())) return;

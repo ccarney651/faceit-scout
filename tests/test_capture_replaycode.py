@@ -90,13 +90,21 @@ def test_the_wrong_match_guard_runs_on_the_first_snapshot() -> None:
     assert 'src="engine/replaycode.js"' in html, "the engine module is not loaded"
 
 
-def test_the_guard_runs_before_sides_are_resolved() -> None:
-    """Order matters. Resolving sides on the wrong replay spends an OCR pass and
-    can teach the map's roster the wrong names, and the answer is worthless
-    either way if the code disagrees."""
+def test_the_guard_runs_before_every_other_check() -> None:
+    """Order matters, and the operator settled it on 2026-09-08.
+
+    Side detection reads the HUD names against the SELECTED match's roster, so on
+    the wrong replay it cannot succeed - it either fails, sending the operator
+    after a calibration fault that does not exist, or half-matches and teaches
+    the map wrong names. "It will always fail if it's a code from the wrong game
+    entirely." Every other check is equally meaningless on the wrong match, so
+    the code question goes first.
+    """
     html = APP.read_text(encoding="utf-8")
     body = html[html.index("async function snapshot("):]
-    assert body.index("ensureCodeChecked()") < body.index("ensureSideResolved()")
+    first = body.index("ensureCodeChecked()")
+    for later in ("ensureSideResolved()", "pick a sub-map first"):
+        assert first < body.index(later), f"the code check must precede {later}"
 
 
 def test_the_guard_state_resets_with_the_map() -> None:

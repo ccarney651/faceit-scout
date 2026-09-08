@@ -962,6 +962,11 @@ async function main() {
     const setup = () => p.evaluate(() => {
       window.__feed = [{ code: 'D9X9N2', match_id: 'm1', team_a: 'Alpha', team_b: 'Bravo' },
                        { code: 'B4K2M1', match_id: 'm2', team_a: 'Delta', team_b: 'Echo' }];
+      // DATA.codes is the whole feed; currentCodes() is the operator's FILTERED
+      // working list. They are deliberately different here - see the filtered
+      // check below, which is the bug this stub originally hid by making them
+      // identical.
+      DATA.codes = window.__feed;
       window.currentCodes = () => window.__feed;
       window.selectedCode = () => window.__feed[1];          // operator picked B4K2M1
       window.readReplayCode = async () => window.__read;
@@ -1007,6 +1012,26 @@ async function main() {
       modal: !!document.querySelector('#mback.open') }));
     check('code guard: an unreadable code abstains rather than blocking',
       unread.ok === true && unread.modal === false, JSON.stringify(unread));
+
+    // THE REGRESSION. The guard asked currentCodes() - the division / opponent /
+    // hide-done filtered list - to identify the code on screen. A code already
+    // captured is filtered out of it, so on 2026-09-08 a screen showing QPC797
+    // against a selected DE8N10 (same division, both real) abstained silently.
+    // Re-watching a replay you already captured is precisely a wrong match.
+    await setup();
+    await p.evaluate(() => {
+      window.currentCodes = () => [window.__feed[1]];   // the screen's code is filtered out
+      window.__read = 'D9X9N2';
+      window.__g = ensureCodeChecked();
+    });
+    let blockedFiltered = true;
+    try { await p.waitForSelector('#mback.open', { timeout: 5000 }); }
+    catch (e) { blockedFiltered = false; }
+    check('code guard: a code hidden by the operator filters still blocks',
+      blockedFiltered);
+    await p.evaluate(() => { const b = [...document.querySelectorAll('#mback button')]
+      .find(x => /keep/i.test(x.textContent)); if (b) b.click(); });
+    await p.evaluate(() => window.__g);
 
     await ctx.close();
   }
