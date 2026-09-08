@@ -571,6 +571,37 @@ test('findMarkerBox rejects two runs that disagree on width', () => {
   assert.equal(SB.findMarkerBox(d, w, h), null);
 });
 
+// A REAL rule is not a solid run. U+2500 glyphs do not join, so the rendered
+// line has holes in it, and antialiasing costs more pixels at the edges: the
+// measured fill on the operator's frames is 0.94-0.95, one row tall, against a
+// 0.8 threshold. Every test above paints a solid 1.0, which is why they could
+// all pass while the detector was believed broken in the field. These two pin
+// the margin that actually exists - see tools/real_frame_eval/marker_parity.py.
+function withHoledRules(w, h, yTop, yBot, x0, x1, fill) {
+  // Drop pixels on a regular stride so the run keeps its full SPAN (the
+  // detector measures x0..x1) while losing the fill a solid line would have.
+  const skip = Math.max(2, Math.round(1 / (1 - fill)));
+  return frame(w, h, set => {
+    for (const y of [yTop, yBot])
+      for (let x = x0; x <= x1; x++)
+        if (x === x0 || x === x1 || x % skip !== 0)
+          set(x, y, RULE[0], RULE[1], RULE[2]);
+  });
+}
+
+test('a rule with holes in it is still a rule at the measured 0.94 fill', () => {
+  const w = 2570, h = 1393;
+  const box = SB.findMarkerBox(withHoledRules(w, h, 255, 761, 128, 682, 0.94), w, h);
+  assert.ok(box, 'the real frames fill 0.94 and must not fall out');
+  assert.equal(box.x, 128);
+  assert.equal(box.w, 555);
+});
+
+test('a run too sparse to be a rule is refused', () => {
+  const w = 2570, h = 1393;
+  assert.equal(SB.findMarkerBox(withHoledRules(w, h, 255, 761, 128, 682, 0.6), w, h), null);
+});
+
 // An all-zero board welds its adjacent zeros: "0 • 0 • 0" comes back as
 // "000000" or "00-00-00". A real stat is never written "00" - the board does
 // not pad - so an all-zeros token two or more long is that many columns.

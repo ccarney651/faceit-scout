@@ -1275,6 +1275,10 @@ async function nextRound(){ if(!session) return;
   // readable now. Awaited before the counter moves, so the read is filed
   // against the round it closes rather than the one it opens.
   if(session.snaps.length) await captureBoardRead(session.round);
+  // No snapshot yet means no comp to attribute the board's rows to, so the read
+  // is deliberately skipped - but skipping it in silence is what made an
+  // untaken read look like a broken one.
+  else noBoardNotice('take a snapshot first, so the board has a comp to attach to');
   if(!session) return;                       // finish/undo may have landed while the modal was open
   session.history.push({type:'round', round:session.round, sub:session.sub,
     attacker:session.attacker, attackerConfirmed:session.attackerConfirmed});
@@ -1466,11 +1470,30 @@ async function readScoreboard(frame){
 // Returns the raw scoreboard object (for the score readout that finish uses) or
 // null when there is no board region at all, which is not a failure: it means
 // the markers are off and no crop was ever set, so there is nothing to block on.
-async function captureBoardRead(roundNo){
+// There is nothing to read when the lobby is not running the workshop mode with
+// Draw Capture Markers on AND no SCOREBOARD box has been set by hand. Until now
+// that state was indistinguishable from a clean pass: captureBoardRead returned
+// null for both, and the round advanced in silence - which is how "the board
+// read never ran" got recorded as "findMarkerBox never succeeded", a claim that
+// turned out to be false (the detector finds the box on 7 of 7 real frames that
+// have the rules drawn, including the one exported during the failing test).
+//
+// Passive, not a modal. The operator has asked for fewer pop-ups, this is a
+// CONFIGURATION state rather than a failed read, and the answer cannot change
+// between the rounds of one map - so it is said once, and again at Finish,
+// where the map's last board is the one that matters most.
+function noBoardNotice(why, always){
+  if(!session) return;
+  if(session.boardNoticed && !always) return;
+  session.boardNoticed=true;
+  snapMsg('no board read — '+why, true);
+}
+const NO_BOARD_WHY='host the scrim on workshop code <b>B44BZ</b> with <b>Draw Capture Markers</b> on, or set the SCOREBOARD box by hand';
+async function captureBoardRead(roundNo, always){
   if(!session) return null;
   for(;;){
     const sb=await readScoreboard(grabFrame());
-    if(!sb) return null;
+    if(!sb){ noBoardNotice(NO_BOARD_WHY, always); return null; }
     const bar={ a:(session.players&&session.players.a)||[],
                 b:(session.players&&session.players.b)||[] };
     // from_start is only meaningful on a map's FIRST read. A first read taken
@@ -1576,7 +1599,7 @@ async function finishScrimMap(c){
       heroes, pairs }); } }
   // Closes the final round. Uses the same read for the score readout below, so
   // finishing costs one OCR pass, not two.
-  const sb = await captureBoardRead(session.round) || await readScoreboard(grabFrame());
+  const sb = await captureBoardRead(session.round, true) || await readScoreboard(grabFrame());
   let score=null, winner_side=null, result=null;
   if(sb && sb.readout && sb.readout.a!=null && sb.readout.b!=null){
     const usIsA = sideId !== 'them';
@@ -1619,7 +1642,7 @@ function startScrimSession(c){
     attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[],
     // Cumulative board reads, one per round boundary crossed, plus the run of
     // consecutive skips so the next good read can say how many rounds it spans.
-    boardReads:[], boardSkips:0};
+    boardReads:[], boardSkips:0, boardNoticed:false};
   document.getElementById('mapinfo').textContent=`${c.map||'?'} \u00B7 ${c.map_category||'?'} \u2014 ${c.team_a||'?'} vs ${c.team_b||'?'}`;
   const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
   document.getElementById('subpill').style.display=submaps.length?'':'none';

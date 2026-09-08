@@ -257,14 +257,21 @@ display mode changes the geometry and requires recalibration.
 
 Do not lose these; they matter more to the product than calibration polish.
 
-- **`autoBoardBox()` returns `null` on real frames** even with the workshop's
-  green capture markers enabled and confirmed present in the lobby settings.
-  `Scoreboard.findMarkerBox()` has never succeeded in the field.
-- **The board read silently does nothing** when there is neither a marker box
-  nor a hand-set SCOREBOARD box — `readScoreboard()` returns null and
-  `captureBoardRead()` treats that as "not configured". For a public tool this
-  should say so once; the operator's preference was a passive banner rather than
-  a modal, but it was never built.
+- ~~**`autoBoardBox()` returns `null` on real frames**~~ — **withdrawn
+  2026-09-08, it was never measured.** No console output and no frame was ever
+  taken; the claim was inferred from the single symptom below. Run over the
+  operator's frames with the shipped module
+  (`tools/real_frame_eval/marker_parity.py`), `findMarkerBox()` returns a box on
+  **7 of 7** frames that have the rules drawn — including `frame(1).png`, the
+  frame exported during the very test that was believed to prove it broken. The
+  frames come from the page's own `grabFrame()`, so those are the bytes
+  `autoBoardBox()` sees: colour space and scaling are not variables.
+- **The board read silently did nothing** when there is neither a marker box nor
+  a hand-set SCOREBOARD box, *and* when no snapshot had been taken yet — the
+  round advanced with no signal either way. **Fixed 2026-09-08** with the
+  passive notice the operator asked for. This was the real defect, and its
+  silence is what let the sentence above be written: an untaken read and a
+  failed one looked identical from the outside.
 - **The per-round scoreboard read has never run successfully end to end.** It is
   committed, unit-tested and covered by browser checks, but has never been
   exercised against a real slot-ordered board. See

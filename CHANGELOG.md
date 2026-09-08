@@ -21,6 +21,24 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Fixed
 
+- **A scrim round no longer advances in silence when no board was read.** The
+  per-round scoreboard read does nothing when the lobby is not running `B44BZ`
+  with *Draw Capture Markers* on and no SCOREBOARD box has been set by hand, and
+  it is deliberately skipped before the map's first snapshot. Both cases
+  returned `null` and said nothing, so an untaken read and a failed one looked
+  identical from the outside — which is how "the marker detector never works in
+  the field" came to be written down. The tool now says which it is, once per
+  map and again at Finish: passive, because this is a configuration state rather
+  than a failed read, and the design reserves interruptions for real failures.
+- **Withdrawn: "`Scoreboard.findMarkerBox()` has never succeeded in the
+  field."** It was inferred from one symptom, never measured. Run over the
+  operator's real frames it returns a box on 7 of 7 that have the rules drawn,
+  including the frame exported during the test that was thought to prove it
+  broken. `tools/real_frame_eval/marker_parity.py` is the harness, and two unit
+  tests now pin the property the synthetic fixtures were missing: a rendered
+  rule has holes in it (measured fill 0.94–0.95 against a 0.8 threshold),
+  because U+2500 glyphs do not join.
+
 - **Auto-calibrate finds the portrait strips by the HUD's own structure.** It
   placed the two boxes at fixed fractions of the frame, hand-measured once off a
   1440p capture, and nudged them with a translation-only sweep. That cannot
