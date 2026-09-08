@@ -194,10 +194,45 @@
     return out;
   }
 
+  // recheckPinned(read, codes, pinned) - the verdict on every snapshot AFTER
+  // the first, once a code is pinned to the map.
+  //
+  // checkAgainstSelected answers "is the operator's PICK right", and abstain
+  // there means "carry on, nothing to report" - the pick is only ever a hint.
+  // Here the question is different: a code is already pinned and snapshots are
+  // already banked under it, so the only honest outcomes are "still the same
+  // replay", "demonstrably a different one", and "I could not tell" - and the
+  // third is not the same as the first. Giving it its own name is the point of
+  // this function: the page had collapsed unsure into same and reported both
+  // as silence, which made a guard that could not see indistinguishable from a
+  // guard that had checked and was happy. The operator swapped replays
+  // mid-capture on 2026-09-08 and the page said nothing either way.
+  //
+  // 'changed' is deliberately the narrowest status: an EXACT read of a
+  // DIFFERENT code the feed carries. A near match is an inference and a code
+  // in no feed is unnameable, so both are unsure - the caller must not stop a
+  // capture that is going fine on either.
+  function recheckPinned(read, codes, pinned) {
+    var out = { status: 'unsure', code: null, pinned: pinned || null,
+                read: read || null, near: false };
+    if (!read || !pinned) return out;
+    var list = (codes || []).map(function (c) { return c && c.code; })
+      .filter(Boolean);
+    if (!list.length || list.indexOf(pinned) === -1) return out;
+    var m = matchReadCode(read, codes);
+    if (m.kind === 'none') return out;
+    out.near = m.kind === 'near';
+    out.code = m.code;                   // named even when near, so the page can say what it nearly read
+    if (m.kind === 'near') return out;   // an inference never moves the verdict
+    out.status = m.code === pinned ? 'same' : 'changed';
+    return out;
+  }
+
   var Mod = {
     ALPHABET: ALPHABET, LEN: LEN, foldCode: foldCode, codeBox: codeBox,
     PROBES: PROBES, probeStrip: probeStrip,
     matchReadCode: matchReadCode, checkAgainstSelected: checkAgainstSelected,
+    recheckPinned: recheckPinned,
     OFFSETS: { DX: DX, DW: DW, DY: DY, DH: DH, PAD: PAD },
   };
 

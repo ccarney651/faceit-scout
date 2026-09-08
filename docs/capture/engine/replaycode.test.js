@@ -232,3 +232,84 @@ test('a read of the wrong length never matches', () => {
   assert.equal(R.checkAgainstSelected('D9X9N', FEED, 'B4K2M1').status, 'abstain');
   assert.equal(R.checkAgainstSelected('D9X9N22', FEED, 'B4K2M1').status, 'abstain');
 });
+
+// ---------------------------------------------------------------------------
+// recheckPinned - the verdict on every snapshot AFTER the first, once a code is
+// pinned to the map.
+//
+// These exist because the mid-map guard shipped with no test at all: on
+// 2026-09-08 the operator swapped replays mid-capture and the page said
+// nothing, and neither the 907 pytest nor the 148 browser checks touched the
+// path. The distinction the page could not draw - and therefore could not
+// report - is 'unsure' versus 'same'.
+
+test('the same code still on screen is not a change', () => {
+  const r = R.recheckPinned('B4K2M1', FEED, 'B4K2M1');
+  assert.equal(r.status, 'same');
+  assert.equal(r.code, 'B4K2M1');
+});
+
+test('a different feed code on screen is a change, and names it', () => {
+  const r = R.recheckPinned('D9X9N2', FEED, 'B4K2M1');
+  assert.equal(r.status, 'changed');
+  assert.equal(r.code, 'D9X9N2');
+});
+
+// UNSURE IS NOT SAME. The page reports these differently: 'same' is a
+// confirmation the operator can trust, 'unsure' is a snapshot going into the
+// record unverified. Collapsing them is what made the guard invisible.
+test('an unreadable pass is unsure, never same', () => {
+  for (const bad of [null, '', undefined]) {
+    const r = R.recheckPinned(bad, FEED, 'B4K2M1');
+    assert.equal(r.status, 'unsure',
+      'a read of ' + JSON.stringify(bad) + ' must not be reported as confirmed');
+  }
+});
+
+// A scrim replay, or any replay this league feed does not carry. The screen
+// really did change, but the page cannot name what to, so it cannot say the
+// capture is now filed against the wrong match - only that it cannot tell.
+test('a code belonging to no feed entry is unsure, not a change', () => {
+  const r = R.recheckPinned('ZZZZZZ', FEED, 'B4K2M1');
+  assert.equal(r.status, 'unsure');
+  assert.equal(r.code, null);
+});
+
+// One character apart is an OCR inference. Stopping a capture that is going
+// fine on an inference is the same error the first-snapshot check refuses to
+// make - see the near-match modal there.
+test('a near match is unsure, and never stops a capture', () => {
+  const r = R.recheckPinned('D9X9N4', FEED, 'B4K2M1');
+  assert.equal(r.status, 'unsure');
+  assert.ok(r.near, 'the page may want to say the read was close');
+  // Named, because the page prints it: "one character off D9X9N2". A near
+  // match that reports no candidate makes that sentence read "off null".
+  assert.equal(r.code, 'D9X9N2');
+});
+
+test('a near match of the pinned code itself is unsure, not a change', () => {
+  const r = R.recheckPinned('B4K2M2', FEED, 'B4K2M1');
+  assert.equal(r.status, 'unsure');
+});
+
+// Nothing pinned means the guard was never armed - the caller gates on this,
+// and this must not invent a second opinion.
+test('no pinned code is unsure', () => {
+  assert.equal(R.recheckPinned('D9X9N2', FEED, null).status, 'unsure');
+});
+
+test('an empty feed is unsure rather than a change', () => {
+  assert.equal(R.recheckPinned('D9X9N2', [], 'B4K2M1').status, 'unsure');
+  assert.equal(R.recheckPinned('D9X9N2', null, 'B4K2M1').status, 'unsure');
+});
+
+// The pinned code came from an exact feed match, so its absence means the feed
+// moved under a live capture. That is a page problem, not a wrong replay.
+test('a pinned code missing from the feed is unsure', () => {
+  assert.equal(R.recheckPinned('D9X9N2', FEED, 'QQQQQQ').status, 'unsure');
+});
+
+test('a read of the wrong length is unsure', () => {
+  assert.equal(R.recheckPinned('D9X9N', FEED, 'B4K2M1').status, 'unsure');
+  assert.equal(R.recheckPinned('D9X9N22', FEED, 'B4K2M1').status, 'unsure');
+});

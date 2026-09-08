@@ -1191,6 +1191,11 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
 // on every snapshot of a map whose banner never reads. After the third, it says
 // so once and stands down.
 const CODE_CHECK_TRIES=3;
+// The same cap for the mid-map re-check, counted CONSECUTIVELY rather than per
+// map: a banner that reads again after a blind stretch clears it, because the
+// question there is "is this still the pinned replay", and it stays worth
+// asking for as long as the map lasts. See ensureCodeUnchanged.
+const RECHECK_FULL_TRIES=3;
 // The map's verification state, kept as STATE rather than announced as a
 // message. snapMsg was the wrong mechanism: ensureSideResolved writes to it and
 // then "snapshot N kept" overwrites it a moment later, so the operator saw a
@@ -1284,21 +1289,64 @@ async function readCodeOnce(){
 // Refuses rather than autocorrecting. Switching mid-map is not a correction:
 // snapshots already taken belong to the pinned match, so the operator has to
 // decide what happens to them. Returns true when capture may proceed.
+//
+// SAYS WHAT IT SAW EVERY TIME, including when nothing is wrong. The first
+// version spoke only to refuse, so all four of its other outcomes - not armed,
+// could not read, agreed, not certain enough - looked identical from the
+// outside: nothing at all. On 2026-09-08 the operator swapped replays mid-map,
+// saw no indication of any kind, and reported the check as not working. That is
+// word for word the report ensureCodeChecked's abstain branch already exists to
+// prevent, and the lesson written out at length there was never carried across
+// to here. A guard heard from only when it refuses cannot be told from a guard
+// that is not running.
 async function ensureCodeUnchanged(){
   const s=session;
   if(!s||!s.codePinned||!s.snaps.length) return true;
-  const now=await readCodeOnce();
+  const n=s.snaps.length, pl=n===1?'':'s';
+  const banked=n+' snapshot'+pl;
+  const quick=await readCodeOnce();
   if(session!==s) return true;
-  if(!now||now===s.codePinned) return true;      // agrees, or cannot tell
-  // A single pass disagreed, which is not proof - confirm with the full read
-  // before stopping a capture on one OCR result.
+  if(quick===s.codePinned){    // the cheap pass is enough when it AGREES
+    s.recheckBlind=0; setCodeVerdict(true, 'still '+s.codePinned+' · '+banked); return true; }
+  // The cheap pass either disagreed or read nothing at all, and NEITHER of
+  // those is an answer: it is one geometry at one contrast, and the frames just
+  // after a replay swap - menus, a loading screen, a HUD still settling - are
+  // exactly when it comes back null. The first version returned true on null,
+  // which abandoned the question on the weakest evidence available in the one
+  // moment the guard existed for. Escalate instead: the full read is five
+  // geometries and three contrasts, and it is the only read this page trusts to
+  // identify a match.
+  //
+  // Bounded, because that read costs fifteen OCR passes. If the banner simply
+  // is not on screen, paying for it on every snapshot forever would make
+  // capture unusable - so after RECHECK_FULL_TRIES consecutive failures it
+  // stands down to the cheap pass alone and keeps saying so. Any pass that
+  // agrees clears the count.
+  if((s.recheckBlind||0)>=RECHECK_FULL_TRIES){
+    setCodeVerdict(false, 'could not re-check the replay code — '+banked
+      +' captured as '+s.codePinned+', unverified since');
+    return true;
+  }
   const sure=await readReplayCode();
   if(session!==s) return true;
-  if(!sure||sure===s.codePinned) return true;
-  const v=OWDBReplayCode.checkAgainstSelected(sure, DATA.codes, s.codePinned);
-  if(v.status!=='mismatch'||v.near) return true; // not certain enough to stop anyone
+  const v=OWDBReplayCode.recheckPinned(sure, DATA.codes, s.codePinned);
+  if(v.status==='same'){
+    s.recheckBlind=0; setCodeVerdict(true, 'still '+s.codePinned+' · '+banked); return true; }
+  if(v.status==='unsure'){
+    // Stops nothing - an unreadable banner must never make capture impossible -
+    // but it is no longer silent, and the count says how much of the map is
+    // riding on a code nobody has confirmed since it was pinned. A scrim replay
+    // lands here too: the screen really did change, but a code this feed does
+    // not carry cannot be named, so 'I cannot tell' is the whole truth.
+    s.recheckBlind=(s.recheckBlind||0)+1;
+    setCodeVerdict(false, (v.read
+        ? 'screen read '+v.read+(v.near?' (one character off '+v.code+')':'')+', not confirmed as '+s.codePinned
+        : codeReadProblem())
+      +' — '+banked+' captured as '+s.codePinned+', unverified since');
+    return true;
+  }
   setCodeVerdict(false, 'replay changed to '+v.code+' mid-map — '
-    +s.snaps.length+' snapshot'+(s.snaps.length===1?'':'s')+' already captured as '+s.codePinned);
+    +banked+' already captured as '+s.codePinned);
   await uiModal({ title:'The replay changed while capturing',
     bodyHtml:'This map has <b>'+s.snaps.length+'</b> snapshot'+(s.snaps.length===1?'':'s')
       +' captured as <b>'+esc(s.codePinned)+'</b>, but the screen is now showing <b>'+esc(v.code)+'</b>.'
@@ -1591,7 +1639,9 @@ function startMap(){ const c=selectedCode();
     // The replay-code guard, per map: whether it has reached a verdict, and how
     // many times it has tried to. Both reset with the map, because the answer
     // is about the replay now on screen - see ensureCodeChecked.
-    codeChecked:false, codeTries:0, codeVerdict:null, codePinned:null};
+    // recheckBlind: consecutive full re-reads that could not confirm the pinned
+    // code, so the escalation in ensureCodeUnchanged can stand down.
+    codeChecked:false, codeTries:0, codeVerdict:null, codePinned:null, recheckBlind:0};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
   renderCodeVerdict();
   document.getElementById('subpill').style.display=submaps.length?'':'none';
