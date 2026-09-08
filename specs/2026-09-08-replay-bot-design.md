@@ -190,6 +190,46 @@ The bot writes the established contribution schema — `format`, `contributor`,
 `demo_code`, `map_guid`, `map_name`, `map_category`, `side_a_team_id`,
 `side_a_team`, `side_b_team_id`, `side_b_team`, `captured_at`, and `profile`.
 
+### 6.1 The payload is observations, not comps
+
+**Corrected 2026-09-08 against the real schema.** An earlier draft of this
+section assumed the bot would ship per-round comps. It does not. `maps[]`
+carries an `observations[]` array, and `owdb` derives comps from it downstream —
+so the bot's job ends at reporting what it saw.
+
+Each observation is **one side at one sample**, per `owdb/contribute.py`:
+
+```
+{side, ts, sub_map, round_no, phase, heroes: [guid…], pairs: [[guid, player_id|null]…]}
+```
+
+Three consequences:
+
+- **`heroes` are hero GUIDs**, not display names — `"0x02E00000000001EC"`, with
+  operator-added heroes as `"custom:d_mon"`. `refs.js` `bestMatch()` already
+  returns the guid alongside the name, so the bot carries the guid and never
+  round-trips through a name.
+- **One sample yields two observation records**, one per side. The sweep's
+  internal representation holds both sides together because round detection
+  needs the whole scoreline; `emit.js` splits them.
+- **Segmentation's shipped output is `round_no`**, stamped onto each
+  observation. The opening-comp and hero-pool distinction of §4.2 remains the
+  bot's own analysis — worth keeping for the accuracy comparison in §9 — but it
+  is not what the contribution carries.
+
+### 6.2 Honest degradation
+
+Three fields the browser path fills that the bot initially cannot:
+
+| Field | Bot behaviour | Why |
+|---|---|---|
+| `pairs` | `[]` | Player attribution needs name OCR the bot does not yet run. The merge already defaults this to empty, so it is a supported absence rather than a malformed record. |
+| `sub_map` | `null` | Control sub-maps would need reading, and `CONTROL_SUBMAPS` is forked across four files. Deferred rather than forked a fifth time. |
+| `phase` | `null` | Attack/defend is derivable downstream from `round_no`. |
+
+These are absences the schema already tolerates, not invented values. The bot
+must never guess one of them — a wrong `sub_map` is worse than no `sub_map`.
+
 Two things mark it as machine-produced:
 
 - `tool_version: "replay-bot-0.1"`, distinct from `browser-0.2`;
