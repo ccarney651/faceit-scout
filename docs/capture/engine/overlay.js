@@ -72,6 +72,18 @@
     // cluster reads either flag on either page.
     var autoShown = false, autoPending = false;
 
+    // Tell the modal helper where the panel is, once, here - so every uiModal
+    // mirrors into it without any call site knowing the panel exists. A modal
+    // drawn only on the main page is invisible to an operator watching
+    // Overwatch, which on 2026-09-08 made a correctly-blocking wrong-match
+    // guard look like nothing had happened at all. Read live rather than
+    // captured: pipWin is a page-level global that opens and closes.
+    if (typeof OWDBUtil !== 'undefined' && OWDBUtil && OWDBUtil.setPipGetter) {
+      OWDBUtil.setPipGetter(function () {
+        return typeof pipWin !== 'undefined' ? pipWin : null;
+      });
+    }
+
     // Reads the palette currently active on this page (via getComputedStyle,
     // not a guessed token table) so the control panel always matches -
     // including palettes added after this code was written.

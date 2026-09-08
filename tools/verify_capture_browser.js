@@ -1029,6 +1029,42 @@ async function main() {
     catch (e) { blockedFiltered = false; }
     check('code guard: a code hidden by the operator filters still blocks',
       blockedFiltered);
+
+    // THE PANEL MUST SEE IT TOO. documentPictureInPicture needs a user gesture
+    // and is not available headless, so the panel is stood up as a plain window
+    // object and registered the same way overlay.js registers the real one -
+    // uiModal cannot tell the difference, which is the point of the getter.
+    await p.evaluate(() => {
+      const w = window.open('', '_blank', 'width=320,height=420');
+      window.__pip = w;
+      w.document.body.innerHTML = '<div id="pmsg"></div>';
+      OWDBUtil.setPipGetter(() => window.__pip);
+    });
+    await setup();
+    await p.evaluate(() => { window.__read = 'D9X9N2'; window.__g = ensureCodeChecked(); });
+    await p.waitForSelector('#mback.open', { timeout: 5000 });
+    const mirrored = await p.evaluate(() => {
+      const d = window.__pip.document.getElementById('owdb-mback');
+      return { drawn: !!d, text: d ? d.textContent : '',
+               buttons: d ? [...d.querySelectorAll('button')].map(b => b.textContent) : [] };
+    });
+    check('modal: the control panel is asked the same question',
+      mirrored.drawn && /D9X9N2/.test(mirrored.text) && /B4K2M1/.test(mirrored.text),
+      JSON.stringify(mirrored).slice(0, 200));
+    check('modal: the panel carries the same choices',
+      mirrored.buttons.length === 2 && mirrored.buttons.some(b => /switch/i.test(b)),
+      JSON.stringify(mirrored.buttons));
+
+    // Answering from the PANEL must resolve the question and clear both copies.
+    await p.evaluate(() => [...window.__pip.document.querySelectorAll('#owdb-mback button')]
+      .find(b => /keep/i.test(b.textContent)).click());
+    const afterPanel = await p.evaluate(async () => ({ ok: await window.__g,
+      main: !!document.querySelector('#mback.open'),
+      panel: (window.__pip.document.getElementById('owdb-mback') || {}).innerHTML }));
+    check('modal: answering in the panel resolves it and closes both',
+      afterPanel.ok === true && afterPanel.main === false && !afterPanel.panel,
+      JSON.stringify(afterPanel).slice(0, 200));
+    await p.evaluate(() => { try { window.__pip.close(); } catch (e) {} OWDBUtil.setPipGetter(null); });
     await p.evaluate(() => { const b = [...document.querySelectorAll('#mback button')]
       .find(x => /keep/i.test(x.textContent)); if (b) b.click(); });
     await p.evaluate(() => window.__g);

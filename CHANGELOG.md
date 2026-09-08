@@ -19,6 +19,19 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-08
 
+### Fixed
+
+- **Every question the capture tool asks now appears in the floating control
+  panel.** Modals were drawn only in the main page. The panel exists precisely
+  so an operator never alt-tabs away from Overwatch, so a modal it could not
+  show was a silent hang: the wrong-match guard blocked correctly and the
+  operator, working from the panel, saw nothing at all. The same applied to the
+  scrim page's league-code block and its per-round board read. The question is
+  now drawn in both documents and either one answers it - the first answer
+  closes the other, and Escape works from whichever window has focus. Registered
+  once by `engine/overlay.js` rather than passed per call, because a modal that
+  has to remember to mirror is one that will not.
+
 ### Added
 
 - **The league capture page checks the replay code itself, on a map's first

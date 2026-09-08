@@ -160,7 +160,7 @@ canonical and this copy is the bug.
   external script and left the whole viewer blank. `tools/verify_capture_browser.js`
   closes most of it: serve `docs/`, `npm install --no-save playwright-core
   tesseract.js` (both, in one command — separate `--no-save` installs prune each
-  other), then run it. 144 checks. Everything left needs a human with Overwatch
+  other), then run it. 148 checks. Everything left needs a human with Overwatch
   open: screen share, calibration, portrait recognition, the overlay over the
   game.
 - **`docs/theme.css` is the design system; a page that restates one of its
