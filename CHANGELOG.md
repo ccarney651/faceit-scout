@@ -19,7 +19,33 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-08
 
+### Added
+
+- **Every division FACEIT runs for the season now has a page, played or not.**
+  The export skipped any championship with no finished match, so in the week
+  Season 10 opened the site carried EMEA Expert, Advanced and Intermediate and
+  nothing else: a scout in NA, SA or OCE, or in EMEA Master, could not see that
+  their division existed. A division with fixtures and no results now leads with
+  its kickoff, lists its opening fixtures, and says on each tab what it is
+  waiting for. One with neither results nor fixtures is still skipped - that is
+  a seeded shell, and listing it would put a permanently dead tab in the
+  switcher. The fixtures were already in the payload; nothing new is fetched.
+- **A region row and a division row replace the flat division dropdown.** With
+  four regions and up to four tiers each, one list ran to eighteen entries and
+  hid how many divisions a region has. Unstarted divisions are marked `soon`.
+
 ### Fixed
+
+- **"Season 10 has finished" no longer appears on a season that is running.**
+  The note fired on `viewQueue()` - the CURRENT DIVISION's code queue - so any
+  division without live codes announced that the whole season was over. The
+  copy was written for the end of Season 9, when it was true of every division
+  at once. It became visibly wrong the moment unplayed divisions got pages: they
+  have no codes by definition, so all seven added above greeted a scout with
+  "Season 10 has finished" on the page that says the first match is Wednesday.
+  A season is now finished only when no division has a fixture left to play, and
+  a codeless division speaks only for itself. The flag defaults to "finished",
+  so a frozen season archive reads exactly as it did.
 
 - **Auto-calibrate finds the portrait strips by the HUD's own structure.** It
   placed the two boxes at fixed fractions of the frame, hand-measured once off a

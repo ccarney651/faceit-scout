@@ -369,8 +369,21 @@ closes both the `</script>` and the `<!--` escape holes. JSON decoding reverses
 it losslessly.
 
 **Views and tabs.** Without `--championship`, every championship in the database
-becomes a switchable division, grouped by region and tier; `--region`,
-`--tier`, and `--season` narrow it. Playoff championships are split off and
+**with results or fixtures** becomes a switchable division, grouped by region and
+tier; `--region`, `--tier`, and `--season` narrow it. Each division carries a
+`state` — `live` once anything has been played, otherwise `upcoming` — and
+`summary.starts_at`, the first fixture with a time on it. The switcher renders a
+region row and a division row from `views[].region`, marking an `upcoming`
+division `soon`; every tab but Matches replaces its body with what it is waiting
+for, since all of them derive from played maps. A championship with neither
+results nor fixtures is skipped, so a seeded shell never becomes a dead tab.
+
+The season gate is a *separate and earlier* decision, and deliberately so: which
+season to export is resolved from **results only** (`championship_names_with_results`),
+because seeding creates the next season's championships days before its first
+game. Admitting unplayed divisions therefore cannot flip the site to a season
+that has not started — by the time that gate is reached the season is already
+chosen. Playoff championships are split off and
 attached to their matching regular-season division rather than becoming their
 own view. The page has five tabs — Overview, Teams, Players, League meta,
 Matches — with hash routing; Playoffs is a mode *inside* the Matches tab, not a

@@ -488,6 +488,20 @@ def _dashboard_data(db: Database, cid: str,
       WHERE m.championship_id=:c AND m.status!='FINISHED'
       ORDER BY (m.scheduled_at IS NULL), m.scheduled_at, m.round, m.group_no""", {"c": cid})
 
+    # Has this division kicked off? A division with fixtures and no results is
+    # not an error and not an empty one - it is a season that has not started,
+    # and a scout still needs to see that it exists, who is in it and when it
+    # begins. Before 2026-09-08 the caller dropped it outright, so on the week
+    # Season 10 opened the site carried EMEA Expert/Advanced/Intermediate but
+    # not EMEA, NA, OCE or SA Master, whose first fixtures were days away.
+    #
+    # `starts_at` is the earliest fixture with a time on it. Fixtures with no
+    # schedule sort last in `upcoming` and are skipped here rather than being
+    # allowed to stand in for a kickoff the site would then display as blank.
+    summary["state"] = "live" if summary["matches"] else "upcoming"
+    summary["starts_at"] = next(
+        (u["scheduled_at"] for u in upcoming if u.get("scheduled_at")), None)
+
     return {
         "summary": summary, "teams": teams, "heroes": heroes,
         "bans_by_role": bans_by_role, "maps": maps,
@@ -495,6 +509,7 @@ def _dashboard_data(db: Database, cid: str,
         "attacking_first_extra": atk_extra,
         "matches": matches,
         "upcoming": upcoming,
+        "state": summary["state"],
         "team_names": sorted(team_names),
         "team_avatars": team_avatars,
     }
@@ -680,7 +695,12 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
     ordered: list[tuple[str, str]] = []
     for cid in cids:
         d = _dashboard_data(db, cid, attack_cycles=owdb_cycles)
-        if not d["summary"]["matches"]:
+        # Results OR fixtures. A championship with neither is a seeded shell -
+        # FACEIT creates the row days before anything is scheduled against it -
+        # and admitting it would put a permanently dead tab in the switcher.
+        # One with fixtures is a division that simply has not started; see
+        # _dashboard_data's `state`.
+        if not d["summary"]["matches"] and not d["upcoming"]:
             continue
         for h in d.pop("heroes"):
             heroes.setdefault(h["name"], {"name": h["name"], "role": h["role"]})
@@ -751,15 +771,22 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
                    if (region, t) in by_region_tier]
         for t, cid in present:
             views.append({"id": cid, "label": f"{region} {t}",
-                          "divisions": [cid], "region": region})
+                          "divisions": [cid], "region": region,
+                          "state": divisions[cid]["state"]})
             used.add(cid)
         if len(present) > 1:
+            # Combined is live as soon as ANY of its divisions is: it is a view
+            # over several, so calling it upcoming while one of them has results
+            # would be plainly wrong to anyone reading it.
             views.append({"id": f"{region.lower()}-combined", "label": f"{region} Combined",
-                          "divisions": [cid for _, cid in present], "region": region})
+                          "divisions": [cid for _, cid in present], "region": region,
+                          "state": ("live" if any(divisions[c]["state"] == "live"
+                                                  for _, c in present) else "upcoming")})
     # Any division whose name didn't classify still gets a plain view (fallback).
     for name, cid in sorted(ordered):
         if cid not in used:
-            views.append({"id": cid, "label": name, "divisions": [cid], "region": None})
+            views.append({"id": cid, "label": name, "divisions": [cid],
+                          "region": None, "state": divisions[cid]["state"]})
 
     # Full hero roster (every hero, not just those banned this season) so the draft
     # simulator can ban off-meta picks like Torbjörn that never show up in the data.

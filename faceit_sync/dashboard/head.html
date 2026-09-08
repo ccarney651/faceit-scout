@@ -552,6 +552,31 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
 .ptl .sp .d{color:var(--muted);font-size:11.5px;margin-top:3px;font-variant-numeric:tabular-nums}
 .ptl .sp.now{border-left-color:var(--good)}
 @media (max-width:640px){.ptl{flex-direction:column}}
+
+/* ---- region / division switcher ----
+   Two rows rather than one flat <select>. With four regions and up to four
+   tiers each the flat list ran to eighteen entries like "EMEA Master, EMEA
+   Expert, ... NA Intermediate", which hid how many divisions a region actually
+   has and made finding OCE a scroll. Region on top, that region's divisions
+   beneath, both visible at once. */
+#divnav{margin-top:9px;display:flex;flex-direction:column;gap:3px}
+.dnrow{display:flex;gap:2px;flex-wrap:wrap;align-items:center;min-height:0}
+.dnrow button{border:0;background:transparent;color:var(--muted);border-radius:var(--r-sm);
+  cursor:pointer;font-family:inherit;white-space:nowrap;transition:color .12s,background .12s}
+.dnrow button:hover{color:var(--fg)}
+.dnrow button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dnregion button{padding:5px 13px;font-size:12.5px;font-weight:800;letter-spacing:.02em}
+.dnregion button.on{background:var(--accent);color:var(--on-accent)}
+.dndiv button{padding:4px 11px;font-size:12px;font-weight:650}
+.dndiv button.on{background:var(--surface2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line2)}
+/* A division whose season has not started. Marked rather than hidden - seeing
+   that your division exists and starts on Thursday is the whole point. */
+.dndiv button.soon::after{content:'soon';margin-left:6px;font-size:9px;font-weight:800;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--mid);vertical-align:1px}
+@media (max-width:640px){
+  .dnrow{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .dnrow::-webkit-scrollbar{display:none}
+}
 </style>
 </head>
 <body>
@@ -559,7 +584,6 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
   <div class="toprow">
     <div class="brand"><span class="prodname"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">FACEIT League</span><span class="sub" id="seasonlab"></span></span>
       <h1 id="title"></h1>
-      <select id="division" class="hidden" aria-label="Division"></select>
       <span class="meta" id="subtitle"></span></div>
     <div class="sidebox">
       <div class="themerow">
@@ -578,6 +602,10 @@ table.cmpaxis th.num,table.cmpaxis td.num{text-align:right}
       </div>
       <div class="sidetoggle"><span class="on">Data</span><a id="navcapturelink" href="capture/" title="Scout comps in your browser &mdash; no install, no exe">Capture <span id="navcapcount"></span></a></div>
     </div>
+  </div>
+  <div id="divnav" class="hidden">
+    <div class="dnrow dnregion" id="dnregion" role="tablist" aria-label="Region"></div>
+    <div class="dnrow dndiv" id="dndiv" role="tablist" aria-label="Division"></div>
   </div>
   <nav id="nav"></nav>
 </div></div>
