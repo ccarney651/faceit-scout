@@ -80,16 +80,55 @@
 
   // Timestamps to grab, in order. `n` points per play segment, evenly spaced
   // strictly inside it: i/(n+1) for i in 1..n.
-  function plan(segs, n) {
+  //
+  // With `stepS`, points are snapped to that grid. Seeking is done by jumping
+  // to the start and pressing REPLAY FORWARD, which moves in fixed 20s steps,
+  // so an unsnapped target is simply not reachable - asking for 1:42 would mean
+  // dragging the scrubber to a pixel, which is both imprecise and mouse work.
+  // On the grid, every seek is an exact number of keypresses from a known
+  // origin, so errors cannot accumulate across a map.
+  //
+  // Snapping can collide (two thirds of a short round rounding to the same
+  // step), and duplicates are dropped rather than spending an 800ms grab on a
+  // frame already captured.
+  function plan(segs, n, opts) {
+    var step = opts && opts.stepS;
     var out = [];
+
     segs.forEach(function (s) {
       if (!s.play) return;
       var span = s.to - s.from;
-      for (var i = 1; i <= n; i++) {
-        out.push(s.from + span * (i / (n + 1)));
+      var pts = [];
+      for (var i = 1; i <= n; i++) pts.push(s.from + span * (i / (n + 1)));
+
+      if (!step) {
+        out = out.concat(pts);
+        return;
       }
+
+      // The reachable points inside this segment.
+      var lo = Math.ceil(s.from / step) * step;
+      var hi = Math.floor(s.to / step) * step;
+
+      var snapped = pts.map(function (t) {
+        var g = Math.round(t / step) * step;
+        if (lo > hi) {
+          // A segment too short to contain any grid point at all. Fixed-step
+          // seeking cannot land inside it, so take the nearest reachable
+          // instant to its middle and accept being marginally outside - the
+          // alternative is not sampling the segment at all.
+          return Math.round(((s.from + s.to) / 2) / step) * step;
+        }
+        return Math.min(hi, Math.max(lo, g));
+      });
+
+      out = out.concat(snapped.filter(function (t, i) {
+        return snapped.indexOf(t) === i;
+      }));
     });
-    return out;
+
+    // Dedupe across the whole plan, preserving order.
+    return out.filter(function (t, i) { return out.indexOf(t) === i; });
   }
 
   // How many samples a map of this kind deserves. Maps with rounds get fewer

@@ -65,6 +65,45 @@ test('every play segment is sampled, and breaks are never sampled', () => {
   assert.ok(got.every((t) => t <= 100 || t >= 200), 'nothing inside the break');
 });
 
+// Seeking is done by jumping to the start and pressing REPLAY FORWARD (X),
+// which moves in fixed 20s steps. Snapping the plan to that grid makes every
+// seek an exact number of keypresses - no scrubber dragging, and no drift from
+// accumulated approximate seeks.
+test('samples snap to the 20s grid the forward key actually moves in', () => {
+  const got = T.plan([{ play: true, from: 0, to: 400 }], 3, { stepS: 20 });
+  assert.deepStrictEqual(got, [100, 200, 300]);
+  got.forEach((t) => assert.strictEqual(t % 20, 0, `${t} is not on the grid`));
+});
+
+// Unsnapped thirds of 0-50 are 12.5/25/37.5 - not one of them on the grid, so
+// this fails loudly if snapping is absent rather than passing by luck.
+test('samples off the grid are pulled onto it', () => {
+  const got = T.plan([{ play: true, from: 0, to: 50 }], 3, { stepS: 20 });
+  got.forEach((t) => assert.strictEqual(t % 20, 0, `${t} is not on the 20s grid`));
+  got.forEach((t) => assert.ok(t >= 0 && t <= 50, `${t} escaped 0-50`));
+});
+
+// 100-115 contains exactly one grid point, 100. Thirds would be 103.75/107.5/
+// 111.25, none of them reachable by keypress.
+test('a segment shorter than one step collapses to the grid points it contains', () => {
+  const got = T.plan([{ play: true, from: 100, to: 115 }], 3, { stepS: 20 });
+  assert.ok(got.length >= 1, 'a short segment must not vanish');
+  got.forEach((t) => assert.strictEqual(t % 20, 0, `${t} is not reachable`));
+  got.forEach((t) => assert.ok(t >= 100 && t <= 115, `${t} escaped 100-115`));
+});
+
+// Thirds of 0-45 are 11.25/22.5/33.75, which snap to 20/20/40 - a duplicate.
+// Two seeks to the same instant is a wasted 800ms grab of an identical frame.
+test('snapping never produces the same instant twice', () => {
+  const got = T.plan([{ play: true, from: 0, to: 45 }], 3, { stepS: 20 });
+  assert.strictEqual(new Set(got).size, got.length, 'duplicate seeks waste a grab');
+});
+
+test('without a step, samples stay exactly where they fall', () => {
+  const got = T.plan([{ play: true, from: 0, to: 50 }], 3);
+  assert.deepStrictEqual(got, [12.5, 25, 37.5]);
+});
+
 // The real measurement from the rig: a 17:42 Control replay whose bar showed
 // two blue runs. This is the shape the sampler must produce for it.
 test('the measured Control replay yields nine samples across three rounds', () => {
