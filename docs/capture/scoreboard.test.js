@@ -608,3 +608,33 @@ test('a complete row is not altered by the pipe retry', () => {
   const e = SB.parse(['BRIGITTE * 2 + 4 « 1005 * 1621 » 987 + 0']).entries[0];
   assert.deepEqual([e.k, e.d, e.dd, e.dt, e.x, e.uu], [2, 4, 1005, 1621, 987, 0]);
 });
+
+// ---------- occlusion ----------
+//
+// Overwatch's replay events panel covers exactly the left column, where the
+// board is drawn. Verified in a real frame where it hid the whole block behind
+// "JAVI / ALL EVENTS / ROUND 1". It is a DIFFERENT failure from a board that
+// would not parse, because the remedy is different and the operator can only
+// act on the one they are told.
+
+test('the events panel covering the board is named as occlusion, not a misread', () => {
+  const why = SB.detectOcclusion(['JAVI', 'ALL EVENTS', 'ROUND 1']);
+  assert.match(why || '', /events panel/i);
+});
+
+test('a board that read fine is not called occluded', () => {
+  const why = SB.detectOcclusion([
+    'TEAM 1', 'ALPHA * 6 + 0 + 3256 = 761 + 31% * 2', 'MATCH TIME: 9:57']);
+  assert.strictEqual(why, null);
+});
+
+// The panel's own text is the strong signal, but the MATCH TIME anchor is what
+// distinguishes "covered" from "the panel is open somewhere harmless".
+test('the events panel is not occlusion while MATCH TIME still reads', () => {
+  const why = SB.detectOcclusion(['ALL EVENTS', 'MATCH TIME: 9:57']);
+  assert.strictEqual(why, null);
+});
+
+test('an empty read is not blamed on the events panel', () => {
+  assert.strictEqual(SB.detectOcclusion([]), null);
+});

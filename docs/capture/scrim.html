@@ -247,22 +247,34 @@
       <div class="sidetoggle"><a href="../scrims.html">Data</a><span class="on">Capture</span></div>
     </div>
   </div>
-  <div class="sub">Zero-install scrim scouting: share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser — <b>everything stays private</b> on this machine. <span class="warn" id="ctxwarn"></span></div>
+  <div class="sub">Zero-install scrim scouting: share your <b>whole screen</b> (or just the Overwatch window), calibrate once, then capture each map's comps round-by-round. Runs entirely in your browser — <b>everything stays private</b> on this machine. <span class="warn" id="ctxwarn"></span></div>
 </header>
 <main>
   <div id="guide" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-md);padding:9px 13px;font-size:13px"></div>
+  <!-- The tool reads TWO things off the workshop HUD - the ban row and the
+       spectator scoreboard - and both exist only in a lobby running our mode.
+       This lived in tools/scrim_code/README.md, where no operator was ever
+       going to see it, and the symptom was a ban read that abstained with
+       "could not read the ban row" as though the tool were broken. -->
+  <div id="wscode" style="background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--warn,#e0a030);border-radius:var(--r-md);padding:9px 13px;font-size:13px;margin-top:8px">
+    <b>Host the scrim on workshop code <code>B44BZ</code></b> before you record it.
+    Hero bans are read off that mode&rsquo;s HUD, and the per-player scoreboard stats
+    are <b>impossible on any other code</b> &mdash; stock ScrimTime draws no ban row,
+    and ScrimTime Lite has no spectator scoreboard at all.
+    <span class="faint">This is the <b>workshop code</b> the lobby runs, not a replay code.</span>
+  </div>
   <details id="howto" class="howto">
     <summary>How it works — 30-second guide</summary>
     <div class="steps">
-      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>borderless/fullscreen</b> (16:9) with a replay open.</div>
-      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → pick your <b>whole screen</b> (best for auto-calibrate; a single window includes the title bar).</div>
+      <div class="step"><div class="sh"><span class="n">1</span><span class="st">Open a replay</span></div>Run Overwatch <b>windowed or borderless</b> (not exclusive fullscreen) with a replay open.</div>
+      <div class="step"><div class="sh"><span class="n">2</span><span class="st">Share screen</span></div><b>Share my screen</b> → <b>whole screen</b> on two monitors, or <b>the Overwatch window</b> on one — window sharing keeps the game in frame while you work in the browser.</div>
       <div class="step"><div class="sh"><span class="n">3</span><span class="st">Calibrate</span></div><b>Auto-calibrate</b> aims the boxes at the 10 portraits, shows you the confidence, and you confirm (want ~10/10). Or set the LEFT/RIGHT boxes by hand.</div>
       <div class="step"><div class="sh"><span class="n">4</span><span class="st">Set up scrim</span></div>Create or pick a private scrim below and press <b>Save scrim</b> — the floating panel opens, and the map, bans and capture all happen there so you never alt-tab out of the game.</div>
       <div class="step"><div class="sh"><span class="n">5</span><span class="st">Capture</span></div>Press <b>Snapshot</b> — use the side radios or <b>Swap teams</b> to set which team is on the left. Then: <b>Next round</b>, <b>Attacking</b> picker (escort/hybrid — round 3+ needs a click, it's time-bank not parity), <b>Sub-map</b> (control). <b>Pop out overlay</b> = no alt-tab; keys <b>S/R/Z/F</b>.</div>
       <div class="step"><div class="sh"><span class="n">6</span><span class="st">Save</span></div><b>Finish + save</b> — the map is saved privately in this browser. Review, export, or import scrims under the scrim panel.</div>
     </div>
-    <p class="status" style="margin:4px 0 2px">Tips: use borderless, not exclusive fullscreen. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button.</p>
-    <p class="status warn" style="margin:4px 0 2px"><b>Use Overwatch's default team colors (blue/red)</b> — if your in-game UI colors are customized, accuracy drops noticeably.</p>
+    <p class="status" style="margin:4px 0 2px">Tips: windowed or borderless both work — not exclusive fullscreen, which cannot be window-shared. If a portrait reads wrong or a new hero isn't known, fix it under <b>Hero recognition</b> — it learns for next time. Fix misreads on a saved map with its <b>review</b> button.</p>
+    <p class="status" style="margin:4px 0 2px"><b>Custom team colors are supported.</b> Auto-calibrate sweeps for them, so colorblind UI settings are fine. Two combinations are known not to work: magenta against purple (too close to tell apart), and swapping the friendly/enemy defaults.</p>
   </details>
   <div class="layout" id="layout">
     <div class="appcol">
@@ -280,7 +292,7 @@
       <button id="hidep" class="ghost" disabled>Hide preview</button>
       <button id="stopcap" class="ghost" disabled>Stop capture</button>
     </div>
-    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9) and click <b>Auto-calibrate</b>. Sharing just the app window includes its title bar — use manual boxes then, or share the screen.</div>
+    <div class="status" id="calhint" style="margin-top:6px">Share your <b>whole screen</b>, or <b>the Overwatch window</b> if you only have one monitor, then click <b>Auto-calibrate</b>. On one screen, sharing the whole screen shows the browser rather than the game — share the window instead.</div>
   </div>
 
   <div class="card" id="scrimpane">
@@ -434,7 +446,7 @@
     </div>
   </div>
 </div>
-<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/replaycode.js"></script><script src="engine/heroes.js"></script><script src="engine/banrow.js"></script><script>
+<script src="scoreboard.js"></script><script src="engine/names.js"></script><script src="engine/util.js"></script><script src="engine/idb.js"></script><script src="engine/frames.js"></script><script src="engine/calibration.js"></script><script src="engine/refs.js"></script><script src="engine/overlay.js"></script><script src="engine/tour.js"></script><script src="engine/session.js"></script><script src="engine/opponents.js"></script><script src="engine/replaycode.js"></script><script src="engine/heroes.js"></script><script src="engine/banrow.js"></script><script src="engine/boardreads.js"></script><script>
 const {normName, simScore, affinity, confidentOrientation,
        AUTO_SIDE_MARGIN, STRONG_NAME_SCORE, MIN_STRONG_NAMES} = OWDBNames;
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
@@ -530,13 +542,13 @@ let LEAGUE_CHECK_ACK=false;
 function codeFeedWarn(){
   const el=document.getElementById('ctxwarn'); if(!el) return;
   if(CODE_FEED==='failed'){
-    el.textContent='League-code check unavailable — data.json did not load, so league matches cannot be detected.';
+    el.textContent='League replay-code check unavailable — data.json did not load, so league matches cannot be detected.';
   } else if(CODE_FEED==='empty'){
     el.textContent = leagueFeedIsReal()
-      ? 'League-code check unavailable — the league has no live replay codes at all right now'
+      ? 'League replay-code check unavailable — the league has no live replay codes at all right now'
         + (LEAGUE_DATA && LEAGUE_DATA.code_wipe_date ? ' (all wiped ' + LEAGUE_DATA.code_wipe_date + ')' : '')
         + ', so there is nothing to check a code against.'
-      : 'League-code check unavailable — data.json carries no codes (a local checkout ships an empty feed; CI publishes the real one).';
+      : 'League replay-code check unavailable — data.json carries no replay codes (a local checkout ships an empty feed; CI publishes the real one).';
   }
 }
 // Did a REAL feed load and simply carry no codes? Between seasons, and after
@@ -1028,7 +1040,7 @@ function tourDefs(){
       body:'Welcome! In the next minute you\'ll <b>share your screen</b>, <b>auto-calibrate</b> the hero boxes, <b>set up a scrim map</b> and <b>capture</b> its comps. Everything stays private on this browser.',
       done:()=>false},
     {t:'Share your screen', target:'share',
-      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> (Overwatch borderless/fullscreen, 16:9). Auto-calibrate needs the full frame.',
+      body:'Click <b>Share my screen</b> and pick your <b>whole screen</b> — or <b>the Overwatch window</b> if you only have one monitor.',
       done:()=>!!vid.srcObject},
     {t:'Auto-calibrate', target:'autocal',
       body:'Click <b>Auto-calibrate</b> \u2014 it finds the 10 hero portraits, then <b>review the result</b> and click <b>Use these boxes</b> to confirm. Nothing is saved until you do.',
@@ -1258,7 +1270,12 @@ function nextAttackerState(phased, prevAttacker, newRound){
   return {attacker:prevAttacker, confirmed:false};
 }
 function attackerGateOk(s){ return !(s&&s.phased&&s.round>=3&&!s.attackerConfirmed); }
-function nextRound(){ if(!session) return;
+async function nextRound(){ if(!session) return;
+  // The board accumulates over the map, so the round that is ENDING is only
+  // readable now. Awaited before the counter moves, so the read is filed
+  // against the round it closes rather than the one it opens.
+  if(session.snaps.length) await captureBoardRead(session.round);
+  if(!session) return;                       // finish/undo may have landed while the modal was open
   session.history.push({type:'round', round:session.round, sub:session.sub,
     attacker:session.attacker, attackerConfirmed:session.attackerConfirmed});
   session.round++;
@@ -1412,13 +1429,17 @@ async function readScoreboard(frame){
     const sb=auto||boxes.scoreboard, sr=boxes.score_readout;
     if(!sb&&!sr) return null;
     const w=await ocrWorker();
-    const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser', boxSource: auto?'markers':'manual' };
+    const out={ roles:[], entries:[], matchTime:null, readout:null, team:null, box:'scrimtime', code:'browser', boxSource: auto?'markers':'manual',
+      // For OWDBBoardReads.evaluateRead: occlusion is detected in the raw
+      // lines, and the join refuses to attribute on a role-grouped layout.
+      raw:null, layout:null };
     if(sb){
       await w.setParameters({ tessedit_pageseg_mode:'6' });
       const {data}=await ocrRead(w, scoreCanvas(frame,sb));
       await w.setParameters({ tessedit_pageseg_mode:'7' });
       const lines=(data.text||'').split('\n').map(s=>s.replace(/\s+/g,' ').trim()).filter(Boolean);
       const parsed=Scoreboard.parse(lines);
+      out.raw=lines; out.layout=parsed.layout||null;
       if(parsed.entries.length){ Scoreboard.assignTeams(parsed,{ dps:2, tank:1, support:2 });
         out.roles=parsed.roles; out.entries=parsed.entries; out.matchTime=parsed.matchTime; }
     }
@@ -1426,6 +1447,62 @@ async function readScoreboard(frame){
       out.readout=Scoreboard.parseScoreReadout((data.text||'')); }
     return out;
   }catch(e){ console.warn('scoreboard read skipped:',e); return null; } }
+
+// ---------- the board read at a round boundary ----------
+//
+// Called on Next round and on Finish map, never on a timer: in a replay the
+// operator controls time, so the authoritative frame is the one they scrubbed
+// to, not whatever a timer caught.
+//
+// A FAILED READ BLOCKS, because the board is gone once the round ends. Making
+// the operator look at it while they can still scrub back is the entire point,
+// and a silent failure is unrecoverable. The only way past is an explicit Skip,
+// which is recorded so the next good read can say it spans two rounds.
+//
+// ONLY FAILURES INTERRUPT. A clean read updates the status line and the advance
+// proceeds untouched - a confirmation on every read would be one per round per
+// map, and this tool already had a pop-up problem.
+//
+// Returns the raw scoreboard object (for the score readout that finish uses) or
+// null when there is no board region at all, which is not a failure: it means
+// the markers are off and no crop was ever set, so there is nothing to block on.
+async function captureBoardRead(roundNo){
+  if(!session) return null;
+  for(;;){
+    const sb=await readScoreboard(grabFrame());
+    if(!sb) return null;
+    const bar={ a:(session.players&&session.players.a)||[],
+                b:(session.players&&session.players.b)||[] };
+    // from_start is only meaningful on a map's FIRST read. A first read taken
+    // at round 1 saw the map from zero; one taken later means the operator
+    // joined a map already in progress and its values include rounds nobody
+    // observed.
+    const r=OWDBBoardReads.evaluateRead(sb, bar, session.boardReads,
+      { round:roundNo,
+        fromStart: session.boardReads.length ? true : roundNo===1,
+        skipped: session.boardSkips });
+    if(r.status==='ok'){
+      session.boardReads.push(r.read); session.boardSkips=0;
+      const named=r.read.rows.filter(x=>x.player).length;
+      snapMsg('board read ✓ '+esc(r.read.match_time)+' — '+named+'/10 players identified');
+      return sb;
+    }
+    const title = r.status==='occluded' ? 'The board is covered'
+      : r.status==='duplicate' ? 'That is the same moment' : 'The board did not read';
+    const act=await uiModal({ title:title,
+      bodyHtml: esc(r.why||'the board could not be read')
+        + '<br><br>Scrub back if you need to — the board is gone once the round ends. '
+        + '<b>Skip</b> records the gap so the next read says it covers two rounds.',
+      escapeValue:'again',
+      actions:[{label:'Skip this read', value:'skip', ghost:true},
+               {label:'Read again', value:'again'}] });
+    if(act==='skip'){
+      session.boardSkips++;
+      snapMsg('board read skipped — the next one will cover '+(session.boardSkips+1)+' rounds', true);
+      return sb;
+    }
+  }
+}
 // ocrWorker now lives in engine/refs.js (shared with index.html) - it now
 // races a load timeout and clears its own cache on failure (index.html's
 // existing fix for a real hang bug: a stalled Tesseract.createWorker() used
@@ -1497,7 +1574,9 @@ async function finishScrimMap(c){
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: session.phased? (s.attacker===side?'attack':'defend') : null,
       heroes, pairs }); } }
-  const sb = await readScoreboard(grabFrame());
+  // Closes the final round. Uses the same read for the score readout below, so
+  // finishing costs one OCR pass, not two.
+  const sb = await captureBoardRead(session.round) || await readScoreboard(grabFrame());
   let score=null, winner_side=null, result=null;
   if(sb && sb.readout && sb.readout.a!=null && sb.readout.b!=null){
     const usIsA = sideId !== 'them';
@@ -1510,7 +1589,10 @@ async function finishScrimMap(c){
     side_a_team:leftLabel, side_b_team:rightLabel, winner_side, score, result,
     profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
     captured_at:new Date().toISOString(), ...banState(), observations, crops:session.crops||null,
-    scoreboard: sb, scrim:true };
+    // The sequence of cumulative reads, one per round boundary. Deltas are NOT
+    // computed here: OWDBBoardReads.deltas() derives them at analysis time, so
+    // a fix to that arithmetic reaches every capture already taken.
+    board_reads: session.boardReads, scoreboard: sb, scrim:true };
   await idbPutScrimMap(rec);
   const wasQueued=activeScrimMap.queued;
   if(!wasQueued) activeScrim.map_no=(activeScrim.map_no||1)+1;
@@ -1534,7 +1616,10 @@ async function finishScrimMap(c){
 function startScrimSession(c){
   const submaps=c?submapsFor(c.map):[]; const phased=!!(c&&['Escort','Hybrid'].includes(c.map_category));
   session={code:c, submaps, phased, round:1, sub: submaps.length?null:null,
-    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[]};
+    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[],
+    // Cumulative board reads, one per round boundary crossed, plus the run of
+    // consecutive skips so the next good read can say how many rounds it spans.
+    boardReads:[], boardSkips:0};
   document.getElementById('mapinfo').textContent=`${c.map||'?'} \u00B7 ${c.map_category||'?'} \u2014 ${c.team_a||'?'} vs ${c.team_b||'?'}`;
   const subbtns=document.getElementById('subbtns'); subbtns.innerHTML='';
   document.getElementById('subpill').style.display=submaps.length?'':'none';
@@ -1909,8 +1994,8 @@ async function refuseIfLeagueCode(code){
         : `The league match feed failed to load, so <b>${esc(code)}</b> cannot be checked. `
           + `If this is a league match, capture it in League capture instead so it gets published.`;
     const title = CODE_FEED==='empty' && leagueFeedIsReal()
-      ? 'No league codes exist to check against'
-      : 'League codes cannot be checked right now';
+      ? 'No league replay codes exist to check against'
+      : 'League replay codes cannot be checked right now';
     const go=await uiModal({title:title,
       bodyHtml:why + `<br><br>Asked once per scrim: the rest of this scrim's maps will start without asking again.`,
       actions:[{label:'Start anyway', value:'go'},{label:'Cancel', value:null, ghost:true}]});

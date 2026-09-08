@@ -699,9 +699,10 @@ logic is owned once:
 | `engine/util.js` | HTML/attr escaping, CSS injection, base64 helpers, toasts, modals, the `ICONS` table |
 | `engine/idb.js` | IndexedDB open/read/write; `open(version, stores)` takes its store list from the caller rather than hard-coding one |
 | `engine/frames.js` | Screen share, frame grab, greyscale canvases, HUD name-row location and name crops; `ctx.onStop` is the page-specific teardown hook |
-| `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns |
+| `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns. Auto-calibrate is a three-stage cascade — HUD structure detection, a team-colour sweep for custom palettes, then the legacy fixed-fraction sweep as a floor — with the hero matcher scoring every proposal |
 | `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
 | `engine/replaycode.js` | The replay code on the HUD banner: its Crockford Base32 alphabet, where it sits relative to the calibrated portrait strip, and whether a read is a code at all |
+| `engine/boardreads.js` | The scoreboard-row-to-player join and the delta arithmetic. Holds the WHOLE read decision (`evaluateRead`) so `scrim.html` orchestrates and renders but never decides |
 | `engine/heroes.js` | Which role each hero plays, and `byRole()` for grouping a catalogue by it. The ONE copy of the role table — `docs/scrims.html` imports it too, which is that page's only external script |
 | `engine/overlay.js`, `engine/tour.js` | The floating capture console, and the guided-tour mechanism — `tourDefs`/`updateGuide` stay page-side since the tour content itself is page-specific |
 
@@ -821,6 +822,45 @@ crops, and *both* pages' replay-code read, all added after the guard was written
 clears the cache so the next call builds a fresh one. It is kept byte-identical
 on both pages. The silence was the point: `ensureSideResolved()` was rewritten to
 say *why* a detection failed, and it can only name an error that arrives.
+
+**The portrait strips are found by their own structure, not by a fraction of
+the frame.** Until 2026-09-08 both boxes came from `AUTO_STRIPS`, four hand-
+measured fractions per strip, nudged by a translation-only sweep. That cannot
+survive a change of display mode: the HUD scales with the game's *content*
+height, so a title bar's ~29px makes borderless tiles ~7% larger than windowed
+ones on the same monitor, and a sweep that only translates can never resize a
+box. Measured across four configurations of one replay, it read 10/10 on the
+configuration it had been fitted to and 4-6/10 on the other three.
+
+`detectStrips()` keys on the one thing common to all of them: five team-coloured
+tiles at a constant pitch. It finds the rows where **both** halves carry team
+colour (requiring both is what excludes the TEAM banner above the tiles), then
+takes the five run *starts* in each half — starts, not extents, because the
+centre objective bar is the same colour as the left team and can only ever
+extend a run rightward, never move where it began. The pitch is the scale, so
+`w = 5 × pitch`, `h = w ×` the strip's own aspect ratio, and `y` is the band's
+top row. Nothing about resolution, aspect, UI scale or display mode is assumed.
+
+Three details are load-bearing, each measured on a frame that failed without it.
+The band's rows are **merged across small gaps and offered as several
+candidates**: a tile is team-coloured at its header and name plate but not
+across the portrait art between, so its row profile dips mid-tile, and taking
+the single longest run picked a structure *above* the tiles. The column
+threshold comes from the **column profile's own maximum**, not the band height —
+a column count cannot exceed the band height, so a tall band pushes the
+threshold past anything the tiles can reach and the placement is lost silently.
+And a custom palette is handled by sweeping hue windows (`detectStripsByHue()`),
+ranked for scoring by pixel mass but **chosen by the hero matcher**, because the
+map outweighs the HUD and the holes tiles punch in a background are as periodic
+as the tiles themselves.
+
+Verified live 2026-09-08 across all four capture/display configurations, on a
+shrunken game window, and on two custom palettes including a magenta team over a
+purple map. Two known gaps: magenta against purple (the two differ in brightness
+rather than hue, so a hue sweep cannot separate them — and a player who set them
+could not either), and inverting OW's friendly/enemy defaults, which leaves the
+right strip correct and misplaces the left. Both fail honestly rather than
+reporting confidence over a bad placement.
 
 **The replay-code read varies the crop geometry, not just the contrast.**
 `codeBox()` is fractions of the calibrated strip, which is why it survives every
@@ -1064,6 +1104,48 @@ every row below the gap would attach to the wrong player.
 plus `scoreboard_crop.py` and `scoreboard_eval.js` re-run the whole comparison
 over the fixture frames and report both a name-matched score and the positional
 score production actually gets. Everything before them was prose.
+
+**The board is read at every round boundary, and the reads are stored raw.**
+`captureBoardRead()` in `scrim.html` runs on *Next round* and on *Finish map* -
+never on a timer, because in a replay the operator controls time and the
+authoritative frame is the one they scrubbed to. Each read goes into
+`board_reads` on the scrim map record as a **cumulative** snapshot; the board
+accumulates over a map, so a round is the difference between consecutive reads,
+and that subtraction happens in `OWDBBoardReads.deltas()` at analysis time. Same
+rule the contribution merge follows: store observations, derive reports, so an
+improvement to the arithmetic applies retroactively.
+
+**The row-to-player join is name-first, position-second, and the order is
+load-bearing.** `engine/boardreads.js` holds the whole decision - the page
+orchestrates and renders, it does not decide. Two coordinate systems meet there
+and confusing them is the bug the module exists to prevent: the board's `team`
+is TEAM 1 / TEAM 2 (a game concept, the first five rows and the last five),
+while the bar's `a`/`b` are the LEFT and RIGHT screen strips. Nothing guarantees
+TEAM 1 is the left strip - a spectator changing POV in a replay flips it - so
+`stripForBlock()` **derives** the mapping from the name matches rather than
+assuming it, and withholds identity entirely when no name matches. The
+positional fallback additionally rests on the portrait bar being in slot order,
+which is Overwatch's own HUD and is **not verified**; the mode's own sort key IS
+(`GroupMode 0`, the default: `getSlot()*0.1 + (2 if Team.1 else 3)`, so rows 1-5
+are Team 1 slots 0-4 and rows 6-10 are Team 2 slots 0-4). A role-grouped board
+is attributed to team and role only.
+
+**A failed read blocks the advance and only failures interrupt.** The board is
+gone once the round ends, so a silent failure is unrecoverable - the operator is
+stopped while they can still scrub back, and the only way past is an explicit
+Skip, which records `boardSkips` so the next good read carries
+`rounds_covered: 2`. A clean read updates the status line and does not open
+anything: a confirmation per round per map is exactly the pop-up problem the
+operator already reported. `Scoreboard.detectOcclusion()` separates "the replay
+events panel is covering the board" from "the board did not parse", because the
+remedies differ and the operator can only act on the one they are told.
+
+**Two code concepts live on this page and they are deliberately worded apart.**
+The **workshop code** (`B44BZ`) is what the lobby runs, and bans and scoreboard
+stats are readable only in it - stated on the page itself now, not just in
+`tools/scrim_code/README.md`. The **replay code** is FACEIT's, and
+`refuseIfLeagueCode()` uses it to stop a league match being recorded as a private
+scrim. Same word, opposite meaning, opposite remedy.
 
 **Three features still carry `WIP` badges**: auto side-detection, the scoreboard
 OCR read, and the score-box read. Side detection has since worked end to end in

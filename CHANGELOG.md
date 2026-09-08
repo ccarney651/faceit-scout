@@ -17,9 +17,82 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-08
+
+### Fixed
+
+- **Auto-calibrate finds the portrait strips by the HUD's own structure.** It
+  placed the two boxes at fixed fractions of the frame, hand-measured once off a
+  1440p capture, and nudged them with a translation-only sweep. That cannot
+  survive a change of display mode: the HUD scales with the game's *content*
+  height, so a title bar's ~29px makes borderless tiles ~7% larger than windowed
+  ones on the same monitor, and a sweep that only translates can never resize a
+  box. Measured over four capture/display configurations of one replay, it read
+  10/10 on the one it had been fitted to and 4-6/10 on the other three.
+
+  It now locates the five team-coloured tiles per side and takes their **pitch**,
+  which *is* the scale — `w = 5 × pitch`, `h` from the strip's aspect ratio, `y`
+  from the band's top row. Resolution, aspect ratio, UI scale, windowed vs
+  borderless and whole-screen vs single-window all stop being assumptions.
+  Confirmed live across all four configurations at 10/10, and on a deliberately
+  shrunken game window.
+
+- **Colorblind and custom team colors work.** Auto-calibrate keyed on blue and
+  red, so a contributor running OW's accessibility palette got nothing from it.
+  A second pass now sweeps hue windows instead of assuming the colors, with the
+  hero matcher choosing between the proposals — **154 of the 156 selectable
+  friendly/enemy color pairs resolve**. Confirmed live on orange/lime and on
+  neon-blue/magenta, the latter over a purple map, at 10/10.
+
+  Known gaps, both failing honestly rather than reporting confidence over a bad
+  placement: magenta against purple, which differ in brightness rather than hue
+  (and which a player could not tell apart either), and inverting the
+  friendly/enemy defaults, which leaves the right strip correct and misplaces
+  the left.
+
+### Changed
+
+- **The capture pages no longer tell you to use the default team colors.** The
+  warning said accuracy drops noticeably with customized UI colors. That is no
+  longer true, and the replacement names the two combinations that genuinely do
+  not work.
+
+---
+
 ## 2026-09-06
 
 ### Added
+
+- **Per-round scoreboard stats.** The board is now read at every round
+  boundary - on *Next round* and on *Finish map*, never on a timer, because in a
+  replay the operator controls time and the authoritative frame is the one they
+  scrubbed to. Each read is stored raw and cumulative in a new `board_reads`
+  array on the scrim map record; `OWDBBoardReads.deltas()` turns them into
+  per-round stats **at analysis time**, so a later fix to that arithmetic
+  reaches every capture already taken. Design:
+  `specs/2026-09-06-scrim-board-reads-design.md`.
+- **Rows join to players by name, with slot position as the fallback.** The
+  mode's sort key was confirmed from source - `GroupMode 0`, the default, puts
+  Team 1 slots 0-4 in rows 1-5 and Team 2 slots 0-4 in rows 6-10 - but the
+  positional join also needs the portrait bar to be in slot order (Overwatch's
+  HUD, unverified) and a Team-1-to-strip mapping that did not exist anywhere.
+  The row's own name is the reliable half, so `OWDBBoardReads.joinRows()` matches
+  on it first and **derives** the strip mapping from those matches, falling back
+  to position only for rows the names could not place. A role-grouped board is
+  attributed to team and role only, never guessed to a player.
+- **The replay events panel is now a named failure.** It covers exactly the left
+  column where the board is drawn, and `Scoreboard.detectOcclusion()` recognises
+  it by its own text plus the missing `MATCH TIME` anchor, so the operator is
+  told to close it rather than left with a generic misread.
+- **A failed board read blocks the advance, with an explicit Skip.** The board is
+  gone once the round ends, so a silent failure is unrecoverable. A skip is
+  recorded, and the next good read carries `rounds_covered: 2` rather than
+  attributing two rounds' stats to one. **Only failures interrupt** - a clean
+  read updates the status line and the round advances untouched.
+- **The capture page now names the workshop code it depends on.** `B44BZ`, and
+  the fact that bans and scoreboard stats are readable only in a lobby running
+  it, were documented only in `tools/scrim_code/README.md`. The league warnings
+  now say **replay code** so the two cannot be confused.
 
 - **The scrim scoreboard now finds itself.** `tools/scrim_code/scrim_owdb.opy`
   draws two thin green rules bracketing the board (`5. Spectator Scoreboard >

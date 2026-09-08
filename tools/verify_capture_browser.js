@@ -851,6 +851,90 @@ async function main() {
     }
   }
 
+  // --- board reads: a failed read blocks the advance, a clean one does not ---
+  //
+  // readScoreboard is a top-level function declaration, so it IS a window
+  // property and can be stubbed. uiModal is NOT - it is a const destructured
+  // from OWDBUtil, a lexical binding the page never exposes - so the block is
+  // driven through the REAL modal DOM instead, which is the better test anyway:
+  // it exercises the buttons the operator actually presses.
+  //
+  // What this CANNOT prove is the OCR read itself against a real slot-ordered
+  // board. That still needs a scrim played on the current share code.
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto(BASE + '/capture/scrim.html?unlock=' + UNLOCK, { waitUntil: 'load' });
+    await p.waitForTimeout(800);
+
+    check('board: OWDBBoardReads loads on the scrim page',
+      await p.evaluate(() => typeof window.OWDBBoardReads === 'object'));
+
+    await p.evaluate(() => {
+      const names = ['A1','A2','A3','A4','A5','B1','B2','B3','B4','B5'];
+      window.__names = names;
+      window.__good = { layout: 'slot', matchTime: '9:00', raw: ['x'],
+        entries: names.map((n, i) => ({ name: n, team: i < 5 ? 'a' : 'b', fields: 6,
+          k: 1, d: 1, dd: 100, dt: 100, x: '10%', uu: 1 })) };
+      window.__bad = { layout: null, entries: [], matchTime: null,
+        raw: ['JAVI', 'ALL EVENTS'] };
+      window.__served = window.__bad;
+      window.readScoreboard = async () => window.__served;
+      window.grabFrame = () => null;
+      session = { code: { scrim: true }, submaps: [], phased: false, round: 1, sub: null,
+        attacker: null, attackerConfirmed: true, sideResolved: true,
+        // A snapshot complete enough for refreshSession() to render it: it
+        // formats aNames against aPlayers, so a stub missing either throws.
+        snaps: [{ round: 1, sub: null, attacker: null,
+          a: names.slice(0, 5), b: names.slice(5),
+          aNames: names.slice(0, 5), bNames: names.slice(5),
+          aPlayers: names.slice(0, 5), bPlayers: names.slice(5), ts: 0 }],
+        lastKept: null, history: [],
+        players: { a: names.slice(0, 5), b: names.slice(5) },
+        boardReads: [], boardSkips: 0 };
+    });
+
+    // A failing read must stop the advance dead and put a modal up.
+    await p.evaluate(() => { window.__np = nextRound(); });
+    let blocked = true;
+    try { await p.waitForSelector('#mback.open', { timeout: 5000 }); }
+    catch (e) { blocked = false; }
+    check('board: a failed read blocks the advance with a modal', blocked);
+    check('board: the modal names the occlusion, not a generic misread',
+      /events panel/i.test(await p.evaluate(() =>
+        (document.querySelector('#mback .mbody') || {}).textContent || '')));
+    check('board: the round has not advanced while blocked',
+      await p.evaluate(() => session.round === 1));
+
+    // The ONLY way past is the explicit Skip.
+    await p.evaluate(() => [...document.querySelectorAll('#mback button')]
+      .find(b => /skip/i.test(b.textContent)).click());
+    await p.evaluate(() => window.__np);
+    const afterSkip = await p.evaluate(() => ({ round: session.round,
+      skips: session.boardSkips, reads: session.boardReads.length }));
+    check('board: Skip advances the round and records the gap',
+      afterSkip.round === 2 && afterSkip.skips === 1 && afterSkip.reads === 0,
+      JSON.stringify(afterSkip));
+
+    // A clean read must store and NOT interrupt - this tool already had a
+    // pop-up problem, so a confirmation per round is a regression, not a nicety.
+    await p.evaluate(() => { window.__served = window.__good; window.__np = nextRound(); });
+    await p.evaluate(() => window.__np);
+    const clean = await p.evaluate(() => ({
+      modalOpen: !!document.querySelector('#mback.open'),
+      round: session.round, reads: session.boardReads.length,
+      covered: (session.boardReads[0] || {}).rounds_covered,
+      named: ((session.boardReads[0] || {}).rows || []).filter(r => r.player).length,
+    }));
+    check('board: a clean read does not interrupt',
+      clean.modalOpen === false && clean.round === 3, JSON.stringify(clean));
+    check('board: the read after a skip says it covers two rounds',
+      clean.reads === 1 && clean.covered === 2, JSON.stringify(clean));
+    check('board: rows join to players by name', clean.named === 10, JSON.stringify(clean));
+
+    await ctx.close();
+  }
+
   await browser.close();
 
   const failed = results.filter(r => !r.pass);

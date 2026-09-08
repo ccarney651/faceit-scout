@@ -61,3 +61,36 @@ def test_left_and_right_strips_are_mirrored_halves() -> None:
     check that the two strips didn't get swapped or overlap the centre."""
     assert AUTO_STRIPS[SIDE_LEFT][0] < 0.35
     assert AUTO_STRIPS[SIDE_RIGHT][0] > 0.65
+
+
+def test_vertical_placement_ignores_the_frames_aspect_ratio() -> None:
+    """The HUD scales with the rendered width, so a frame that is not 16:9 must
+    not move the strips vertically.
+
+    AUTO_STRIPS' y/h are fractions of HEIGHT, which is only equivalent to the
+    real HUD proportions at 16:9. Measured against a live 2570x1393 window
+    capture (aspect 1.845), that put the strips 10-12px too high and 6px too
+    short - and the offset sweep in the browser tool steps by 0.01 of height,
+    13.9px there, so it cannot even resolve an error that size. It plateaued at
+    4/10 portraits recognised.
+    """
+    wide = auto_profile(2560, 1440, hud_variant="default").slots[SIDE_LEFT][0]
+    squashed = auto_profile(2560, 1300, hud_variant="default").slots[SIDE_LEFT][0]
+    assert squashed.y == wide.y, "same width, so the HUD sits at the same height"
+    assert squashed.h == wide.h, "same width, so the portraits are the same size"
+
+
+def test_lands_near_the_2570x1393_window_capture() -> None:
+    """Ground truth read out of a live session (2026-09-07), not a screenshot.
+
+    The operator hand-set the boxes over a window capture and reported
+    boxes.a = x135.5 y125.5 w660.1 h100.4 at videoWidth 2570 x 1393. Horizontal
+    was already correct (dx +5.5, dw -2.7); the whole error was vertical.
+    Tolerances are loose because a hand-drawn box carries a few px of jitter and
+    the window's own top chrome is inside the frame.
+    """
+    s0 = auto_profile(2570, 1393, hud_variant="default").slots[SIDE_LEFT][0]
+    assert abs(s0.x - 135.5) <= 7
+    assert abs(s0.w - 132.0) <= 7
+    assert abs(s0.y - 125.5) <= 7
+    assert abs(s0.h - 100.4) <= 4

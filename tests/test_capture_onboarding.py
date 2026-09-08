@@ -96,9 +96,18 @@ global.detectContentRect=()=>({x:0,y:0,w:1920,h:1080});
 // stubbed - only the free variables the module still calls out to can be.
 // readComp backs calOk's "N/10 confident" read; mirror the old calOk stub's
 // 9-of-10 result whenever both boxes are present.
+//
+// The names matter now and did not before. calOk counts DISTINCT confident
+// heroes per side, because a placement that reads the same hero ten times was
+// being reported to the operator as "9/10 portraits confident" - Overwatch 2 is
+// role locked, so five cells on a side must be five different heroes. Real
+// readComp always sets a name ('??' when it is not confident); this stub used
+// to return bare scores, which is data the real function never produces.
 global.readComp=(bx)=>{ if(!bx||!bx.a||!bx.b) return null;
-  return { a:[{score:0.9},{score:0.9},{score:0.9},{score:0.9},{score:0.9}],
-           b:[{score:0.9},{score:0.9},{score:0.9},{score:0.9},{score:0.1}] }; };
+  return { a:[{name:'Ana',score:0.9},{name:'Genji',score:0.9},{name:'Mercy',score:0.9},
+              {name:'Reaper',score:0.9},{name:'Zarya',score:0.9}],
+           b:[{name:'Ashe',score:0.9},{name:'Mei',score:0.9},{name:'Hanzo',score:0.9},
+              {name:'Lucio',score:0.9},{name:'??',score:0.1}] }; };
 global.updateBtns=()=>{ global._update=1; };
 global.selfTest=()=>{ global._selftest=1; };
 global.setStageHint=()=>{};
@@ -186,7 +195,16 @@ def test_auto_calibrate_previews_before_committing() -> None:
         + "\nconst OWDBCalibration = module.exports;\n"
         + _CAL_BODY
     )
-    proc = subprocess.run([node, "-e", src], capture_output=True, text=True)
+    # Written to a temp file rather than passed via `node -e`: calibration.js
+    # grew past Windows' CreateProcess command-line limit when structure
+    # detection landed ("[WinError 206] The filename or extension is too
+    # long"). Same reason, and the same fix, as test_capture_autocalibrate.py.
+    script = Path(__file__).resolve().parent / "_tmp_calpreview_check.js"
+    script.write_text(src, encoding="utf-8")
+    try:
+        proc = subprocess.run([node, str(script)], capture_output=True, text=True)
+    finally:
+        script.unlink(missing_ok=True)
     assert proc.returncode == 0, f"node failed:\n{proc.stderr}"
     results = json.loads(proc.stdout)
     failed = [r["name"] for r in results if not r["ok"]]

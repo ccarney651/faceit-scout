@@ -615,8 +615,33 @@
     return result;
   }
 
+  // Overwatch's replay events panel is drawn over exactly the left column,
+  // which is where the board lives. Verified in a real frame where it hid the
+  // whole block behind "JAVI / ALL EVENTS / ROUND 1".
+  //
+  // This is deliberately NOT folded into a general "the board did not parse"
+  // failure. The remedy is specific and the operator can only act on the one
+  // they are told, and moving the board is not an alternative: the kill feed
+  // owns the top-right and the objective UI owns the centre.
+  //
+  // TWO signals, and both are needed. The panel's own text alone is not enough
+  // - a panel open somewhere harmless still puts its words on screen - so the
+  // absence of the MATCH TIME anchor is what turns "the panel is up" into "the
+  // panel is covering the board".
+  var PANEL_MARKERS = [/\bALL\s*EVENTS\b/i, /\bBOOKMARKS?\b/i];
+
+  function detectOcclusion(lines) {
+    var text = (lines || []).join(' ');
+    if (!text.trim()) return null;
+    if (/MATCH\s*TIME/i.test(text)) return null;
+    var seen = PANEL_MARKERS.some(function (re) { return re.test(text); });
+    if (!seen) return null;
+    return 'the replay events panel is covering the board - close it and read again';
+  }
+
   var Scoreboard = {
     tokenize: tokenize,
+    detectOcclusion: detectOcclusion,
     nameFromRaw: nameFromRaw,
     splitRow: splitRow,
     teamFromLine: teamFromLine,

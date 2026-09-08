@@ -363,13 +363,23 @@ without any extra work from the operator.
 `heroes add` registers one under a namespaced `custom:` GUID that cannot collide
 with a FACEIT one.
 
-**Palette-mismatch diagnosis.** Refs are team-tint-specific (measured: no colour
-transform separates the tints), so a user running colorblind/custom UI team
-colours who imports a default-palette library scores ~0.2–0.5 against the 0.55
-floor — slots stay `??` with nothing saying why. Capture now watches per-side
-resolve rates and, when they fit that signature (one side blind while the other
-is healthy, or both blind), names the actual cause in the log and points at
-relearning — instead of letting it read as "the tool is broken".
+**Palette-mismatch diagnosis.** Capture watches per-side resolve rates and, when
+they fit a one-side-blind-while-the-other-is-healthy signature (or both blind),
+names a likely cause in the log and points at relearning — instead of letting it
+read as "the tool is broken".
+
+> **The premise behind this needs re-measuring.** It was written on the basis
+> that refs are team-tint-specific ("measured: no colour transform separates the
+> tints"), so a custom palette would score ~0.2–0.5 against the 0.55 floor.
+> Measured again on 2026-09-08 against real frames, cells scored against the
+> *other* team's variant matched the **same heroes at higher confidence** — and
+> in four cells the correct variant named the wrong hero where the other named
+> the right one. The browser matcher crops the right 58% / top 45% of a cell,
+> which is mostly portrait art, then mean-centres and L2-normalises, discarding
+> the uniform tint shift the original claim assumed was fatal. Two live captures
+> on custom palettes then read 10/10 end to end. That does not prove the CLI
+> path behaves the same way, and the hint is harmless either way, so it stays —
+> but the sentence it rested on did not survive contact with the frames.
 
 **Shareable library (`refs export` / `refs import`).** The distribution model is
 *curator learns once → ship the library → others only calibrate*. Export packs
@@ -475,6 +485,16 @@ over the live screen share and shows them with an X/10 confidence verdict
 off") — **nothing is written until you click *Use these boxes***, so a bad scan
 cannot silently lock a bad ROI. Retry and clear are one click each, and the
 preview disappears when screen sharing stops.
+
+**Auto-calibrate finds the HUD by its own structure.** It no longer places the
+boxes at fixed fractions of the frame, so resolution, aspect ratio, UI scale,
+windowed vs borderless and whole-screen vs single-window all stop mattering: it
+locates the five team-coloured tiles per side and takes their *pitch*, which is
+the scale. Custom and colourblind team colours are handled by a second pass that
+sweeps hue rather than assuming blue and red — 154 of the 156 selectable
+friendly/enemy colour pairs resolve. When it cannot find the strips it says so
+rather than reporting confidence over a bad placement, and the manual boxes
+remain as the fallback.
 
 **WIP badges.** Experimental OCR reads wear an amber ⚠ tag with a tooltip
 naming the feature: the scoreboard and score reads in the league app;

@@ -193,13 +193,24 @@ canonical and this copy is the bug.
   27% of match-teams field more than five players once substitutes are counted,
   which destroys the exact five-over-five cover assignment relies on. Do not
   collapse the two.
-- **`AUTO_STRIPS` is correct live; the frames in `screenshots/` do not match it.**
-  Verified 2026-08-18: auto-calibrate reports 10/10 portraits confident against a
-  live share. On those old replay-HUD screenshots it reaches only 4.83-5.48 where
-  the measured strip scores 6.06-6.82, and the gap is strip *size* (~6% wider,
-  ~14% taller) so no dx/dy sweep closes it. That is a property of the fixtures,
-  not a bug: derive boxes from the pixels when evaluating against them (as
-  `tools/real_frame_eval/gen_all.py` does) and do NOT change `AUTO_STRIPS`.
+- **`AUTO_STRIPS` is no longer how the portrait strips are found.**
+  `engine/calibration.js` locates them from the HUD's own structure — five
+  team-coloured tiles at a constant pitch — and the pitch *is* the scale, so
+  nothing about resolution, aspect, UI scale or display mode is assumed.
+  AUTO_STRIPS survives only as the fallback sweep and as the source of each
+  strip's aspect ratio.
+
+  **This corrects an invariant that stood here until 2026-09-08.** It read
+  "AUTO_STRIPS is correct live; the frames in `screenshots/` do not match it",
+  and explained the gap as strip *size* (~6% wider, ~14% taller) that no dx/dy
+  sweep could close — concluding that was "a property of the fixtures, not a
+  bug". The measurement was right and the conclusion was wrong. The HUD scales
+  with the game's CONTENT height, and a title bar takes ~29px of it, so
+  borderless tiles really are ~7% larger than windowed ones on the same
+  monitor. It was a property of the display mode, and the fixtures were telling
+  the truth. Measured over four configurations of one replay, the old sweep read
+  10/10 on the one it was fitted to and 4-6/10 on the rest; structure detection
+  reads 10/10 on all four, confirmed live.
 - **The HUD name crop must come from `nameRow()`, not from a fraction of the
   calibration box.** The box is fitted to the portraits; every fixed band under
   it that anyone has tried also contains the health bar or the portrait bottom,
@@ -496,14 +507,15 @@ November.
    `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would cost
    and why it was declined.
 
-   **Not covered anywhere: aspect ratios other than 16:9.** `AUTO_STRIPS`
-   expresses the HUD as fractions of the frame, and auto-calibrate's sweep
-   searches translation only, so it cannot correct a scale error. The failure is
-   loud rather than silent — calibration scores low and says so, naming 16:9 —
-   but the operator is then told to drag the boxes by hand, which is exactly the
-   case the replay-code reader is least safe in. No non-16:9 HUD frame exists in
-   `screenshots/`; the operator has only 16:9 monitors, so this needs a
-   screenshot from someone else before anything can be claimed.
+   **Aspect ratios other than 16:9 are no longer assumed away.** This said the
+   HUD was expressed as fractions of the frame and that the sweep searched
+   translation only, so a scale error was uncorrectable. Since 2026-09-08 the
+   strips are found by their own pitch, which carries the scale, and the boxes
+   follow from it. Confirmed live on 2026-09-08 across four capture/display
+   configurations and a deliberately shrunken game window — a content height,
+   and so a HUD scale, that no table could have held. Still true: the operator
+   has only 16:9 monitors, so a genuinely non-16:9 *monitor* remains untested,
+   and a frame from someone else is still the thing worth having.
 
 3. **OWCS expansion** — scrape from FACEIT where possible; VOD-based capture
    from YouTube and Twitch for the rest; manual entry as fallback.
