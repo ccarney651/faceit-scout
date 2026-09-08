@@ -74,17 +74,20 @@
     var pos = null;      // unknown until the first seek establishes it
     var focused = false;
 
-    async function press(key) {
+    // Keys go in ONE call per seek, not one per key. Each call is a process
+    // spawn costing the better part of a second, so a 50-press seek sent
+    // key-by-key would spend 40 seconds doing nothing but starting processes.
+    async function press(keys) {
+      if (!keys.length) return;
       if (!focused) {
         await ctx.focus();
         focused = true;
       }
-      await ctx.send(key);
+      await ctx.sendKeys(keys);
     }
 
     async function seekTo(t) {
-      var plan = seekPlan(pos, t, stepS);
-      for (var i = 0; i < plan.length; i++) await press(plan[i]);
+      await press(seekPlan(pos, t, stepS));
       pos = t;
       await ctx.settle();
       return pos;
@@ -97,8 +100,8 @@
       // remembered position would be a lie about the new one.
       reset: function () { pos = null; focused = false; },
       seekTo: seekTo,
-      pause: function () { return press(KEY.pause); },
-      mediaControls: function () { return press(KEY.mediaControls); },
+      pause: function () { return press([KEY.pause]); },
+      mediaControls: function () { return press([KEY.mediaControls]); },
     };
   }
 

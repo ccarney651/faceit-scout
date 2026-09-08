@@ -49,8 +49,11 @@ test('the cheaper of the two routes is always chosen', () => {
 // verified without a single keystroke reaching the game.
 test('a whole sample plan is driven in order, from a known origin', async () => {
   const sent = [];
+  const spawns = [];
   const drv = D.make({
-    send: async (k) => { sent.push(k); },
+    // One call per seek, carrying the whole key sequence - a spawn per key
+    // would cost ~800ms each and make a 50-press seek take 40 seconds.
+    sendKeys: async (keys) => { spawns.push(keys); keys.forEach((k) => sent.push(k)); },
     focus: async () => { sent.push('<focus>'); },
     settle: async () => {},
   });
@@ -61,11 +64,12 @@ test('a whole sample plan is driven in order, from a known origin', async () => 
   assert.strictEqual(sent[0], '<focus>', 'focus is taken before any key');
   assert.strictEqual(sent[1], 'B', 'first seek restarts from a known origin');
   assert.strictEqual(count(sent, 'X'), 5, '2 presses then 3 more, not 2 then 5');
+  assert.strictEqual(spawns.length, 2, 'one batched call per seek, not one per key');
 });
 
 test('the driver remembers where it is between seeks', async () => {
   const sent = [];
-  const drv = D.make({ send: async (k) => sent.push(k), focus: async () => {}, settle: async () => {} });
+  const drv = D.make({ sendKeys: async (ks) => ks.forEach((k) => sent.push(k)), focus: async () => {}, settle: async () => {} });
   await drv.seekTo(40);
   assert.strictEqual(drv.position(), 40);
   await drv.seekTo(100);
@@ -77,7 +81,7 @@ test('the driver remembers where it is between seeks', async () => {
 test('the driver settles after seeking, before anything reads the screen', async () => {
   const order = [];
   const drv = D.make({
-    send: async (k) => order.push('key:' + k),
+    sendKeys: async (ks) => ks.forEach((k) => order.push('key:' + k)),
     focus: async () => {},
     settle: async () => order.push('settle'),
   });
