@@ -26,6 +26,7 @@ each team actually played.** That is the whole scope of this document.
 | Frames | Retained as PNGs after each run |
 | Seek strategy | One uniform sweep; round boundaries derived afterwards |
 | Sample interval | ~30s, configurable |
+| Frame source | Window grab of the Overwatch client, which must run Borderless Windowed |
 | Calibration | One-time frozen constant + per-run smoke check |
 | Provenance | Segregated contributor file, `tool_version: "replay-bot-0.1"` |
 | Host | Bare-metal Windows on a spare machine — **not** a VM, **not** gcbserv |
@@ -164,10 +165,17 @@ often, or ever.
 
 The rig is one machine at one resolution with fixed settings, so:
 
-- **Bootstrap, once.** Run `auto-calibrate` on the bot's own grab path — not on
-  a screenshot, and not on the browser path, since a native window grab may
-  differ in dimensions and origin from `getDisplayMedia`. Record the emitted
-  `boxes.a` and the frame dimensions. Freeze both as constants.
+- **Bootstrap, once.** Run `auto-calibrate` against a share of **the Overwatch
+  window**, not the whole display, and not a hand-measured screenshot. Record
+  the emitted `boxes.a` and the frame dimensions, and freeze both as constants.
+
+  The window is what makes this transfer. The bot grabs the client window so it
+  can run behind other work — a full-screen grab would make the rig
+  single-purpose, corrupted by any overlay or notification, which defeats the
+  point of a background job. `getDisplayMedia` can share a window as readily as
+  a display, so the bootstrap and the bot see the same rectangle in the same
+  coordinates. Overwatch must therefore run **Borderless Windowed**; exclusive
+  fullscreen is not reliably window-capturable.
 - **Per run, cheaply.** Assert the frame matches the frozen dimensions and that
   the frozen crop still contains HUD-shaped content. This is a smoke check of a
   few lines, not a calibration.
