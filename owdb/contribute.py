@@ -411,6 +411,25 @@ def merge_first_wins(
         # that never could, so it takes the map regardless of order - among
         # equally-verified views, and among equally-unverified ones, arrival
         # still decides. An override remains the last word either way.
+        #
+        # KNOWN TRUST LIMIT, stated rather than papered over. screen_code is
+        # supplied by the contributor, so this priority is self-asserted: adding
+        # one field jumps the queue past an honest earlier submission. That sits
+        # awkwardly beside this function's own rule that ordering must not come
+        # from the files, for the same reason timestamps do not.
+        #
+        # It is accepted deliberately and narrowly. A forger still has to clear
+        # validate_maps - real game, right season, teams FACEIT lists, code
+        # matching FACEIT's published one - so the reachable harm is displacing
+        # a competing view of a map they could already submit, which is the
+        # weakness first-wins always had in the other direction and which the
+        # overrides file exists to correct. The REJECTION use of screen_code is
+        # not affected: forging it there only avoids a rejection, which is
+        # exactly the behaviour before the field existed.
+        #
+        # The real fix is a verification the contributor cannot write - the
+        # upload Worker stamping it, or a signature over the read - and that is
+        # worth doing before this tool is opened to strangers.
         order = arrival[key]
         verified = [w for w in order if by_who[w].get("screen_code")]
         winner = preferred or (verified[0] if verified else order[0])
