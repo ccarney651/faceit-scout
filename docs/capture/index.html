@@ -1251,6 +1251,62 @@ function switchToScreenCode(code, wasNear){
     : 'switched to '+code+' — snapshot again to capture it', done);
   return false;
 }
+// One read, one geometry, one contrast - about a fifteenth of readReplayCode's
+// work. Not enough to IDENTIFY a match from scratch, which is why the full read
+// exists, but plenty to answer "is this still the replay we pinned": the pinned
+// code is a known answer to compare against, and a wrong crop or a changed
+// replay both fail to reproduce it.
+//
+// Null means "could not tell", never "changed". The banner is not always on
+// screen and one pass is the least reliable kind of read, so an unreadable
+// result must never stop a capture that is going fine.
+async function readCodeOnce(){
+  try{
+    if(!vid.srcObject||!boxes.a) return null;
+    const box=OWDBReplayCode.codeBox(boxes.a);
+    if(!box) return null;
+    const w=await ocrWorker();
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
+    const {data}=await ocrRead(w, codeCanvas(grabFrame(), box, CODE_CONTRASTS[1]));
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    return OWDBReplayCode.foldCode((data&&data.text||'').replace(/\s+/g,''));
+  }catch(e){ console.warn('quick code read skipped:', e); return null; }
+}
+
+// The replay must not change under a map that is already being captured.
+//
+// Verifying once at the start proves the FIRST snapshot's match and nothing
+// after it: an operator can scrub to a different replay at any point, and the
+// map record would then hold comps from two matches under one code, which is
+// the same wrong-attribution this whole guard exists to prevent - only harder
+// to spot, because the code it is filed under really was on screen once.
+//
+// Refuses rather than autocorrecting. Switching mid-map is not a correction:
+// snapshots already taken belong to the pinned match, so the operator has to
+// decide what happens to them. Returns true when capture may proceed.
+async function ensureCodeUnchanged(){
+  const s=session;
+  if(!s||!s.codePinned||!s.snaps.length) return true;
+  const now=await readCodeOnce();
+  if(session!==s) return true;
+  if(!now||now===s.codePinned) return true;      // agrees, or cannot tell
+  // A single pass disagreed, which is not proof - confirm with the full read
+  // before stopping a capture on one OCR result.
+  const sure=await readReplayCode();
+  if(session!==s) return true;
+  if(!sure||sure===s.codePinned) return true;
+  const v=OWDBReplayCode.checkAgainstSelected(sure, DATA.codes, s.codePinned);
+  if(v.status!=='mismatch'||v.near) return true; // not certain enough to stop anyone
+  setCodeVerdict(false, 'replay changed to '+v.code+' mid-map — '
+    +s.snaps.length+' snapshot'+(s.snaps.length===1?'':'s')+' already captured as '+s.codePinned);
+  await uiModal({ title:'The replay changed while capturing',
+    bodyHtml:'This map has <b>'+s.snaps.length+'</b> snapshot'+(s.snaps.length===1?'':'s')
+      +' captured as <b>'+esc(s.codePinned)+'</b>, but the screen is now showing <b>'+esc(v.code)+'</b>.'
+      +'<br><br>Capturing on would file two different matches under one code. '
+      +'<b>Finish + save</b> this map first, or <b>Undo</b> back to nothing, then pick up the new replay.',
+    escapeValue:'ok', actions:[{label:'Got it', value:'ok'}] });
+  return false;
+}
 async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) return true;
   if(s._codeChecking) return false;   // an attempt is in flight (rapid S presses) - don't stack OCR passes
   const sel=selectedCode(); if(!sel||!sel.code){ s.codeChecked=true; return true; }
@@ -1273,6 +1329,7 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
     const v=OWDBReplayCode.checkAgainstSelected(got, DATA.codes, sel.code);
     if(v.status==='ok'){
       s.codeChecked=true;
+      s.codePinned=v.code;            // every later snapshot is checked against this
       setCodeVerdict(true, 'verified '+v.code);
       return true;
     }
@@ -1534,7 +1591,7 @@ function startMap(){ const c=selectedCode();
     // The replay-code guard, per map: whether it has reached a verdict, and how
     // many times it has tried to. Both reset with the map, because the answer
     // is about the replay now on screen - see ensureCodeChecked.
-    codeChecked:false, codeTries:0, codeVerdict:null};
+    codeChecked:false, codeTries:0, codeVerdict:null, codePinned:null};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
   renderCodeVerdict();
   document.getElementById('subpill').style.display=submaps.length?'':'none';
@@ -1601,6 +1658,8 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   // The line above is a precondition, not a check - there is no frame to read a
   // code from without a stream and calibrated boxes.
   if(!(await ensureCodeChecked())) return;
+  // ...and that it is STILL that replay, on every snapshot after the first.
+  if(!(await ensureCodeUnchanged())) return;
   // Control maps: capture needs to know which sub-map the round is played on.
   // After the code, because "pick a sub-map" is advice about the wrong match
   // when the replay on screen is not the one selected.
@@ -1626,7 +1685,12 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   const pA=(session.players&&session.players.a)||[], pB=(session.players&&session.players.b)||[];
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
     a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name),
-    aPlayers:pA.map(playerName), bPlayers:pB.map(playerName), ts:session.snaps.length*1000};
+    aPlayers:pA.map(playerName), bPlayers:pB.map(playerName), ts:session.snaps.length*1000,
+    // The replay code this snapshot was taken under, as READ off the screen -
+    // not the one the map is filed as. Null when it was never verified. Carrying
+    // it per snapshot rather than once per map is what makes a mid-map replay
+    // switch visible to the merge instead of only to the operator who was there.
+    code:session.codePinned||null};
   // Keep the opening portraits (10 grayscale crops) so a misread can be corrected
   // AND taught from Review later, not just live — closes the correction→learning loop.
   if(!session.crops){ const cr={a:[],b:[]}; for(const s of ['a','b']) for(let i=0;i<5;i++) cr[s].push(learnCrop(s,i)); session.crops=cr; }
@@ -1739,6 +1803,10 @@ function buildObservations(snaps, players, playersRaw, phased, playersConf){
       player_conf.push(confs[i]||null); }
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: phased? (s.attacker===side?'attack':'defend') : null,
+      // The code READ off the screen when this snapshot was taken, or null if
+      // it was never verified. The merge compares it to the code the map is
+      // filed under; absence means unknown, never wrong.
+      screen_code: s.code||null,
       heroes, pairs, ingame_names, player_conf }); } }
   return observations;
 }
@@ -1749,6 +1817,10 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
   const observations=buildObservations(session.snaps, session.players, session.playersRaw,
     session.phased, session.playersConf);
   const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
+    // What the SCREEN said, as opposed to what this map is filed as. Null when
+    // the code was never read. See owdb/contribute.py: a map is refused when
+    // these provably disagree, and kept when the screen code is simply unknown.
+    screen_code:(session&&session.codePinned)||null,
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
     winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
@@ -1999,6 +2071,7 @@ function buildContribution(name, maps){
   const heroes={}; used.forEach(g=>{ if(CUSTOM_HEROES[g]) heroes[g]={name:CUSTOM_HEROES[g].name, role:CUSTOM_HEROES[g].role}; });
   return {format:1, contributor:name, tool_version:'browser-0.2', heroes,
   maps: maps.map(r=>({ match_id:r.match_id, game_no:r.game_no, demo_code:r.code,
+    screen_code:r.screen_code||null,
     map_guid:r.map_guid, map_name:r.map_name, map_category:r.map_category,
     side_a_team_id:r.side_a_team_id, side_a_team:r.side_a_team, side_b_team_id:r.side_b_team_id, side_b_team:r.side_b_team,
     winner_side:r.winner_side, captured_at:r.captured_at, bans:r.bans||[], profile:r.profile, observations:r.observations })) }; }

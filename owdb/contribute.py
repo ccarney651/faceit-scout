@@ -307,6 +307,23 @@ def validate_maps(
         if code and game.demo_code and str(code) != str(game.demo_code):
             rejects.append((key, f"replay code {code!r} does not match FACEIT's"))
             continue
+        # What the capture tool READ off the screen, against what the map is
+        # filed as. This is the only check that can catch a capture of the wrong
+        # replay: every other identifying field comes from the operator's
+        # selection, so a wrong-match capture agrees with itself and satisfies
+        # everything above. Per observation as well as per map, because the
+        # replay can be changed mid-capture - the map is then filed under a code
+        # that genuinely was on screen once, and only the snapshots disagree.
+        #
+        # Absence is not evidence. A code that was never read is unknown, not
+        # wrong: the banner is not always on screen and OCR fails honestly.
+        seen = [m.get("screen_code")]
+        seen += [o.get("screen_code") for o in (m.get("observations") or [])]
+        bad = next((str(sc) for sc in seen
+                    if sc and code and str(sc) != str(code)), None)
+        if bad:
+            rejects.append((key, f"screen showed {bad!r}, filed as {code!r}"))
+            continue
         cleaned.append(m)
     for rkey, why in rejects:
         log.warning("rejected map from %s (%s): %s", who, rkey, why)
@@ -389,7 +406,14 @@ def merge_first_wins(
             log.warning("override for %s prefers %r, who has no view of it - "
                         "falling back to first-wins", key, preferred)
             preferred = None
-        winner = preferred or arrival[key][0]
+        # First-wins makes quality a function of who was fastest. A view that
+        # CONFIRMED the replay code off the screen is better evidence than one
+        # that never could, so it takes the map regardless of order - among
+        # equally-verified views, and among equally-unverified ones, arrival
+        # still decides. An override remains the last word either way.
+        order = arrival[key]
+        verified = [w for w in order if by_who[w].get("screen_code")]
+        winner = preferred or (verified[0] if verified else order[0])
         owner[key] = winner
         maps[key] = by_who[winner]
         ignored.extend((who, key) for who in arrival[key] if who != winner)

@@ -556,3 +556,85 @@ def test_no_target_season_checks_nothing() -> None:
     from owdb.contribute import validate_maps
     contrib = _contrib("alice", [("old", 1, ["ram"])])
     assert len(validate_maps(contrib, _known_seasons())[0]["maps"]) == 1
+
+
+# --- the screen code -------------------------------------------------------
+# Every identifying field on a captured map (match_id, game_no, code, both team
+# names) comes from the operator's SELECTION; only the comps come from the
+# screen. A capture filed against the wrong match is therefore internally
+# consistent and passes every check here - the game exists, the season matches,
+# the teams are the ones FACEIT lists, the code agrees. The browser is the only
+# witness that anything was wrong, so it now sends what it read.
+
+def test_a_map_whose_screen_code_contradicts_its_filing_is_rejected() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    contrib["maps"][0].update(demo_code="CODE1", screen_code="OTHER9")
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert cleaned["maps"] == []
+    assert "OTHER9" in rejects[0][1] and "CODE1" in rejects[0][1], rejects
+
+
+def test_a_screen_code_that_agrees_passes() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    contrib["maps"][0].update(demo_code="CODE1", screen_code="CODE1")
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert len(cleaned["maps"]) == 1 and rejects == []
+
+
+def test_an_absent_screen_code_is_not_evidence_of_anything() -> None:
+    """The banner is not always on screen and OCR can simply fail. Absence must
+    mean unknown, never wrong - the same rule the season guard follows."""
+    from owdb.contribute import validate_maps
+    for missing in ({}, {"screen_code": None}, {"screen_code": ""}):
+        contrib = _contrib("alice", [("m1", 1, ["ram"])])
+        contrib["maps"][0].update(demo_code="CODE1", **missing)
+        cleaned, rejects = validate_maps(contrib, _known())
+        assert len(cleaned["maps"]) == 1, (missing, rejects)
+
+
+def test_a_snapshot_taken_under_a_different_code_rejects_the_map() -> None:
+    """The replay changing mid-map is the case per-observation codes exist for:
+    the map is filed under a code that really was on screen once, so nothing at
+    map level looks wrong. Two matches under one code is the same wrong
+    attribution, only harder to see."""
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    m = contrib["maps"][0]
+    m.update(demo_code="CODE1", screen_code="CODE1")
+    m["observations"] = [{"side": "a", "heroes": ["ram"], "screen_code": "CODE1"},
+                         {"side": "b", "heroes": ["ana"], "screen_code": "OTHER9"}]
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert cleaned["maps"] == []
+    assert "OTHER9" in rejects[0][1], rejects
+
+
+def test_a_verified_view_outranks_an_earlier_unverified_one() -> None:
+    """First-wins decides who owns a map, and quality is then a function of who
+    was fastest. A view that confirmed the replay code off the screen is better
+    evidence than one that never could, so it wins regardless of order - the
+    losing view is still retained, exactly as first-wins already retains it."""
+    from owdb.contribute import merge_first_wins
+    early = _contrib("alice", [("m1", 1, ["ram"])])          # no screen_code
+    late = _contrib("bob", [("m1", 1, ["ana"])])
+    late["maps"][0]["screen_code"] = "CODE1"
+    res = merge_first_wins([early, late])
+    assert res.owner[MapKey("m1", 1)] == "bob"
+    assert ("alice", MapKey("m1", 1)) in res.ignored, "the losing view is kept"
+
+
+def test_first_wins_still_decides_between_two_verified_views() -> None:
+    from owdb.contribute import merge_first_wins
+    a = _contrib("alice", [("m1", 1, ["ram"])]); a["maps"][0]["screen_code"] = "CODE1"
+    b = _contrib("bob", [("m1", 1, ["ana"])]); b["maps"][0]["screen_code"] = "CODE1"
+    assert merge_first_wins([a, b]).owner[MapKey("m1", 1)] == "alice"
+
+
+def test_an_override_still_beats_a_verified_view() -> None:
+    """The curator's escape hatch stays the last word."""
+    from owdb.contribute import merge_first_wins
+    early = _contrib("alice", [("m1", 1, ["ram"])])
+    late = _contrib("bob", [("m1", 1, ["ana"])]); late["maps"][0]["screen_code"] = "CODE1"
+    res = merge_first_wins([early, late], overrides={MapKey("m1", 1): "alice"})
+    assert res.owner[MapKey("m1", 1)] == "alice"

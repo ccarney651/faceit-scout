@@ -19,6 +19,36 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-08
 
+### Changed
+
+- **The replay on screen decides which match a capture is filed against.** The
+  code the operator picks from the dropdown is a hint; the replay open in
+  Overwatch is the fact. An exact read now corrects the selection silently
+  instead of asking "keep or switch" - a question with one right answer, whose
+  wrong answer was the worst outcome available. It clears the operator's own
+  division / opponent / hide-done filters to reach the code when they hide it,
+  and an already-scouted map is a note rather than a wall. A one-character read
+  still asks, because that is an inference and not a reading.
+
+  This matters more than a warning would: every identifying field on a captured
+  map - `match_id`, `game_no`, `demo_code`, both team names - comes from the
+  SELECTION, and only the comps come from the screen. A wrong-match capture is
+  therefore self-consistent and passes every server check that exists. Nothing
+  downstream could ever detect it.
+
+- **The code is pinned for the whole map, and every snapshot carries it.**
+  Verifying once proved the first snapshot and nothing after it; an operator can
+  scrub to another replay at any point, and the map would then hold comps from
+  two matches under one code. Each snapshot is now checked with a single OCR
+  pass (a fifteenth of a full read) against the pinned code, and capture stops
+  if the replay genuinely changed. `screen_code` travels with every observation
+  and with the map.
+
+- **The merge refuses a map whose screen code contradicts its filing**, per
+  observation as well as per map, and a **verified view now outranks an earlier
+  unverified one** for ownership. Absence is still not evidence: a code that was
+  never read is unknown, not wrong.
+
 ### Fixed
 
 - **Every question the capture tool asks now appears in the floating control
