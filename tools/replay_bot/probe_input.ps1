@@ -17,7 +17,7 @@
 
 param(
   [Parameter(Mandatory = $true)][string]$Key,
-  [ValidateSet('Post', 'Input')][string]$Method = 'Post'
+  [ValidateSet('Post', 'Input', 'Send', 'Attach')][string]$Method = 'Post'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +31,11 @@ public class Inp {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint type);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint from, uint to, bool attach);
+  [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr h);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
 }
 '@
 Add-Type -TypeDefinition $sig
@@ -56,6 +61,38 @@ if ($Method -eq 'Post') {
   [void][Inp]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$vk, $down)
   Start-Sleep -Milliseconds 60
   [void][Inp]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$vk, $up)
+}
+elseif ($Method -eq 'Send') {
+  # Synchronous delivery. Same message, but processed inline by the target's
+  # window procedure rather than queued, which some apps handle differently.
+  $scan = [Inp]::MapVirtualKey([uint32]$vk, 0)
+  $down = [IntPtr](1 -bor ($scan -shl 16))
+  $up = [IntPtr](1 -bor ($scan -shl 16) -bor (1 -shl 30) -bor (1 -shl 31))
+  [void][Inp]::SendMessage($hwnd, $WM_KEYDOWN, [IntPtr]$vk, $down)
+  Start-Sleep -Milliseconds 60
+  [void][Inp]::SendMessage($hwnd, $WM_KEYUP, [IntPtr]$vk, $up)
+}
+elseif ($Method -eq 'Attach') {
+  # Attach our input thread to the game's, so from the game's point of view the
+  # keyboard focus state is shared with us. This is the technique that could
+  # preserve background operation: it can let SetFocus and posted keys land
+  # without ever foregrounding the window and stealing the desktop.
+  $target = [Inp]::GetWindowThreadProcessId($hwnd, [IntPtr]::Zero)
+  $me = [Inp]::GetCurrentThreadId()
+  $attached = [Inp]::AttachThreadInput($me, $target, $true)
+  try {
+    [void][Inp]::SetFocus($hwnd)
+    $scan = [Inp]::MapVirtualKey([uint32]$vk, 0)
+    $down = [IntPtr](1 -bor ($scan -shl 16))
+    $up = [IntPtr](1 -bor ($scan -shl 16) -bor (1 -shl 30) -bor (1 -shl 31))
+    [void][Inp]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$vk, $down)
+    Start-Sleep -Milliseconds 60
+    [void][Inp]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$vk, $up)
+  }
+  finally {
+    if ($attached) { [void][Inp]::AttachThreadInput($me, $target, $false) }
+  }
+  Write-Output ("ATTACHED {0}" -f $attached)
 }
 else {
   [void][Inp]::SetForegroundWindow($hwnd)
