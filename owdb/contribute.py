@@ -55,6 +55,30 @@ CONTRIB_FORMAT = 1
 # writes the files this reads, and a mismatch drops every upload silently.
 CONTRIB_DIR = "data/captures/s10"
 
+# The season a championship name encodes ('s9', 's10'), or None.
+#
+# DELIBERATELY DUPLICATED from faceit_sync.models.season_of, regex and all.
+# owdb ships as a standalone contributor tool and imports nothing from
+# faceit_sync; a five-line rule is a smaller price than that dependency. The
+# word boundary is the load-bearing part - a bare substring test lets "S90 EMEA"
+# match "s9". Keep the two in step if the naming ever changes.
+_SEASON_RE = re.compile(r"\bS(\d+)\b", re.IGNORECASE)
+
+
+def season_of(name: str | None) -> str | None:
+    if not name:
+        return None
+    m = _SEASON_RE.search(name)
+    return f"s{m.group(1)}" if m else None
+
+
+def season_of_dir(path: str | Path) -> str | None:
+    """The season a contributions directory is scoped to, from its own name -
+    so the merge checks against the directory it was pointed at rather than a
+    constant that can drift from it at a cutover."""
+    return season_of(Path(path).name)
+
+
 # The deployed upload worker. Baked into builds so end users configure
 # NOTHING; empty until the curator deploys infra/upload-worker.
 DEFAULT_UPLOAD_ENDPOINT = "https://upload.owdb.io"
@@ -85,10 +109,13 @@ class MapKey(NamedTuple):
 
 
 class KnownGame(NamedTuple):
-    """What FACEIT says about a real game: who played it, and its replay code."""
+    """What FACEIT says about a real game: who played it, its replay code, and
+    which season it belongs to."""
 
     teams: frozenset[str]           # both team names, lowercased
     demo_code: str | None        # None when FACEIT never published one
+    season: str | None = None    # 's9', 's10'; None when the championship name
+                                 # does not resolve — see validate_maps
 
 
 class MergeResult(NamedTuple):
@@ -208,35 +235,52 @@ def known_games(faceit_db_path: str) -> dict[MapKey, KnownGame]:
     with connect_ro(faceit_db_path) as fdb:
         rows = fdb.execute(
             """SELECT g.match_id, g.game_no, g.demo_code,
-                      t1.name AS a, t2.name AS b
+                      t1.name AS a, t2.name AS b, c.name AS championship
                FROM games g
                JOIN matches m ON m.id = g.match_id
+               LEFT JOIN championships c ON c.id = m.championship_id
                LEFT JOIN teams t1 ON t1.id = m.faction1_team_id
                LEFT JOIN teams t2 ON t2.id = m.faction2_team_id""",
         ).fetchall()
     return {
         MapKey(str(r["match_id"]), int(r["game_no"])): KnownGame(
             teams=frozenset(str(n).lower() for n in (r["a"], r["b"]) if n),
-            demo_code=r["demo_code"])
+            demo_code=r["demo_code"],
+            season=season_of(r["championship"]) if r["championship"] else None)
         for r in rows
     }
 
 
 def validate_maps(
-    contrib: Mapping[str, Any], known: Mapping[MapKey, KnownGame]
+    contrib: Mapping[str, Any], known: Mapping[MapKey, KnownGame],
+    season: str | None = None,
 ) -> tuple[dict[str, Any], list[tuple[MapKey | None, str]]]:
     """One contribution -> (cleaned copy, rejected maps with reasons).
 
     Applied PER VIEW, before ownership: if Alice's view of a real game carries
     the wrong team names and Bob's is right, Alice's view is dropped and Bob's
-    must still be able to win the map. Three checks:
+    must still be able to win the map. Four checks:
 
     * the game must exist in faceit.games — fabrication or corruption;
+    * it must belong to ``season`` when both seasons are known — see below;
     * any team name the contribution carries must be one of the two teams
       FACEIT says played — the signature of scouting the WRONG replay code and
       attaching it to this match, which would poison another team's report; and
     * the replay code must agree when FACEIT published one (lenient when it
       did not — some matches never get codes, yet the operator may have one).
+
+    THE SEASON CHECK, and why it errs the way it does. ``data/captures/<season>/``
+    was the only thing scoping a contribution to a season, and a directory
+    cannot scope what is inside a file placed in it: on 2026-09-08 a publish of
+    two S10 matches carried 31 S9 playoff maps along with it — the browser page
+    uploads every map in its IndexedDB — and 25 reached the live site as season
+    10 coverage.
+
+    A map is dropped only when it PROVABLY belongs to another season. A game
+    whose championship does not resolve is kept, because that is exactly what a
+    match played in the first hours of a season looks like before FACEIT files
+    it, and a stricter rule would have thrown out the real work along with the
+    mistake. ``season=None`` disables the check entirely.
     """
     who = str(contrib.get("contributor", "?"))
     cleaned: list[dict[str, Any]] = []
@@ -249,6 +293,10 @@ def validate_maps(
         game = known.get(key)
         if game is None:
             rejects.append((key, "game does not exist on FACEIT"))
+            continue
+        if season and game.season and game.season != season:
+            rejects.append((key, f"belongs to season {game.season}, "
+                                 f"not {season}"))
             continue
         names = [str(m.get(f"side_{s}_team") or "").lower() for s in ("a", "b")]
         bad = [n for n in names if n and n not in game.teams]
@@ -488,6 +536,7 @@ def merged_payload(
     player_names: Mapping[str, str] | None = None,
     excludes: Set[MapKey] | None = None,
     player_stats: Mapping[tuple[str, int, str], Mapping[str, Any]] | None = None,
+    season: str | None = None,
 ) -> dict[str, Any]:
     """The published artifact, derived from many contributors' raw observations.
 
@@ -511,7 +560,7 @@ def merged_payload(
     if known is not None:
         checked = []
         for c in contributions:
-            cleaned, rejects = validate_maps(c, known)
+            cleaned, rejects = validate_maps(c, known, season=season)
             rejected += len(rejects)
             checked.append(cleaned)
         contributions = checked

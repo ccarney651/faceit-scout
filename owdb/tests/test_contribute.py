@@ -506,3 +506,53 @@ def test_rank_player_heroes_splits_low_data_players() -> None:
     assert ranks[("P3", "ram")]["low_data"] is True
     assert ranks[("P3", "ram")]["rank"] == 1 and ranks[("P3", "ram")]["of"] == 1
     assert ranks[("P3", "ram")]["games"] == 1
+
+
+# --- season scoping --------------------------------------------------------
+# data/captures/<season>/ was the ONLY thing scoping a contribution to a season,
+# and a directory cannot scope what is inside the file placed in it. On
+# 2026-09-08 a publish of two S10 matches carried 31 S9 playoff maps with it -
+# the browser page uploads every map in its IndexedDB - and 25 of them reached
+# the live site as season 10 coverage. These pin the guard that stops it.
+
+def _known_seasons() -> dict[MapKey, Any]:
+    from owdb.contribute import KnownGame
+    teams = frozenset({"alpha", "bravo"})
+    return {
+        MapKey("m1", 1): KnownGame(teams=teams, demo_code="CODE1", season="s10"),
+        MapKey("old", 1): KnownGame(teams=teams, demo_code="CODE1", season="s9"),
+        MapKey("new", 1): KnownGame(teams=teams, demo_code="CODE1", season=None),
+    }
+
+
+def test_map_from_another_season_is_rejected() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("old", 1, ["ram"])])
+    cleaned, rejects = validate_maps(contrib, _known_seasons(), season="s10")
+    assert cleaned["maps"] == []
+    assert "s9" in rejects[0][1] and "s10" in rejects[0][1], rejects
+
+
+def test_map_from_this_season_passes() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    cleaned, rejects = validate_maps(contrib, _known_seasons(), season="s10")
+    assert len(cleaned["maps"]) == 1 and rejects == []
+
+
+def test_unresolvable_season_is_kept() -> None:
+    """The rule that matters most. A match FACEIT has not filed under a
+    championship yet - which is every match played in the hours after a season
+    opens - must NOT be thrown out. Dropping only what provably belongs to
+    ANOTHER season is what separates the mistake from the real work."""
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("new", 1, ["ram"])])
+    cleaned, rejects = validate_maps(contrib, _known_seasons(), season="s10")
+    assert len(cleaned["maps"]) == 1 and rejects == []
+
+
+def test_no_target_season_checks_nothing() -> None:
+    """Callers that do not name a season keep the old behaviour exactly."""
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("old", 1, ["ram"])])
+    assert len(validate_maps(contrib, _known_seasons())[0]["maps"]) == 1

@@ -27,7 +27,7 @@ from . import __version__
 from .calibrate import default_frame_dir, run_calibration
 from .capture import DEFAULT_WRITE_INTERVAL_MS, run_capture, run_hotkey_capture
 from .context import AmbiguousCode, CodeNotFound, derive_code_context, format_context
-from .contribute import CONTRIB_DIR
+from .contribute import CONTRIB_DIR, season_of_dir
 from .db import Database
 from .derive import (
     DEFAULT_MIN_SAMPLES,
@@ -600,7 +600,11 @@ def cmd_contribute_merge(args: argparse.Namespace) -> int:
     payload = merged_payload(contribs, roles, names, overrides=overrides,
                              known=known_games(_faceit_db_path(args)),
                              player_names=pnames, excludes=excludes,
-                             player_stats=pstats)
+                             player_stats=pstats,
+                             # Scoped to the directory being merged, not to a
+                             # constant: --dir is what CI points at, and a
+                             # constant can drift from it at a cutover.
+                             season=season_of_dir(args.dir))
     if args.captured_out:
         # A tiny public feed of which games are already scouted, so every
         # contributor's app can grey them out instead of two people scouting
