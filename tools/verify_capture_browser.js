@@ -975,25 +975,35 @@ async function main() {
         snaps: [], lastKept: null, history: [], codeChecked: false, codeTries: 0 };
     });
 
+    // AN EXACT READ CORRECTS THE SELECTION - it does not ask. The screen is the
+    // fact; the dropdown pick is a hint. A question with one right answer spends
+    // the operator's attention and leaves a way to answer it wrongly, and a kept
+    // mismatch is silent, permanent and undetectable downstream.
     await setup();
-    await p.evaluate(() => { window.__read = 'D9X9N2'; window.__g = ensureCodeChecked(); });
-    let blocked = true;
-    try { await p.waitForSelector('#mback.open', { timeout: 5000 }); }
-    catch (e) { blocked = false; }
-    check('code guard: a different code on screen blocks with a modal', blocked);
-    const body = await p.evaluate(() =>
-      (document.querySelector('#mback .mbody') || {}).textContent || '');
-    check('code guard: the modal names BOTH codes, so the choice is informed',
-      /D9X9N2/.test(body) && /B4K2M1/.test(body), body.slice(0, 160));
-
-    // Keeping the selection is a real answer, not a dismissal: capture proceeds
-    // against what the operator chose.
-    await p.evaluate(() => [...document.querySelectorAll('#mback button')]
-      .find(b => /keep/i.test(b.textContent)).click());
-    check('code guard: Keep lets the snapshot through',
-      await p.evaluate(() => window.__g) === true);
-    check('code guard: the verdict is not re-asked for this map',
-      await p.evaluate(() => session.codeChecked === true));
+    await p.evaluate(() => {
+      window.__switched = null;
+      window.onCode = () => { window.__switched = window.__sel; };   // record the switch
+      window.currentCodes = () => window.__feed;
+      Object.defineProperty(document.getElementById('code'), 'value', {
+        configurable: true,
+        set(v) { window.__sel = window.__feed[+v] && window.__feed[+v].code; },
+        get() { return '1'; },
+      });
+      window.__read = 'D9X9N2';
+      window.__g = ensureCodeChecked();
+    });
+    const corrected = await p.evaluate(async () => ({ ok: await window.__g,
+      switched: window.__switched,
+      modal: !!document.querySelector('#mback.open'),
+      verdict: session.codeVerdict }));
+    check('code guard: an exact read switches to the screen, without asking',
+      corrected.switched === 'D9X9N2' && corrected.modal === false,
+      JSON.stringify(corrected).slice(0, 220));
+    check('code guard: the switch voids the snapshot that triggered it',
+      corrected.ok === false, JSON.stringify(corrected).slice(0, 160));
+    check('code guard: and it says which replay it moved to',
+      !!corrected.verdict && corrected.verdict.ok === true
+        && /D9X9N2/.test(corrected.verdict.text), JSON.stringify(corrected.verdict));
 
     // Agreement must be silent. This page already had a pop-up problem; a
     // confirmation on every map's first snapshot would be a regression.
@@ -1037,16 +1047,25 @@ async function main() {
     // against a selected DE8N10 (same division, both real) abstained silently.
     // Re-watching a replay you already captured is precisely a wrong match.
     await setup();
-    await p.evaluate(() => {
-      window.currentCodes = () => [window.__feed[1]];   // the screen's code is filtered out
+    const filtered = await p.evaluate(async () => {
+      window.__switched = null;
+      window.__unhid = false;
+      window.onCode = () => { window.__switched = window.__sel; };
+      var only = [window.__feed[1]];                    // the screen's code is filtered out
+      window.currentCodes = () => only;
+      window.refreshCodes = () => { only = window.__feed; window.__unhid = true; };
+      Object.defineProperty(document.getElementById('code'), 'value', {
+        configurable: true,
+        set(v) { window.__sel = only[+v] && only[+v].code; },
+        get() { return '1'; },
+      });
       window.__read = 'D9X9N2';
-      window.__g = ensureCodeChecked();
+      const ok = await ensureCodeChecked();
+      return { ok: ok, switched: window.__switched, unhid: window.__unhid };
     });
-    let blockedFiltered = true;
-    try { await p.waitForSelector('#mback.open', { timeout: 5000 }); }
-    catch (e) { blockedFiltered = false; }
-    check('code guard: a code hidden by the operator filters still blocks',
-      blockedFiltered);
+    check('code guard: a code hidden by the operator filters is still reached',
+      filtered.unhid === true && filtered.switched === 'D9X9N2',
+      JSON.stringify(filtered));
 
     // THE PANEL MUST SEE IT TOO. documentPictureInPicture needs a user gesture
     // and is not available headless, so the panel is stood up as a plain window
@@ -1058,8 +1077,10 @@ async function main() {
       w.document.body.innerHTML = '<div id="pmsg"></div>';
       OWDBUtil.setPipGetter(() => window.__pip);
     });
+    // A NEAR read is the case that still asks, so it is what raises a modal to
+    // mirror: D9X9N3 is one character from D9X9N2 and is not a code itself.
     await setup();
-    await p.evaluate(() => { window.__read = 'D9X9N2'; window.__g = ensureCodeChecked(); });
+    await p.evaluate(() => { window.__read = 'D9X9N3'; window.__g = ensureCodeChecked(); });
     await p.waitForSelector('#mback.open', { timeout: 5000 });
     const mirrored = await p.evaluate(() => {
       const d = window.__pip.document.getElementById('owdb-mback');
@@ -1067,10 +1088,11 @@ async function main() {
                buttons: d ? [...d.querySelectorAll('button')].map(b => b.textContent) : [] };
     });
     check('modal: the control panel is asked the same question',
-      mirrored.drawn && /D9X9N2/.test(mirrored.text) && /B4K2M1/.test(mirrored.text),
+      mirrored.drawn && /D9X9N2/.test(mirrored.text) && /B4K2M1/.test(mirrored.text)
+        && /D9X9N3/.test(mirrored.text),
       JSON.stringify(mirrored).slice(0, 200));
     check('modal: the panel carries the same choices',
-      mirrored.buttons.length === 2 && mirrored.buttons.some(b => /switch/i.test(b)),
+      mirrored.buttons.length === 2 && mirrored.buttons.some(b => /use /i.test(b)),
       JSON.stringify(mirrored.buttons));
 
     // Answering from the PANEL must resolve the question and clear both copies.

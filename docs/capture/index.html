@@ -1210,6 +1210,47 @@ function renderCodeVerdict(){
   el.textContent=(v.ok?'✓ ':'⚠ ')+v.text;
   el.className='pill'+(v.ok?'':' warn');
 }
+// Move the capture onto the code the screen is showing.
+//
+// The dropdown holds the FILTERED list, and the code on screen is very often
+// filtered out of it - that is how the guard's first field failure was found: a
+// replay already captured that night had been removed by "hide already-scouted".
+// The filters are about choosing what to scout NEXT; they have no bearing on
+// what is open in Overwatch. So they are cleared to reach it - the operator is
+// not choosing here, the screen already chose.
+//
+// Returns false: onCode() restarts the map, so the snapshot that triggered this
+// is void and the operator presses again. Nothing has been captured yet, which
+// is exactly why this runs on the map's FIRST snapshot.
+function switchToScreenCode(code, wasNear){
+  const findIdx=()=>currentCodes().findIndex(c=>c.code===code);
+  let idx=findIdx();
+  if(idx===-1){
+    const hide=document.getElementById('hide'), opp=document.getElementById('opp');
+    if(hide && hide.checked){ hide.checked=false; savePref('hide'); }
+    if(opp && opp.value && opp.value!=='all'){ opp.value='all'; savePref('opp'); }
+    refreshCodes(); idx=findIdx();
+  }
+  if(idx===-1){
+    // Another division. This page cannot change that without discarding the
+    // operator's whole context, so it says so instead of reporting a switch
+    // that did not happen.
+    setCodeVerdict(false, code+' is on screen but sits in another division — change Division to capture it');
+    return false;
+  }
+  const full=(DATA.codes||[]).find(c=>c.code===code);
+  const done=full?isDone(full):false;
+  const el=document.getElementById('code'); el.value=String(idx); onCode();
+  // onCode() rebuilt the session, so the verdict is set AFTER it, on the new one.
+  setCodeVerdict(true, 'switched to '+code+' — the replay you have open'
+    +(wasNear?' (read was one character off)':''));
+  // Already scouted is a heads-up, not a wall: re-capturing a map is allowed and
+  // sometimes wanted, and the operator has better things to do than be blocked.
+  snapMsg(done
+    ? code+' is already scouted — capturing it again. Snapshot to start.'
+    : 'switched to '+code+' — snapshot again to capture it', done);
+  return false;
+}
 async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) return true;
   if(s._codeChecking) return false;   // an attempt is in flight (rapid S presses) - don't stack OCR passes
   const sel=selectedCode(); if(!sel||!sel.code){ s.codeChecked=true; return true; }
@@ -1251,50 +1292,36 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
         +' — NOT verified as '+sel.code+(last?'':' · retrying'));
       return true;                    // NEVER blocks
     }
-    // A real disagreement. Both codes exist in this division's feed, so one of
-    // them is what is on screen and the other is what every capture from here
-    // would be filed against. The operator decides; the tool does not reassign
-    // on its own, because a near match is an OCR inference and switching on it
-    // silently is the same class of error as picking the wrong row by hand.
-    const act=await uiModal({ title:'The screen is not the match you picked',
-      bodyHtml:'Screen says <b>'+esc(v.code)+'</b>'
-        +(v.near?' (read as '+esc(v.read)+', one character off)':'')
-        +'<br>You selected <b>'+esc(sel.code)+'</b>'
-        +(sel.team_a?' — '+esc(sel.team_a)+' vs '+esc(sel.team_b||'?'):'')
-        +'<br><br>Every comp captured from here is filed against whichever you choose.',
-      escapeValue:'keep',
-      actions:[{label:'Keep '+sel.code, value:'keep', ghost:true},
-               {label:'Switch to '+v.code, value:'switch'}] });
-    if(session!==s) return true;
-    s.codeChecked=true;
-    if(act==='switch'){
-      // The dropdown holds the FILTERED list, and the code on screen is often
-      // filtered out of it - that is how this bug was found. Clearing "hide
-      // done" is enough for the common case (re-watching a replay already
-      // captured); an opponent filter can hide it too, so that is cleared as
-      // well. Both are the operator's own view settings, and they just asked to
-      // switch to this code, which is consent to show it.
-      const findIdx=()=>currentCodes().findIndex(c=>c.code===v.code);
-      let idx=findIdx();
-      if(idx===-1){
-        const hide=document.getElementById('hide'), opp=document.getElementById('opp');
-        if(hide && hide.checked){ hide.checked=false; savePref('hide'); }
-        if(opp && opp.value && opp.value!=='all'){ opp.value='all'; savePref('opp'); }
-        refreshCodes(); idx=findIdx();
+    // THE SCREEN IS AUTHORITATIVE, so an exact read CORRECTS the selection
+    // rather than asking about it. The operator's pick is a starting hint typed
+    // out of a dropdown of lookalike six-character strings; the replay actually
+    // open in Overwatch is the fact. Asking "keep or switch" spent the
+    // operator's attention on a question with one right answer, and left a way
+    // to answer it wrongly - which is the whole hazard, since a kept mismatch is
+    // silent, permanent, and undetectable downstream.
+    //
+    // A NEAR match still asks. One character off is an OCR inference, not a
+    // reading, and silently refiling a capture on an inference is the same error
+    // this prevents, only automated and unattributable.
+    if(v.near){
+      const act=await uiModal({ title:'Is this the right replay?',
+        bodyHtml:'The code reads <b>'+esc(v.read)+'</b>, which is not a code in the feed.'
+          +'<br>The nearest one is <b>'+esc(v.code)+'</b> — a single character apart, so this is a guess.'
+          +'<br><br>You selected <b>'+esc(sel.code)+'</b>'
+          +(sel.team_a?' — '+esc(sel.team_a)+' vs '+esc(sel.team_b||'?'):''),
+        escapeValue:'keep',
+        actions:[{label:'Keep '+sel.code, value:'keep', ghost:true},
+                 {label:'Use '+v.code, value:'switch'}] });
+      if(session!==s) return true;
+      s.codeChecked=true;
+      if(act!=='switch'){
+        setCodeVerdict(false, 'read '+v.read+' — capturing as '+sel.code+' unverified');
+        return true;
       }
-      if(idx!==-1){
-        const el=document.getElementById('code'); el.value=String(idx); onCode();
-        snapMsg('switched to '+esc(v.code)+' — snapshot again to capture it', true);
-        return false;                 // onCode() restarted the map; this snapshot is void
-      }
-      // Still not reachable: it belongs to another division, which this page
-      // cannot change on the operator's behalf without discarding their whole
-      // context. Say so rather than reporting a switch that did not happen.
-      snapMsg(esc(v.code)+' is in another division — change the division to capture it', true);
-      return false;
+    } else {
+      s.codeChecked=true;
     }
-    setCodeVerdict(false, 'screen showed '+v.code+' — capturing as '+sel.code+' anyway');
-    return true;
+    return switchToScreenCode(v.code, v.near);
   }catch(e){ console.warn('code check skipped:', e); s.codeChecked=true; return true; }
   finally{ s._codeChecking=false; }
 }
