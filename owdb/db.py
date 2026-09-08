@@ -247,6 +247,13 @@ _SEED_WIPES = [
     # attempt, while hiding a live one loses that map permanently, because
     # a code nobody scouts is never recoverable. So this errs toward alive.
     ("2026-08-18", "observed", "patch on the 19th; dated the 18th so same-day post-patch games stay scoutable"),
+    # Same deliberate day-early dating as the entry above. The patch landed on
+    # the 8th at roughly 19:00 UK (18:00 UTC), with league games played after
+    # it that evening whose codes are alive. Dating this the 8th would mark
+    # those dead and lose them permanently; dating it the 7th offers a few
+    # already-dead codes from earlier on the 8th, which costs one failed
+    # capture attempt each. Errs toward alive, as the 2026-08-18 entry does.
+    ("2026-09-07", "observed", "patch on the 8th ~19:00 UK; dated the 7th so same-day post-patch games stay scoutable"),
 ]
 # The date the site and merge use without a database: a game finished on or
 # before this can never be replayed unless it was captured first. Update this
