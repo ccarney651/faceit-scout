@@ -4,6 +4,11 @@
 // the authenticated Worker — rather than a rewrite.
 function bootApp(DATA){
 const DIVS = DATA.divisions, VIEWS = DATA.views;   // real divisions + combined views
+// Is the SEASON over? Not "does this division have codes" - that is a different
+// question, and conflating the two told every unplayed division's visitors that
+// Season 10 had finished. A season with a fixture still to be played has not
+// finished, whichever division you happen to be looking at.
+const SEASON_FINISHED = Object.values(DIVS||{}).every(d=>!((d&&d.upcoming)||[]).length);
 (()=>{ const fb=document.getElementById('footbuilt'); if(fb&&DATA.built_at) fb.textContent='· data updated '+String(DATA.built_at).slice(0,10); })();
 // Remembered division (decision in pickDivision above; this is just the IO).
 // localStorage throws in some privacy modes and on file:// origins, so both ends
@@ -2316,7 +2321,7 @@ function renderScoutBody(t){
     side.appendChild(el(sectionH('Upcoming',`<span class="note">${tUp.length} scheduled</span>`)));
     const ub=el(`<div class="uprows"></div>`);
     tUp.forEach(u=>{ const opp=(u.f1===t.team)?u.f2:u.f1;
-      ub.appendChild(el(`<div class="uprow"><span class="uptime">${u.scheduled_at?esc(fmtWhen(u.scheduled_at)):'time TBD'}</span>`+
+      ub.appendChild(el(`<div class="uprow"><span class="uptime">${u.scheduled_at?fmtWhen(u.scheduled_at):'time TBD'}</span>`+
         `<span class="upteams"><span class="upvs">vs</span>${opp?teamLink(opp):'<span class="faint">TBD</span>'}</span>`+
         `<span class="uptag">${u.round?('Round '+u.round):''}</span></div>`));
     });
@@ -3349,6 +3354,44 @@ function hashDispatch(){
   if(start==='simfull'){ SCOUT_PREP=false; SCOUT_SIM_OPEN=true; SIM_OPEN_ALL=true; show('scout'); return; }
   show(TABS.some(t=>t.id===start)?start:'overview');
 }
+// A division that has not kicked off yet. Every tab but Matches derives from
+// results, so there is genuinely nothing to draw - and an empty standings table
+// reads as a data fault rather than as a season that starts on Thursday. Each
+// tab says what it is waiting for instead, and names the date, because "no data"
+// is the one thing a scout can already see for themselves.
+const UPCOMING_TAB={
+  overview:'Standings, map results and the season summary appear once the first match is played.',
+  scout:'Team reports build from played maps. Nothing has been played in this division yet.',
+  players:'Player stats and hero pools come from played maps, so they start with the first match.',
+  meta:'League meta needs games to read - hero picks, bans and map trends all begin at kickoff.',
+};
+function viewIsUpcoming(){
+  const v=viewOf(CURRENT_VIEW);
+  return !!(v && v.state==='upcoming');
+}
+function renderUpcomingNotice(tabId){
+  const s=D().summary;
+  const when=s.starts_at?fmtWhen(s.starts_at):null;
+  const box=el(`<div class="card"></div>`);
+  box.appendChild(el(`<h2 style="margin:0 0 6px">${esc(s.championship)} has not started</h2>`));
+  box.appendChild(el(`<div style="color:var(--muted);font-size:13px;line-height:1.55">`
+    +(when?`First match <b style="color:var(--fg)">${when}</b>. `:'')
+    +esc(UPCOMING_TAB[tabId]||'This tab fills in once the division has played.')
+    +`</div>`));
+  const up=(D().upcoming||[]).filter(u=>u.f1&&u.f2).slice(0,8);
+  if(up.length){
+    box.appendChild(el(`<div style="margin-top:12px;font-weight:700;font-size:12px;letter-spacing:.04em;color:var(--mid)">OPENING FIXTURES</div>`));
+    const list=el(`<div class="ptl" style="margin-top:6px"></div>`);
+    for(const u of up){
+      list.appendChild(el(`<div class="sp"><div class="t"><span class="tlink">${esc(u.f1)}</span>`
+        +`<span style="color:var(--mid);font-weight:500">vs</span>`
+        +`<span class="tlink">${esc(u.f2)}</span></div>`
+        +`<div class="d">${u.scheduled_at?fmtWhen(u.scheduled_at):'time to be confirmed'}</div></div>`));
+    }
+    box.appendChild(list);
+  }
+  return box;
+}
 function show(id){
   const navId = (id==='matchdetail'?'matches':(id==='compare'?'scout':(id==='playerdetail'?'players':id)));   // drill-ins: no nav entry of their own - they hang off Matches / Teams / Players
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.id===navId));
@@ -3363,6 +3406,10 @@ function show(id){
     c.appendChild(renderCompare());
   } else if(id==='playerdetail'){
     c.appendChild(renderPlayer());
+  } else if(viewIsUpcoming() && id!=='matches'){
+    // Matches still renders itself: its whole job on an unstarted division is
+    // the fixture list, which it already draws from `upcoming`.
+    c.appendChild(renderUpcomingNotice(id));
   } else {
     c.appendChild(TABS.find(t=>t.id===id).render());
   }
@@ -3373,7 +3420,14 @@ function updateHeader(){
   const s=D().summary;
   document.getElementById('title').textContent=s.championship;
   const sub=document.getElementById('subtitle');
-  sub.textContent=`${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`+(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
+  // "0 matches · 0 maps · ? → ?" is what the played-season line degrades to on a
+  // division that has not kicked off. Lead with the fixture instead: it is the
+  // one fact that division actually has.
+  sub.textContent=(viewIsUpcoming()
+      ? (s.starts_at?`Starts ${fmtWhen(s.starts_at)}`:'Not started yet')
+        +` · ${(D().upcoming||[]).length} fixture${(D().upcoming||[]).length===1?'':'s'} scheduled`
+      : `${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`)
+    +(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
   const ncl=document.getElementById('navcapcount'); const capLink=document.getElementById('navcapturelink');
   if(ncl){ const nq=viewQueue().length; ncl.textContent=nq?'· '+nq+' left':''; }
   if(capLink) capLink.href=captureDivisionUrl();
@@ -3400,9 +3454,55 @@ function updateHeader(){
     sub.appendChild(b);
   }
 }
+/* ====================================================== DIVISION SWITCHER */
+// Region row, then that region's divisions. VIEWS already carries `region`, so
+// this is two rows over exactly the list the flat <select> held - see head.html
+// for why the flat one stopped working at four regions.
+//
+// The remembered REGION is derived from the current view rather than stored
+// separately: the view is the single source of truth for what the page shows,
+// and a second stored value can disagree with it after a rebuild drops a
+// division. Changing region jumps to that region's first division, which is the
+// strongest tier because TIERS orders them.
+const viewSuffix=(v)=> v.region ? v.label.slice(v.region.length+1) : v.label;
+function divNavRegions(){ return [...new Set(VIEWS.map(v=>v.region).filter(Boolean))]; }
+function renderDivNav(){
+  const wrap=document.getElementById('divnav');
+  const rowR=document.getElementById('dnregion'), rowD=document.getElementById('dndiv');
+  if(!wrap||!rowR||!rowD) return;
+  if(VIEWS.length<2){ wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  const cur=viewOf(CURRENT_VIEW)||VIEWS[0];
+  const regions=divNavRegions();
+  const orphans=VIEWS.filter(v=>!v.region);
+  rowR.innerHTML=''; rowD.innerHTML='';
+  const mk=(row,label,on,cls,onclick)=>{
+    const b=el(`<button type="button" role="tab" aria-selected="${on?'true':'false'}"${cls?` class="${cls}"`:''}>${esc(label)}</button>`);
+    if(on) b.classList.add('on');
+    b.onclick=onclick; row.appendChild(b); return b;
+  };
+  // "Other" collects views whose championship name did not classify into a
+  // region - the same fallback the export builds them for. It is only drawn
+  // when such a view exists, so the common case shows four clean regions.
+  const groups=regions.map(r=>({key:r,label:r,views:VIEWS.filter(v=>v.region===r)}));
+  if(orphans.length) groups.push({key:null,label:'Other',views:orphans});
+  const curKey=cur.region||(orphans.includes(cur)?null:regions[0]);
+  for(const g of groups){
+    mk(rowR,g.label,g.key===curKey,'',()=>{
+      const first=g.views[0]; if(first) setDivision(first.id);
+    });
+  }
+  const shown=(groups.find(g=>g.key===curKey)||groups[0]).views;
+  for(const v of shown){
+    mk(rowD,viewSuffix(v),v.id===CURRENT_VIEW,
+       v.state==='upcoming'?'soon':'', ()=>setDivision(v.id));
+  }
+  // One division in a region is not a choice; the region button already says it.
+  rowD.style.display = shown.length>1 ? '' : 'none';
+}
 function setDivision(id){
   CURRENT_VIEW=id; rememberDivision(id); recomputeDivision(); updateHeader(); updateWipeNote();
-  const dsel=document.getElementById('division'); if(dsel) dsel.value=id;   // keep header in sync
+  renderDivNav();                                    // keep the switcher in sync
   const cur=document.querySelector('nav button.active');
   show(cur?cur.dataset.id:'overview');
 }
@@ -3416,7 +3516,7 @@ function updateWipeNote(){
     // Nothing to capture. Rather than leave the slot empty - which reads as a
     // broken site rather than a finished season - say where the season stands.
     const note=seasonNote(DATA.season, q.length, DATA.next_season_start,
-                          new Date().toISOString().slice(0,10));
+                          new Date().toISOString().slice(0,10), SEASON_FINISHED);
     if(!note){ el.style.display='none'; return; }
     el.style.display='block';
     el.innerHTML=`<span style="color:var(--muted)">${esc(note)}</span>`;
@@ -3431,11 +3531,7 @@ function init(){
   initTheme();
   const slab=document.getElementById('seasonlab');
   if(slab) slab.textContent=seasonLabel(DATA.season);
-  const dsel=document.getElementById('division');
-  VIEWS.forEach(v=>dsel.appendChild(el(`<option value="${v.id}">${esc(v.label)}</option>`)));
-  dsel.value=CURRENT_VIEW;
-  if(VIEWS.length>1) dsel.classList.remove('hidden');
-  dsel.onchange=()=>setDivision(dsel.value);
+  renderDivNav();
   updateHeader();
   const nav=document.getElementById('nav');
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});

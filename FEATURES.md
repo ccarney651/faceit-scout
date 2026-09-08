@@ -87,8 +87,20 @@ pages. Regenerate with `python -m faceit_sync.hero_icons <asset-dir>`.
 
 ### Regions and divisions
 
-The site ships **EMEA** (Master / Expert / Advanced) and **NA** (Master /
-Expert), picked with a paired region + division selector. Region and tier are
+The site ships **every division FACEIT runs for the season** — EMEA and NA
+(Master / Expert / Advanced / Intermediate), plus **SA** and **OCE**
+(Master only) — picked with a region row and a division row beneath it.
+
+**A division does not have to have played.** One with fixtures and no results
+gets a page that leads with its kickoff, lists its opening fixtures, and says on
+each tab what it is waiting for. Until 2026-09-08 the export skipped any
+championship with no finished match, so in the week Season 10 opened the site
+carried three EMEA divisions and nothing else — a scout in NA, SA or OCE, or in
+EMEA Master, could not see that their division existed. A championship with
+neither results nor fixtures is still skipped; it is a seeded shell, and listing
+it would put a permanently dead tab in the switcher.
+
+Region and tier are
 read from the championship *name* — the `championships.region` column says
 `GLOBAL` on every row and is useless — matched as **whole words**, since a bare
 `"NA" in name` would file an "Open Nationals" cup under North America.

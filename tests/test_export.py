@@ -798,3 +798,61 @@ def test_game_rosters_carry_mitigation(db: Database) -> None:
     assert rows, "fixture exported no per-game roster rows"
     assert all("mit" in p for p in rows)
     assert rows[0]["mit"] == 9000
+
+
+# --- divisions that have not kicked off yet --------------------------------
+
+@responses.activate
+def test_division_with_only_fixtures_is_exported_as_upcoming(db: Database) -> None:
+    """A division that has not played a game still needs a page.
+
+    Before 2026-09-08 the export dropped any championship with no FINISHED
+    match, so on the week Season 10 opened the site carried EMEA Expert /
+    Advanced / Intermediate but NOT EMEA Master, NA Master, NA Intermediate,
+    OCE Master or SA Master - the four whose first fixture was still days away.
+    A scout could not see that their division existed, who was in it, or when it
+    started. The fixtures were in the payload the whole time.
+    """
+    _ingest(db)                                    # a division WITH results
+    played_cid = db.conn.execute(
+        "SELECT championship_id FROM matches LIMIT 1").fetchone()[0]
+    played_name = db.conn.execute(
+        "SELECT name FROM championships WHERE id=?", (played_cid,)).fetchone()[0]
+    season = played_name.split()[0]                # 'S9' - match the fixture's season
+
+    # A second championship in the same season and region, one tier down, with a
+    # single scheduled match and nothing played.
+    cid = "cid-upcoming"
+    db.conn.execute(
+        "INSERT OR REPLACE INTO championships(id, name, game, region) VALUES (?,?,?,?)",
+        (cid, f"{season} EMEA Expert Central - Regular Season", "ow2", "GLOBAL"))
+    db.conn.commit()
+    mid = "1-33333333-3333-3333-3333-333333333333"
+    _register_scheduled(responses, mid, cid, f1=("u1", "Not Started"),
+                        f2=("u2", "Also Waiting"), schedule="2026-09-09T18:00:00Z")
+    SyncEngine(make_client()[0], db).ingest_match(mid)
+
+    d = _dashboard_data(db, cid)
+    assert d["summary"]["matches"] == 0, "nothing has been played"
+    assert d["state"] == "upcoming"
+    assert {d["upcoming"][0]["f1"], d["upcoming"][0]["f2"]} == {"Not Started", "Also Waiting"}
+    assert d["summary"]["starts_at"] == "2026-09-09T18:00:00Z", "the page leads with this"
+
+    played = _dashboard_data(db, played_cid)
+    assert played["state"] == "live"
+
+
+@responses.activate
+def test_a_championship_with_neither_results_nor_fixtures_is_still_skipped(
+        db: Database) -> None:
+    """Relaxing the gate must not admit an empty shell. A seeded championship row
+    with no results AND no fixtures has nothing to say, and listing it would put
+    a dead tab in the switcher."""
+    _ingest(db)
+    db.conn.execute(
+        "INSERT OR REPLACE INTO championships(id, name, game, region) VALUES (?,?,?,?)",
+        ("cid-empty", "S9 EMEA Advanced Central - Regular Season", "ow2", "GLOBAL"))
+    db.conn.commit()
+    buf = io.StringIO()
+    export_html(db, buf)
+    assert "EMEA Advanced" not in buf.getvalue()

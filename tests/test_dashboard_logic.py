@@ -1893,3 +1893,42 @@ def test_season_note_stops_promising_a_date_once_it_passes(tmp_path) -> None:
 def test_season_note_is_silent_with_no_season_to_name(tmp_path) -> None:
     got = _run("return seasonNote(null, 0, '2026-09-07', '2026-08-27');", tmp_path)
     assert got == ""
+
+
+# --- the finished-season note must not fire on a season that is running -----
+# 2026-09-08: opening S10 EMEA Master in the preview said "Season 10 has
+# finished - every replay code from it was wiped by an Overwatch patch". That
+# copy was written for the end of Season 9, when it was true. The trigger is
+# `liveCodes`, which is viewQueue() - the CURRENT DIVISION's queue - so any
+# division without live codes claimed the whole season was over. Divisions that
+# have not kicked off have no codes by definition, so every one of the seven
+# added on 2026-09-08 would have said it.
+
+def test_season_note_does_not_declare_a_running_season_finished(tmp_path) -> None:
+    """A division with no live codes says nothing about whether the SEASON is
+    over. Fixtures still to be played is what settles that."""
+    got = _run("return seasonNote('s10', 0, '2026-10-01', '2026-09-08', false);",
+               tmp_path)
+    assert "has finished" not in got, got
+    assert "wiped" not in got, got
+
+
+def test_season_note_still_explains_a_genuinely_finished_season(tmp_path) -> None:
+    """The S9 behaviour this copy was written for is untouched."""
+    got = _run("return seasonNote('s9', 0, '2026-09-07', '2026-08-27', true);",
+               tmp_path)
+    assert "Season 9" in got and "wiped" in got
+
+
+def test_season_note_defaults_to_finished_for_older_callers(tmp_path) -> None:
+    """Omitting the flag keeps the pre-2026-09-08 behaviour, so a frozen archive
+    page rendered by an older build reads exactly as it did."""
+    got = _run("return seasonNote('s9', 0, '2026-09-07', '2026-08-27');", tmp_path)
+    assert "wiped" in got
+
+
+def test_season_note_names_the_division_when_the_season_runs_on(tmp_path) -> None:
+    """The slot must not go empty - that reads as a broken page, which is why
+    this note exists at all - but it can only speak for the division."""
+    got = _run("return seasonNote('s10', 0, null, '2026-09-08', false);", tmp_path)
+    assert got and "division" in got.lower(), got

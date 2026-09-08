@@ -1,0 +1,3793 @@
+{
+ "format": 1,
+ "contributor": "gcb",
+ "tool_version": "browser-0.2",
+ "heroes": {},
+ "maps": [
+  {
+   "match_id": "1-650e7061-bd49-4864-9133-c23024e2718a",
+   "game_no": 1,
+   "demo_code": "2RW1PZ",
+   "map_guid": "0x08000000000004B7",
+   "map_name": "Nepal",
+   "map_category": "Control",
+   "side_a_team_id": "886e27af-47c8-4873-8263-870b4f5d8fb3",
+   "side_a_team": "Bumbubolti",
+   "side_b_team_id": "6f56df0c-4be8-4598-845c-e3e31d9fb428",
+   "side_b_team": "Clockwork",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:03:52.443Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": "Sanctum",
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E000000000052C",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E000000000052C",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": "Sanctum",
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": "Sanctum",
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E000000000052C",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E000000000052C",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": "Sanctum",
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "sub_map": "Shrine",
+     "round_no": 2,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E000000000052C",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E000000000052C",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "sub_map": "Shrine",
+     "round_no": 2,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "sub_map": "Village",
+     "round_no": 3,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E000000000052C",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000231",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E000000000052C",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "sub_map": "Village",
+     "round_no": 3,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 4000,
+     "sub_map": "Village",
+     "round_no": 3,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000231",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 4000,
+     "sub_map": "Village",
+     "round_no": 3,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-650e7061-bd49-4864-9133-c23024e2718a",
+   "game_no": 2,
+   "demo_code": "KPVY6F",
+   "map_guid": "0x08000000000005BB",
+   "map_name": "Route 66",
+   "map_category": "Escort",
+   "side_a_team_id": "6f56df0c-4be8-4598-845c-e3e31d9fb428",
+   "side_a_team": "Clockwork",
+   "side_b_team_id": "886e27af-47c8-4873-8263-870b4f5d8fb3",
+   "side_b_team": "Bumbubolti",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:04:51.161Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E000000000013B",
+      "custom:d_mon",
+      "0x02E0000000000195",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E000000000013B",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000195",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000079",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000079",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000013B",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000079",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000079",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 4000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 4000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000365",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000365",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 5000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 5000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000365",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000365",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 6000,
+     "sub_map": null,
+     "round_no": 3,
+     "phase": "defend",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 6000,
+     "sub_map": null,
+     "round_no": 3,
+     "phase": "attack",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E000000000031C"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000231",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000031C",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 7000,
+     "sub_map": null,
+     "round_no": 4,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 7000,
+     "sub_map": null,
+     "round_no": 4,
+     "phase": "defend",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E000000000031C"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000231",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E000000000031C",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 8000,
+     "sub_map": null,
+     "round_no": 4,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000365",
+      "0x02E000000000052C"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000365",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E000000000052C",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 8000,
+     "sub_map": null,
+     "round_no": 4,
+     "phase": "defend",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000079"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000231",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000079",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-650e7061-bd49-4864-9133-c23024e2718a",
+   "game_no": 3,
+   "demo_code": "GJZ2S2",
+   "map_guid": "0x0800000000000E13",
+   "map_name": "New Junk City",
+   "map_category": "Flashpoint",
+   "side_a_team_id": "6f56df0c-4be8-4598-845c-e3e31d9fb428",
+   "side_a_team": "Clockwork",
+   "side_b_team_id": "886e27af-47c8-4873-8263-870b4f5d8fb3",
+   "side_b_team": "Bumbubolti",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:05:26.894Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E000000000030A",
+      "0x02E00000000004E3",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "0x02E000000000030A",
+       "e2125589-e4a8-49f8-94d3-25b79a24eac4"
+      ],
+      [
+       "0x02E00000000004E3",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000079",
+      "0x02E000000000030A",
+      "0x02E00000000004DD",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E00000000004DD",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E000000000030A",
+      "0x02E00000000004E3",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "0x02E000000000030A",
+       "e2125589-e4a8-49f8-94d3-25b79a24eac4"
+      ],
+      [
+       "0x02E00000000004E3",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GETI",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000079",
+      "0x02E000000000030A",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-650e7061-bd49-4864-9133-c23024e2718a",
+   "game_no": 4,
+   "demo_code": "BJKSTM",
+   "map_guid": "0x080000000000102C",
+   "map_name": "Neon Junction",
+   "map_category": "Hybrid",
+   "side_a_team_id": "886e27af-47c8-4873-8263-870b4f5d8fb3",
+   "side_a_team": "Bumbubolti",
+   "side_b_team_id": "6f56df0c-4be8-4598-845c-e3e31d9fb428",
+   "side_b_team": "Clockwork",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:06:00.332Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000079",
+      "0x02E000000000030A",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E000000000032A",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000032A",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000079",
+      "0x02E000000000030A",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000079",
+      "0x02E000000000030A",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "0x02E000000000023B",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "0x02E000000000023B",
+       null
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000079",
+      "0x02E000000000030A",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E00000000001EC",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      null,
+      "matched",
+      "matched"
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-650e7061-bd49-4864-9133-c23024e2718a",
+   "game_no": 5,
+   "demo_code": "0TDWP7",
+   "map_guid": "0x0800000000000D53",
+   "map_name": "Esperança",
+   "map_category": "Push",
+   "side_a_team_id": "886e27af-47c8-4873-8263-870b4f5d8fb3",
+   "side_a_team": "Bumbubolti",
+   "side_b_team_id": "6f56df0c-4be8-4598-845c-e3e31d9fb428",
+   "side_b_team": "Clockwork",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:06:34.195Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E00000000004E3",
+      "0x02E000000000030A",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "0x02E000000000030A",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E000000000007A",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "0x02E000000000007A",
+       "e2125589-e4a8-49f8-94d3-25b79a24eac4"
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "custom:d_mon",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E000000000007A",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "0x02E000000000007A",
+       "e2125589-e4a8-49f8-94d3-25b79a24eac4"
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "0x02E000000000007A",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "0x02E000000000007A",
+       "e2125589-e4a8-49f8-94d3-25b79a24eac4"
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E00000000004E3",
+      "custom:d_mon",
+      "0x02E0000000000003",
+      "0x02E0000000000231"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "aa699889-9b10-4988-8803-9ea6d87c91e0"
+      ],
+      [
+       "0x02E00000000004E3",
+       "61f01f6f-b724-461e-85d0-b503085ea2a4"
+      ],
+      [
+       "custom:d_mon",
+       "648f487c-b67f-4fc4-a191-37e5f1268c92"
+      ],
+      [
+       "0x02E0000000000003",
+       "a9b728a8-d6fb-4c71-8715-661ecc8e4aea"
+      ],
+      [
+       "0x02E0000000000231",
+       "00d432ec-ebec-46d0-8fc1-e55ea3b37f83"
+      ]
+     ],
+     "ingame_names": [
+      "ORIION",
+      "OKLOKAR",
+      "FRANKYBOXING",
+      "ANDURIEL",
+      "ILO"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "custom:d_mon",
+      "0x02E0000000000516",
+      "0x02E0000000000003"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000042",
+       "b4179b13-9e88-4527-a41a-c7b4fd776a16"
+      ],
+      [
+       "0x02E0000000000231",
+       "59899874-21b6-4182-815f-1ca5e73a94c6"
+      ],
+      [
+       "custom:d_mon",
+       "e2125589-e4a8-49f8-94d3-25b79a24eac4"
+      ],
+      [
+       "0x02E0000000000516",
+       "8b75522a-8915-43ee-8acb-289509f12082"
+      ],
+      [
+       "0x02E0000000000003",
+       "f4023bbb-a8ea-4f57-8312-79d36404d181"
+      ]
+     ],
+     "ingame_names": [
+      "FAMM",
+      "GET",
+      "SWIINES",
+      "FLURCHUS",
+      "ALEX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "forced",
+      "matched",
+      "matched"
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-838c3f20-00f1-4ed1-8626-9934f4f72812",
+   "game_no": 1,
+   "demo_code": "04C5WM",
+   "map_guid": "0x08000000000004B7",
+   "map_name": "Nepal",
+   "map_category": "Control",
+   "side_a_team_id": "e63afd52-7641-45fb-9a8b-41634cc15c8d",
+   "side_a_team": "Moominhouse",
+   "side_b_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+   "side_b_team": "Telacy Divine",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:00:39.005Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": "Village",
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E000000000032A",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E000000000032A",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E000000000013B",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       "f8d00cf2-056b-4453-960c-8a8dafc4900f"
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "2 MIKIX"
+     ],
+     "player_conf": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": "Village",
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000052C",
+      "0x02E0000000000516",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000052C",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E0000000000042",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       "78174d69-c467-489f-bcd0-9e2d500d4f31"
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": "Sanctum",
+     "round_no": 2,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E00000000001EC",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E000000000013B",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       "f8d00cf2-056b-4453-960c-8a8dafc4900f"
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "2 MIKIX"
+     ],
+     "player_conf": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": "Sanctum",
+     "round_no": 2,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000052C",
+      "0x02E0000000000516",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000052C",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E0000000000042",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       "78174d69-c467-489f-bcd0-9e2d500d4f31"
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-838c3f20-00f1-4ed1-8626-9934f4f72812",
+   "game_no": 2,
+   "demo_code": "4PEMA1",
+   "map_guid": "0x0800000000000C85",
+   "map_name": "Shambali Monastery",
+   "map_category": "Escort",
+   "side_a_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+   "side_a_team": "Telacy Divine",
+   "side_b_team_id": "e63afd52-7641-45fb-9a8b-41634cc15c8d",
+   "side_b_team": "Moominhouse",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:02:00.033Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E0000000000516",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E0000000000042",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E0000000000042",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E000000000013B",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E0000000000516",
+      "0x02E000000000000A",
+      "0x02E000000000013B"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E000000000000A",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched"
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E0000000000042",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E000000000013B",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E0000000000516",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E0000000000042",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E0000000000042",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E000000000013B",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E0000000000516",
+      "0x02E0000000000042",
+      "0x02E00000000001A2",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E0000000000042",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E00000000001A2",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000079",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E0000000000042",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000079",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-838c3f20-00f1-4ed1-8626-9934f4f72812",
+   "game_no": 3,
+   "demo_code": "D5T959",
+   "map_guid": "0x080000000000102C",
+   "map_name": "Neon Junction",
+   "map_category": "Hybrid",
+   "side_a_team_id": "e63afd52-7641-45fb-9a8b-41634cc15c8d",
+   "side_a_team": "Moominhouse",
+   "side_b_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+   "side_b_team": "Telacy Divine",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:02:33.543Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000079",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000079",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E00000000001EC",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000231",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E00000000003C3",
+      "0x02E00000000001EC",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E00000000003C3",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E00000000001EC",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000079",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000079",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E00000000001EC",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000231",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 1000,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E00000000003C3",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E00000000003C3",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E00000000001EC",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E0000000000231",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000079",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000079",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E00000000001EC",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000231",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 2000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E00000000003C3",
+      "0x02E00000000001EC",
+      "0x02E000000000013B",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E00000000003C3",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E00000000001EC",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E000000000013B",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000079",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000079",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E0000000000042",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000231",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 3000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E00000000003C3",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E00000000003C3",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E00000000001EC",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E0000000000231",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "a",
+     "ts": 4000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "attack",
+     "heroes": [
+      "0x02E0000000000079",
+      "0x02E0000000000003",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000079",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E00000000001EC",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000231",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 4000,
+     "sub_map": null,
+     "round_no": 2,
+     "phase": "defend",
+     "heroes": [
+      "0x02E0000000000003",
+      "0x02E0000000000079",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000003",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000079",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E00000000001EC",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E0000000000231",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    }
+   ]
+  },
+  {
+   "match_id": "1-838c3f20-00f1-4ed1-8626-9934f4f72812",
+   "game_no": 4,
+   "demo_code": "QPC797",
+   "map_guid": "0x0800000000000E13",
+   "map_name": "New Junk City",
+   "map_category": "Flashpoint",
+   "side_a_team_id": "3c27356d-8ec6-4cb5-9bdf-fdd6ea5c9402",
+   "side_a_team": "Telacy Divine",
+   "side_b_team_id": "e63afd52-7641-45fb-9a8b-41634cc15c8d",
+   "side_b_team": "Moominhouse",
+   "winner_side": null,
+   "captured_at": "2026-09-08T01:03:07.215Z",
+   "bans": [],
+   "profile": {
+    "w": 2560,
+    "h": 1440,
+    "hud_variant": "browser"
+   },
+   "observations": [
+    {
+     "side": "a",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E000000000052C",
+      "0x02E0000000000516",
+      "0x02E00000000001EC",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E000000000052C",
+       "ae950365-9e9e-4123-8d0f-e9c1cb3b13e0"
+      ],
+      [
+       "0x02E0000000000516",
+       "9757da68-89ed-4aa8-bfc3-d9b42cc88ce4"
+      ],
+      [
+       "0x02E00000000001EC",
+       "091e671e-580e-4808-947c-c49dcdefdd5a"
+      ],
+      [
+       "0x02E0000000000231",
+       "4fa4ba39-094a-43b2-94d6-f12ecf612c06"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "VICTOR",
+      "LILY",
+      "ELLO",
+      "NELIOZU",
+      "KINGHEEDORAH"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    },
+    {
+     "side": "b",
+     "ts": 0,
+     "sub_map": null,
+     "round_no": 1,
+     "phase": null,
+     "heroes": [
+      "0x02E0000000000516",
+      "0x02E0000000000003",
+      "0x02E0000000000042",
+      "0x02E0000000000231",
+      "custom:d_mon"
+     ],
+     "pairs": [
+      [
+       "0x02E0000000000516",
+       "cba04715-ccb5-4089-b0ba-d065e0812cf0"
+      ],
+      [
+       "0x02E0000000000003",
+       "d6e02300-6bae-4930-b512-e151a964b623"
+      ],
+      [
+       "0x02E0000000000042",
+       "c1d127b1-ad51-4647-b6c3-bbef6ef43ab0"
+      ],
+      [
+       "0x02E0000000000231",
+       "455fc5b0-6983-4cad-880b-c6fb33219f80"
+      ],
+      [
+       "custom:d_mon",
+       null
+      ]
+     ],
+     "ingame_names": [
+      "KELPIE",
+      "ELEMENT",
+      "APRI",
+      "Z3TLIX",
+      "MIKIX"
+     ],
+     "player_conf": [
+      "matched",
+      "matched",
+      "matched",
+      "matched",
+      null
+     ]
+    }
+   ]
+  }
+ ],
+ "discord_id": "131622115538501632"
+}

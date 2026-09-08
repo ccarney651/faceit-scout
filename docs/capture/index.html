@@ -405,7 +405,7 @@ button:disabled{opacity:.45;cursor:default}
 </div>
 <script src="engine/names.js"></script>
 <script src="engine/assign.js"></script>
-<script src="engine/replaycode.js"></script>
+<script src="engine/replaycode.js"></script><script src="engine/contribution.js"></script>
 <script src="engine/util.js"></script>
 <script src="engine/idb.js"></script>
 <script src="engine/frames.js"></script>
@@ -1892,8 +1892,13 @@ function buildContribution(name, maps){
     map_guid:r.map_guid, map_name:r.map_name, map_category:r.map_category,
     side_a_team_id:r.side_a_team_id, side_a_team:r.side_a_team, side_b_team_id:r.side_b_team_id, side_b_team:r.side_b_team,
     winner_side:r.winner_side, captured_at:r.captured_at, bans:r.bans||[], profile:r.profile, observations:r.observations })) }; }
-async function publish(){ const note=document.getElementById('pubnote'); const maps=await idbAll();
-  if(!maps.length){ note.textContent='nothing captured yet.'; return; }
+async function publish(){ const note=document.getElementById('pubnote'); const saved=await idbAll();
+  if(!saved.length){ note.textContent='nothing captured yet.'; return; }
+  // Only THIS season's maps leave the browser - see engine/contribution.js for
+  // why the feed is the test and why an empty feed filters nothing.
+  const split=OWDBContribution.splitBySeason(saved, DATA.codes), maps=split.send;
+  if(!maps.length){ note.innerHTML='<span class="warn">nothing from this season to publish — '
+    +esc(OWDBContribution.heldNote(split.held))+'</span>'; return; }
   const name=(document.getElementById('pubname').value||'').trim().toLowerCase();
   if(!sessionPayload() && !/^[a-z0-9_-]{2,24}$/.test(name)){ note.innerHTML='<span class="warn">name must be 2-24 chars: a-z 0-9 _ -, or log in with Discord</span>'; return; }
   localStorage.setItem('owdb_name',name); note.textContent='publishing…';
@@ -1910,14 +1915,16 @@ async function publish(){ const note=document.getElementById('pubnote'); const m
         toast(`🎉 <b>First capture published!</b> Your scout profile is now on the leaderboard — check the site in ~2 min.`,'ok',10000);
       } else {
         renderImpact(name, maps, j);
-        note.innerHTML=`<span class="ok">published as ${esc(name)}: ${j.action} · ${j.maps} maps — moved to “uploaded” below. Site rebuilds in ~2 min.</span>`;
+        const held=OWDBContribution.heldNote(split.held);
+        note.innerHTML=`<span class="ok">published as ${esc(name)}: ${j.action} · ${j.maps} maps — moved to “uploaded” below. Site rebuilds in ~2 min.</span>`
+          +(held?` <span class="faint">${esc(held)}</span>`:'');
       }
       toast(`published as <b>${esc(name)}</b> — ${j.maps} map${j.maps===1?'':'s'} ${j.action==='created'?'added':'updated'}. The site rebuilds in ~2 min.`,'ok',8000); }
     else { note.innerHTML='<span class="warn">publish failed: '+esc(j.error||('HTTP '+res.status))+'</span>';
       toast('publish failed: '+esc(j.error||('HTTP '+res.status)),'bad',8000); }
   }catch(e){ note.innerHTML='<span class="warn">publish failed ('+esc(e.message||e)+'). Use Download JSON and send it to the curator.</span>';
     toast('publish failed ('+esc(e.message||e)+'). Use <b>Download JSON</b> and send it to the curator.','bad',9000); } }
-async function downloadContrib(){ const maps=await idbAll(); const name=((document.getElementById('pubname').value||'operator').trim().toLowerCase())||'operator';
+async function downloadContrib(){ const maps=OWDBContribution.splitBySeason(await idbAll(), DATA.codes).send; const name=((document.getElementById('pubname').value||'operator').trim().toLowerCase())||'operator';
   const blob=new Blob([JSON.stringify(buildContribution(name,maps),null,2)],{type:'application/json'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name+'.json'; a.click(); }
 

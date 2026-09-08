@@ -176,10 +176,28 @@ function longDate(iso){
 // scouting recovers one. The page used to render an empty slot there, which
 // reads as a broken site rather than a finished season. A start date already
 // past is dropped rather than advertised.
-function seasonNote(season, liveCodes, nextStartISO, todayISO){
+// `seasonFinished` defaults to true so a build rendering a frozen archive reads
+// exactly as it did before 2026-09-08. New callers pass it explicitly.
+//
+// WHY IT HAD TO BE ADDED. `liveCodes` is viewQueue() - the CURRENT DIVISION's
+// queue, not the season's - so "this division has nothing to capture" was being
+// reported as "the season is over". That was harmless while every division in
+// the season had played, which is the state this copy was written for at the end
+// of Season 9. It stopped being harmless when divisions that have not kicked off
+// started getting pages: they have no codes by definition, so all seven added on
+// 2026-09-08 greeted a scout with "Season 10 has finished" on the same page that
+// says the first match is on Wednesday.
+function seasonNote(season, liveCodes, nextStartISO, todayISO, seasonFinished){
   if(liveCodes) return '';
   const label=seasonLabel(season);
   if(!label) return '';
+  if(seasonFinished===false){
+    // The season is still running, so nothing here may speak for it. The slot
+    // still must not go empty - an empty slot reads as a broken page, which is
+    // the whole reason this note exists - so it says the one true thing left:
+    // there is nothing to capture in THIS division right now.
+    return 'No replay codes to capture in this division right now.';
+  }
   const next=seasonLabel('s'+(parseInt(String(season).slice(1),10)+1));
   const wiped=`${label} has finished — every replay code from it was wiped by `
     + `an Overwatch patch, so there is nothing left to capture.`;
