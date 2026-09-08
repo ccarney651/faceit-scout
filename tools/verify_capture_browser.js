@@ -1013,6 +1013,24 @@ async function main() {
     check('code guard: an unreadable code abstains rather than blocking',
       unread.ok === true && unread.modal === false, JSON.stringify(unread));
 
+    // AND IT MUST STILL BE VISIBLE AFTERWARDS. The first version announced the
+    // abstain through snapMsg, which ensureSideResolved and then "snapshot N
+    // kept" overwrite within milliseconds of the guard returning - so a capture
+    // filed against an unverified code looked exactly like a verified one, and
+    // was reported as the guard letting a wrong code slide. The verdict is state
+    // now, not a message: it has to survive anything written after it.
+    const verdictAfterNoise = await p.evaluate(() => {
+      snapMsg('✓ snapshot 1 kept');          // what clobbered it before
+      const el = document.getElementById('codeverify');
+      return { text: el ? el.textContent : null,
+               shown: !!el && el.style.display !== 'none',
+               stored: session.codeVerdict && session.codeVerdict.ok };
+    });
+    check('code guard: an unverified capture says so, and keeps saying so',
+      verdictAfterNoise.shown && verdictAfterNoise.stored === false
+        && /NOT verified/i.test(verdictAfterNoise.text || ''),
+      JSON.stringify(verdictAfterNoise));
+
     // THE REGRESSION. The guard asked currentCodes() - the division / opponent /
     // hide-done filtered list - to identify the code on screen. A code already
     // captured is filtered out of it, so on 2026-09-08 a screen showing QPC797

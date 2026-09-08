@@ -293,6 +293,7 @@ button:disabled{opacity:.45;cursor:default}
       <span class="pill" id="mapinfo">pick a replay</span>
       <span class="pill" id="roundpill">Round 1</span>
       <span class="pill" id="subpill" style="display:none">sub: —</span>
+      <span class="pill" id="codeverify" style="display:none"></span>
     </div>
     <div class="row poprow" style="margin-top:10px">
       <button id="pop" title="Open the control panel over Overwatch — snapshot, round, finish and copy without alt-tabbing"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg> Control panel</button>
@@ -1190,6 +1191,25 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
 // on every snapshot of a map whose banner never reads. After the third, it says
 // so once and stands down.
 const CODE_CHECK_TRIES=3;
+// The map's verification state, kept as STATE rather than announced as a
+// message. snapMsg was the wrong mechanism: ensureSideResolved writes to it and
+// then "snapshot N kept" overwrites it a moment later, so the operator saw a
+// verdict for a few milliseconds at most and reasonably concluded the guard had
+// let a wrong code slide. This is the answer to "which match is this capture
+// filed against", it stays true for the whole map, so it is drawn every time
+// the panel ticks and every time the map bar renders.
+function setCodeVerdict(ok, text){
+  if(session) session.codeVerdict={ok:!!ok, text:text};
+  renderCodeVerdict();
+}
+function renderCodeVerdict(){
+  const el=document.getElementById('codeverify'); if(!el) return;
+  const v=session&&session.codeVerdict;
+  if(!v){ el.style.display='none'; el.textContent=''; return; }
+  el.style.display='';
+  el.textContent=(v.ok?'✓ ':'⚠ ')+v.text;
+  el.className='pill'+(v.ok?'':' warn');
+}
 async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) return true;
   if(s._codeChecking) return false;   // an attempt is in flight (rapid S presses) - don't stack OCR passes
   const sel=selectedCode(); if(!sel||!sel.code){ s.codeChecked=true; return true; }
@@ -1212,7 +1232,7 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
     const v=OWDBReplayCode.checkAgainstSelected(got, DATA.codes, sel.code);
     if(v.status==='ok'){
       s.codeChecked=true;
-      snapMsg('screen shows '+esc(v.code)+' — the match you picked');
+      setCodeVerdict(true, 'verified '+v.code);
       return true;
     }
     if(v.status==='abstain'){
@@ -1226,11 +1246,9 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
       // wrong-match tests, saw nothing, and reasonably reported it as "not
       // reading the replay code at all". An unverified capture is worth one
       // line every time it happens.
-      snapMsg((got
-          ? 'screen reads '+esc(got)+', which is not a code in the feed'
-          : 'could not read the replay code ('+esc(codeReadProblem())+')')
-        +' — this capture is NOT verified as '+esc(sel.code)
-        +(last?'' : ' · will retry on the next snapshot'), true);
+      setCodeVerdict(false, (got ? 'screen read '+got+', not in the feed'
+                                 : 'code unreadable')
+        +' — NOT verified as '+sel.code+(last?'':' · retrying'));
       return true;                    // NEVER blocks
     }
     // A real disagreement. Both codes exist in this division's feed, so one of
@@ -1275,7 +1293,7 @@ async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) retur
       snapMsg(esc(v.code)+' is in another division — change the division to capture it', true);
       return false;
     }
-    snapMsg('keeping '+esc(sel.code)+' — capturing against your selection', true);
+    setCodeVerdict(false, 'screen showed '+v.code+' — capturing as '+sel.code+' anyway');
     return true;
   }catch(e){ console.warn('code check skipped:', e); s.codeChecked=true; return true; }
   finally{ s._codeChecking=false; }
@@ -1489,8 +1507,9 @@ function startMap(){ const c=selectedCode();
     // The replay-code guard, per map: whether it has reached a verdict, and how
     // many times it has tried to. Both reset with the map, because the answer
     // is about the replay now on screen - see ensureCodeChecked.
-    codeChecked:false, codeTries:0};
+    codeChecked:false, codeTries:0, codeVerdict:null};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
+  renderCodeVerdict();
   document.getElementById('subpill').style.display=submaps.length?'':'none';
   refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
 }
@@ -1812,7 +1831,14 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:500,
     const {leftName,rightName}=sideNames();
     el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
       `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
-      `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; },
+      `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`+
+      // Whether this capture is verified as the match it is being filed
+      // against. Drawn on every tick, so it cannot be overwritten by the next
+      // status message the way the first attempt was.
+      (session.codeVerdict
+        ? `<div style="margin-top:3px;font-weight:700;font-size:11px;color:${session.codeVerdict.ok?'#5fd08a':'#ffb454'}">`
+          +`${session.codeVerdict.ok?'✓':'⚠'} ${esc(session.codeVerdict.text)}</div>`
+        : ''); },
   // Controls are rebuilt per map (startMap calls renderPipControls) so
   // sub-map / flip buttons always match the current map — no alt-tab.
   controls:[
