@@ -277,7 +277,6 @@ button:disabled{opacity:.45;cursor:default}
       <div class="row" style="margin-top:8px">
         <select id="code" class="skel" disabled></select>
         <button id="copy" class="ghost" title="Copy the selected replay code into your clipboard">Copy</button>
-        <button id="readcode" class="ghost" title="Read the replay code off the screen and check it against this division's codes">Read code</button><span class="wip" title="Experimental — OCRs the code printed on the HUD banner. Checked against the feed, so a misread cannot select a code that does not exist.">WIP</span>
         <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
       </div>
       <div class="row" style="margin-top:8px">
@@ -677,30 +676,9 @@ async function readReplayCode(){
 }
 function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
 
-// matchReadCode(read, codes) - what a code read off the screen corresponds to
-// in this division's feed.
-//
-// The feed is what makes the league read trustworthy where a scrim read is not:
-// here every code has a right answer available, so a one-character miss is
-// recoverable rather than silently wrong. Crockford excludes I/L/O precisely
-// because they are confusable with 1/0 and foldCode applies the published
-// folding; this catches what survives it.
-//
-// A TIE ABSTAINS. Two feed codes one character from the read means choosing
-// either could file the capture against the wrong match, which is the exact
-// failure this exists to prevent.
-function matchReadCode(read, codes){
-  if(!read) return {kind:'none', code:null};
-  const list=(codes||[]).map(c=>c.code).filter(Boolean);
-  if(list.indexOf(read)!==-1) return {kind:'exact', code:read};
-  const near=list.filter(c=>{
-    if(c.length!==read.length) return false;
-    let d=0; for(let i=0;i<c.length;i++) if(c[i]!==read[i]) d++;
-    return d===1;
-  });
-  if(near.length===1) return {kind:'near', code:near[0]};
-  return {kind:'none', code:null};
-}
+// matchReadCode and the verdict built on it now live in engine/replaycode.js,
+// where they can be exercised by node:test without a browser or an OCR pass.
+// See ensureCodeChecked() below for the one place the page consults them.
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
@@ -725,23 +703,6 @@ document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); }
 document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
 document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };
 document.getElementById('code').onchange=onCode;
-// The wrong-match guard. Picking the wrong code from a dropdown of lookalike
-// six-character strings attributes every comp captured afterwards to the wrong
-// match, teams and players, and publishes it - with nothing to say it happened.
-// This asks the screen instead.
-document.getElementById('readcode').onclick=async()=>{
-  const got=await readReplayCode();
-  if(!got){ snapMsg(esc(codeReadProblem()), true); return; }
-  const cs=currentCodes(), m=matchReadCode(got, cs);
-  if(m.kind==='none'){ snapMsg('screen says '+esc(got)+', which is not a code in this division — nothing changed', true); return; }
-  const cur=selectedCode();
-  if(cur && cur.code===m.code){ snapMsg('screen says '+esc(m.code)+' — matches what is selected'); return; }
-  const idx=cs.findIndex(c=>c.code===m.code);
-  const sel=document.getElementById('code');
-  sel.value=String(idx); onCode();
-  snapMsg((m.kind==='near'?'read '+esc(got)+', nearest code is ':'screen says ')
-      +esc(m.code)+' — selected it');
-};
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
 function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`${c.code} — copied`;} }
 document.getElementById('skip').onclick=nextCode;
@@ -1209,6 +1170,75 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
 // first snapshot pays no OCR cost. On failure the snapshot is refused outright
 // (never guess a side) and BOTH surfaces — the main page and the control panel —
 // are told to set the left team by hand; the next Snapshot press retries fresh.
+// The wrong-match guard, run on a map's FIRST snapshot.
+//
+// Picking the wrong code from a dropdown of lookalike six-character strings
+// attributes every comp captured afterwards to the wrong match, teams and
+// players, and publishes it with nothing to say it happened. The codes are fed
+// to the operator, so there is nothing to LOOK UP here - what is worth checking
+// is that the replay actually on screen is the one they picked.
+//
+// Returns false only to block a snapshot, and only on a definite disagreement
+// between two codes that both exist in the feed. Everything it cannot settle
+// abstains and lets capture proceed: the code banner is not always on screen
+// and OCR can simply fail, so a guard that can make capture impossible would be
+// worse than the bug it prevents. See engine/replaycode.js for the verdict
+// table, which is unit-tested there.
+//
+// CAPPED AT THREE ATTEMPTS per map. One is fragile at a map transition, where
+// the banner may not be painted yet; unlimited retries would cost an OCR pass
+// on every snapshot of a map whose banner never reads. After the third, it says
+// so once and stands down.
+const CODE_CHECK_TRIES=3;
+async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) return true;
+  if(s._codeChecking) return false;   // an attempt is in flight (rapid S presses) - don't stack OCR passes
+  const sel=selectedCode(); if(!sel||!sel.code){ s.codeChecked=true; return true; }
+  s._codeChecking=true;
+  try{
+    const got=await readReplayCode();
+    if(session!==s) return true;      // the operator changed code or map mid-read
+    const v=OWDBReplayCode.checkAgainstSelected(got, currentCodes(), sel.code);
+    if(v.status==='ok'){
+      s.codeChecked=true;
+      snapMsg('screen shows '+esc(v.code)+' — the match you picked');
+      return true;
+    }
+    if(v.status==='abstain'){
+      s.codeTries=(s.codeTries||0)+1;
+      if(s.codeTries>=CODE_CHECK_TRIES){
+        s.codeChecked=true;           // stand down, but say so - silence here is what hid the last one
+        snapMsg('could not verify the replay code ('+esc(got?('read '+got):codeReadProblem())
+          +') — check yourself that this is '+esc(sel.code), true);
+      }
+      return true;                    // NEVER blocks
+    }
+    // A real disagreement. Both codes exist in this division's feed, so one of
+    // them is what is on screen and the other is what every capture from here
+    // would be filed against. The operator decides; the tool does not reassign
+    // on its own, because a near match is an OCR inference and switching on it
+    // silently is the same class of error as picking the wrong row by hand.
+    const act=await uiModal({ title:'The screen is not the match you picked',
+      bodyHtml:'Screen says <b>'+esc(v.code)+'</b>'
+        +(v.near?' (read as '+esc(v.read)+', one character off)':'')
+        +'<br>You selected <b>'+esc(sel.code)+'</b>'
+        +(sel.team_a?' — '+esc(sel.team_a)+' vs '+esc(sel.team_b||'?'):'')
+        +'<br><br>Every comp captured from here is filed against whichever you choose.',
+      escapeValue:'keep',
+      actions:[{label:'Keep '+sel.code, value:'keep', ghost:true},
+               {label:'Switch to '+v.code, value:'switch'}] });
+    if(session!==s) return true;
+    s.codeChecked=true;
+    if(act==='switch'){
+      const cs=currentCodes(), idx=cs.findIndex(c=>c.code===v.code);
+      if(idx!==-1){ const el=document.getElementById('code'); el.value=String(idx); onCode(); }
+      snapMsg('switched to '+esc(v.code)+' — snapshot again to capture it', true);
+      return false;                   // onCode() restarted the map; this snapshot is void
+    }
+    snapMsg('keeping '+esc(sel.code)+' — capturing against your selection', true);
+    return true;
+  }catch(e){ console.warn('code check skipped:', e); s.codeChecked=true; return true; }
+  finally{ s._codeChecking=false; }
+}
 async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
   if(s._detecting) return false;    // an attempt is already in flight (rapid S presses) — let it finish, don't stack OCR passes
   s._detecting=true;

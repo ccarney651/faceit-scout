@@ -135,9 +135,69 @@
     return { x: cx - w / 2 + dx * a.w, y: cy - h / 2 + dy * a.h, w: w, h: h };
   }
 
+  // matchReadCode(read, codes) - what a code read off the screen corresponds to
+  // in this division's feed.
+  //
+  // The feed is what makes the league read trustworthy where a scrim read is
+  // not: here every code has a right answer available, so a one-character miss
+  // is recoverable rather than silently wrong. Crockford excludes I/L/O
+  // precisely because they are confusable with 1/0 and foldCode applies the
+  // published folding; this catches what survives it.
+  //
+  // A TIE ABSTAINS. Two feed codes one character from the read means choosing
+  // either could file the capture against the wrong match, which is the exact
+  // failure this exists to prevent.
+  function matchReadCode(read, codes) {
+    if (!read) return { kind: 'none', code: null };
+    var list = (codes || []).map(function (c) { return c && c.code; })
+      .filter(Boolean);
+    if (list.indexOf(read) !== -1) return { kind: 'exact', code: read };
+    var near = list.filter(function (c) {
+      if (c.length !== read.length) return false;
+      var d = 0;
+      for (var i = 0; i < c.length; i++) if (c[i] !== read[i]) d++;
+      return d === 1;
+    });
+    if (near.length === 1) return { kind: 'near', code: near[0] };
+    return { kind: 'none', code: null };
+  }
+
+  // checkAgainstSelected(read, codes, selected) - the verdict the league page
+  // needs on a map's FIRST snapshot: is the screen showing the match the
+  // operator picked to scout?
+  //
+  // Picking the wrong code from a dropdown of lookalike six-character strings
+  // attributes every comp captured afterwards to the wrong match, teams and
+  // players, and publishes it with nothing to say it happened. This asks the
+  // screen instead - but only ever to REFUSE, never to reassign: 'mismatch'
+  // reports both codes and the page puts the choice to the operator.
+  //
+  // 'abstain' is the important status. The code banner is not always on screen
+  // and OCR can simply fail, so a guard that cannot tell must let capture
+  // proceed - one that can make capture impossible is worse than the bug it
+  // prevents. Everything unknown lands here: a failed read, a read matching no
+  // feed code, a tie, an empty feed, and a selection the feed does not carry
+  // (which is a page bug, not an operator error, and blocking on it would
+  // accuse the operator of something they did not do).
+  function checkAgainstSelected(read, codes, selected) {
+    var out = { status: 'abstain', code: null, selected: selected || null,
+                read: read || null, near: false };
+    if (!read || !selected) return out;
+    var list = (codes || []).map(function (c) { return c && c.code; })
+      .filter(Boolean);
+    if (!list.length || list.indexOf(selected) === -1) return out;
+    var m = matchReadCode(read, codes);
+    if (m.kind === 'none') return out;
+    out.code = m.code;
+    out.near = m.kind === 'near';
+    out.status = m.code === selected ? 'ok' : 'mismatch';
+    return out;
+  }
+
   var Mod = {
     ALPHABET: ALPHABET, LEN: LEN, foldCode: foldCode, codeBox: codeBox,
     PROBES: PROBES, probeStrip: probeStrip,
+    matchReadCode: matchReadCode, checkAgainstSelected: checkAgainstSelected,
     OFFSETS: { DX: DX, DW: DW, DY: DY, DH: DH, PAD: PAD },
   };
 
