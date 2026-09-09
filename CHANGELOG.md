@@ -40,6 +40,16 @@ Entries before 2026-08-11 were reconstructed from git history.
   where the code assumed, so the code clicked blind - and every one was
   reproducible for nothing from frames already on disk.
 
+- **`tools/replay_bot/scrape_codes.js`, which finds test codes that will
+  actually work.** It pulls from owreplays.tv filtered to competitive role queue
+  - the only mode on there shaped like a FACEIT game - and drops anything from
+  before the last code wipe. Both filters were learned the hard way on the same
+  day: four of five codes picked by hand were quick play and three were 6v6,
+  which draws six portraits a side against geometry frozen at five; and 83 of
+  the ~100 competitive replays listed sit on a wiped patch. The site's patch
+  levels corroborate `_SEED_WIPES` to within seven hours, so it doubles as an
+  independent check on a wipe date.
+
 ### Fixed
 
 - **A replay on a bright map was read as no replay at all, and it cost a code.**

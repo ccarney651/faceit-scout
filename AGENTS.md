@@ -323,6 +323,27 @@ canonical and this copy is the bug.
   detector over every retained frame, which is how the panel detector was
   caught.
 
+- **Test codes come from `scrape_codes.js`, and picking them by hand goes wrong.**
+  `node tools/replay_bot/scrape_codes.js` pulls fresh ones off owreplays.tv
+  filtered to **competitive role queue** (the site's mode 2 / gametype 1), which
+  is the only thing on there shaped like a FACEIT game. Four of five codes
+  picked by hand on 2026-09-09 turned out to be quick play and three of those
+  were **6v6** - six portraits a side against geometry frozen at five, so every
+  cell would have read the wrong hero with nothing in the output saying so.
+- **The patch filter is the part that matters, and it is not optional.** Codes
+  die at a patch. The site records each replay's `PatchLevel`, and it lines up
+  with `owdb/db.py._SEED_WIPES` exactly: uploads on 2.24.0.3 stop at 2026-09-08
+  12:42Z, 2.24.1.0 starts 19:15Z, against the ledger's *"patch on the 8th ~19:00
+  UK"*. **That makes the site an independent witness to a wipe date** the project
+  otherwise records only by observation - worth checking against when a new wipe
+  is suspected. Of ~100 competitive role-queue replays listed, 83 sit on the
+  wiped patch; the scraper drops them and says how many it dropped.
+- **The live-patch pool is small - about 14 at any moment, and shared with
+  yourself.** The scraper skips anything in `state/attempts.json` or
+  `state/seen_codes.json` (both per-machine and gitignored, like the ledger they
+  sit beside). It refills as people upload, so re-running it later finds more;
+  running it twice in one evening will not.
+
 - **A league code can only be imported once, and that shapes everything.**
   Importing one the account already holds makes the client warn and demand a
   manual scroll-and-select, which ends an unattended run. Imports cannot be
