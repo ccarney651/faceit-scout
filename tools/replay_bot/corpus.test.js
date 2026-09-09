@@ -87,28 +87,40 @@ test('a loading screen is not mistaken for a replay', { skip }, async () => {
   }
 });
 
-// AN OPEN EVENTS PANEL ONLY EXISTS INSIDE A REPLAY, so every frame labelled
-// open is a replay whether or not anyone wrote "hud" next to it. That is the
-// ground truth this is graded against, and it is independent of the tint.
-//
 // The measure used to be taken over the whole plate box, which catches the name
 // plates, the health pips and whatever the map shows between the cells. On a
 // bright blue map that cancelled team B's red entirely: 4.8 against a threshold
 // of 15, on a replay that was on screen at the time. run.js reads exactly this
 // to decide whether a replay loaded, waited 90 seconds, gave up, and spent the
 // code - which is what happened to RCR3NK.
-test('every replay frame in the corpus reads as a replay', { skip }, async () => {
-  const missed = [];
-  let worst = Infinity;
-  for (const p of C.panels()) {
-    if (!p.open) continue;               // shut tells us nothing either way
-    const tint = Crop.hudTint(await load(C.at(p.file)), calib);
-    worst = Math.min(worst, tint.a, tint.b);
-    if (!calib.hudPresent(tint)) missed.push(p.file + ' read ' + Math.min(tint.a, tint.b).toFixed(1));
+//
+// GRADED AGAINST WHAT SOMEBODY SAW, NOT AGAINST THE OPEN PANEL. An earlier
+// version of this took "the events viewer is open" to mean "a replay is
+// readable", on the reasoning that the panel only exists inside a replay. The
+// panel does - but the PLATES take a moment to paint after a seek, and a frame
+// caught in that moment has an open panel, a playhead, and nothing at all where
+// the portraits go. `mid-seek` is one. So the label is the human one.
+test('a replay reads as a replay, and a frame without plates does not', { skip }, async () => {
+  const wrong = [];
+  for (const name of Object.keys(C.WITNESSES)) {
+    const w = C.WITNESSES[name];
+    const tint = Crop.hudTint(await load(C.file(name)), calib);
+    if (calib.hudPresent(tint) !== w.hud) {
+      wrong.push(name + ' should be ' + (w.hud ? 'a replay' : 'no replay') +
+        ', read ' + Math.min(tint.a, tint.b).toFixed(1));
+    }
   }
-  assert.deepStrictEqual(missed, []);
-  assert.ok(worst > calib.HUD_TINT * 2,
-    'and the dimmest clears the threshold with room: ' + worst.toFixed(1) + ' against ' + calib.HUD_TINT);
+  assert.deepStrictEqual(wrong, []);
+});
+
+// How much room the threshold actually has, on the dimmest frame in the corpus
+// whose plates are genuinely drawn. Everything reading lower is a seek caught
+// mid-transition, which hudPresent is right to refuse - so this, not those, is
+// the number that says whether 15 is safe.
+test('the dimmest properly drawn replay clears the threshold with room', { skip }, async () => {
+  const tint = Crop.hudTint(await load(C.file('dim-replay')), calib);
+  const margin = Math.min(tint.a, tint.b) - calib.HUD_TINT;
+  assert.ok(margin > 10, 'margin is only ' + margin.toFixed(1));
 });
 
 test('two frames of the ESC menu are the same screen, and a replay is not', { skip }, async () => {

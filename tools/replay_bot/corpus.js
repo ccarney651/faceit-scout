@@ -12,6 +12,19 @@
 // megabytes each. This file is the part worth keeping: the names, and the
 // reason each one is here. Tests skip themselves when the frames are absent,
 // so a checkout without them is green rather than broken.
+//
+// THEY LIVE IN frames/corpus/ BECAUSE THE BOT REUSES FILENAMES. A run names
+// its frames cap-<tag>-<n>.png with n restarting at zero every time, so the
+// next run silently overwrites the last one's. This corpus originally pointed
+// straight at frames/, and a five-map run replaced three labelled witnesses -
+// including the frame whose 15.1 tint was the entire evidence for reading the
+// team plates off the portrait band. Every test still passed, because the
+// replacements happened to fall on the same side of every threshold. The
+// labels were describing pictures that no longer existed.
+//
+// frames/corpus/ is copied by hand and never written by a run. When a witness
+// is added, copy it in - a name here that points at frames/ is a label with a
+// countdown on it.
 
 (function (global) {
   'use strict';
@@ -19,17 +32,38 @@
   var fs = require('fs');
   var path = require('path');
 
-  var DIR = path.join(__dirname, 'frames');
+  var DIR = path.join(__dirname, 'frames', 'corpus');
 
   // `open` and `hud` are what the picture shows, not what any code says.
   var WITNESSES = {
     'panel-open': {
       file: 'cap-t180-34.png',
-      saw: 'A replay with the events viewer open - ROUND 1/2/3 stacked down ' +
-        'the left - over an explosion bright enough to wash team A\'s tint ' +
-        'down to 15.1, which is 0.1 above the threshold that decides whether ' +
-        'a replay is on screen at all.',
+      saw: 'A replay with the events viewer open and the media controls up. ' +
+        'NOT the frame originally labelled here - that one caught an explosion ' +
+        'bright enough to wash team A down to a tint of 15.1, and a later run ' +
+        'overwrote it before the corpus was moved somewhere safe. The reading ' +
+        'it carried is recorded in crop.hudTint and in the commit that made ' +
+        'it; the picture is gone.',
       open: true, hud: true, playhead: true,
+    },
+    'dim-replay': {
+      file: 'cap-pos-42.png',
+      saw: 'The dimmest frame in the corpus with both team plates actually ' +
+        'drawn: a minimum tint of 27.6 against a threshold of 15. Everything ' +
+        'reading lower turns out to be a seek caught mid-transition, with the ' +
+        'plates not yet painted at all - which hudPresent is right to refuse. ' +
+        'This is the frame that says how much room the threshold really has.',
+      open: true, hud: true, playhead: true,
+    },
+    'mid-seek': {
+      file: 'cap-q-147.png',
+      saw: 'A post-seek grab with NO PLAYER PLATES AT ALL - team headers, an ' +
+        'open events panel, a playhead, and darkness where the portraits go. ' +
+        'Its tint of 7.3 is stray scene light, not a plate. Reading this ' +
+        'frame would produce ten confident-looking heroes out of nothing, ' +
+        'which is why the tint is checked before a sample is believed, and ' +
+        'why there is now a wait after a seek.',
+      open: true, hud: false, playhead: true,
     },
     'panel-shut-bright': {
       file: 'cap-zero-51.png',

@@ -82,6 +82,19 @@ They are gitignored like everything else here. `contact_sheet.js` renders the
 ten crops of any of them, which is how a geometry problem gets looked at rather
 than believed.
 
+## The corpus, and why it is a subdirectory
+
+`corpus/` holds the frames that have been **looked at and labelled**. It exists
+because a run names its frames `cap-<tag>-<n>.png` with `n` restarting at zero
+every time, so **the next run overwrites the last one's**. The corpus first
+pointed straight at this directory, and a five-map run replaced three labelled
+witnesses - one of them the frame whose 15.1 tint was the whole evidence for
+reading the team plates off the portrait band. Every test still passed, because
+the replacements happened to fall on the same side of every threshold.
+
+Copy a new witness in by hand. A label pointing at a frame out here has a
+countdown on it.
+
 **The ones that have been looked at are named in `../corpus.js`**, with a note
 on what is actually in each. That file is the committed half of this directory:
 the frames are megabytes and stay out of git, the labels are small and are the
