@@ -96,6 +96,15 @@
         'everywhere, and both tints read 0.0.',
       open: false, hud: false, playhead: false,
     },
+    'replay-history': {
+      file: 'cap-probe-5.png',
+      saw: 'The career-profile REPLAYS list - IMPORTED (10), a row per replay, ' +
+        'ESC/BACK bottom right. The screen the client was sitting on when ' +
+        '7V4END failed to import: open-import navigates from wherever it is, ' +
+        'so its first clicks landed here instead of on a menu, and the bot ' +
+        'then waited ninety seconds for a replay that was never opening.',
+      open: false, hud: false, playhead: false,
+    },
     'esc-menu': {
       file: 'cap-probe-84.png',
       saw: 'The ESC menu - SOCIAL / CAREER PROFILE / OPTIONS / LEAVE GAME. ' +

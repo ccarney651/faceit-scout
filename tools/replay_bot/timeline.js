@@ -206,9 +206,33 @@
   // start of the map, where no portraits are drawn yet, and read ten cells of
   // confident nonsense (Zarya 0.52, Jetpack Cat 0.47) that would have gone
   // straight into the output.
+  // How far into the bar a stretch of play can begin and still be the assemble
+  // phase rather than a round. The bar does not always read zero at the start -
+  // some maps show a few seconds of break first - so this is a small allowance,
+  // not an equality test. Every genuine first round measured across a twenty-map
+  // league run began between 0:49 and 0:58.
+  var ASSEMBLE_STARTS_BY_S = 10;
+
+  // Stretches of play that are not rounds, marked so the log can show them as
+  // setup rather than silently renumbering everything after them.
+  //
+  // TWO THINGS ARE NOT A ROUND. A stretch shorter than minPlayS is the usual
+  // blip. And a stretch that starts at the very beginning of the bar is the
+  // ASSEMBLE PHASE, whatever its length - every map opens with one, so nothing
+  // is played before it.
+  //
+  // The second rule exists because the first is not enough, and a live map
+  // proved it: a hybrid opened with exactly 30 seconds of play against a
+  // 30-second floor, survived by one second, and was recorded with five rounds
+  // where four were played. Raising the floor is the wrong fix - assemble
+  // phases measured 7 to 30 seconds, but a real round can be 43 - so a floor
+  // high enough to catch it starts eating rounds that were played.
   function dropShortPlay(segs, minPlayS) {
     return segs.map(function (s) {
-      if (!s.play || (s.to - s.from) >= minPlayS) return s;
+      if (!s.play) return s;
+      var tooShort = (s.to - s.from) < minPlayS;
+      var isAssemble = s.from <= ASSEMBLE_STARTS_BY_S;
+      if (!tooShort && !isAssemble) return s;
       return { from: s.from, to: s.to, play: false, tooShort: true };
     });
   }

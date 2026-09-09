@@ -152,9 +152,9 @@ async function inReplay(io) {
 // menu differ by 3.4, and it differs from a replay by 82 - but two frames of a
 // REPLAY differ from each other by 55, because the game behind the HUD is a
 // different scene entirely. So this trick works here and nowhere else.
-async function escMenuUp(io) {
+async function onScreen(io, name) {
   try {
-    const known = readJson(path.join(__dirname, 'screens', 'esc-menu.json'), null);
+    const known = readJson(path.join(__dirname, 'screens', name + '.json'), null);
     if (!known) return false;
     const img = await io.loadImage(await io.grabTo('probe'));
     return S.looksLike(S.thumb(img), known.thumb).same;
@@ -162,6 +162,23 @@ async function escMenuUp(io) {
     return false;
   }
 }
+
+const escMenuUp = (io) => onScreen(io, 'esc-menu');
+
+// Whether the client is sitting on the career-profile REPLAYS list.
+//
+// THE IMPORT CHUNK NAVIGATES FROM WHEREVER IT IS, so starting a run already on
+// this screen puts its first clicks somewhere else entirely. That is how 7V4END
+// was lost: the code never imported, the bot waited its ninety seconds for a
+// replay that was never opening, and every code after it worked because leaving
+// the first map normalises the state. Only the FIRST code of a run is exposed,
+// which is exactly the kind of fault that hides.
+//
+// The list's contents change as replays are imported and evicted, and that does
+// not matter: across ninety seconds of probes the fingerprint moved between 0.6
+// and 5.3 against a threshold of 18, while a replay sits at 100 and the ESC
+// menu at 121.
+const replayHistoryUp = (io) => onScreen(io, 'replay-history');
 
 async function waitFor(io, want, timeoutMs, label) {
   const until = Date.now() + timeoutMs;
@@ -270,6 +287,21 @@ async function main() {
           throw new Error('the ESC menu will not close - the client is not where ' +
             'the chunks expect it');
         }
+      }
+
+      // The replay list is the other screen the import chunk cannot start from.
+      // Backed out of rather than clicked through, and refused loudly if it
+      // will not go - a chunk played from the wrong screen spends the code and
+      // reports nothing useful.
+      for (let back = 0; await replayHistoryUp(io); back++) {
+        if (back >= 2) {
+          throw new Error('the client is stuck on the replay list - the import ' +
+            'chunk navigates from somewhere else, so playing it here would ' +
+            'click blind and spend the code for nothing');
+        }
+        console.log('the replay list is up - backing out before importing');
+        await I.sendKeys(['ESC']);
+        await wait(1200);
       }
 
       // The import chunk clicks the replay history tab. Playing it while a

@@ -163,3 +163,56 @@ test('the plan no longer reaches for 0:00', () => {
   const plan = T.plan(segs, T.samplesFor(segs), { stepS: 60 });
   assert.ok(!plan.includes(0), 'sampling the first instant of a map reads no HUD at all');
 });
+
+// THE ASSEMBLE PHASE IS NOT A ROUND, AND ONE MAP PROVED THE LENGTH TEST IS NOT
+// ENOUGH. A hybrid in the first twenty-map league run opened with a stretch of
+// play exactly 30 seconds long against a 30-second floor, so it survived by one
+// second and the map was recorded with five rounds where four were played. The
+// map-type check could not catch it either: hybrid has no upper bound, because
+// a score past 3 goes to extra rounds.
+//
+// Raising the floor is the wrong lever. Assemble phases measured 7 to 30
+// seconds across that run, but a REAL round can be short too - a Junkertown
+// escort's second round ran 43 seconds - so a floor high enough to catch this
+// starts eating rounds that were played.
+//
+// The structural fact is better: every map opens with an assemble phase, so a
+// stretch of play starting at the very beginning of the bar is that phase and
+// never a round. Every genuine first round in that run began between 0:49 and
+// 0:58.
+test('play starting at the very beginning of the bar is the assemble phase', () => {
+  const got = T.dropShortPlay([
+    { from: 0, to: 30, play: true },
+    { from: 30, to: 58, play: false },
+    { from: 58, to: 531, play: true },
+  ], 30);
+  assert.deepStrictEqual(got.map((s) => s.play), [false, false, true]);
+  assert.strictEqual(got[0].tooShort, true, 'shown as setup, like any other non-round');
+});
+
+test('a long opening stretch is still not a round if it starts at zero', () => {
+  const got = T.dropShortPlay([{ from: 0, to: 400, play: true }], 30);
+  assert.strictEqual(got[0].play, false, 'nothing is played before the assemble phase');
+});
+
+// The bar does not always start exactly at zero - some maps read a few seconds
+// of break first - so "at the beginning" has to allow for that.
+test('play beginning a few seconds in is still the assemble phase', () => {
+  const got = T.dropShortPlay([
+    { from: 3, to: 33, play: true },
+    { from: 33, to: 60, play: false },
+    { from: 60, to: 500, play: true },
+  ], 30);
+  assert.deepStrictEqual(got.map((s) => s.play), [false, false, true]);
+});
+
+// And a short round in the MIDDLE of a map is a round: the Junkertown escort's
+// 43-second second round is real, and dropping it loses half the map.
+test('a short round later in the map is kept', () => {
+  const got = T.dropShortPlay([
+    { from: 49, to: 294, play: true },
+    { from: 294, to: 367, play: false },
+    { from: 367, to: 410, play: true },
+  ], 30);
+  assert.deepStrictEqual(got.map((s) => s.play), [true, false, true]);
+});
