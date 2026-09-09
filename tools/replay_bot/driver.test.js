@@ -93,15 +93,21 @@ test('the driver settles after seeking, before anything reads the screen', async
 // because it was closed. These pin the "measure, then press at most once"
 // rule: pressing when it is already open would close it, and pressing twice
 // would put it back where it started.
-test('an already-open events viewer is left alone', async () => {
+// There is no absolute test for "already open" any more, and there cannot be:
+// Circuit Royal's bright sky read 0.529 through the panel box, the bot decided
+// the viewer was open, and neither N nor K was pressed - leaving no controls, no
+// bar, and a map that failed calibrating. So K is always pressed, and a panel
+// that was already open announces itself by the reading FALLING.
+test('a viewer that was already open is closed by K and put back', async () => {
   let presses = 0;
+  const reads = [0.755, 0.211, 0.755];
   const got = await D.ensureEventsViewer({
-    read: async () => 0.755,
-    isOpen: (f) => f >= 0.5,
+    read: async () => (reads.length > 1 ? reads.shift() : reads[0]),
     toggle: async () => { presses++; },
   });
-  assert.strictEqual(presses, 0, 'a press would have closed it');
-  assert.deepStrictEqual([got.open, got.pressed], [true, false]);
+  assert.strictEqual(presses, 2, 'closed it, then put it back');
+  assert.strictEqual(got.open, true);
+  assert.deepStrictEqual(got.steps, ['K', 'K again']);
 });
 
 test('a closed events viewer is opened with one press', async () => {
@@ -281,11 +287,19 @@ test('controls that will not show mean K is never pressed', async () => {
   assert.match(got.reason, /media controls/);
 });
 
-test('an already-open viewer needs neither key', async () => {
-  const v = viewerCtx({ reads: [0.755], mediaVisible: () => true });
+test('the controls are still raised even when the panel is already open', async () => {
+  const v = viewerCtx({ reads: [0.755, 0.211, 0.755], mediaVisible: () => true });
   const got = await D.ensureEventsViewer(v.ctx);
-  assert.deepStrictEqual(v.log, [], 'no press at all');
+  assert.deepStrictEqual(v.log, ['N', 'K', 'K'], 'N first, then K twice');
   assert.strictEqual(got.open, true);
+});
+
+// A panel that closes and refuses to reopen is a failure, not a silent pass.
+test('a panel that will not come back is reported', async () => {
+  const v = viewerCtx({ reads: [0.755, 0.211, 0.211], mediaVisible: () => true });
+  const got = await D.ensureEventsViewer(v.ctx);
+  assert.strictEqual(got.open, false);
+  assert.match(got.reason, /would not reopen/);
 });
 
 test('showing the media controls settles, like every other UI move', async () => {

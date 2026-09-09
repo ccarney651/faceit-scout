@@ -52,7 +52,7 @@
   // showing them. `mediaVisible()` catches that - the playhead is drawn only
   // while the controls are up - and one more press puts them back.
   //
-  // THE VERDICT IS THE CHANGE, NOT THE LEVEL. The panel is translucent and its
+  // THE VERDICT IS THE CHANGE, AND ONLY THE CHANGE. The panel is translucent and its
   // contents vary, so how bright it reads depends on the map behind it and on
   // how much happened in the game:
   //
@@ -61,15 +61,19 @@
   //     Havana, Quick Play  0.000 closed -> 0.252 open
   //
   // Havana's OPEN panel reads dimmer than Busan's CLOSED one, so no absolute
-  // threshold can separate them - and a threshold was what refused two maps
-  // that had opened perfectly well. Every press that worked raised the fraction
-  // by at least 0.25; `rise` is that, halved for margin.
+  // threshold can separate them. Two maps were refused by one; a third was
+  // WRECKED by one, when Circuit Royal's bright sky read 0.529 through the
+  // panel box, the bot concluded the viewer was already open, and neither N nor
+  // K was ever pressed - leaving no media controls, no bar, and a seek that
+  // moved nothing.
+  //
+  // So there is no absolute test left anywhere in here. K is pressed every
+  // time, and the reading either rises (it opened), falls by as much (it was
+  // open and has just been closed, so press again), or does not move (nothing
+  // is there to open, which is a failure). Every press that worked raised the
+  // fraction by at least 0.25; `rise` is that, halved for margin.
   async function ensureEventsViewer(ctx) {
     var steps = [];
-    var before = await ctx.read();
-    if (ctx.isOpen(before)) {
-      return { open: true, pressed: false, before: before, after: before, steps: steps };
-    }
 
     if (ctx.showMedia) {
       await ctx.showMedia();
@@ -86,8 +90,8 @@
           return {
             open: false,
             pressed: false,
-            before: before,
-            after: before,
+            before: null,
+            after: null,
             steps: steps,
             reason: 'media controls would not show, so K has nothing to open',
           };
@@ -95,17 +99,42 @@
       }
     }
 
+    var rise = ctx.rise === undefined ? 0.125 : ctx.rise;
+    var before = await ctx.read();
     await ctx.toggle();
     steps.push('K');
     var after = await ctx.read();
-    var rise = ctx.rise === undefined ? 0.125 : ctx.rise;
+
+    if (after - before >= rise) {
+      return { open: true, pressed: true, before: before, after: after,
+        rose: after - before, steps: steps };
+    }
+
+    // It went DOWN by as much as an opening would raise it: the panel was
+    // already open and K has just closed it. Put it back and check.
+    if (before - after >= rise) {
+      await ctx.toggle();
+      steps.push('K again');
+      var back = await ctx.read();
+      return {
+        open: back - after >= rise,
+        pressed: true,
+        before: before,
+        after: back,
+        rose: back - after,
+        steps: steps,
+        reason: back - after >= rise ? null : 'the panel closed and would not reopen',
+      };
+    }
+
     return {
-      open: ctx.isOpen(after) || (after - before) >= rise,
+      open: false,
       pressed: true,
       before: before,
       after: after,
       rose: after - before,
       steps: steps,
+      reason: 'pressing K changed nothing',
     };
   }
 

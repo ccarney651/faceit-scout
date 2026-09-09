@@ -89,6 +89,19 @@
     eventsPanel: { x0: 30, x1: 530, y0: 280, y1: 480, minBrightFrac: 0.35, brightAt: 170 },
   };
 
+  // Whether a replay is on screen at all, from the team tint crop.js read off
+  // the two portrait bands.
+  //
+  // Both sides must be tinted: a black loading screen reads 0.0 on each, and
+  // the smallest margin measured on a real replay frame was 29. 15 sits between
+  // them with room on both sides. This does NOT depend on the media controls
+  // being up, which is the whole point - they are hidden when a replay opens.
+  var HUD_TINT = 15;
+
+  function hudPresent(tint) {
+    return tint.a >= HUD_TINT && tint.b >= HUD_TINT;
+  }
+
   // Whether the events viewer is open, given the bright fraction crop.js read
   // out of the panel box.
   function eventsViewerOpen(brightFraction) {
@@ -133,6 +146,8 @@
 
   var Mod = {
     FROZEN: FROZEN,
+    HUD_TINT: HUD_TINT,
+    hudPresent: hudPresent,
     cells: cells,
     check: check,
     eventsViewerOpen: eventsViewerOpen,

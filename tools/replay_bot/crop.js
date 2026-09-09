@@ -157,8 +157,45 @@
     return best;
   }
 
+  // How strongly each side's portrait band is tinted with its team colour.
+  //
+  // THIS IS WHAT "A REPLAY IS ON SCREEN" LOOKS LIKE. The playhead was used for
+  // that and it was wrong: the media controls are HIDDEN when a replay opens,
+  // so a perfectly good replay showed no scrubber, run.js waited 90 seconds for
+  // one, gave up - and then played the import chunk inside the replay it had
+  // failed to notice, clicking at coordinates that meant something else
+  // entirely.
+  //
+  // The plates are always there and always coloured: side a blue, side b red.
+  // Measured across real frames, the smallest margins were 29 and 35, against
+  // exactly 0.0 on a black loading screen.
+  function hudTint(img, calib) {
+    var cv = createCanvas(img.width, img.height);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    var d = cx.getImageData(0, 0, img.width, img.height).data;
+
+    var out = {};
+    ['a', 'b'].forEach(function (side) {
+      var box = calib.FROZEN.boxes[side];
+      var r = 0, b = 0, n = 0;
+      for (var y = Math.round(box.y); y < Math.round(box.y + box.h); y += 3) {
+        for (var x = Math.round(box.x); x < Math.round(box.x + box.w); x += 3) {
+          var i = (y * img.width + x) * 4;
+          r += d[i];
+          b += d[i + 2];
+          n++;
+        }
+      }
+      // Signed towards the side's own colour, so both are positive in a replay.
+      out[side] = n ? (side === 'a' ? (b - r) / n : (r - b) / n) : 0;
+    });
+    return out;
+  }
+
   var Mod = {
     cell: cell,
+    hudTint: hudTint,
     all: all,
     barFlags: barFlags,
     panelBrightFraction: panelBrightFraction,

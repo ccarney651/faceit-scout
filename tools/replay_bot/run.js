@@ -126,13 +126,19 @@ function writeJson(p, value) {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Whether a replay is on screen, judged by the playhead being drawn. It is the
-// one thing that is present in a replay and absent in the menus, and it is
-// already read for seeking, so nothing new has to be calibrated for it.
+// Whether a replay is on screen, judged by the two team plates being tinted.
+//
+// NOT THE PLAYHEAD, which is what this used and why a run once did nothing at
+// all: the media controls are HIDDEN when a replay opens, so there is no
+// scrubber to find. The bot waited ninety seconds for one inside a replay that
+// was already playing, gave up, and then ran the import chunk from inside that
+// replay - clicking at coordinates that mean something else there.
+//
+// The plates are drawn whether the controls are up or not.
 async function inReplay(io) {
   try {
     const img = await io.loadImage(await io.grabTo('probe'));
-    return !!Crop.playheadX(img, calib);
+    return calib.hudPresent(Crop.hudTint(img, calib));
   } catch (e) {
     return false;
   }
@@ -233,6 +239,16 @@ async function main() {
     };
     writeJson(STATE, state);
     try {
+      // The import chunk clicks the replay history tab. Playing it while a
+      // replay is still open puts those clicks somewhere else entirely, which
+      // is how one failed map turned into a run that spent two more codes
+      // achieving nothing.
+      if (await inReplay(io)) {
+        console.log('still inside a replay - leaving before importing');
+        await R.play('leave-replay', { speed: args.chunkSpeed });
+        await waitFor(io, false, EXIT_TIMEOUT_MS, 'the replay to close');
+      }
+
       const tOpen = Date.now();
       await R.play('open-import', { code: code.code, speed: args.chunkSpeed });
       const tPlayed = Date.now();

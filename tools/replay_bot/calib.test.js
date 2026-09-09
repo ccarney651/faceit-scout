@@ -67,3 +67,37 @@ test('the open/closed threshold sits between the two measured states', () => {
   const t = C.FROZEN.eventsPanel.minBrightFrac;
   assert.ok(t > 0.211 && t < 0.755, `threshold ${t} must separate the measurements`);
 });
+
+// --- is a replay even on screen? ------------------------------------------
+//
+// This used to be answered by the playhead, and that was wrong in a way that
+// cost three codes: the media controls are HIDDEN when a replay opens, so a
+// perfectly good replay shows no scrubber. The bot waited 90s for one inside a
+// replay that was already playing, then ran the import chunk from inside it.
+//
+// The team plates are drawn either way - side a blue, side b red. Measured on
+// real frames: 76.2/35.1 with the controls down, 49.8/43.0 mid-sample,
+// 29.1/58.9 during assemble, and exactly 0.0/0.0 on a black loading screen.
+
+test('a replay frame reads as a replay', () => {
+  assert.strictEqual(C.hudPresent({ a: 76.2, b: 35.1 }), true, 'controls down');
+  assert.strictEqual(C.hudPresent({ a: 49.8, b: 43.0 }), true, 'mid-sample');
+  assert.strictEqual(C.hudPresent({ a: 29.1, b: 58.9 }), true, 'assemble phase');
+});
+
+test('a black loading screen does not', () => {
+  assert.strictEqual(C.hudPresent({ a: 0, b: 0 }), false);
+});
+
+// Both sides have to be tinted. One alone could be anything the map happens to
+// be showing - a red wall, a blue sky - and reading a menu as a replay is how
+// clicks end up somewhere they mean something else.
+test('one tinted side is not enough', () => {
+  assert.strictEqual(C.hudPresent({ a: 60, b: 2 }), false);
+  assert.strictEqual(C.hudPresent({ a: 2, b: 60 }), false);
+});
+
+test('the threshold sits between the loading screen and the tightest real frame', () => {
+  assert.ok(C.HUD_TINT > 0 && C.HUD_TINT < 29,
+    'below the smallest margin measured on a real replay, above black');
+});

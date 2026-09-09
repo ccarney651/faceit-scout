@@ -77,6 +77,10 @@
   // is far above this.
   var MOTION_DIFF = 1.5;
 
+  // How long to let the client finish loading before giving up on a frame.
+  var LOAD_TRIES = 12;
+  var LOAD_WAIT_MS = 400;
+
   var mmss = function (s) {
     return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
   };
@@ -171,10 +175,11 @@
       // Retained frames are a regression corpus, so a frame that gets read as a
       // sample is copied to a name that says which sample it was. Copying a PNG
       // is a few milliseconds against a 497ms grab.
-      keepAs: function (tag) {
-        if (!lastSettled) return null;
+      keepAs: function (tag, src) {
+        var from = src || lastSettled;
+        if (!from) return null;
         var dest = path.join(framesDir, 'cap-' + tag + '-' + (n++) + '.png');
-        fs.copyFileSync(lastSettled, dest);
+        fs.copyFileSync(from, dest);
         return dest;
       },
     };
@@ -211,6 +216,44 @@
     await drv.pause();
     await sleep(400);
     return { known: true, paused: !await moving(), pressed: true };
+  }
+
+  // A frame with the replay actually on screen.
+  //
+  // A LOADING SCREEN IS BLACK, PERFECTLY STILL, AND SETTLES BEAUTIFULLY. That
+  // is the worst possible input: every readiness test built so far - two frames
+  // agreeing, waiting a fixed time, the picture not moving - says a loading
+  // screen is ready, and the matcher then scores hero templates against black
+  // and returns 0.29 to 0.63 with no sign anything is wrong. It happened three
+  // ways in one run: two samples of a map read as nonsense, and another map
+  // died calibrating because the bar was not there.
+  //
+  // The media controls are absent while the client loads, so the playhead is
+  // the signal. No playhead means WAIT, not read, and not fail.
+  async function readyFrame(io, first) {
+    var p = first || await io.grabTo('ready');
+    for (var i = 0; i < LOAD_TRIES; i++) {
+      var img = await io.loadImage(p);
+      // The HUD, not the playhead: the media controls hide themselves, and a
+      // frame with the portraits drawn is exactly what a sample needs.
+      if (calib.hudPresent(Crop.hudTint(img, calib))) return { path: p, img: img };
+      await sleep(LOAD_WAIT_MS);
+      p = await io.grabTo('ready');
+    }
+    return null;
+  }
+
+  // The same wait, for the bar rather than the HUD. Calibration needs the
+  // playhead specifically, and by then N has been pressed so it should be up.
+  async function barFrame(io, first) {
+    var p = first || await io.grabTo('bar');
+    for (var i = 0; i < LOAD_TRIES; i++) {
+      var img = await io.loadImage(p);
+      if (Crop.playheadX(img, calib)) return { path: p, img: img };
+      await sleep(LOAD_WAIT_MS);
+      p = await io.grabTo('bar');
+    }
+    return null;
   }
 
   // Pixels per second of playback, by playing the replay and watching the knob.
@@ -337,8 +380,10 @@
       //    be up before the events viewer will open. A run that pressed only K
       //    sat at 0.023 before and after, having done nothing.
       var viewer = await D.ensureEventsViewer({
-        read: async function () { return Crop.panelBrightFraction(img0, calib); },
-        isOpen: calib.eventsViewerOpen,
+        read: async function () {
+          img0 = await io.loadImage(await io.grabTo('panel'));
+          return Crop.panelBrightFraction(img0, calib);
+        },
         // The playhead is drawn only while the media controls are up, so it
         // doubles as the check that N went the right way.
         mediaVisible: async function () { return !!Crop.playheadX(img0, calib); },
@@ -400,11 +445,16 @@
       // 3. The bar's scale, measured on this map by moving it and looking.
       await io.sendKeys([D.KEY.jumpToStart]);
       await io.settle();
-      var atZero = Crop.playheadX(await io.loadImage(io.lastFrame()), calib);
+      var zeroFrame = await barFrame(io, io.lastFrame());
       await io.sendKeys([D.KEY.forward]);
       await io.settle();
-      var atOne = Crop.playheadX(await io.loadImage(io.lastFrame()), calib);
-      if (!atZero || !atOne) throw new Error('no playhead on the bar - is a replay open?');
+      var oneFrame = await barFrame(io, io.lastFrame());
+      if (!zeroFrame || !oneFrame) {
+        throw new Error('the bar never appeared - the replay is still loading, or ' +
+          'the media controls are down');
+      }
+      var atZero = Crop.playheadX(zeroFrame.img, calib);
+      var atOne = Crop.playheadX(oneFrame.img, calib);
 
       ref = { zeroX: atZero.centre, stepPx: atOne.centre - atZero.centre, stepS: stepS };
       if (ref.stepPx <= 0) {
@@ -494,9 +544,16 @@
           continue;
         }
 
-        // The frame the seek left behind IS the sample - grabbing another one
-        // reads the same still screen half a second later.
-        var framePath = (io.keepAs && io.keepAs('t' + t)) || await io.grabTo('t' + t);
+        // The frame the seek left behind IS the sample - unless the client is
+        // still loading, in which case it is black and would read as ten heroes
+        // that are not there.
+        var ready = await readyFrame(io, io.lastFrame());
+        if (!ready) {
+          missed.push({ t: t, at: at, reason: 'still loading' });
+          log(mmss(t).padStart(6) + '  NOT LOADED - dropped');
+          continue;
+        }
+        var framePath = io.keepAs ? io.keepAs('t' + t, ready.path) : ready.path;
         var read = await readHud(framePath);
 
         // ONE SECOND LOOK IF IT LOOKS WRONG. A frame caught while the HUD is
