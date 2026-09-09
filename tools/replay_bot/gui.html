@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>replay-bot recorder</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 24px;
+    background: #14161a; color: #d8dde3;
+    font: 14px/1.5 ui-monospace, Consolas, "DejaVu Sans Mono", monospace;
+  }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: #8b949e; margin: 0 0 20px; }
+  .rect { color: #7ec699; }
+  .rect.bad { color: #e5786d; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262b33; vertical-align: top; }
+  th { color: #8b949e; font-weight: normal; }
+  td.name { color: #e6d08a; white-space: nowrap; }
+  td.state { white-space: nowrap; }
+  .missing { color: #8b949e; }
+  .have { color: #7ec699; }
+  .does { color: #8b949e; }
+  button { font: inherit; background: #222831; color: #d8dde3; border: 1px solid #39414d;
+           padding: 3px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #2c3441; }
+  button:disabled { opacity: .4; cursor: default; }
+  input { font: inherit; background: #0f1115; color: #d8dde3; border: 1px solid #39414d;
+          padding: 3px 6px; width: 9em; text-transform: uppercase; }
+  #status { margin: 18px 0 8px; min-height: 1.5em; }
+  #status.working { color: #e6d08a; }
+  #status.bad { color: #e5786d; }
+  #status.good { color: #7ec699; }
+  pre { background: #0f1115; border: 1px solid #262b33; padding: 12px; max-width: 1100px;
+        overflow-x: auto; white-space: pre; margin: 0 0 20px; }
+  .hint { color: #8b949e; max-width: 1100px; }
+</style>
+</head>
+<body>
+
+<h1>replay-bot recorder</h1>
+<p class="sub">Records what you do in the Overwatch window, and replays it per code.</p>
+
+<p>window: <span id="rect" class="rect">checking…</span></p>
+
+<table>
+  <thead>
+    <tr><th>chunk</th><th>from</th><th>record</th><th>state</th><th></th></tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<p id="status"></p>
+<pre id="log">Ready. Overwatch must be running, and stays where it is - recording only
+captures what happens while its window is in front.</pre>
+
+<p class="hint">
+  Recording: press <b>Record</b>, alt-tab into Overwatch, do the step, press <b>F10</b>.<br>
+  Anything you do outside the game window is ignored, so getting there is free.<br>
+  Pauses over 3 seconds are capped on playback, so end a chunk at the click that
+  starts a slow load rather than recording yourself waiting through it.
+</p>
+
+<script>
+let state = { chunks: [], wanted: [], busy: null };
+let working = false;
+// Typed codes live here rather than in the inputs, because every action
+// re-renders the table and a cleared code box after a recording would mean
+// retyping it to play the chunk straight back - which is the one thing you
+// always want to do next.
+const codes = {};
+
+const el = (id) => document.getElementById(id);
+const byName = (n) => state.chunks.find((c) => c.name === n);
+
+function say(text, kind) {
+  el('status').textContent = text;
+  el('status').className = kind || '';
+}
+
+function describe(events) {
+  return events.map((e) => {
+    const wait = String(e.waitMs).padStart(5) + 'ms  ';
+    if (e.type === 'click') return '  +' + wait + 'click ' + e.button + ' at ' + e.x + ',' + e.y;
+    if (e.type === 'text') return '  +' + wait + 'type ' + e.value;
+    if (e.type === 'paste') return '  +' + wait + 'paste ' + e.value;
+    return '  +' + wait + 'key ' + e.key;
+  }).join('\n');
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : {});
+  const out = await res.json();
+  if (!res.ok) throw new Error(out.error || res.statusText);
+  return out;
+}
+
+function render() {
+  const r = state.rect;
+  el('rect').textContent = r
+    ? r.w + 'x' + r.h + ' at ' + r.ox + ',' + r.oy
+    : (state.rectError || 'not found');
+  el('rect').className = 'rect' + (r ? '' : ' bad');
+
+  const known = new Set(state.wanted.map((w) => w.name));
+  const extra = state.chunks.filter((c) => !known.has(c.name))
+    .map((c) => ({ name: c.name, from: '(recorded by hand)', does: '', needsCode: c.typesCode }));
+
+  el('rows').innerHTML = '';
+  state.wanted.concat(extra).forEach((w) => {
+    const got = byName(w.name);
+    const tr = document.createElement('tr');
+
+    const name = document.createElement('td');
+    name.className = 'name';
+    name.textContent = w.name;
+
+    const from = document.createElement('td');
+    from.innerHTML = w.from + (w.does ? '<br><span class="does">' + w.does + '</span>' : '');
+
+    const code = document.createElement('td');
+    let input = null;
+    if (w.needsCode || (got && got.typesCode)) {
+      input = document.createElement('input');
+      input.placeholder = 'code';
+      input.value = codes[w.name] || '';
+      input.oninput = (ev) => { codes[w.name] = ev.target.value.trim(); };
+      code.appendChild(input);
+    } else {
+      code.innerHTML = '<span class="does">-</span>';
+    }
+
+    const st = document.createElement('td');
+    st.className = 'state';
+    st.innerHTML = got
+      ? '<span class="have">' + got.events.length + ' events</span>' +
+        (got.typesCode ? ' <span class="does">+code</span>' : '')
+      : '<span class="missing">not recorded</span>';
+
+    const act = document.createElement('td');
+    act.appendChild(button('Record', () => record(w.name, codes[w.name])));
+    if (got) {
+      act.appendChild(button('Check', () => check(w.name, codes[w.name])));
+      act.appendChild(button('Play', () => play(w.name, codes[w.name])));
+      act.appendChild(button('Show', () => show(got)));
+      act.appendChild(button('Delete', () => remove(w.name)));
+    }
+
+    [name, from, code, st, act].forEach((td) => tr.appendChild(td));
+    el('rows').appendChild(tr);
+  });
+
+  document.querySelectorAll('button').forEach((b) => { b.disabled = working; });
+}
+
+function button(label, fn) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.style.marginRight = '6px';
+  b.onclick = fn;
+  return b;
+}
+
+async function guard(what, fn) {
+  working = true;
+  render();
+  say(what, 'working');
+  try {
+    await fn();
+  } catch (e) {
+    say(e.message, 'bad');
+    el('log').textContent = e.message;
+  } finally {
+    working = false;
+    await refresh();
+  }
+}
+
+function record(name, code) {
+  return guard('recording "' + name + '" - alt-tab into Overwatch, do the step, press F10',
+    async () => {
+      const got = await api('/api/record', { name, code: code || null });
+      el('log').textContent = 'saved ' + got.events.length + ' events to ' + got.path +
+        '\n\n' + describe(got.events) + (got.warning ? '\n\nWARNING: ' + got.warning : '');
+      say(got.warning ? 'recorded, with a warning - read the log' : 'recorded ' + name,
+        got.warning ? 'bad' : 'good');
+    });
+}
+
+// Walks the chunk without sending anything. Worth doing before every Play,
+// because a real attempt at open-import spends a replay code for good.
+function check(name, code) {
+  return guard('checking "' + name + '" - nothing is sent', async () => {
+    const got = await api('/api/check', { name, code: code || null });
+    const nl = String.fromCharCode(10);
+    el('log').textContent = got.would.join(nl) + nl + nl +
+      'walked ' + got.n + ' of ' + got.planned + ' events, sent nothing';
+    say('checked ' + name + ' - it walks clean', 'good');
+  });
+}
+
+function play(name, code) {
+  return guard('playing "' + name + '" - hands off the mouse', async () => {
+    const got = await api('/api/play', { name, code: code || null });
+    say('played ' + got.n + ' of ' + got.planned + ' events', 'good');
+  });
+}
+
+function remove(name) {
+  return guard('deleting "' + name + '"', async () => {
+    await api('/api/delete', { name });
+    say('deleted ' + name, 'good');
+  });
+}
+
+function show(chunk) {
+  el('log').textContent = chunk.name + '  recorded ' + chunk.recorded_at +
+    '  in ' + chunk.client.w + 'x' + chunk.client.h + '\n\n' + describe(chunk.events);
+  say('');
+}
+
+async function refresh() {
+  try {
+    state = await api('/api/state');
+  } catch (e) {
+    say('cannot reach the recorder server: ' + e.message, 'bad');
+  }
+  render();
+}
+
+refresh();
+</script>
+</body>
+</html>

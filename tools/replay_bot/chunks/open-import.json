@@ -1,0 +1,50 @@
+{
+  "name": "open-import",
+  "recorded_at": "2026-09-09T00:37:04.414Z",
+  "client": {
+    "w": 2560,
+    "h": 1440
+  },
+  "events": [
+    {
+      "type": "click",
+      "button": "left",
+      "x": 2345,
+      "y": 463,
+      "waitMs": 0,
+      "holdMs": 61
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "x": 1282,
+      "y": 710,
+      "waitMs": 1262,
+      "holdMs": 124
+    },
+    {
+      "type": "paste",
+      "value": "$CODE",
+      "waitMs": 156,
+      "holdMs": 60
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "x": 1340,
+      "y": 833,
+      "waitMs": 1175,
+      "holdMs": 93
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "x": 1340,
+      "y": 833,
+      "waitMs": 1626,
+      "holdMs": 126
+    }
+  ],
+  "repaired_at": "2026-09-09T01:45:00.000Z",
+  "repair_note": "the Ctrl+V was recorded as a bare V, before record_input.ps1 watched modifiers; restored as the paste it was"
+}

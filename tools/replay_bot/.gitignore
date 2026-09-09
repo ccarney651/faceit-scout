@@ -1,0 +1,8 @@
+# Run artefacts, not source.
+#
+# out/    - captured contribution files; the real ones belong in data/captures/
+# state/  - the attempt ledger, which is per-machine: it records which codes
+#           this client has already imported, and a code can only be imported
+#           once, so it must never be shared between rigs or reset by a merge.
+out/
+state/
