@@ -86,7 +86,19 @@
     // is decided by the rise, in driver.ensureEventsViewer. See the readings
     // there - an open panel on one map reads dimmer than a closed one on
     // another, so the level alone cannot separate the two states.
-    eventsPanel: { x0: 30, x1: 530, y0: 280, y1: 480, minBrightFrac: 0.35, brightAt: 170 },
+    // minFlatRows is the test; brightAt/minBrightFrac survive only because the
+    // probes still print a brightness. flatSd is how uniform a row must be to
+    // count as one of the panel's bars.
+    //
+    // Measured open/closed across three maps - a dark one, a bright daylight
+    // one and a neon one: closed 0.000/0.120/0.000, open 0.595/0.690/0.345.
+    // 0.22 sits in the gap. Brightness over the same six frames overlapped
+    // completely, which is what this replaced.
+    eventsPanel: {
+      x0: 30, x1: 530, y0: 280, y1: 480,
+      minFlatRows: 0.22, flatSd: 12,
+      minBrightFrac: 0.35, brightAt: 170,
+    },
   };
 
   // Whether a replay is on screen at all, from the team tint crop.js read off
@@ -102,10 +114,10 @@
     return tint.a >= HUD_TINT && tint.b >= HUD_TINT;
   }
 
-  // Whether the events viewer is open, given the bright fraction crop.js read
-  // out of the panel box.
-  function eventsViewerOpen(brightFraction) {
-    return brightFraction >= FROZEN.eventsPanel.minBrightFrac;
+  // Whether the events viewer is open, given the flat-row fraction crop.js read
+  // out of the panel box. See crop.panelFlatRows for why it is not brightness.
+  function eventsViewerOpen(flatRows) {
+    return flatRows >= FROZEN.eventsPanel.minFlatRows;
   }
 
   // The five portrait crops for one side, left to right.

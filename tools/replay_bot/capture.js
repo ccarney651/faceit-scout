@@ -382,8 +382,9 @@
       var viewer = await D.ensureEventsViewer({
         read: async function () {
           img0 = await io.loadImage(await io.grabTo('panel'));
-          return Crop.panelBrightFraction(img0, calib);
+          return Crop.panelFlatRows(img0, calib);
         },
+        isOpen: calib.eventsViewerOpen,
         // The playhead is drawn only while the media controls are up, so it
         // doubles as the check that N went the right way.
         mediaVisible: async function () { return !!Crop.playheadX(img0, calib); },
@@ -397,9 +398,8 @@
         },
       });
       log('events viewer ' + (viewer.open ? 'open' : 'CLOSED') +
-        ' (bright ' + viewer.after.toFixed(3) + ' from ' + viewer.before.toFixed(3) +
-        (viewer.rose === undefined ? '' : ', rose ' + viewer.rose.toFixed(3)) +
-        (viewer.steps.length ? ', pressed ' + viewer.steps.join(' then ') : '') + ')');
+        ' (panel rows ' + (viewer.after === null ? '?' : viewer.after.toFixed(3)) +
+        (viewer.steps.length ? ', pressed ' + viewer.steps.join(' then ') : ', untouched') + ')');
       if (!viewer.open) {
         throw new Error('events viewer would not open' +
           (viewer.reason ? ' - ' + viewer.reason : '') +

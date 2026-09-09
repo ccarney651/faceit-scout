@@ -93,21 +93,19 @@ test('the driver settles after seeking, before anything reads the screen', async
 // because it was closed. These pin the "measure, then press at most once"
 // rule: pressing when it is already open would close it, and pressing twice
 // would put it back where it started.
-// There is no absolute test for "already open" any more, and there cannot be:
-// Circuit Royal's bright sky read 0.529 through the panel box, the bot decided
-// the viewer was open, and neither N nor K was pressed - leaving no controls, no
-// bar, and a map that failed calibrating. So K is always pressed, and a panel
-// that was already open announces itself by the reading FALLING.
-test('a viewer that was already open is closed by K and put back', async () => {
+// The panel's state is read from its structure - the flat bands the round rows
+// and dropdowns make - so it can simply be asked. Brightness could not be
+// asked: it is translucent, and a neon map behind it read HIGHER closed (0.548)
+// than a dark map did open (0.519).
+test('a viewer that is already open is left alone', async () => {
   let presses = 0;
-  const reads = [0.755, 0.211, 0.755];
   const got = await D.ensureEventsViewer({
-    read: async () => (reads.length > 1 ? reads.shift() : reads[0]),
+    read: async () => 0.60,
+    isOpen: (f) => f >= 0.22,
     toggle: async () => { presses++; },
   });
-  assert.strictEqual(presses, 2, 'closed it, then put it back');
-  assert.strictEqual(got.open, true);
-  assert.deepStrictEqual(got.steps, ['K', 'K again']);
+  assert.strictEqual(presses, 0, 'pressing K would have closed it');
+  assert.deepStrictEqual([got.open, got.pressed], [true, false]);
 });
 
 test('a closed events viewer is opened with one press', async () => {
@@ -236,7 +234,7 @@ function viewerCtx(opts) {
     log,
     ctx: {
       read: async () => (reads.length > 1 ? reads.shift() : reads[0]),
-      isOpen: (f) => f >= 0.35,
+      isOpen: (f) => f >= 0.22,     // calib.FROZEN.eventsPanel.minFlatRows
       mediaVisible: o.mediaVisible === undefined ? undefined : async () => o.mediaVisible(),
       showMedia: async () => { log.push('N'); },
       toggle: async () => { log.push('K'); },
@@ -252,14 +250,13 @@ test('the media controls are shown before the events viewer is toggled', async (
   assert.deepStrictEqual(got.steps, ['N', 'K']);
 });
 
-// A quick-play escort is one round, so its events panel is nearly empty and an
-// OPEN one reads dimmer (0.252) than a CLOSED panel on a busy Control map
-// (0.211). No level can separate those; the rise can.
-test('a press that raises the panel counts as open below the level', async () => {
-  const v = viewerCtx({ reads: [0.0, 0.252], mediaVisible: () => true });
+// The tightest open reading measured on a real map was 0.345, on a neon map
+// where the panel had two rounds in it and little else. The threshold has to
+// clear that with room, and clear a closed reading of 0.120 the other way.
+test('the dimmest real panel still reads as open', async () => {
+  const v = viewerCtx({ reads: [0.0, 0.345], mediaVisible: () => true });
   const got = await D.ensureEventsViewer(v.ctx);
-  assert.strictEqual(got.open, true, '0.252 is under the 0.35 level but rose 0.252');
-  assert.ok(Math.abs(got.rose - 0.252) < 1e-9);
+  assert.strictEqual(got.open, true);
 });
 
 test('a press that changes nothing is still a closed viewer', async () => {
@@ -287,19 +284,13 @@ test('controls that will not show mean K is never pressed', async () => {
   assert.match(got.reason, /media controls/);
 });
 
-test('the controls are still raised even when the panel is already open', async () => {
-  const v = viewerCtx({ reads: [0.755, 0.211, 0.755], mediaVisible: () => true });
+// N is pressed even when the panel is already open: the media controls are a
+// separate thing, and the bar is what calibration reads.
+test('the controls are still raised when the panel is already open', async () => {
+  const v = viewerCtx({ reads: [0.60], mediaVisible: () => true });
   const got = await D.ensureEventsViewer(v.ctx);
-  assert.deepStrictEqual(v.log, ['N', 'K', 'K'], 'N first, then K twice');
+  assert.deepStrictEqual(v.log, ['N'], 'N yes, K no');
   assert.strictEqual(got.open, true);
-});
-
-// A panel that closes and refuses to reopen is a failure, not a silent pass.
-test('a panel that will not come back is reported', async () => {
-  const v = viewerCtx({ reads: [0.755, 0.211, 0.211], mediaVisible: () => true });
-  const got = await D.ensureEventsViewer(v.ctx);
-  assert.strictEqual(got.open, false);
-  assert.match(got.reason, /would not reopen/);
 });
 
 test('showing the media controls settles, like every other UI move', async () => {

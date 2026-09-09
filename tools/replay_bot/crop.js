@@ -87,8 +87,48 @@
     return out;
   }
 
-  // How much of the events-panel box is bright, which is how the bot tells
-  // whether the replay events viewer is open. It has to know, because the
+  // How much of the events-panel box is flat horizontal bands, which is how the
+  // bot tells whether the replay events viewer is open.
+  //
+  // BRIGHTNESS CANNOT ANSWER THIS AND THREE MAPS PROVED IT. The panel is
+  // translucent, so what it reads depends on the map behind it - on a dark map
+  // it brightens the box (0.045 -> 0.770), on a neon one it DARKENS it
+  // (0.548 -> 0.519). Closed readings ranged 0.045 to 0.548 and open ones 0.519
+  // to 0.770: overlapping, in both directions, so neither a level nor a rise
+  // can separate them. Two maps were refused with the panel plainly open on
+  // screen.
+  //
+  // Structure survives all of it. The panel is a stack of flat light bars - the
+  // round rows and the two dropdowns - and a row of one is nearly uniform
+  // across its width whatever is behind it. Measured on the same three maps:
+  // closed 0.000/0.120/0.000, open 0.595/0.690/0.345.
+  function panelFlatRows(img, calib) {
+    var p = calib.FROZEN.eventsPanel;
+    var cv = createCanvas(img.width, img.height);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    var d = cx.getImageData(0, 0, img.width, img.height).data;
+
+    var flat = 0, rows = 0;
+    for (var y = p.y0; y < p.y1; y++) {
+      var sum = 0, sum2 = 0, n = 0;
+      for (var x = p.x0; x < p.x1; x += 2) {
+        var i = (y * img.width + x) * 4;
+        var l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        sum += l;
+        sum2 += l * l;
+        n++;
+      }
+      var mean = sum / n;
+      var sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+      if (sd < p.flatSd) flat++;
+      rows++;
+    }
+    return rows ? flat / rows : 0;
+  }
+
+  // How much of the events-panel box is bright. Kept because the probes and the
+  // retained frames are full of it, but it decides nothing any more. It has to know, because the
   // scrubber only draws round breaks while that panel is showing, and K
   // toggles it - so pressing K blind would close it half the time.
   function panelBrightFraction(img, calib) {
@@ -199,6 +239,7 @@
     all: all,
     barFlags: barFlags,
     panelBrightFraction: panelBrightFraction,
+    panelFlatRows: panelFlatRows,
     playheadX: playheadX,
   };
 

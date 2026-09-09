@@ -52,26 +52,17 @@
   // showing them. `mediaVisible()` catches that - the playhead is drawn only
   // while the controls are up - and one more press puts them back.
   //
-  // THE VERDICT IS THE CHANGE, AND ONLY THE CHANGE. The panel is translucent and its
-  // contents vary, so how bright it reads depends on the map behind it and on
-  // how much happened in the game:
+  // THE PANEL IS READ BY ITS STRUCTURE, NOT ITS BRIGHTNESS. It is translucent,
+  // so brightness depends on the map behind it: on a dark map opening it took
+  // the box from 0.045 to 0.770, on a neon one from 0.548 DOWN to 0.519. Closed
+  // readings ranged 0.045-0.548 and open ones 0.519-0.770 - overlapping in both
+  // directions, so neither a level nor a rise could separate them, and two maps
+  // were refused with the panel plainly open on screen.
   //
-  //     Busan, Control      0.211 closed -> 0.755 open
-  //     Gibraltar, Escort   0.024 closed -> 0.504 open
-  //     Havana, Quick Play  0.000 closed -> 0.252 open
+  // crop.panelFlatRows counts the flat horizontal bands the panel is made of
+  // instead: closed 0.000/0.120/0.000 against open 0.595/0.690/0.345 on those
+  // same three maps. See calib.FROZEN.eventsPanel.
   //
-  // Havana's OPEN panel reads dimmer than Busan's CLOSED one, so no absolute
-  // threshold can separate them. Two maps were refused by one; a third was
-  // WRECKED by one, when Circuit Royal's bright sky read 0.529 through the
-  // panel box, the bot concluded the viewer was already open, and neither N nor
-  // K was ever pressed - leaving no media controls, no bar, and a seek that
-  // moved nothing.
-  //
-  // So there is no absolute test left anywhere in here. K is pressed every
-  // time, and the reading either rises (it opened), falls by as much (it was
-  // open and has just been closed, so press again), or does not move (nothing
-  // is there to open, which is a failure). Every press that worked raised the
-  // fraction by at least 0.25; `rise` is that, halved for margin.
   async function ensureEventsViewer(ctx) {
     var steps = [];
 
@@ -99,42 +90,27 @@
       }
     }
 
-    var rise = ctx.rise === undefined ? 0.125 : ctx.rise;
+    // With a reliable reading of the panel's state, this is simply a question
+    // worth asking: an open panel is left alone, and a closed one is pressed
+    // once and checked. The elaborate rise-and-fall dance that used to live
+    // here existed only because the reading was brightness, which could not
+    // tell the two states apart.
     var before = await ctx.read();
+    if (ctx.isOpen(before)) {
+      return { open: true, pressed: false, before: before, after: before, steps: steps };
+    }
+
     await ctx.toggle();
     steps.push('K');
     var after = await ctx.read();
-
-    if (after - before >= rise) {
-      return { open: true, pressed: true, before: before, after: after,
-        rose: after - before, steps: steps };
-    }
-
-    // It went DOWN by as much as an opening would raise it: the panel was
-    // already open and K has just closed it. Put it back and check.
-    if (before - after >= rise) {
-      await ctx.toggle();
-      steps.push('K again');
-      var back = await ctx.read();
-      return {
-        open: back - after >= rise,
-        pressed: true,
-        before: before,
-        after: back,
-        rose: back - after,
-        steps: steps,
-        reason: back - after >= rise ? null : 'the panel closed and would not reopen',
-      };
-    }
-
+    var open = ctx.isOpen(after);
     return {
-      open: false,
+      open: open,
       pressed: true,
       before: before,
       after: after,
-      rose: after - before,
       steps: steps,
-      reason: 'pressing K changed nothing',
+      reason: open ? null : 'K did not open the panel',
     };
   }
 

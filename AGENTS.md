@@ -327,15 +327,23 @@ canonical and this copy is the bug.
   2026-08-18 wipe and 255 dead codes hours after the 2026-09-08 patch. `run.js`
   refuses a feed not built today; `--stale-ok` overrides it, and rarely should.
 
-- **The events viewer needs N THEN K, every time, and its state is the RISE not
-  the level.** The scrubber only draws round breaks while that panel is open -
+- **The events viewer needs N THEN K, every time, and its state is read from
+  STRUCTURE.** The scrubber only draws round breaks while that panel is open -
   closed, a three-round Control map reads as one continuous segment,
   confidently and wrongly. The media controls must be up before K does
-  anything: a run that pressed only K measured 0.023 before and after. And the
-  panel is translucent, so an OPEN one on a quick-play map (0.252) reads dimmer
-  than a CLOSED one on a busy Control map (0.211) - no absolute threshold can
-  separate them, and the one that existed refused two maps that had opened fine.
-
+  anything: a run that pressed only K measured 0.023 before and after.
+- **Never judge the events panel by brightness, in either direction.** It is
+  translucent, so what the box reads depends entirely on the map behind it. Over
+  three maps: a dark one went 0.045 closed to 0.770 open, a bright one 0.488 to
+  0.519, and a NEON one went 0.548 DOWN to 0.519 - closed readings spanning
+  0.045-0.548 against open ones spanning 0.519-0.770. Overlapping in both
+  directions, so neither a level nor a rise works, and each version of that
+  mistake cost live codes: a level refused two maps that had opened, then
+  false-positived on a bright sky and skipped N and K entirely; a rise then
+  refused two more with the panel plainly open on screen.
+  `crop.panelFlatRows` counts the flat horizontal bands the panel is built from
+  instead - closed 0.000/0.120/0.000 against open 0.595/0.690/0.345 on those
+  same maps.
 - **Seek acceptance is PROBABILISTIC, not a threshold.** The client ignores a
   seek key arriving while it is still seeking. Bisecting for the cliff twice
   gave two different answers: 550ms dropped a press in one run and landed all

@@ -1839,11 +1839,14 @@ until you look. Several looked entirely healthy while being wrong.
   viewer needs **N then K, every time** — the media controls must be up before K
   will open the panel. A run that pressed only K measured 0.023 before and
   0.023 after, having done nothing, and refused two maps.
-- **The panel's state is the RISE, not the level.** Busan measured 0.211 closed
-  to 0.755 open; Gibraltar 0.024 to 0.504; a quick-play Havana 0.000 to
-  **0.252**. An open panel on one map reads dimmer than a closed one on another,
-  because the panel is translucent and its contents vary with how much happened
-  in the game. No absolute threshold can separate them.
+- **The panel's state is read from its structure, never its brightness.** It is
+  translucent, so the box follows the map behind it: a dark map went 0.045
+  closed to 0.770 open, a bright one 0.488 to 0.519, and a neon one 0.548 *down*
+  to 0.519. Closed readings span 0.045-0.548 and open ones 0.519-0.770 -
+  overlapping in both directions, so neither a level nor a change can separate
+  them, and each attempt at one cost live codes. `crop.panelFlatRows` counts the
+  flat horizontal bands the panel is made of: closed 0.000/0.120/0.000 against
+  open 0.595/0.690/0.345 on those same three maps.
 - **Breaks are found by colour, not brightness.** Event ticks and the playhead
   are bright white; the blue channel's lead over red is clean.
 - **A 20-second step is not a fixed number of pixels** — 45px on a 17-minute
