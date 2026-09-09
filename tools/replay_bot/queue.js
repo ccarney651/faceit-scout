@@ -9,9 +9,17 @@
 // client time on it is not a slow path, it is a guaranteed failure.
 //
 // Note that every live code shares ONE expiry: the next wipe kills the whole
-// queue at once, regardless of when each game finished. Ordering is therefore
-// about determinism and resumability, not triage - there is no "expiring
-// soonest" to prioritise.
+// queue at once, regardless of when each game finished. So there is no
+// "expiring soonest" to prioritise, and ordering within the queue is about
+// determinism and resumability.
+//
+// TRIAGE STILL MATTERS, THOUGH, AND FOR A DIFFERENT REASON: the queue does not
+// reliably FIT. The league produces about 127 coded games a day across every
+// region and tier, which is around nine hours of capture a week against a patch
+// cadence of roughly one - and those nine hours are hours the client cannot be
+// used for anything else. When the whole queue will not finish before the wipe,
+// which codes get the client's time is the entire question, so this filters by
+// division and by team.
 
 (function (global) {
   'use strict';
@@ -25,21 +33,47 @@
   // would silently skip every map after the first.
   function key(c) { return c.match_id + ':' + c.game_no; }
 
-  // Codes still worth spending client time on, oldest game first. filter()
-  // already copies, so the sort never disturbs the caller's feed.
+  function norm(s) { return String(s === null || s === undefined ? '' : s).toLowerCase(); }
+
+  // Loose, so "EMEA" takes every EMEA tier and "EMEA Master" takes just the one.
+  // A division name is curated text, not an identifier, and asking an operator
+  // to type it exactly is how a filter silently matches nothing.
+  function matchesAny(value, wanted) {
+    if (!wanted || !wanted.length) return true;
+    var v = norm(value);
+    return wanted.some(function (w) { return v.indexOf(norm(w)) !== -1; });
+  }
+
+  // Codes still worth spending client time on.
+  //
+  // Oldest game first by default: deterministic, and a resumed run picks up
+  // where it stopped. `newestFirst` is for when the queue will not finish and
+  // the freshest games are the ones worth having. Either way a match's four or
+  // five games share a timestamp and stay adjacent, which is what makes the
+  // output read as "this team, this match" rather than scattered maps.
+  //
+  // filter() already copies, so the sort never disturbs the caller's feed.
   function pending(codes, opts) {
     var wipeDate = opts.wipeDate;
     var done = new Set(opts.done || []);
+    var dir = opts.newestFirst ? -1 : 1;
     return codes
       .filter(function (c) { return day(c.finished_at) > wipeDate; })
       .filter(function (c) { return !done.has(key(c)); })
+      .filter(function (c) { return matchesAny(c.division, opts.divisions); })
+      .filter(function (c) {
+        if (!opts.teams || !opts.teams.length) return true;
+        return matchesAny(c.team_a, opts.teams) || matchesAny(c.team_b, opts.teams);
+      })
       .sort(function (x, y) {
-        return x.finished_at < y.finished_at ? -1 : x.finished_at > y.finished_at ? 1 : 0;
+        if (x.finished_at === y.finished_at) return 0;
+        return (x.finished_at < y.finished_at ? -1 : 1) * dir;
       });
   }
 
   var Mod = {
     day: day,
+    matchesAny: matchesAny,
     pending: pending,
   };
 

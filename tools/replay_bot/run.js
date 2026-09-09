@@ -4,6 +4,14 @@
 //   node tools/replay_bot/run.js --dry              show the queue, touch nothing
 //   node tools/replay_bot/run.js --limit 3          three maps from the feed
 //   node tools/replay_bot/run.js --codes A1B2C3,... arbitrary codes, for testing
+//   node tools/replay_bot/run.js --divisions "EMEA Master,EMEA Expert"
+//   node tools/replay_bot/run.js --teams Wasp,Crabs --newest
+//
+// The league produces about 127 coded games a day across every region and tier,
+// which is roughly nine hours of capture a week - hours the client cannot be
+// used for anything else - against a patch cadence of about one week. The whole
+// queue does not reliably fit before the wipe that kills it, so --divisions and
+// --teams are how the client's time gets spent on the games worth having.
 //
 // IT OWNS THE MACHINE while it runs. Keys and clicks only land in a foreground
 // client, so this is an overnight job on a rig nobody is using.
@@ -62,6 +70,9 @@ function parseArgs(argv) {
     codes: flag('--codes') ? flag('--codes').split(',').map((c) => c.trim()).filter(Boolean) : null,
     out: flag('--out'),
     staleOk: argv.includes('--stale-ok'),
+    divisions: flag('--divisions') ? flag('--divisions').split(',').map((d) => d.trim()).filter(Boolean) : null,
+    teams: flag('--teams') ? flag('--teams').split(',').map((t) => t.trim()).filter(Boolean) : null,
+    newestFirst: argv.includes('--newest'),
     // Skips the timed-playback measurement when the operator already knows what
     // the client is set to. Wrong here means every sample lands somewhere else,
     // so it is a flag and not a default.
@@ -212,6 +223,9 @@ async function main() {
         'or pass --stale-ok if you are certain.');
     }
     queue = Q.pending(feed.codes || [], {
+      divisions: args.divisions,
+      teams: args.teams,
+      newestFirst: args.newestFirst,
       wipeDate: feed.code_wipe_date,
       done: attemptedKeys(state),
     });
