@@ -115,13 +115,22 @@ function Do-Keys([string]$keyFile, [int]$gapMs) {
 
   # $code, NOT $vk: PowerShell variable names are case-insensitive, so $vk would
   # overwrite a $VK lookup table with the integer it had just read from it.
+  # THE GAP GOES BETWEEN PRESSES, NOT AFTER THE LAST ONE. It exists because the
+  # client silently ignores a seek key that arrives while it is still seeking,
+  # so it is about the NEXT press - and there is no next press after the last.
+  # Sleeping there anyway cost 700ms on every seek the bot made: a one-press
+  # seek measured 746ms of which 700 was waiting for nothing. The caller's own
+  # quiesce covers the draw before the frame is read, and every seek is checked
+  # against the playhead afterwards regardless.
+  $i = 0
   foreach ($k in $seq) {
     $code = $KEYS[$k]
     $scan = [byte][HostWin]::MapVirtualKey([uint32]$code, 0)
     [HostWin]::keybd_event([byte]$code, $scan, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 30
     [HostWin]::keybd_event([byte]$code, $scan, 2, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds $gapMs
+    $i++
+    if ($i -lt $seq.Count) { Start-Sleep -Milliseconds $gapMs }
   }
   return ('SENT {0} keys' -f $seq.Count)
 }

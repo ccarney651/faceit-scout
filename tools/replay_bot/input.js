@@ -71,7 +71,10 @@
   // itself and refuses if it cannot, because keys sent to an unfocused window
   // are silently discarded and would leave the bot believing it had seeked.
   async function sendKeys(keys, opts) {
-    var gapMs = (opts && opts.gapMs) || SEEK_GAP_MS;
+    // `|| SEEK_GAP_MS` here quietly turned a requested gap of 0 into 700, which
+    // is how every timing measurement of this path came out 700ms too high.
+    var gapMs = (opts && opts.gapMs !== undefined && opts.gapMs !== null)
+      ? opts.gapMs : SEEK_GAP_MS;
     var keyFile = path.join(os.tmpdir(), 'owdb-keys-' + process.pid + '-' + (seqNo++) + '.txt');
     fs.writeFileSync(keyFile, keys.join(String.fromCharCode(10)), 'utf8');
 
@@ -103,7 +106,8 @@
 
     var args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', SCRIPT, '-KeyFile', keyFile];
-    args.push('-GapMs', String((opts && opts.gapMs) || SEEK_GAP_MS));
+    args.push('-GapMs', String((opts && opts.gapMs !== undefined && opts.gapMs !== null)
+      ? opts.gapMs : SEEK_GAP_MS));
 
     return new Promise(function (resolve, reject) {
       execFile('powershell', args, { windowsHide: true }, function (err, stdout, stderr) {

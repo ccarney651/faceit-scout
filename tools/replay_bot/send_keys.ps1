@@ -72,13 +72,19 @@ if (-not $NoFocus) {
 # to index an integer, reporting only "Cannot index into a null array" with no
 # hint at the cause. Three unrelated theories about argument separators were
 # tried and discarded before anyone read the line number.
+# The gap belongs BETWEEN presses, not after the last one - it exists so the
+# next key does not arrive while the client is still seeking, and there is no
+# next key after the last. host.ps1 does the same; this script is the fallback
+# and the two must not disagree about what a gap means.
+$i = 0
 foreach ($k in $seq) {
   $code = $VK[$k]
   $scan = [byte][Keys]::MapVirtualKey([uint32]$code, 0)
   [Keys]::keybd_event([byte]$code, $scan, 0, [UIntPtr]::Zero)
   Start-Sleep -Milliseconds 30
   [Keys]::keybd_event([byte]$code, $scan, 2, [UIntPtr]::Zero)
-  Start-Sleep -Milliseconds $GapMs
+  $i++
+  if ($i -lt $seq.Count) { Start-Sleep -Milliseconds $GapMs }
 }
 
 Write-Output ("SENT {0} keys" -f $seq.Count)
