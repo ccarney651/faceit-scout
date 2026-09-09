@@ -49,10 +49,24 @@
   // reason: the level is map-dependent, the change is not.
   var VIEWER_RISE = 0.125;
 
-  // How long a seek needs to have drawn before its frame is worth reading.
-  // Menus still get the two-frame settle, because a half-drawn panel would be
-  // measured as a brightness and believed; a half-drawn HUD only scores badly.
-  var QUIESCE_MS = 320;
+  // How long a seek needs to have drawn before its frame is worth reading:
+  // MEASURED AT NOTHING.
+  //
+  // probe_limits.js seeks, reads immediately, then reads the same position again
+  // after everything has stopped, and compares the least confident of the ten
+  // cells. Across two runs and four delays the early read matched the settled
+  // one every time - 0.66 at +0ms against 0.66 at +640ms.
+  //
+  // The reason is that a grab is not free: a PowerShell spawn plus PrintWindow
+  // is about half a second, so by the time the frame is taken the HUD has long
+  // since finished moving. The wait was 320ms of waiting for something that had
+  // already happened. If grabbing ever gets fast (a persistent host would make
+  // it ~150ms), measure this again - the free wait disappears with it.
+  //
+  // Menus still get the two-frame settle, because a half-drawn panel is
+  // measured as a brightness and then believed; a half-drawn HUD only scores
+  // badly, and the sample loop re-reads when it does.
+  var QUIESCE_MS = 0;
 
   // Shorter than this, a stretch of play is the assemble phase rather than a
   // round. Every map measured opens with one.

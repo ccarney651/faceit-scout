@@ -349,6 +349,17 @@ canonical and this copy is the bug.
   open.** With it closed a three-round Control map reads as one continuous
   segment - confidently and wrongly. `K` toggles the panel, so check its
   brightness (`crop.panelBrightFraction`) rather than pressing blind.
+- **Seek acceptance is PROBABILISTIC, not a threshold.** Bisecting for the cliff
+  twice gave two different answers: 550ms dropped a press in one run and landed
+  all five in the next; 375ms landed 2 of 5, then 4 of 5. Any timing probe here
+  must measure a RATE over several trials - `probe_limits.js` does - and a
+  number found by one clean pass is a number found by luck. 700ms sits above
+  every failure yet seen (highest was 550ms).
+- **Waiting before a grab does nothing.** Reading a seek immediately scores the
+  same as reading it 640ms later, in both runs and at every delay, because a
+  grab is itself half a second of PowerShell spawn and PrintWindow - the wait
+  had already happened. `QUIESCE_MS` is 0. If grabbing ever gets fast, measure
+  it again: the free wait disappears with it.
 - **Seek keys need 700ms between them; at 45ms only one in five lands.** The
   client ignores a seek key that arrives while it is still seeking, silently -
   the keys are delivered, it just does not act on them. Measured with

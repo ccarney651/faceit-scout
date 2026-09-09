@@ -40,11 +40,16 @@
   // points inside the first two minutes of a seventeen-minute map while
   // reporting that it had covered all of it.
   //
-  // 700ms is 600 plus margin, since the cliff sits somewhere between 300 and
-  // 600 and nothing pins where. It costs about 20 seconds of seeking per map,
-  // which is nothing against a minute of grabs - and the driver verifies the
-  // result anyway, because a gap that is merely usually enough is not a thing
-  // to trust hundreds of maps to.
+  // THERE IS NO CLIFF. Bisecting for one, twice, gave two different answers:
+  // 550ms dropped a press in one run and landed all five in the next, and 375ms
+  // landed 2 of 5 then 4 of 5. Acceptance is probabilistic - presumably a race
+  // against however long that particular seek takes - so a threshold found by
+  // one clean bisection is a threshold found by luck.
+  //
+  // 700ms sits above every failure yet observed (the highest was 550ms). It
+  // costs a few seconds of seeking per map, and the driver verifies the result
+  // regardless, because a gap that is usually enough is not a thing to trust
+  // hundreds of unrepeatable maps to.
   var SEEK_GAP_MS = 700;
 
   function parse(stdout) {
