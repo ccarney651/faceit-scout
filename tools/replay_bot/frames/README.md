@@ -65,3 +65,19 @@ exactly why the annotated copy exists.
 
 A league replay frame is still wanted, so matcher scores can be measured against
 the heroes and name plates the bot will really meet.
+
+## What the bot leaves here
+
+A run keeps every frame it takes, named for what it was: `cap-timeline-*` and
+`cap-zero-*`/`cap-one-*` from the setup, `cap-t<seconds>-*` for each sample,
+`cap-settle-*`/`cap-q-*` from waiting, `cap-pause-*` from the motion check, and
+`probe-*` from whichever probe was run.
+
+Retention is not tidiness, it is the recovery path. **A replay code imports
+once**, so a map read badly cannot be re-captured on that account - but a better
+matcher can re-read its frames offline for nothing. That is why the guards
+refuse loudly rather than carrying on: only a broken *grab* is unrecoverable.
+
+They are gitignored like everything else here. `contact_sheet.js` renders the
+ten crops of any of them, which is how a geometry problem gets looked at rather
+than believed.

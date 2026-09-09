@@ -410,3 +410,42 @@ test('carriage returns and blank lines are not events', () => {
   const got = R.parseRaw('{"t":1}' + CR + NL + NL + '{"t":2}' + CR + NL);
   assert.deepStrictEqual(got.map((e) => e.t), [1, 2]);
 });
+
+// --- replaying faster than it was performed --------------------------------
+//
+// A recorded wait is the operator waiting: partly for a menu to animate, partly
+// for themselves. The import chunk spends about four seconds of a map on them.
+
+test('speed divides the recorded waits', () => {
+  const got = R.resolve(chunk([
+    { type: 'click', button: 'left', x: 1, y: 1, waitMs: 1200, holdMs: 60 },
+  ]), RECT, null, { speed: 2 });
+  assert.strictEqual(got[0].waitMs, 600);
+});
+
+test('no speed given means play it exactly as recorded', () => {
+  const got = R.resolve(chunk([
+    { type: 'click', button: 'left', x: 1, y: 1, waitMs: 1200, holdMs: 60 },
+  ]), RECT, null);
+  assert.strictEqual(got[0].waitMs, 1200);
+});
+
+// Menus need some time to draw whatever the speed says. Zero would not be a
+// faster version of the gesture, it would be a different one.
+test('a wait never scales below the floor', () => {
+  const got = R.resolve(chunk([
+    { type: 'click', button: 'left', x: 1, y: 1, waitMs: 150, holdMs: 60 },
+  ]), RECT, null, { speed: 10 });
+  assert.strictEqual(got[0].waitMs, R.MIN_WAIT_MS);
+});
+
+test('speed applies to every kind of event', () => {
+  const got = R.resolve(chunk([
+    { type: 'click', button: 'left', x: 1, y: 1, waitMs: 800, holdMs: 60 },
+    { type: 'scroll', x: 2, y: 2, notches: -2, waitMs: 800, holdMs: 1 },
+    { type: 'drag', button: 'left', x: 3, y: 3, toX: 9, toY: 9, path: [], waitMs: 800, holdMs: 60 },
+    { type: 'key', key: 'DOWN', vk: 40, waitMs: 800, holdMs: 40 },
+    { type: 'paste', value: R.CODE, waitMs: 800, holdMs: 60 },
+  ]), RECT, 'ABC123', { speed: 4 });
+  assert.deepStrictEqual(got.map((e) => e.waitMs), [200, 200, 200, 200, 200]);
+});

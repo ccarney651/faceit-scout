@@ -65,6 +65,9 @@ function parseArgs(argv) {
     // so it is a flag and not a default.
     stepS: Number(flag('--step')) || null,
     intervalChunk: flag('--interval-chunk'),
+    // Divides the waits inside every chunk. 1 is as recorded; probe_chunk.js
+    // says what the client will actually keep up with.
+    chunkSpeed: Number(flag('--chunk-speed')) || 1,
   };
 }
 
@@ -231,7 +234,7 @@ async function main() {
     writeJson(STATE, state);
     try {
       const tOpen = Date.now();
-      await R.play('open-import', { code: code.code });
+      await R.play('open-import', { code: code.code, speed: args.chunkSpeed });
       const tPlayed = Date.now();
       await waitFor(io, true, LOAD_TIMEOUT_MS, 'the replay to load');
       const tLoaded = Date.now();
@@ -243,7 +246,7 @@ async function main() {
       // the interval must change before the step is measured.
       const setInterval = first && haveIntervalChunk ? async () => {
         console.log(`setting the skip interval (${intervalChunk}), once for this session`);
-        await R.play(intervalChunk, {});
+        await R.play(intervalChunk, { speed: args.chunkSpeed });
       } : null;
 
       // The first map measures the interval; the rest are told it, which saves
@@ -288,7 +291,7 @@ async function main() {
     // at coordinates that mean something else, so it is checked first.
     try {
       if (await inReplay(io)) {
-        await R.play('leave-replay', {});
+        await R.play('leave-replay', { speed: args.chunkSpeed });
         await waitFor(io, false, EXIT_TIMEOUT_MS, 'the replay to close');
       }
     } catch (e) {

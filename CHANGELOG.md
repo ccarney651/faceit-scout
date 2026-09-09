@@ -36,8 +36,16 @@ Entries before 2026-08-11 were reconstructed from git history.
   it wholesale.
 
   Design in `specs/2026-09-08-replay-bot-design.md`, architecture in
-  `ARCHITECTURE.md` §14. Not yet wired to the queue: opening a replay from a
-  code is still done by hand.
+  `ARCHITECTURE.md` §14.
+
+- **It runs unattended, end to end.** `run.js` walks the queue - import a code,
+  capture the map, leave, repeat - at roughly a minute a map, writing a
+  contribution file after every map rather than at the end of a night. Two
+  consecutive failures stop a run rather than burning the remaining codes
+  against a client stuck in a menu, and a **stale-feed guard** refuses a
+  `data.json` that was not built today: a feed from before a patch lists dead
+  codes while looking perfectly healthy, and a run aimed at it would spend the
+  whole queue on codes that cannot work.
 
 - **Round structure is read off the replay scrubber.** Between-round breaks are
   drawn in a different colour from play time, so a map's rounds are stated by
@@ -84,6 +92,15 @@ Entries before 2026-08-11 were reconstructed from git history.
   dead, and a code nobody scouts is never recoverable. Same reasoning as the
   2026-08-18 entry. CI regenerates the feed on its next run.
 
+- **A map takes about a minute, and where its time goes is measured.** One
+  long-lived PowerShell process replaced a spawn per call, taking a grab from
+  585ms to 204ms - two thirds of the old cost was process startup, paid twenty
+  times a map. The replay is paused before anything waits for the screen to be
+  still, since a playing replay never settles and each failed settle cost seven
+  seconds. Waiting before a grab turned out to do nothing at all, measured
+  twice, and was removed. `probe_limits.js` and `probe_chunk.js` exist so the
+  rest can be re-measured rather than argued about.
+
 ### Fixed
 
 - **A calibration number recorded as known-good was the uncommitted default.**
@@ -94,12 +111,18 @@ Entries before 2026-08-11 were reconstructed from git history.
   error is obvious; as a number it is invisible. `contact_sheet.js` now renders
   the ten crops so geometry can be looked at rather than believed.
 
-- **The bot opens the replay events viewer before reading round structure.** The
-  scrubber only draws between-round breaks while that panel is showing, so with
-  it closed a three-round Control map read as one continuous segment -
-  confidently, and wrongly, which is what the first live run did. `K` toggles
-  the panel, so `capture_map.js` measures its brightness, presses at most once,
-  and refuses the map if it will not open.
+- **The bot opens the replay events viewer before reading round structure, with
+  N then K.** The scrubber only draws between-round breaks while that panel is
+  showing, so with it closed a three-round Control map read as one continuous
+  segment - confidently and wrongly, which is what the first live run did. The
+  media controls have to be up before `K` will open the panel; a run that
+  pressed only `K` measured 0.023 before and after, having done nothing.
+
+  Its state is judged by the **change** a press makes, not by a brightness
+  threshold. The panel is translucent and its contents vary with how much
+  happened in the game, so an open panel on a quick-play map (0.252) reads
+  dimmer than a closed one on a busy Control map (0.211) - and the threshold
+  version refused two maps that had opened perfectly well.
 
 - **A seek moved one 20-second step per batch, not the number of steps asked
   for.** Found by reading the playhead in the six frames the first live run
@@ -110,6 +133,19 @@ Entries before 2026-08-11 were reconstructed from git history.
   was an artefact. The mechanism (most likely the client ignoring input while it
   seeks) is measured by `probe_seek.js`; until that is settled, no full-map run
   should be believed.
+
+- **The skip interval is measured rather than trusted.** Replay viewer options
+  revert at every client restart - a known Blizzard bug - so an interval set to
+  60 seconds last night is 20 tonight with nothing on screen to say which, and
+  assuming the wrong one puts every sample at a third or triple of its intended
+  time, inside the wrong round, looking entirely reasonable. The bot times
+  playback against the moving playhead and derives what a press is really worth.
+
+- **Setup blips are no longer sampled.** Every map opens with a few seconds of
+  play before the round proper, and with a 60-second interval the only reachable
+  point near it is 0:00 - where no portraits are drawn. Ten cells of confident
+  nonsense went into the output before this was caught; play segments under 30
+  seconds are now shown as setup and excluded.
 
 
 ## 2026-09-08

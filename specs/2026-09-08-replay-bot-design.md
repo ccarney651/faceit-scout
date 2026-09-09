@@ -4,6 +4,11 @@ An unattended harness that loads FACEIT replay codes into an Overwatch client,
 sweeps each replay, and reads hero compositions off the HUD — replacing the
 operator who currently has to sit in-game and scrub by hand.
 
+> **Status, 2026-09-09: built and running.** This is the design as it was
+> written. Where the build disagreed with it, the build won and
+> `ARCHITECTURE.md` section 14 is the as-built account; section 11 below
+> records which of these questions the building of it answered.
+
 ## 0. Why this exists
 
 Capture today needs a person. They share their screen to `docs/capture/index.html`,
@@ -372,14 +377,45 @@ run the client.
 
 ## 11. Open items
 
-- **Termination condition.** "N consecutive invalid frames, plus a hard cap" is
-  a reasonable default but has not been validated against a real replay's end
-  screen. Worth settling in a first spike.
-- **Sample interval.** 30s is a starting guess; §9's sparse-versus-dense test
-  replaces it with a number.
-- **Escort and Hybrid segmentation.** Control's resetting clock makes boundaries
-  obvious. Checkpoint-based modes need their rule written against real
-  observations.
-- **Input mechanism.** Every spectate control is rebindable in-game, so the
-  driver should bind seek and spectate to unambiguous keys rather than hunting
-  UI pixels. The specific automation library is left to implementation.
+**Settled by building it (2026-09-09).** Kept here with their answers, because
+what a design got wrong is worth as much as what it got right.
+
+- ~~**Termination condition.**~~ There is nothing to terminate. The scrubber
+  states the map's duration and its round structure, so the sample plan is
+  finite before the first seek — "N consecutive invalid frames plus a hard cap"
+  was a solution to a problem that only exists if you sweep blindly. What
+  replaced it is a set of refusals: a frame at the wrong size, a missing
+  playhead, an events panel that will not open, a seek that will not land.
+- ~~**Sample interval.**~~ Not an interval at all. Samples are placed 3 per
+  round or 5 across a single segment, read off the bar, then snapped to the grid
+  that seeking can actually reach. The grid is whatever the client's skip
+  interval is — **measured** per session by timing playback, since the setting
+  silently reverts at every client restart.
+- ~~**Escort and Hybrid segmentation.**~~ No mode-specific rule was needed.
+  Breaks are drawn on the scrubber for every mode, so Escort reads its two
+  halves the same way Control reads its three rounds. Verified on Watchpoint:
+  Gibraltar, Circuit Royal and Havana. The one adjustment was dropping play
+  segments under 30s, which are the assemble phase rather than a round.
+- ~~**Input mechanism.**~~ `keybd_event` through a long-lived PowerShell host,
+  with the client foregrounded — nothing reaches an unfocused window. Seek and
+  spectate are the client's own bindings (`B`, `X`, `Z`, `N`, `K`, `SPACE`), and
+  the menus around a replay are recorded rather than bound, since they have no
+  keyboard route at all.
+
+**Still open.**
+
+- **Side b's calibration box.** It reads about 0.11 lower than side a, at the
+  same 1px offset on two independent maps, so it is geometry rather than a map.
+  Wants a bootstrap re-run for side b, not a hand-edited number.
+- **Chunk playback speed.** `open-import` spends ~4.2s replaying waits the
+  operator made while menus animated. `probe_chunk.js` measures what the client
+  will keep up with; it has not been run yet, so `--chunk-speed` defaults to 1.
+- **Real league maps.** Everything so far was measured on quick-play and
+  competitive replays from a public code site. A FACEIT map is longer and has
+  more rounds, so sample counts and per-map time will differ — worth re-timing
+  on the first post-patch match rather than extrapolating.
+- **Sparse-versus-dense accuracy.** §9's test is still unrun: nobody has yet
+  quantified how many hero swaps the sampling misses.
+- **Six-versus-six.** The frozen geometry divides each side's box into five
+  portraits. A 6v6 replay reads garbage, and nothing currently detects that it
+  is one.

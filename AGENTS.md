@@ -306,139 +306,129 @@ canonical and this copy is the bug.
   segment 404s.
 
 - **The replay bot lives in `tools/replay_bot/` and its facts were all measured,
-  not reasoned.** See `ARCHITECTURE.md` §14 and
-  `specs/2026-09-08-replay-bot-design.md`. Run its tests with
+  not reasoned.** See `ARCHITECTURE.md` §14 for the full account and
+  `specs/2026-09-08-replay-bot-design.md` for the design. Run its tests with
   `node --test "tools/replay_bot/*.test.js"`. It needs
   `npm install --no-save @napi-rs/canvas`, which **prunes** any other
   `--no-save` package - reinstall `playwright-core tesseract.js` in ONE command
-  when you next need them.
+  when you next need them. The traps below are the ones that cost time.
+
+- **A league code can only be imported once, and that shapes everything.**
+  Importing one the account already holds makes the client warn and demand a
+  manual scroll-and-select, which ends an unattended run. Imports cannot be
+  deleted either, though the list is a ring and new ones evict the oldest. So
+  the account starts clean, **every code gets exactly one attempt**, `run.js`
+  logs a code as attempted *before* opening it, and a failed map is a loss to
+  report rather than a retry to queue. Retained frames are what make a bad read
+  fixable, and only offline.
+
+- **Never point a run at a stale feed.** A `data.json` built before a patch
+  lists dead codes while looking perfectly healthy - the local one still had the
+  2026-08-18 wipe and 255 dead codes hours after the 2026-09-08 patch. `run.js`
+  refuses a feed not built today; `--stale-ok` overrides it, and rarely should.
+
+- **The events viewer needs N THEN K, every time, and its state is the RISE not
+  the level.** The scrubber only draws round breaks while that panel is open -
+  closed, a three-round Control map reads as one continuous segment,
+  confidently and wrongly. The media controls must be up before K does
+  anything: a run that pressed only K measured 0.023 before and after. And the
+  panel is translucent, so an OPEN one on a quick-play map (0.252) reads dimmer
+  than a CLOSED one on a busy Control map (0.211) - no absolute threshold can
+  separate them, and the one that existed refused two maps that had opened fine.
+
+- **Seek acceptance is PROBABILISTIC, not a threshold.** The client ignores a
+  seek key arriving while it is still seeking. Bisecting for the cliff twice
+  gave two different answers: 550ms dropped a press in one run and landed all
+  five in the next. Any timing probe here must measure a **rate** over several
+  trials (`probe_limits.js` does), and a number found by one clean pass is a
+  number found by luck. `SEEK_GAP_MS` is 700, above every failure yet seen, and
+  `driver.seekTo` verifies against `crop.playheadX` regardless - **if correction
+  fails, the measured position wins**, so a misplaced sample is dropped rather
+  than mislabelled.
+
+- **The time-skip interval reverts at every client restart** - a known Blizzard
+  bug where replay viewer options apply but are never saved. 60s last night is
+  20s tonight with nothing on screen to say which, and assuming wrong puts every
+  sample at a third or triple of its intended time, in the wrong round, looking
+  entirely reasonable. A `set-interval` chunk sets it once a session and
+  `capture.js` **measures** what a press is worth by timing playback anyway.
+
+- **A 20-second step is not a fixed number of pixels** - 45px on a 17-minute
+  Control map, 69px on an 11-minute Escort one - so the bar is calibrated per
+  map. That also measures the map's duration off the bar span, which is why
+  `capture_map.js` needs no duration argument.
+
+- **A playing replay never settles, and a settle that fails costs seconds.**
+  Pause first: `capture.js` diffs two frames a quarter-second apart, which is a
+  far stronger signal than the playhead and works before the controls are up.
+  Four failed settles before the first pause were most of a 90-second stall.
+
+- **Waiting before a grab does nothing.** Reading a seek immediately scores the
+  same as reading it 640ms later, at every delay, across two runs - a grab is
+  itself half a second of spawn and PrintWindow, so the wait had already
+  happened. `QUIESCE_MS` is 0; measure it again if grabbing ever gets fast.
+
+- **One PowerShell process does the grabs and key sends** (`host.js` +
+  `host.ps1`): 204ms a grab against 585ms for a fresh spawn, because 341ms of
+  the old cost was `Add-Type` and startup, paid twenty times a map. It falls
+  back to the standalone scripts if it cannot start, and `OWDB_NO_HOST=1` forces
+  that. Its child and pipes are **unref'd** - a caller forgetting `close()`
+  would otherwise wait forever on an open pipe for a host waiting for it, which
+  cost the test suite 72 seconds of nothing.
+
+- **Menu input is recorded, never taken from a screenshot.** Screenshots of the
+  rig arrive at 2557x1437 while the client area is 2560x1440, so any coordinate
+  read off one is wrong by a few pixels in an unknown direction. Three chunks
+  close the loop - `open-import`, `set-interval` (once a session, from inside a
+  replay with the controls already up), `leave-replay`. Record with
+  `node tools/replay_bot/recorder.js record <chunk>` (F10 ends it; nothing
+  outside the Overwatch window is recorded), or drive it from
+  `node tools/replay_bot/gui.js` at 127.0.0.1:8787. **Check before you Play** -
+  a dry run sends nothing, and a real `open-import` spends a code.
+
+- **The recorder hooks input, and must.** The polled first version could not see
+  the mouse wheel, recorded a scrollbar drag as a click where it started, and
+  missed every key not on its watch list - three failed attempts at one options
+  menu, in three different ways. Every key now travels with its virtual-key
+  code. The replay code is **pasted**: a recorded Ctrl+V becomes the `$CODE`
+  placeholder and playback sets the clipboard itself.
+
 - **PowerShell variable names are case-insensitive.** `$vk = $VK[$k]` overwrote
   the lookup table with the value it had just read, so the first key sent fine
   and every sequence died on the second iteration with "Cannot index into a null
   array" and no line number. Three unrelated theories about argument separators
   were tried before anyone read the line number. Get the line number first.
+
+- **`ConvertFrom-Json` hands back an array as ONE object in PowerShell 5.1**, so
+  `@(... | ConvertFrom-Json)` wraps it again and a loop over it runs once with
+  the whole array as its item. It surfaced as "Cannot convert System.Object[] to
+  System.Int32" pointing at nothing. Related: `Set-Content -Encoding utf8`
+  writes a BOM, which lands in front of the first JSON line and makes
+  `JSON.parse` fail on a character that does not print.
+
 - **`SetProcessDPIAware()` before any window call.** Without it Windows reports
   a 125%-scaled 2560x1440 display as 2048x1152. Geometry frozen at the real size
   then lands every crop in the wrong place, and both numbers look plausible.
+
 - **Capture survives occlusion; input does not.** `PrintWindow` with
   `PW_RENDERFULLCONTENT` reads the Overwatch window while it is covered, but
   `PostMessage`, `SendMessage` and `AttachThreadInput` were all measured and
   none delivers a key to an unfocused client. The bot is therefore an overnight
-  job, and takes focus once per map rather than once per sample.
-- **The events viewer needs N THEN K, every time.** The media controls have to
-  be up before K will open the panel; a run that pressed only K measured 0.023
-  before and 0.023 after and refused two maps. N is a toggle, so it can hide the
-  controls instead - the playhead is drawn only while they are up, which is the
-  check that catches it, and one more press puts them back.
-- **Judge the events panel by the RISE, not the level.** The panel is
-  translucent and its contents vary with how much happened in the game, so:
-  Busan (Control) 0.211 closed -> 0.755 open; Gibraltar (Escort) 0.024 ->
-  0.504; Havana (quick-play Escort, one round, nearly empty panel) 0.000 ->
-  **0.252**. Havana's OPEN panel reads dimmer than Busan's CLOSED one, so no
-  absolute threshold can separate them - and the 0.35 threshold refused two
-  maps that had opened perfectly well. `minBrightFrac` now only answers "was it
-  already open"; whether a press worked is `rise >= 0.125`.
-- **Side b reads about 0.11 lower than side a, consistently.** Across both maps'
-  retained frames, side a means 0.91/0.82 and side b 0.75/0.75, and shifting
-  box b left by 1px recovers it to 0.86/0.85 - the same offset on both maps, so
-  it is geometry, not a map. **Do not hand-edit `calib.FROZEN.boxes`** to fix
-  it; re-run the bootstrap for side b (auto-calibrate, press Use boxes, then
-  read `boxes.b`). Mean match score is not accuracy, and fitting numbers to it
-  is how the last calibration went wrong.
-- **The scrubber only draws round breaks while the replay events viewer is
-  open.** With it closed a three-round Control map reads as one continuous
-  segment - confidently and wrongly. `K` toggles the panel, so check its
-  brightness (`crop.panelBrightFraction`) rather than pressing blind.
-- **One PowerShell process does the grabs and key sends** (`host.js` +
-  `host.ps1`). Measured: a grab through it is 204ms against 585ms for a fresh
-  spawn, because 341ms of the old cost was `Add-Type` and process startup, paid
-  about twenty times a map. It falls back to the standalone scripts if it will
-  not start or dies mid-run, and `OWDB_NO_HOST=1` forces that path. The child
-  and its pipes are **unref'd**: a caller that forgets `close()` would otherwise
-  wait forever on an open pipe for a host that is waiting for it - which cost
-  the test suite 72 seconds of doing nothing. In-flight requests always hold a
-  timeout timer, so the process can only exit while the host is idle.
-- **Seek acceptance is PROBABILISTIC, not a threshold.** Bisecting for the cliff
-  twice gave two different answers: 550ms dropped a press in one run and landed
-  all five in the next; 375ms landed 2 of 5, then 4 of 5. Any timing probe here
-  must measure a RATE over several trials - `probe_limits.js` does - and a
-  number found by one clean pass is a number found by luck. 700ms sits above
-  every failure yet seen (highest was 550ms).
-- **Waiting before a grab does nothing.** Reading a seek immediately scores the
-  same as reading it 640ms later, in both runs and at every delay, because a
-  grab is itself half a second of PowerShell spawn and PrintWindow - the wait
-  had already happened. `QUIESCE_MS` is 0. If grabbing ever gets fast, measure
-  it again: the free wait disappears with it.
-- **Seek keys need 700ms between them; at 45ms only one in five lands.** The
-  client ignores a seek key that arrives while it is still seeking, silently -
-  the keys are delivered, it just does not act on them. Measured with
-  `probe_seek.js`: 45ms and 150ms land 1 of 5, 300ms lands 3, 600ms and 1000ms
-  land 5. 45ms was the old default, which is why the first live run advanced one
-  20-second step per batch however many keys it sent, and sampled six points
-  inside the first two minutes of a seventeen-minute map while reporting it had
-  covered all of it. `input.SEEK_GAP_MS` is now 700, and `driver.seekTo` still
-  verifies against `crop.playheadX` - **if correction fails, the measured
-  position wins over the requested one**, so a misplaced sample is dropped
-  rather than mislabelled.
-- **The replay viewer's time-skip interval reverts at every client restart.**
-  It is a known Blizzard bug - replay viewer options apply while the client runs
-  and are not saved - so an interval set to 60s last night is 20s tonight with
-  nothing on screen to say which. Assuming the wrong one puts every sample at a
-  third (or triple) of its intended time, inside the wrong round, and the output
-  looks entirely plausible. So the bot does both: a recorded `set-interval`
-  chunk sets 60s once per session on the first map, and `capture.js` MEASURES
-  what a press is really worth by timing playback against the moving playhead
-  (`timeline.stepSecondsFrom` snaps that to the client's 5/10/20/30/60 list and
-  refuses anything that lands nowhere near one). Later maps in the same session
-  reuse the measured value; `--step 60` skips the measurement entirely.
-- **A 20-second step is not a fixed number of pixels.** It measured 45px on a
-  17-minute Control map and 69px on an 11-minute Escort one, so the bar is
-  calibrated per map: jump to start, read the knob, press forward once, read it
-  again. That also measures the map's duration off the bar span (11:17 against a
-  scrubber reading the same), which is what lets a run work unattended -
-  `capture_map.js` no longer needs a duration argument.
-- **Menu coordinates are recorded, never taken from a screenshot.** Screenshots
-  of the rig arrive at 2557x1437 while the client area is 2560x1440, so any
-  coordinate read off one is wrong by a few pixels in an unknown direction.
-  The recorder uses LOW-LEVEL HOOKS, not polling, and that is not a detail: the
-  polled version could not see the mouse wheel at all, recorded a scrollbar drag
-  as a click where the drag started, and missed every key not on its watch list
-  (arrows included). Three attempts at recording one options menu failed in
-  those three different ways before it was rewritten. It now records any key by
-  virtual-key code, wheel notches, and drags with their path.
-  `node tools/replay_bot/recorder.js record <chunk> --code XXXXXX` records a
-  chunk (F10 ends it; nothing outside the Overwatch window is recorded) and
-  `play <chunk> --code YYYYYY` replays it with this replay's code substituted.
-  `node tools/replay_bot/gui.js` serves the same thing as a page on
-  127.0.0.1:8787, which is easier when recording several chunks in a sitting -
-  it shows which are still missing.
-- **A league code can only be imported once per account.** Import one that is
-  already in the list and the client shows a warning and makes you scroll down
-  and pick it by hand, which stops an unattended run dead. So the bot's account
-  must start with no league codes imported, **every code gets exactly one
-  attempt**, and a map that fails must be marked attempted rather than retried -
-  a retry cannot succeed while that code is still in the list. **Imports cannot
-  be deleted, but the list is a ring** (confirmed on the rig 2026-09-09) - new
-  imports evict the oldest, so a code stops colliding once it has been pushed
-  out. Whether it can then be re-imported is untested. Either way, retained
-  frames are what make a bad read fixable, and only offline. Whichever code was used to record
-  `open-import` is already imported and should be dropped from the queue.
-- **The run loop is two chunks, not five.** Leaving a replay lands back on the
-  replay history tab, so `open-import` (Import, paste, OK, Watch) and
-  `leave-replay` (ESC, Leave Game) close the loop between them. Nothing needs to
-  navigate to the replay list.
-- **The code is pasted, not typed, and the clipboard is the bot's to set.**
-  `record_input.ps1` watches Ctrl/Shift/Alt as held state; a recorded Ctrl+V
-  becomes the `$CODE` placeholder, and `play_input.ps1` sets the clipboard to
-  the code before sending it. The first recorder ignored modifiers, so the
-  operator's Ctrl+V was stored as a bare `V` - a chunk that read plausibly in
-  the listing and would have typed the letter "v" into the code field.
+  job that owns the machine while it runs.
+
 - **Press "Use boxes" before reading `boxes.a`.** Auto-calibrate reports "10/10
   portraits confident" for a detection it has NOT committed; read too early and
   you get the `AUTO_STRIPS` default `(129.536, 119.808, 660.224, 97.2)`, which
   is half a portrait out. That exact number was stored in project memory as
   known-good for three weeks. Draw the box and look at it -
   `tools/replay_bot/contact_sheet.js` exists for that.
+
+- **Side b reads about 0.11 lower than side a, consistently.** Across both maps'
+  retained frames, side a means 0.91/0.82 and side b 0.75/0.75, and shifting box
+  b left by 1px recovers it to 0.86/0.85 - the same offset on two independent
+  maps, so it is geometry, not a map. **Do not hand-edit `calib.FROZEN.boxes`**
+  to fix it; re-run the bootstrap for side b. Mean match score is not accuracy,
+  and fitting numbers to it is how the last calibration went wrong.
 
 ## Roadmap
 

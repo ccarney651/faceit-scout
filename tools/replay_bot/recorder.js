@@ -49,6 +49,10 @@
   // A press that strays further than this is a drag, not a click. A hand never
   // holds a mouse perfectly still, so zero would make every click a drag.
   var DRAG_MIN_PX = 6;
+
+  // However fast a chunk is asked to play, a wait never goes below this: the
+  // menus need some time to draw, and zero would be a different gesture.
+  var MIN_WAIT_MS = 100;
   var DRAG_PATH_POINTS = 8;
 
   // One notch of a wheel, per Windows. Notches within WHEEL_GAP_MS of each
@@ -292,9 +296,20 @@
 
   // A chunk plus the window's current position, to the plan play_input.ps1
   // runs: coordinates in screen space, and `$CODE` as this replay's code.
-  function resolve(chunk, rect, code) {
+  // Recorded waits are the operator waiting - partly for the menu to animate,
+  // partly for themselves. `speed` divides them, with a floor, so a chunk can be
+  // replayed faster than it was performed. What the client will actually accept
+  // is a measurement, not a guess: probe_chunk.js finds it by replaying a chunk
+  // at increasing speeds and checking it still ends in the same place.
+  function resolve(chunk, rect, code, opts) {
     var chk = validate(chunk, rect, code);
     if (!chk.ok) throw new Error(chk.reason);
+
+    var speed = (opts && opts.speed) || 1;
+    var scale = function (ms) {
+      if (speed === 1) return ms;
+      return Math.max(MIN_WAIT_MS, Math.round(ms / speed));
+    };
 
     return chunk.events.map(function (e) {
       if (e.type === 'click') {
@@ -303,7 +318,7 @@
           button: e.button,
           x: e.x + rect.ox,
           y: e.y + rect.oy,
-          waitMs: e.waitMs,
+          waitMs: scale(e.waitMs),
           holdMs: e.holdMs,
         };
       }
@@ -318,7 +333,7 @@
           path: (e.path || []).map(function (p) {
             return { x: p.x + rect.ox, y: p.y + rect.oy };
           }),
-          waitMs: e.waitMs,
+          waitMs: scale(e.waitMs),
           holdMs: e.holdMs,
         };
       }
@@ -328,7 +343,7 @@
           x: e.x + rect.ox,
           y: e.y + rect.oy,
           notches: e.notches,
-          waitMs: e.waitMs,
+          waitMs: scale(e.waitMs),
           holdMs: e.holdMs,
         };
       }
@@ -336,7 +351,7 @@
         return {
           type: e.type,
           value: e.value === CODE ? String(code).toUpperCase() : e.value,
-          waitMs: e.waitMs,
+          waitMs: scale(e.waitMs),
           holdMs: e.holdMs,
         };
       }
@@ -345,7 +360,7 @@
         key: e.key,
         vk: e.vk === undefined ? null : e.vk,
         mods: e.mods || [],
-        waitMs: e.waitMs,
+        waitMs: scale(e.waitMs),
         holdMs: e.holdMs,
       };
     });
@@ -477,7 +492,7 @@
     var o = opts || {};
     var chunk = load(name);
     var rect = await windowRect();
-    var plan = resolve(chunk, rect, o.code);
+    var plan = resolve(chunk, rect, o.code, { speed: o.speed });
 
     var planPath = path.join(os.tmpdir(),
       'owdb-plan-' + process.pid + '-' + name + '.json');
@@ -506,6 +521,7 @@
     safeName: safeName,
     CODE: CODE,
     MAX_WAIT_MS: MAX_WAIT_MS,
+    MIN_WAIT_MS: MIN_WAIT_MS,
     DRAG_MIN_PX: DRAG_MIN_PX,
     WHEEL_NOTCH: WHEEL_NOTCH,
     parseRaw: parseRaw,

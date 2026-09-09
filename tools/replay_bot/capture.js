@@ -72,6 +72,11 @@
   // round. Every map measured opens with one.
   var MIN_PLAY_S = 30;
 
+  // Mean absolute difference above which two frames are a moving picture rather
+  // than the same still one. A settled screen sits under 0.6; a playing replay
+  // is far above this.
+  var MOTION_DIFF = 1.5;
+
   var mmss = function (s) {
     return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
   };
@@ -181,35 +186,31 @@
   //
   // THIS IS WORTH A MINUTE A MAP. A replay opens PLAYING, and settling is
   // defined as two consecutive frames agreeing - which never happens while the
-  // picture is moving. Every settle before the first pause therefore ran its
-  // full eight attempts and gave up, about seven seconds each, for N, for K,
-  // and for both calibration presses. The bot looked like it was doing nothing
-  // because it was: it was proving, four times over, that a playing replay does
-  // not hold still.
+  // picture is moving. Every settle before the first pause ran its full retries
+  // and gave up, about seven seconds each, for N, for K, and for both
+  // calibration presses. The bot looked like it was doing nothing because it
+  // was: proving, four times over, that a playing replay does not hold still.
   //
-  // SPACE is a toggle, so this measures first - two reads a beat apart - and
-  // presses only if the knob moved. A frame with no playhead means the media
-  // controls are not up yet, which is not an answer, so it says so and the
-  // caller tries again once they are.
+  // MOTION IS MEASURED ON THE PICTURE, not on the playhead. Two frames a
+  // quarter-second apart differ enormously while a replay plays and barely at
+  // all when it is stopped, so the signal is huge and the test is quick. The
+  // playhead would work too, but it moves slowly - under two pixels a second on
+  // a long map - so it needs a second of waiting to say anything, and it cannot
+  // say anything at all before the media controls are up.
+  //
+  // SPACE is a toggle, so this measures first and presses only if it must.
   async function ensurePaused(io, drv) {
-    async function knob() {
-      var k = Crop.playheadX(await io.loadImage(await io.grabTo('pause')), calib);
-      return k ? k.centre : null;
+    async function moving() {
+      var a = await io.grabTo('pause');
+      await sleep(250);
+      var b = await io.grabTo('pause');
+      return await pixelDiff(a, b) > MOTION_DIFF;
     }
 
-    var a = await knob();
-    if (a === null) return { known: false, paused: false };
-    await sleep(1100);
-    var b = await knob();
-    if (b === null) return { known: false, paused: false };
-    if (a === b) return { known: true, paused: true, pressed: false };
-
+    if (!await moving()) return { known: true, paused: true, pressed: false };
     await drv.pause();
-    await sleep(700);
-    var c = await knob();
-    await sleep(1100);
-    var d = await knob();
-    return { known: c !== null && d !== null, paused: c === d, pressed: true };
+    await sleep(400);
+    return { known: true, paused: !await moving(), pressed: true };
   }
 
   // Pixels per second of playback, by playing the replay and watching the knob.
@@ -322,8 +323,10 @@
       //     the playhead and the attempt is repeated after step 2.
       mark('first frame');
       var stopped = await ensurePaused(io, drv);
-      if (stopped.known) {
-        log('replay ' + (stopped.pressed ? 'was playing, paused it' : 'already paused'));
+      log('replay ' + (stopped.pressed ? 'was playing, paused it' : 'already paused'));
+      if (!stopped.paused) {
+        throw new Error('the replay will not stop - every read after this would ' +
+          'be of a moving picture');
       }
 
       mark('pause check');
@@ -390,13 +393,6 @@
           throw new Error('the media controls are gone after the options menu, ' +
             'so there is no bar to read');
         }
-      }
-
-      // 2c. If the controls were down a moment ago, the playhead was unreadable
-      //     and the replay could not be checked. It can be now.
-      if (!stopped.known) {
-        stopped = await ensurePaused(io, drv);
-        log('replay ' + (stopped.paused ? 'paused' : 'STILL MOVING - settles will be slow'));
       }
 
       mark('interval chunk');

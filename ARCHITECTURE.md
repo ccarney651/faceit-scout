@@ -1709,56 +1709,186 @@ an operator's: the same matcher, not a lookalike.
 
 | Module | Purpose | Pure |
 | --- | --- | --- |
-| `queue.js` | Drop wiped codes, skip captured maps, order oldest first | yes |
-| `timeline.js` | Round structure off the scrubber; the sampling plan | yes |
+| `queue.js` | Drop wiped codes, skip attempted maps, order oldest first | yes |
+| `timeline.js` | Round structure off the scrubber; bar arithmetic; the sampling plan | yes |
 | `segment.js` | Observations to rounds, opening comp and hero pool | yes |
 | `vote.js` | One slot resolved by agreement across frames | yes |
 | `emit.js` | Per-side observations in the contribution schema | yes |
 | `calib.js` | Frozen HUD geometry and the smoke check | yes |
-| `crop.js` | Frame regions to matcher buffers | no |
+| `crop.js` | Frame regions to matcher buffers; playhead; panel brightness | no |
 | `match.js` | The shipped hero matcher, headless | no |
 | `grab.js` | Overwatch window to PNG | no |
-| `driver.js` | **The only module that sends keys** | no |
 | `input.js` | Key delivery, and settling by measurement | no |
 | `host.js` | One long-lived PowerShell, so a grab costs 204ms not 585 | no |
-| `recorder.js` | Recorded menu clicks, replayed per code | part |
+| `driver.js` | **The only module that sends keys** | no |
+| `recorder.js` | Recorded menu input, replayed per code | part |
+| `capture.js` | One open replay, start to finish | no |
+| `run.js` | The queue loop; the CLI | no |
 
-`driver.js` is deliberately alone in automating the client. Everything else
-reads pixels, which is ordinary use.
+`driver.js` and `recorder.js` are the two that automate the client. Everything
+else reads pixels, which is ordinary use.
 
-### 14.4 Measured facts this is built on
+Alongside them sit tools whose only job is to look at things rather than do
+them: `contact_sheet.js` renders the ten crops of a frame, `probe_grab.ps1` and
+`probe_input.ps1` established how capture and input work at all, `probe_seek.js`
+measures how many seek presses land, `probe_limits.js` pushes the waits until
+they break, and `probe_chunk.js` does the same for chunk playback. Every number
+in §14.7 came out of one of these.
+
+### 14.4 The run loop
+
+`run.js` walks the queue: import a code, capture the map, leave, repeat.
+
+1. `queue.pending()` drops wiped codes and anything already attempted, oldest
+   game first.
+2. The code is written to the attempt ledger **before** it is opened.
+3. `recorder.play('open-import')` clicks Import, pastes the code, confirms and
+   watches; the loop waits for the playhead to appear, which is what says a
+   replay is on screen.
+4. On the first map only, `set-interval` runs inside the capture (§14.9).
+5. `capture.js` reads the map.
+6. `emit.js` turns the samples into a contribution record, written after **every**
+   map rather than at the end of the night.
+7. `recorder.play('leave-replay')` returns to the replay history tab — but only
+   if the playhead says a replay is actually open, since those clicks mean
+   something else on the menu screen.
+
+Two guards sit outside that sequence. **Two consecutive failures stop the run**,
+because a client stuck in an unexpected menu will otherwise burn every remaining
+code doing nothing. And the **stale-feed guard** refuses a `data.json` that was
+not built today: codes die at every patch, a stale feed lists dead ones while
+looking perfectly healthy, and pointing an unattended run at it would spend the
+entire queue on codes that cannot work.
+
+### 14.5 One shot per code
+
+Importing a code the account already holds does not overwrite or no-op — the
+client warns and requires scrolling down to select the existing entry by hand,
+which ends an unattended run. Imports also cannot be deleted individually; the
+list is a ring, and new imports evict the oldest. So:
+
+- the account must start with **no league codes imported**;
+- **each code gets exactly one attempt**, which is why the ledger is written
+  before the import and not after — a crash between opening and finishing must
+  not leave a code looking untried;
+- a failed map is a **loss to report**, not a retry to queue.
+
+What makes that survivable is that every frame is kept. A better matcher can
+re-read a map with no client time and no code; only a broken *grab* is
+unrecoverable, which is why the smoke check, the playhead check and the events
+panel check all refuse loudly rather than carrying on.
+
+### 14.6 Getting into a replay is recorded, not hardcoded
+
+Seeking is arithmetic, but the menus around it are mouse work with no keyboard
+route. Those coordinates are **recorded from the operator's own successful
+clicks** (`recorder.js`) rather than read off a screenshot: screenshots of this
+rig arrive at 2557×1437 while the client area is 2560×1440, so a coordinate
+taken from one is wrong by a few pixels in an unknown direction.
+
+A **chunk** is one short named step. Three of them close the loop:
+`open-import`, `set-interval` (once a session), and `leave-replay` — leaving a
+replay lands back on the replay history tab, so nothing needs to navigate there.
+
+Recording uses low-level mouse and keyboard hooks rather than polling key state.
+The polled first version was blind to the mouse wheel, flattened a drag into a
+click at its starting point, and only saw keys on a fixed watch list — three
+separate failures while recording a single options menu. Hooks see every key by
+virtual-key code, wheel notches, and the path of a drag; the code travels with
+each key so playback never has to reverse a name.
+
+The replay code is **pasted, not typed**: a recorded `Ctrl+V` becomes the
+`$CODE` placeholder, and playback sets the clipboard to that map's code before
+sending the keystroke. One clipboard write cannot half-land the way six
+keystrokes can.
+
+Coordinates are stored **relative to the client area**, so a moved window is
+harmless. A resized one is refused rather than scaled — a scaled click lands
+plausibly close to its button and on nothing. Recording only happens while
+Overwatch is foreground, which keeps the operator's alt-tab out of the chunk.
+
+`gui.js` serves `gui.html` on `127.0.0.1:8787` as a front end for the same
+functions — which chunks are missing, Record/Check/Play/Show/Delete per chunk,
+and the event listing after each recording. It binds to loopback because what it
+exposes is "run PowerShell that clicks in the game", holds one operation at a
+time since recording and playback both own the machine's input, and passes every
+name through `recorder.safeName` before it reaches a file path. **Check** walks
+a chunk without sending anything, which matters because every real attempt at
+`open-import` spends a code.
+
+### 14.7 Measured facts this is built on
 
 Every one of these was found by measuring on the rig, and every one is invisible
-until you look.
+until you look. Several looked entirely healthy while being wrong.
+
+**Capture and input**
 
 - **`PrintWindow` with `PW_RENDERFULLCONTENT` captures the window while it is
   fully occluded** (mean luma ~55); screen-copy returns ~5 the moment anything
   covers it. This is what allows capture to happen in the background.
 - **Input needs focus.** `PostMessage`, `SendMessage` and `AttachThreadInput`
-  were all tried against an unfocused client; none delivered. `AttachThreadInput`
-  appears to work only because `SetFocus` foregrounds the window anyway. Hence
-  the bot is an overnight job, and takes focus once per map rather than per
-  sample.
+  were all tried against an unfocused client; none delivered. Hence the bot is
+  an overnight job.
 - **`SetProcessDPIAware()` must run before any window call.** Without it a
   125%-scaled 2560×1440 display reports 2048×1152, and geometry frozen at the
   real size lands every crop in the wrong place. Both numbers look plausible.
-- **The scrubber only draws round breaks while the replay events viewer is
-  open.** With it closed, a three-round Control map reads as one continuous
-  segment — confidently and wrongly. `K` toggles the panel, so the bot measures
-  its brightness rather than pressing blind.
+
+**The scrubber**
+
+- **It only draws round breaks while the events viewer is open**, and that
+  viewer needs **N then K, every time** — the media controls must be up before K
+  will open the panel. A run that pressed only K measured 0.023 before and
+  0.023 after, having done nothing, and refused two maps.
+- **The panel's state is the RISE, not the level.** Busan measured 0.211 closed
+  to 0.755 open; Gibraltar 0.024 to 0.504; a quick-play Havana 0.000 to
+  **0.252**. An open panel on one map reads dimmer than a closed one on another,
+  because the panel is translucent and its contents vary with how much happened
+  in the game. No absolute threshold can separate them.
 - **Breaks are found by colour, not brightness.** Event ticks and the playhead
   are bright white; the blue channel's lead over red is clean.
-- **A batch of seek presses moves one step, not *n*.** The six frames the first
-  live run retained all read the same ten heroes, which looked plausible for a
-  Control map. The playhead says otherwise: it advanced 45px — one 20-second
-  step — between consecutive samples, whether eight presses had been sent, nine
-  or ten. The run never left the first two minutes. `crop.playheadX` reads the
-  knob (the widest run brighter than 200 along the bar's core rows, 40px wide in
-  every frame measured) so a seek can be checked instead of trusted, and
-  `probe_seek.js` sweeps the gap between presses to find what the client
-  actually accepts.
+- **A 20-second step is not a fixed number of pixels** — 45px on a 17-minute
+  Control map, 69px on an 11-minute Escort one — so the bar is calibrated per
+  map, which also measures the map's duration.
 
-### 14.5 Calibration is frozen, and its provenance is the point
+**Seeking**
+
+- **A batch of presses landed one step, not *n*.** The six frames the first live
+  run retained all read the same ten heroes, which looked plausible for a
+  Control map. The playhead said otherwise: it advanced exactly one step between
+  consecutive samples whether eight presses had been sent, nine or ten. The run
+  never left the first two minutes and nothing in its output looked wrong.
+- **The cause is that the client ignores a seek key arriving while it is still
+  seeking**, silently. Measured landing rates for five presses: 45ms and 150ms
+  land 1, 300ms lands 3, 600ms and 1000ms land 5.
+- **There is no clean cliff.** Bisecting for one, twice, gave two different
+  answers: 550ms dropped a press in one run and landed all five in the next.
+  Acceptance is a race against however long that seek takes, so any probe here
+  must measure a **rate** over several trials. `SEEK_GAP_MS` is 700, above every
+  failure yet seen, and `driver.seekTo` verifies the result regardless — when
+  correction runs out of attempts, **the measurement wins**, and a misplaced
+  sample is dropped rather than labelled with a time it was never at.
+
+**The client's own settings**
+
+- **The time-skip interval reverts at every client restart.** Replay viewer
+  options are a known Blizzard bug: they apply while the client runs and are not
+  saved. An interval set to 60s last night is 20s tonight, with nothing on
+  screen to say which, and assuming wrong puts every sample at a third or triple
+  of its intended time — inside the wrong round, looking entirely reasonable.
+
+**Time**
+
+- **A grab is 497ms through a fresh PowerShell and only 156ms of that is work.**
+  A bare spawn is 211ms, one that runs `Add-Type` is 341ms. Through the
+  long-lived host a grab is **204ms** against 585ms.
+- **Waiting before a grab does nothing.** Reading a seek immediately scores the
+  same as reading it 640ms later, at every delay tried, across two runs — a grab
+  is itself half a second of spawn and `PrintWindow`, so the wait had already
+  happened. If grabbing ever gets fast, measure this again.
+- **Reading a frame costs 53ms of our own CPU** — 28ms of it decoding the PNG,
+  11ms matching ten cells. Nothing on our side is worth optimising.
+
+### 14.8 Calibration is frozen, and its provenance is the point
 
 HUD geometry is expressed as fractions *of the calibration box*, so the box must
 be one `auto-calibrate` actually emitted. Auto-calibrate reports "10/10
@@ -1771,92 +1901,53 @@ drops onto the health pips.
 geometry can be looked at rather than believed. Every cell should be a centred
 face.
 
-### 14.6 Sampling
+**Side b currently reads about 0.11 lower than side a.** Swept against both
+maps' retained frames, side a means 0.91/0.82 and side b 0.75/0.75, and shifting
+box b left by 1px recovers it to 0.86/0.85 — the same offset on two independent
+maps, so it is geometry rather than a map. It has **not** been hand-corrected:
+mean match score is not accuracy, the curve is jumpy because a small shift flips
+a cell to a different hero entirely, and fitting numbers to a proxy is how the
+last calibration went wrong. The fix is a bootstrap re-run for side b.
+
+### 14.9 Sampling
 
 The scrubber states the round structure, so nothing is inferred: breaks are read
 off the bar, and samples are placed **3 per round**, or **5 across the single
-segment** on Push and Flashpoint. Points sit strictly inside a segment — a
-round's first and last instants are setup and aftermath.
+segment** where a map has one. Points sit strictly inside a segment — a round's
+first and last instants are setup and aftermath.
 
-Samples snap to a **20-second grid**, because seeking is `JUMP TO START` (`B`)
-followed by *n* presses of `REPLAY FORWARD` (`X`). Positions are counted rather
-than estimated, so they cannot drift across a map.
+Play segments shorter than 30s are **setup, not rounds**. Every map opens with
+one, and with a 60-second step the only reachable grid point near such a segment
+is 0:00 — so the bot sampled the very start of the map, where no portraits are
+drawn, and read ten cells of confident nonsense.
 
-### 14.6b Getting into a replay is recorded, not hardcoded
+Each map's capture therefore runs: pause the replay (measured by diffing two
+frames, since a playing replay never settles and every settle before the first
+pause cost seven seconds), open the events viewer, calibrate the bar by pressing
+`B` and one `X` and watching the knob, then measure what a press is worth in
+seconds by timing playback against the moving playhead. Positions are counted in
+presses rather than estimated, and every seek is checked against the playhead
+afterwards.
 
-Seeking is arithmetic, but the menus around it are mouse work with no keyboard
-route. Those coordinates are **recorded from the operator's own successful
-clicks** (`recorder.js`) rather than read off a screenshot: screenshots of this
-rig arrive at 2557×1437 while the client area is 2560×1440, so a coordinate
-taken from one is wrong by a few pixels in an unknown direction, and every
-click derived from it is a guess.
+### 14.10 What a map is made of
 
-A **chunk** is one short named step, and there are two of them. `open-import`
-runs Import → paste → OK → Watch, which starts the replay; `leave-replay` is
-ESC → Leave Game, which lands back on the replay history tab. That is the whole
-loop — nothing has to navigate to the replay list, because leaving a replay is
-already there.
+Roughly, per map, on this rig:
 
-The replay code, the one part that must differ per run, is stored as a `$CODE`
-placeholder. It is **pasted, not typed**: a recorded `Ctrl+V` becomes the
-placeholder, and playback sets the clipboard to that map's code before sending
-the keystroke. One clipboard write cannot half-land the way six keystrokes can,
-and it is what the operator does by hand.
+| | cost |
+| --- | --- |
+| `open-import` chunk | ~6.3s, mostly recorded waits — `--chunk-speed` divides them |
+| the client loading the replay | ~2.2s, not ours |
+| pausing, the events viewer, bar calibration | a few seconds each |
+| measuring the interval | ~8s, first map of a session only |
+| each sample | a grab, the key gaps, and 53ms of CPU |
 
-That only works because the recorder watches modifiers as held state. It did not
-at first, so the operator's `Ctrl+V` was recorded as a bare `V` — a chunk that
-listed plausibly and would have typed the letter "v" into the code field.
+The two costs that resist optimisation are the **700ms between seek presses**,
+which is a probabilistic property of the client, and the **client's own load
+time**. Everything else has been measured and cut at least once, and
+`probe_limits.js` and `probe_chunk.js` exist so it can be done again rather than
+argued about.
 
-Recording is done with low-level mouse and keyboard hooks rather than by
-polling key state. The polled first version was blind to the mouse wheel,
-flattened a drag into a click at its starting point, and only saw keys on a
-fixed watch list - three separate failures while recording a single options
-menu. Hooks see every key by virtual-key code, wheel notches, and the path of a
-drag; the code travels with each key so playback never has to reverse a name.
-
-Coordinates are stored **relative to the client area**, so a moved window is
-harmless. A resized one is refused rather than scaled — a scaled click lands
-plausibly close to its button and on nothing. Recording only happens while
-Overwatch is foreground, which is what keeps the operator's alt-tab out of the
-chunk.
-
-### 14.6c A code can only be imported once
-
-Importing a league code the account already holds does not overwrite or
-no-op — the client warns and requires scrolling down to select the existing
-entry by hand, which ends an unattended run. This is a hard constraint on the
-whole design, not a detail of the menus:
-
-- the bot's account must start with **no league codes imported**;
-- **each code gets exactly one attempt**, so `run.js` must record a code as
-  attempted before it opens it, not after it succeeds — `queue.pending()` skips
-  what is already `done`, and "done" here has to mean tried;
-- a failed map is **not retriable on that account**, so failures are a data loss
-  to report, not a queue to drain.
-
-**Imported replays cannot be deleted individually, but the list is a ring** —
-confirmed on the rig, 2026-09-09. There is no delete; new imports evict the
-oldest. So a code collides only while it is still *in* the list, and a long run
-naturally pushes early codes out. Whether an evicted code can then be re-
-imported is untested, and nothing should depend on it until it is.
-
-What makes that survivable is frame retention: every PNG is kept, so a better
-matcher can re-read a map with no client time and no code. Only a broken *grab*
-is unrecoverable, which is why the smoke check and the playhead check refuse
-loudly rather than carrying on.
-
-Re-recording `open-import` therefore costs a live code, which is why the chunk
-recorded with the modifier bug was repaired in place rather than re-recorded.
-
-`gui.js` serves `gui.html` on `127.0.0.1:8787` as a front end for the same
-functions — the chunks still missing, a Record/Play/Show/Delete per chunk, and
-the event listing after each recording. It binds to loopback because what it
-exposes is "run PowerShell that clicks in the game", holds one operation at a
-time since recording and playback both own the machine's input, and passes
-every name through `recorder.safeName` before it reaches a file path. No logic
-lives there that is not also in `recorder.js`.
-
-### 14.7 Output
+### 14.11 Output
 
 The bot writes the normal contribution schema into its **own contributor file**
 with `tool_version: "replay-bot-0.1"`, so merge can weight it, audit it, or drop
@@ -1867,11 +1958,19 @@ it wholesale — and bot rows can be diffed against an operator's on the same ma
 `sub_map`, `phase`) are emitted as the absences the merge already tolerates,
 never guessed — a wrong `sub_map` is worse than none.
 
-### 14.8 Terms of service
+Cells scoring below 0.6 are flagged in the run output rather than quietly
+averaged, and a sample whose first read scores badly is read a second time.
+
+`out/` and `state/` are gitignored. The attempt ledger in particular is
+per-machine: it records which codes *this* client has already imported, and
+since a code imports once, it must never be shared between rigs or resolved by a
+merge.
+
+### 14.12 Terms of service
 
 Driving the client with synthetic input is **prohibited by the Blizzard EULA**,
 which defines a Bot as software "not expressly authorized by Blizzard, that
 allows the automated control of a Game or part of a Game". There is no carve-out
 for replay or spectator mode. The operator accepted this on a disposable
 account; it is recorded here so nobody later mistakes it for an oversight, and
-it is why all game-touching code sits in one swappable file.
+it is why the game-touching code sits in `driver.js` and `recorder.js` alone.
