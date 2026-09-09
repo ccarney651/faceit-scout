@@ -20,7 +20,10 @@
   'use strict';
 
   var path = require('path');
+  var fs = require('fs');
+  var os = require('os');
   var execFile = require('child_process').execFile;
+  var seqNo = 0;
 
   var SCRIPT = path.join(__dirname, 'send_keys.ps1');
 
@@ -43,12 +46,19 @@
   // itself and refuses if it cannot, because keys sent to an unfocused window
   // are silently discarded and would leave the bot believing it had seeked.
   function sendKeys(keys, opts) {
+    // Via a file, one key per line. Inline arguments were tried three ways and
+    // all of them broke on Node/PowerShell separator disagreement; a path has
+    // nothing in it to re-split.
+    var keyFile = path.join(os.tmpdir(), 'owdb-keys-' + process.pid + '-' + (seqNo++) + '.txt');
+    fs.writeFileSync(keyFile, keys.join(String.fromCharCode(10)), 'utf8');
+
     var args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-      '-File', SCRIPT, '-Keys', keys.join(',')];
+      '-File', SCRIPT, '-KeyFile', keyFile];
     if (opts && opts.gapMs) args.push('-GapMs', String(opts.gapMs));
 
     return new Promise(function (resolve, reject) {
       execFile('powershell', args, { windowsHide: true }, function (err, stdout, stderr) {
+        try { fs.unlinkSync(keyFile); } catch (e) {}
         if (err && !stdout) {
           reject(new Error('send failed to run: ' + (stderr || err.message)));
           return;

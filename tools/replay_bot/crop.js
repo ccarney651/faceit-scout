@@ -87,10 +87,34 @@
     return out;
   }
 
+  // How much of the events-panel box is bright, which is how the bot tells
+  // whether the replay events viewer is open. It has to know, because the
+  // scrubber only draws round breaks while that panel is showing, and K
+  // toggles it - so pressing K blind would close it half the time.
+  function panelBrightFraction(img, calib) {
+    var p = calib.FROZEN.eventsPanel;
+    var cv = createCanvas(img.width, img.height);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    var d = cx.getImageData(0, 0, img.width, img.height).data;
+
+    var bright = 0, n = 0;
+    for (var y = p.y0; y < p.y1; y += 4) {
+      for (var x = p.x0; x < p.x1; x += 4) {
+        var i = (y * img.width + x) * 4;
+        var l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        if (l > p.brightAt) bright++;
+        n++;
+      }
+    }
+    return n ? bright / n : 0;
+  }
+
   var Mod = {
     cell: cell,
     all: all,
     barFlags: barFlags,
+    panelBrightFraction: panelBrightFraction,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;

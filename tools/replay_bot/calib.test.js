@@ -51,3 +51,19 @@ test('a frame of unexpected size is refused', () => {
 test('a frame matching the bootstrap is accepted', () => {
   assert.strictEqual(C.check({ w: 2560, h: 1440 }).ok, true);
 });
+
+// The round breaks only render on the scrubber while the replay events viewer
+// is open, so the bot must know whether it is. K toggles it, which means a
+// blind press is as likely to close it as open it.
+test('a bright events panel reads as open', () => {
+  assert.strictEqual(C.eventsViewerOpen(0.755), true);
+});
+
+test('a dim events panel reads as closed', () => {
+  assert.strictEqual(C.eventsViewerOpen(0.211), false);
+});
+
+test('the open/closed threshold sits between the two measured states', () => {
+  const t = C.FROZEN.eventsPanel.minBrightFrac;
+  assert.ok(t > 0.211 && t < 0.755, `threshold ${t} must separate the measurements`);
+});

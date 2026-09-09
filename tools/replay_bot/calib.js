@@ -47,7 +47,25 @@
     // is a few pixels of blue, and taking it for a boundary would cut a round
     // in half and invent a segment that never happened.
     timeline: { x0: 73, x1: 2449, y0: 1254, y1: 1262, blueLead: 20, minRunPx: 15 },
+
+    // The replay events viewer - the ROUND 1/2/3 panel down the left.
+    //
+    // THE SCRUBBER ONLY DRAWS ROUND BREAKS WHILE THIS PANEL IS OPEN. With it
+    // closed the bar is one unbroken run, and timeline.js reads a three-round
+    // Control map as a single continuous segment - confidently, and wrongly.
+    //
+    // K toggles it, so a blind press is as likely to close it as open it. The
+    // bot measures instead: the panel is a large pale rectangle, and the
+    // fraction of bright pixels in this box separates the two states cleanly.
+    // Measured on the rig: 0.755 open, 0.211 closed.
+    eventsPanel: { x0: 30, x1: 530, y0: 280, y1: 480, minBrightFrac: 0.5, brightAt: 170 },
   };
+
+  // Whether the events viewer is open, given the bright fraction crop.js read
+  // out of the panel box.
+  function eventsViewerOpen(brightFraction) {
+    return brightFraction >= FROZEN.eventsPanel.minBrightFrac;
+  }
 
   // The five portrait crops for one side, left to right.
   //
@@ -89,6 +107,7 @@
     FROZEN: FROZEN,
     cells: cells,
     check: check,
+    eventsViewerOpen: eventsViewerOpen,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;

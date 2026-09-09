@@ -16,8 +16,12 @@
 # background, and why focus is taken ONCE here for a whole batch instead of per
 # key.
 
+# The key sequence comes from a file rather than an argument. That started as a
+# workaround for a misdiagnosis (see below) but is kept because a path is one
+# token with nothing in it for Node's quoting and PowerShell's -File re-parsing
+# to disagree about, and a long seek can be fifty keys.
 param(
-  [Parameter(Mandatory = $true)][string]$Keys,
+  [Parameter(Mandatory = $true)][string]$KeyFile,
   [switch]$NoFocus,
   [int]$GapMs = 45
 )
@@ -41,7 +45,9 @@ $VK = @{
   'B' = 0x42; 'C' = 0x43; 'K' = 0x4B; 'N' = 0x4E; 'X' = 0x58; 'Z' = 0x5A
 }
 
-$seq = $Keys.Split(',') | ForEach-Object { $_.Trim().ToUpper() } | Where-Object { $_ }
+if (-not (Test-Path $KeyFile)) { Write-Output "ERR no key file $KeyFile"; exit 1 }
+$seq = Get-Content $KeyFile | ForEach-Object { $_.Trim().ToUpper() } | Where-Object { $_ }
+if (-not $seq) { Write-Output 'ERR key file is empty'; exit 1 }
 foreach ($k in $seq) {
   if (-not $VK.ContainsKey($k)) { Write-Output "ERR unknown key $k"; exit 1 }
 }
@@ -59,12 +65,19 @@ if (-not $NoFocus) {
   }
 }
 
+# $code, NOT $vk. POWERSHELL VARIABLE NAMES ARE CASE-INSENSITIVE, so `$vk` and
+# the `$VK` lookup table above are ONE VARIABLE. Writing `$vk = $VK[$k]` here
+# overwrote the table with the integer it had just read: the first key sent
+# fine, and every run of two or more keys died on the second iteration trying
+# to index an integer, reporting only "Cannot index into a null array" with no
+# hint at the cause. Three unrelated theories about argument separators were
+# tried and discarded before anyone read the line number.
 foreach ($k in $seq) {
-  $vk = $VK[$k]
-  $scan = [byte][Keys]::MapVirtualKey([uint32]$vk, 0)
-  [Keys]::keybd_event([byte]$vk, $scan, 0, [UIntPtr]::Zero)
+  $code = $VK[$k]
+  $scan = [byte][Keys]::MapVirtualKey([uint32]$code, 0)
+  [Keys]::keybd_event([byte]$code, $scan, 0, [UIntPtr]::Zero)
   Start-Sleep -Milliseconds 30
-  [Keys]::keybd_event([byte]$vk, $scan, 2, [UIntPtr]::Zero)
+  [Keys]::keybd_event([byte]$code, $scan, 2, [UIntPtr]::Zero)
   Start-Sleep -Milliseconds $GapMs
 }
 
