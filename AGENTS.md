@@ -325,10 +325,94 @@ canonical and this copy is the bug.
   `PostMessage`, `SendMessage` and `AttachThreadInput` were all measured and
   none delivers a key to an unfocused client. The bot is therefore an overnight
   job, and takes focus once per map rather than once per sample.
+- **The events viewer needs N THEN K, every time.** The media controls have to
+  be up before K will open the panel; a run that pressed only K measured 0.023
+  before and 0.023 after and refused two maps. N is a toggle, so it can hide the
+  controls instead - the playhead is drawn only while they are up, which is the
+  check that catches it, and one more press puts them back.
+- **Judge the events panel by the RISE, not the level.** The panel is
+  translucent and its contents vary with how much happened in the game, so:
+  Busan (Control) 0.211 closed -> 0.755 open; Gibraltar (Escort) 0.024 ->
+  0.504; Havana (quick-play Escort, one round, nearly empty panel) 0.000 ->
+  **0.252**. Havana's OPEN panel reads dimmer than Busan's CLOSED one, so no
+  absolute threshold can separate them - and the 0.35 threshold refused two
+  maps that had opened perfectly well. `minBrightFrac` now only answers "was it
+  already open"; whether a press worked is `rise >= 0.125`.
+- **Side b reads about 0.11 lower than side a, consistently.** Across both maps'
+  retained frames, side a means 0.91/0.82 and side b 0.75/0.75, and shifting
+  box b left by 1px recovers it to 0.86/0.85 - the same offset on both maps, so
+  it is geometry, not a map. **Do not hand-edit `calib.FROZEN.boxes`** to fix
+  it; re-run the bootstrap for side b (auto-calibrate, press Use boxes, then
+  read `boxes.b`). Mean match score is not accuracy, and fitting numbers to it
+  is how the last calibration went wrong.
 - **The scrubber only draws round breaks while the replay events viewer is
   open.** With it closed a three-round Control map reads as one continuous
   segment - confidently and wrongly. `K` toggles the panel, so check its
   brightness (`crop.panelBrightFraction`) rather than pressing blind.
+- **Seek keys need 700ms between them; at 45ms only one in five lands.** The
+  client ignores a seek key that arrives while it is still seeking, silently -
+  the keys are delivered, it just does not act on them. Measured with
+  `probe_seek.js`: 45ms and 150ms land 1 of 5, 300ms lands 3, 600ms and 1000ms
+  land 5. 45ms was the old default, which is why the first live run advanced one
+  20-second step per batch however many keys it sent, and sampled six points
+  inside the first two minutes of a seventeen-minute map while reporting it had
+  covered all of it. `input.SEEK_GAP_MS` is now 700, and `driver.seekTo` still
+  verifies against `crop.playheadX` - **if correction fails, the measured
+  position wins over the requested one**, so a misplaced sample is dropped
+  rather than mislabelled.
+- **The replay viewer's time-skip interval reverts at every client restart.**
+  It is a known Blizzard bug - replay viewer options apply while the client runs
+  and are not saved - so an interval set to 60s last night is 20s tonight with
+  nothing on screen to say which. Assuming the wrong one puts every sample at a
+  third (or triple) of its intended time, inside the wrong round, and the output
+  looks entirely plausible. So the bot does both: a recorded `set-interval`
+  chunk sets 60s once per session on the first map, and `capture.js` MEASURES
+  what a press is really worth by timing playback against the moving playhead
+  (`timeline.stepSecondsFrom` snaps that to the client's 5/10/20/30/60 list and
+  refuses anything that lands nowhere near one). Later maps in the same session
+  reuse the measured value; `--step 60` skips the measurement entirely.
+- **A 20-second step is not a fixed number of pixels.** It measured 45px on a
+  17-minute Control map and 69px on an 11-minute Escort one, so the bar is
+  calibrated per map: jump to start, read the knob, press forward once, read it
+  again. That also measures the map's duration off the bar span (11:17 against a
+  scrubber reading the same), which is what lets a run work unattended -
+  `capture_map.js` no longer needs a duration argument.
+- **Menu coordinates are recorded, never taken from a screenshot.** Screenshots
+  of the rig arrive at 2557x1437 while the client area is 2560x1440, so any
+  coordinate read off one is wrong by a few pixels in an unknown direction.
+  The recorder uses LOW-LEVEL HOOKS, not polling, and that is not a detail: the
+  polled version could not see the mouse wheel at all, recorded a scrollbar drag
+  as a click where the drag started, and missed every key not on its watch list
+  (arrows included). Three attempts at recording one options menu failed in
+  those three different ways before it was rewritten. It now records any key by
+  virtual-key code, wheel notches, and drags with their path.
+  `node tools/replay_bot/recorder.js record <chunk> --code XXXXXX` records a
+  chunk (F10 ends it; nothing outside the Overwatch window is recorded) and
+  `play <chunk> --code YYYYYY` replays it with this replay's code substituted.
+  `node tools/replay_bot/gui.js` serves the same thing as a page on
+  127.0.0.1:8787, which is easier when recording several chunks in a sitting -
+  it shows which are still missing.
+- **A league code can only be imported once per account.** Import one that is
+  already in the list and the client shows a warning and makes you scroll down
+  and pick it by hand, which stops an unattended run dead. So the bot's account
+  must start with no league codes imported, **every code gets exactly one
+  attempt**, and a map that fails must be marked attempted rather than retried -
+  a retry cannot succeed while that code is still in the list. **Imports cannot
+  be deleted, but the list is a ring** (confirmed on the rig 2026-09-09) - new
+  imports evict the oldest, so a code stops colliding once it has been pushed
+  out. Whether it can then be re-imported is untested. Either way, retained
+  frames are what make a bad read fixable, and only offline. Whichever code was used to record
+  `open-import` is already imported and should be dropped from the queue.
+- **The run loop is two chunks, not five.** Leaving a replay lands back on the
+  replay history tab, so `open-import` (Import, paste, OK, Watch) and
+  `leave-replay` (ESC, Leave Game) close the loop between them. Nothing needs to
+  navigate to the replay list.
+- **The code is pasted, not typed, and the clipboard is the bot's to set.**
+  `record_input.ps1` watches Ctrl/Shift/Alt as held state; a recorded Ctrl+V
+  becomes the `$CODE` placeholder, and `play_input.ps1` sets the clipboard to
+  the code before sending it. The first recorder ignored modifiers, so the
+  operator's Ctrl+V was stored as a bare `V` - a chunk that read plausibly in
+  the listing and would have typed the letter "v" into the code field.
 - **Press "Use boxes" before reading `boxes.a`.** Auto-calibrate reports "10/10
   portraits confident" for a detection it has NOT committed; read too early and
   you get the `AUTO_STRIPS` default `(129.536, 119.808, 660.224, 97.2)`, which

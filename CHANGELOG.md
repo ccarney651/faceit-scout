@@ -47,6 +47,34 @@ Entries before 2026-08-11 were reconstructed from git history.
   That took a measured Control map from ~35 blind samples to 9, all in live
   play.
 
+- **Menu clicks are recorded, not hardcoded.** `tools/replay_bot/recorder.js`
+  records short named chunks of real mouse and keyboard work - to-replays,
+  open-import, confirm-import, open-replay - and replays them per code, with
+  the replay code itself held as a `$CODE` placeholder. The alternative was
+  reading button positions off a screenshot, and screenshots of the rig arrive
+  at 2557x1437 while the client area is 2560x1440, so every coordinate taken
+  from one is a guess that is wrong by a few pixels in an unknown direction.
+  Coordinates are stored relative to the client area, so a moved window is
+  harmless and a resized one is refused rather than scaled. Seeking is still
+  arithmetic and is never recorded. `node tools/replay_bot/gui.js` serves a
+  local page on 127.0.0.1 that drives the same functions and shows which chunks
+  are still missing.
+
+  Two chunks close the whole loop: `open-import` (Import, paste, OK, Watch) and
+  `leave-replay` (ESC, Leave Game), because leaving a replay lands back on the
+  replay history tab. The code is **pasted** - a recorded `Ctrl+V` becomes the
+  placeholder and playback sets the clipboard to that map's code.
+
+- **A league code can only be imported once per account, which the run loop has
+  to respect.** Importing one already in the list warns and demands a manual
+  scroll-and-select, ending an unattended run. So the account starts clean,
+  every code gets exactly one attempt, and a failed map is a loss to report
+  rather than a retry to queue.
+
+- **The playhead is read off the scrubber, so a seek can be checked rather than
+  trusted** - `crop.playheadX`, with `probe_seek.js` to measure how many
+  presses a batch actually lands at a given gap.
+
 ### Changed
 
 - **Registered the 2026-09-08 code wipe, dated `2026-09-07`.** The patch landed
@@ -65,6 +93,23 @@ Entries before 2026-08-11 were reconstructed from git history.
   portrait right and hanging onto the health pips. Drawn over a real frame the
   error is obvious; as a number it is invisible. `contact_sheet.js` now renders
   the ten crops so geometry can be looked at rather than believed.
+
+- **The bot opens the replay events viewer before reading round structure.** The
+  scrubber only draws between-round breaks while that panel is showing, so with
+  it closed a three-round Control map read as one continuous segment -
+  confidently, and wrongly, which is what the first live run did. `K` toggles
+  the panel, so `capture_map.js` measures its brightness, presses at most once,
+  and refuses the map if it will not open.
+
+- **A seek moved one 20-second step per batch, not the number of steps asked
+  for.** Found by reading the playhead in the six frames the first live run
+  retained: the knob advanced 45px between consecutive samples whether the
+  driver had sent eight presses, nine or ten. The run believed it was sampling
+  fourteen minutes of a map and never left the first two, which is exactly why
+  all six samples read the same ten heroes - a result that looked plausible and
+  was an artefact. The mechanism (most likely the client ignoring input while it
+  seeks) is measured by `probe_seek.js`; until that is settled, no full-map run
+  should be believed.
 
 
 ## 2026-09-08
