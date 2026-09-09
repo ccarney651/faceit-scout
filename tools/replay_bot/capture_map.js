@@ -1,131 +1,66 @@
 // tools/replay_bot/capture_map.js
 // Capture one already-open replay end to end, and report what it saw.
 //
-//   node tools/replay_bot/capture_map.js <durationMMSS>
-//   node tools/replay_bot/capture_map.js 17:42
+//   node tools/replay_bot/capture_map.js            duration measured off the bar
+//   node tools/replay_bot/capture_map.js 17:42      duration given, and compared
 //
-// This is run.js for a single map, minus the queue and minus opening the replay
-// - the operator opens it by hand. That split is deliberate: seeking is keys and
-// arithmetic, while opening a replay is mouse clicks at fixed coordinates, and
-// proving the first without the second means a failure here has one cause.
+// This is run.js for a single map, minus the queue and minus opening the
+// replay - the operator opens that by hand. The split is deliberate: it keeps a
+// failure here down to one cause, and it is the tool to reach for when only the
+// reading is in question.
+//
+// The capture itself lives in capture.js, because run.js does the same thing in
+// a loop and two copies of it would drift.
 //
 // IT TAKES FOCUS. Keys only land while Overwatch is foreground, so the desktop
 // is unusable while this runs. Roughly a minute per map.
 
 const path = require('path');
-const { loadImage, createCanvas } = require('@napi-rs/canvas');
-const G = require('./grab.js');
-const I = require('./input.js');
-const D = require('./driver.js');
-const calib = require('./calib.js');
-const Crop = require('./crop.js');
-const Match = require('./match.js');
-const T = require('./timeline.js');
+const C = require('./capture.js');
 
 const FRAMES = path.join(__dirname, 'frames');
-const REFS = require(path.join(__dirname, '../../docs/capture/refs.json'));
-
-const mmss = (s) => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
-
-async function pixels(p) {
-  const img = await loadImage(p);
-  const cv = createCanvas(img.width, img.height);
-  cv.getContext('2d').drawImage(img, 0, 0);
-  return { img, data: cv.getContext('2d').getImageData(0, 0, img.width, img.height).data };
-}
-
-// Mean absolute difference over the play area. The control bar animates on its
-// own, so it is excluded - otherwise the screen would never read as settled.
-async function diff(pa, pb) {
-  const [a, b] = await Promise.all([pixels(pa), pixels(pb)]);
-  let sum = 0, n = 0;
-  for (let y = 200; y < 1100; y += 8) {
-    for (let x = 0; x < a.img.width; x += 8) {
-      const i = (y * a.img.width + x) * 4;
-      sum += Math.abs(a.data[i] - b.data[i]) +
-        Math.abs(a.data[i + 1] - b.data[i + 1]) +
-        Math.abs(a.data[i + 2] - b.data[i + 2]);
-      n += 3;
-    }
-  }
-  return sum / n;
-}
-
-let grabN = 0;
-async function grabTo(tag) {
-  const p = path.join(FRAMES, `cap-${tag}-${grabN++}.png`);
-  const r = await G.capture(p);
-  if (!r.ok) throw new Error('grab failed: ' + r.reason);
-  return p;
-}
 
 (async () => {
   const arg = process.argv[2];
-  if (!arg || !/^\d+:\d+$/.test(arg)) {
-    console.error('usage: node capture_map.js <duration MM:SS>');
+  if (arg && !/^\d+:\d+$/.test(arg)) {
+    console.error('usage: node capture_map.js [duration MM:SS]');
+    console.error('  with no duration, it is measured off the scrubber');
     process.exit(1);
   }
-  const [m, s] = arg.split(':').map(Number);
-  const duration = m * 60 + s;
+  const told = arg ? Number(arg.split(':')[0]) * 60 + Number(arg.split(':')[1]) : null;
 
-  console.log(`duration ${arg} (${duration}s)`);
+  const io = C.makeIo({ framesDir: FRAMES, log: (m) => console.log(m) });
+  const got = await C.make(io).captureMap({ told });
 
-  // 1. Read the round structure off the scrubber, once.
-  const first = await grabTo('timeline');
-  const img0 = await loadImage(first);
-  const chk = calib.check({ w: img0.width, h: img0.height });
-  if (!chk.ok) throw new Error('calibration smoke check failed: ' + chk.reason);
+  console.log('\ndone: ' + got.samples.length + ' samples' +
+    (got.missed.length ? `, ${got.missed.length} dropped` : ''));
 
-  const segs = T.segments(Crop.barFlags(img0, calib), {
-    duration,
-    minRun: calib.FROZEN.timeline.minRunPx,
-  });
-  console.log('');
-  segs.forEach((sg) => console.log(
-    `  ${sg.play ? 'PLAY ' : 'BREAK'}  ${mmss(sg.from)} - ${mmss(sg.to)}`));
-
-  const per = T.samplesFor(segs);
-  const plan = T.plan(segs, per, { stepS: 20 });
-  console.log(`\n${per} samples per round -> ${plan.length} grabs: ${plan.map(mmss).join(', ')}\n`);
-
-  // 2. Drive the viewer to each sample and read the HUD.
-  const M = Match.make(REFS, { PAD: calib.FROZEN.ref.PAD });
-  const settle = I.makeSettle({
-    grab: () => grabTo('settle'),
-    diff,
-    threshold: 0.6,
-    maxTries: 8,
-    waitMs: 150,
-  });
-
-  const drv = D.make({
-    sendKeys: (keys) => I.sendKeys(keys),
-    focus: async () => {},
-    settle: async () => {
-      const r = await settle();
-      if (!r.settled) console.log('    (warning: screen never settled)');
-    },
-    stepS: 20,
-  });
-
-  const results = [];
-  for (const t of plan) {
-    const started = Date.now();
-    await drv.seekTo(t);
-    const frame = await grabTo('t' + t);
-    const img = await loadImage(frame);
-    const crops = Crop.all(img, calib);
-    const read = {};
-    for (const side of ['a', 'b']) {
-      read[side] = crops[side].map((c) => M.match(c, side));
-    }
-    results.push({ t, read });
-    console.log(`${mmss(t).padStart(6)}  (${((Date.now() - started) / 1000).toFixed(1)}s)`);
-    for (const side of ['a', 'b']) {
-      console.log('        ' + side + ': ' +
-        read[side].map((r) => `${r.name} ${r.score.toFixed(2)}`).join(' | '));
-    }
+  const doubtful = C.doubtfulOf(got.samples);
+  if (doubtful.length) {
+    console.log(`\n${doubtful.length} cell${doubtful.length === 1 ? '' : 's'} below ` +
+      `${C.LOW_SCORE} - worth looking at the frames before trusting them:`);
+    doubtful.forEach((d) => console.log(
+      `  ${C.mmss(d.t)} ${d.side}: ${d.name} ${d.score.toFixed(2)}`));
   }
 
-  console.log('\ndone: ' + results.length + ' samples');
+  // Did the comps actually move across the map?
+  //
+  // The first run that got this far returned the same ten heroes at every
+  // sample. That is possible on a Control map - teams do run one comp - but it
+  // is also exactly what a stuck seek looks like, and the two were
+  // indistinguishable from a wall of per-sample lines.
+  for (const side of ['a', 'b']) {
+    const seen = new Map();
+    got.samples.forEach((s) => {
+      const key = s[side].map((x) => x.name).slice().sort().join(', ');
+      if (!seen.has(key)) seen.set(key, []);
+      seen.get(key).push(C.mmss(s.t));
+    });
+    console.log('');
+    console.log(`SIDE ${side}: ${seen.size} distinct comp${seen.size === 1 ? '' : 's'}`);
+    for (const [comp, times] of seen) {
+      console.log(`  ${String(times.length).padStart(2)}x  ${comp}`);
+      console.log(`       at ${times.join(', ')}`);
+    }
+  }
 })().catch((e) => { console.error('FAILED: ' + e.message); process.exit(1); });
