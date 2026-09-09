@@ -131,7 +131,75 @@ const path = require('path');
     return [...byNo.values()].sort((a, b) => a.no - b.no);
   }
 
-  const Mod = { normaliseName, heroTimeline, heroesAt, compare, rounds };
+  // How many rounds a map type can possibly have.
+  //
+  // THIS IS THE ONLY ANSWER KEY A FACEIT GAME HAS. League codes are not on
+  // owreplays.tv - they come back 403 "Invalid replay", because only replays
+  // somebody uploaded are there - so for the games this bot exists to scout,
+  // there is no hero ground truth at all. What FACEIT does supply, in the feed,
+  // is `map_category`, and the mode fixes the round structure:
+  //
+  //   Push, Flashpoint    one long round
+  //   Control             best of three, so two or three, never one
+  //   Escort, Hybrid      attack and defend, so at least two - and no upper
+  //                       bound, because a score past 3 sends it to extra
+  //                       rounds and refusing a fourth would refuse a real game
+  //
+  // The failure this catches is a map read as one continuous segment when it
+  // had rounds, which was confidently wrong and invisible in the output. It
+  // also catches the reverse: an over-segmented map inventing a round that was
+  // never played, which is what a misread events panel produced on every
+  // escort, hybrid and flashpoint map captured before it was fixed.
+  var ROUNDS_BY_TYPE = {
+    push: [1, 1],
+    flashpoint: [1, 1],
+    control: [2, 3],
+    escort: [2, 9],
+    hybrid: [2, 9],
+    clash: [1, 3],
+  };
+
+  function roundsExpected(category) {
+    return ROUNDS_BY_TYPE[normaliseName(category)] || null;
+  }
+
+  // An unknown map type judges nothing. A new mode arriving should not start
+  // failing every capture on it - `known` says whether there was an opinion.
+  function checkRounds(category, botRounds) {
+    var range = roundsExpected(category);
+    if (!range) return { ok: true, known: false, why: null };
+    var ok = botRounds >= range[0] && botRounds <= range[1];
+    if (ok) return { ok: true, known: true, why: null };
+    var wants = range[0] === range[1] ? String(range[0]) :
+      range[1] >= 9 ? range[0] + ' or more' : range[0] + ' to ' + range[1];
+    // Which way it is wrong matters, because they are different faults.
+    //
+    // MORE rounds than the mode allows is a segmentation error - the bot cut a
+    // round that was never played, which is what a misread events panel did to
+    // every escort, hybrid and flashpoint map before it was fixed.
+    //
+    // FEWER is usually not. The count here is the highest round_no across the
+    // observations, so a round the sampler never visited is invisible: on a
+    // Junkertown escort the bot segmented both rounds correctly and then put
+    // its last sample at 6:00, inside the break, leaving a 43-second second
+    // round with nothing in it. The segmentation was right and the map was
+    // still only half scouted.
+    var over = botRounds > range[1];
+    return {
+      ok: false,
+      known: true,
+      over: over,
+      why: over
+        ? category + ' plays ' + wants + ' - the bot cut it into ' + botRounds
+        : category + ' plays ' + wants + ', but only ' + botRounds +
+          ' was sampled - a round may have gone unvisited',
+    };
+  }
+
+  const Mod = {
+    normaliseName, heroTimeline, heroesAt, compare, rounds,
+    roundsExpected, checkRounds,
+  };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBReplayScore = Mod;
@@ -171,6 +239,15 @@ if (require.main === module) {
 
     let obsTotal = 0, cellsTotal = 0, cellsRight = 0, exactReads = 0, partialKeys = 0;
     const confusions = new Map();
+    let typeChecked = 0, typeWrong = 0;
+
+    // FACEIT's own feed, when it is there: the map category per code, which is
+    // the only ground truth a league game has.
+    let feedByCode = new Map();
+    try {
+      const feed = require(path.join(__dirname, '../../docs/capture/data.json'));
+      feedByCode = new Map((feed.codes || []).map((c) => [String(c.code).toUpperCase(), c]));
+    } catch (e) { /* no feed built; the owreplays key still works */ }
 
     const allMaps = await get(API + 'maps');
     const mapById = new Map(allMaps.map((m) => [m.ID, m]));
@@ -196,18 +273,43 @@ if (require.main === module) {
             (r.GameType === 1 ? ' RQ' : r.GameType === 2 ? ' OQ' : '');
         } catch (e) { /* the score still stands without it */ }
 
+        // The bot's own round count, and what the map type says it can be.
+        const botRounds = Math.max(0, ...map.observations.map((o) => o.round_no || 0));
+        // The category comes from FACEIT's feed for a league code and from
+        // owreplays' map table for a public one. Either will do - the rule is
+        // about the mode, not about where the mode was looked up. Using only
+        // the feed left every public code unchecked, which is how a Junkertown
+        // escort read as a single round sat in the table saying nothing.
+        const feedRow = feedByCode.get(String(code).toUpperCase());
+        if (feedRow) {
+          mapName = feedRow.map || mapName;
+          mapType = feedRow.map_category || mapType;
+          modeName = 'FACEIT ' + (feedRow.division || '');
+        }
+        const typeVerdict = S.checkRounds(mapType, botRounds);
+        if (typeVerdict.known) {
+          typeChecked++;
+          if (!typeVerdict.ok) typeWrong++;
+        }
+
         let events;
         try {
           const res = await get(API + 'replay/' + code + '/events');
           events = res.events || [];
         } catch (e) {
           console.log(pad(code, 8) + pad(mapName, 16) + pad(mapType, 11) + pad(modeName, 20) +
-            pad('-', 8) + pad('-', 8) + pad('-', 9) + 'no answer key');
+            pad('-', 8) + pad('-', 8) + pad(botRounds || '-', 9) +
+            (typeVerdict && !typeVerdict.ok ? typeVerdict.why
+              : typeVerdict && typeVerdict.known ? 'rounds fit the map type'
+              : 'no answer key'));
           continue;
         }
         if (!events.length) {
           console.log(pad(code, 8) + pad(mapName, 16) + pad(mapType, 11) + pad(modeName, 20) +
-            pad('-', 8) + pad('-', 8) + pad('-', 9) + 'the site has no events for this code');
+            pad('-', 8) + pad('-', 8) + pad(botRounds || '-', 9) +
+            (typeVerdict && !typeVerdict.ok ? typeVerdict.why
+              : typeVerdict && typeVerdict.known ? 'rounds fit the map type'
+              : 'the site has no events for this code'));
           continue;
         }
 
@@ -244,10 +346,10 @@ if (require.main === module) {
           }
         }
 
-        const botRounds = Math.max(0, ...map.observations.map((o) => o.round_no || 0));
         const roundsCell = botRounds + ' vs ' + truthRounds.length;
         const notes = [];
         if (botRounds !== truthRounds.length) notes.push('ROUNDS DISAGREE');
+        if (typeVerdict && !typeVerdict.ok) notes.push(typeVerdict.why);
         if (partial) notes.push(partial + ' of ' + map.observations.length + ' had a partial key');
 
         cellsTotal += cells; cellsRight += right; exactReads += exact;
@@ -262,6 +364,10 @@ if (require.main === module) {
       (partialKeys ? `, ${partialKeys} set aside because the key was incomplete` : ''));
     console.log(`heroes read correctly: ${cellsRight}/${cellsTotal}  (${pct(cellsRight, cellsTotal)})`);
     console.log(`compositions read exactly right: ${exactReads}/${obsTotal}  (${pct(exactReads, obsTotal)})`);
+    if (typeChecked) {
+      console.log(`round structure against the map type: ${typeChecked - typeWrong}/${typeChecked} fit` +
+        (typeWrong ? ` - ${typeWrong} IMPOSSIBLE for the mode` : ''));
+    }
 
     if (confusions.size) {
       console.log('\nmost confused, played -> read:');

@@ -102,3 +102,36 @@ test('a round still open at the end of the replay is still a round', () => {
   const evs = [{ time: 10, type: 'ROUND_START', round: 1 }];
   assert.deepStrictEqual(S.rounds(evs), [{ no: 1, start: 10, end: null }]);
 });
+
+// FACEIT LEAGUE CODES ARE NOT ON owreplays.tv - they come back 403 "Invalid
+// replay", because only replays somebody uploaded are there. So for the games
+// this bot actually exists to scout there is no hero answer key at all, and the
+// round structure is the only thing that can be checked. FACEIT supplies it:
+// every game in the feed carries a map_category, and the mode fixes how many
+// rounds are possible.
+test('a map type says how many rounds are possible', () => {
+  assert.deepStrictEqual(S.roundsExpected('Push'), [1, 1], 'one long round');
+  assert.deepStrictEqual(S.roundsExpected('Flashpoint'), [1, 1], 'one long round');
+  assert.deepStrictEqual(S.roundsExpected('Control'), [2, 3], 'best of three, so never one');
+  assert.strictEqual(S.roundsExpected('Escort')[0], 2, 'attack and defend, so at least two');
+  assert.strictEqual(S.roundsExpected('Hybrid')[0], 2);
+});
+
+// Escort and hybrid go to extra rounds when the score passes 3, so the upper
+// bound is open. Refusing a fourth round would refuse a real game.
+test('escort and hybrid have no upper bound, because extra rounds happen', () => {
+  assert.ok(S.roundsExpected('Escort')[1] >= 6);
+  assert.ok(S.checkRounds('Escort', 4).ok, 'four rounds is a long game, not an error');
+  assert.ok(!S.checkRounds('Escort', 1).ok, 'one is impossible');
+});
+
+test('an unknown map type judges nothing rather than guessing', () => {
+  const r = S.checkRounds('Deathmatch', 7);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.known, false);
+});
+
+test('a round count outside the type says which way it is wrong', () => {
+  assert.match(S.checkRounds('Flashpoint', 2).why, /Flashpoint.*1/);
+  assert.match(S.checkRounds('Control', 1).why, /Control.*2/);
+});
