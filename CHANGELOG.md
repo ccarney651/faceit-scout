@@ -17,6 +17,56 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-09
+
+### Added
+
+- **An unattended replay scout, `tools/replay_bot/`.** It drives an Overwatch
+  client through FACEIT replay codes and reads hero compositions off the HUD,
+  because capture was otherwise bounded by operator time and a code dies at the
+  next patch. FACEIT already supplies the map, the code, bans, the scoreboard
+  and both lineups, so the client is used for the single fact FACEIT withholds:
+  which heroes each team actually played.
+
+  It runs the **shipped** matcher rather than a copy - the capture engine
+  injects its DOM handle, so `refs.js`, `frames.js` and `calibration.js` are
+  consumed unmodified - which is what makes bot output comparable to an
+  operator's. Output lands in its own contributor file as
+  `tool_version: "replay-bot-0.1"`, so merge can weight it, audit it, or ignore
+  it wholesale.
+
+  Design in `specs/2026-09-08-replay-bot-design.md`, architecture in
+  `ARCHITECTURE.md` §14. Not yet wired to the queue: opening a replay from a
+  code is still done by hand.
+
+- **Round structure is read off the replay scrubber.** Between-round breaks are
+  drawn in a different colour from play time, so a map's rounds are stated by
+  the UI rather than inferred from score changes. Samples are placed 3 per round
+  (5 across the single segment on Push and Flashpoint), always strictly inside a
+  segment, and snapped to the 20-second grid that `REPLAY FORWARD` moves in.
+  That took a measured Control map from ~35 blind samples to 9, all in live
+  play.
+
+### Changed
+
+- **Registered the 2026-09-08 code wipe, dated `2026-09-07`.** The patch landed
+  around 19:00 UK, so every code from before it is gone, including all 255 then
+  in the capture feed. Dated a day early on purpose: `codeDead()` compares
+  dates, so dating it the 8th would also mark that evening's post-patch games
+  dead, and a code nobody scouts is never recoverable. Same reasoning as the
+  2026-08-18 entry. CI regenerates the feed on its next run.
+
+### Fixed
+
+- **A calibration number recorded as known-good was the uncommitted default.**
+  Auto-calibrate reports "10/10 portraits confident" for a detection it has not
+  yet applied, so reading `boxes.a` before pressing **Use boxes** returns the
+  `AUTO_STRIPS` strip `(129.536, 119.808, 660.224, 97.2)` - shifted half a
+  portrait right and hanging onto the health pips. Drawn over a real frame the
+  error is obvious; as a number it is invisible. `contact_sheet.js` now renders
+  the ten crops so geometry can be looked at rather than believed.
+
+
 ## 2026-09-08
 
 ### Changed

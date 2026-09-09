@@ -305,6 +305,37 @@ canonical and this copy is the bug.
 - The stats endpoint is `…/stats/v1/stats/matches/{id}` — the documented `/time`
   segment 404s.
 
+- **The replay bot lives in `tools/replay_bot/` and its facts were all measured,
+  not reasoned.** See `ARCHITECTURE.md` §14 and
+  `specs/2026-09-08-replay-bot-design.md`. Run its tests with
+  `node --test "tools/replay_bot/*.test.js"`. It needs
+  `npm install --no-save @napi-rs/canvas`, which **prunes** any other
+  `--no-save` package - reinstall `playwright-core tesseract.js` in ONE command
+  when you next need them.
+- **PowerShell variable names are case-insensitive.** `$vk = $VK[$k]` overwrote
+  the lookup table with the value it had just read, so the first key sent fine
+  and every sequence died on the second iteration with "Cannot index into a null
+  array" and no line number. Three unrelated theories about argument separators
+  were tried before anyone read the line number. Get the line number first.
+- **`SetProcessDPIAware()` before any window call.** Without it Windows reports
+  a 125%-scaled 2560x1440 display as 2048x1152. Geometry frozen at the real size
+  then lands every crop in the wrong place, and both numbers look plausible.
+- **Capture survives occlusion; input does not.** `PrintWindow` with
+  `PW_RENDERFULLCONTENT` reads the Overwatch window while it is covered, but
+  `PostMessage`, `SendMessage` and `AttachThreadInput` were all measured and
+  none delivers a key to an unfocused client. The bot is therefore an overnight
+  job, and takes focus once per map rather than once per sample.
+- **The scrubber only draws round breaks while the replay events viewer is
+  open.** With it closed a three-round Control map reads as one continuous
+  segment - confidently and wrongly. `K` toggles the panel, so check its
+  brightness (`crop.panelBrightFraction`) rather than pressing blind.
+- **Press "Use boxes" before reading `boxes.a`.** Auto-calibrate reports "10/10
+  portraits confident" for a detection it has NOT committed; read too early and
+  you get the `AUTO_STRIPS` default `(129.536, 119.808, 660.224, 97.2)`, which
+  is half a portrait out. That exact number was stored in project memory as
+  known-good for three weeks. Draw the box and look at it -
+  `tools/replay_bot/contact_sheet.js` exists for that.
+
 ## Roadmap
 
 ### Season state (2026-09-01)

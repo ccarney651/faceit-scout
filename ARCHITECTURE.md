@@ -31,6 +31,8 @@ them and says how everything connects.
 - [11. Glossary](#11-glossary)
 - [12. Invariants](#12-invariants)
 - [13. Testing map](#13-testing-map)
+- [14. Replay bot](#14-replay-bot)
+- [13. Testing map](#13-testing-map)
 
 ---
 
@@ -67,6 +69,7 @@ independent.
 | Hero portraits on the dashboard | `faceit_sync/hero_icons.py`, `faceit_sync/hero_icons.json` | [4](#4-dashboard-build) |
 | Hero templates used for HUD matching | `owdb/refs.py`, `tools/build_capture_refs.py` | [5](#5-capture--the-python-owdb-package) |
 | Which matches are known about at all | `matches.txt` | [3](#3-ingest--faceit_sync) |
+| The unattended replay scout | `tools/replay_bot/` | [14](#14-replay-bot) |
 
 ## 1. The map
 
@@ -1672,3 +1675,118 @@ that package's safety net.
 For a visual check, build a local preview and screenshot it with headless Edge —
 on Windows use `--screenshot=FILE`, **not** `--dump-dom`, because the GUI
 executable produces no stdout.
+
+## 14. Replay bot
+
+`tools/replay_bot/` drives an Overwatch client through FACEIT replay codes
+unattended, reading hero compositions off the HUD. It exists because capture is
+otherwise bounded by operator time: a code dies at the next patch, and nobody
+can hand-scrub a fortnight of matches before that.
+
+Design: `specs/2026-09-08-replay-bot-design.md`.
+
+### 14.1 Scope, and why it is so narrow
+
+FACEIT already supplies the map, the code, bans, the scoreboard and both
+lineups. The client is needed for exactly one fact FACEIT withholds — **which
+heroes each team actually played** — and the bot does nothing else.
+
+### 14.2 It runs the shipped matcher, not a copy
+
+The capture engine dependency-injects its DOM handle (`refs.js` takes
+`{doc, …}`; `frames.js` only ever calls `ctx.doc.createElement`), and
+`matchCrop()` is pure `Float32Array` arithmetic. So the bot supplies a canvas
+shim and consumes `calibration.js`, `frames.js` and `refs.js` **unmodified**.
+
+`refs.js` also resolves `REF_W`/`REF_H`/`PAD`/`REFS` and util.js's helpers as
+*free variables* — documented and deliberate, because the two capture pages
+share them as page-level globals. Under CommonJS those resolve against
+`globalThis`, which `match.js` populates. That is honouring the module's
+contract, not working around it, and it is what makes bot output comparable to
+an operator's: the same matcher, not a lookalike.
+
+### 14.3 Modules
+
+| Module | Purpose | Pure |
+| --- | --- | --- |
+| `queue.js` | Drop wiped codes, skip captured maps, order oldest first | yes |
+| `timeline.js` | Round structure off the scrubber; the sampling plan | yes |
+| `segment.js` | Observations to rounds, opening comp and hero pool | yes |
+| `vote.js` | One slot resolved by agreement across frames | yes |
+| `emit.js` | Per-side observations in the contribution schema | yes |
+| `calib.js` | Frozen HUD geometry and the smoke check | yes |
+| `crop.js` | Frame regions to matcher buffers | no |
+| `match.js` | The shipped hero matcher, headless | no |
+| `grab.js` | Overwatch window to PNG | no |
+| `driver.js` | **The only module that sends keys** | no |
+| `input.js` | Key delivery, and settling by measurement | no |
+
+`driver.js` is deliberately alone in automating the client. Everything else
+reads pixels, which is ordinary use.
+
+### 14.4 Measured facts this is built on
+
+Every one of these was found by measuring on the rig, and every one is invisible
+until you look.
+
+- **`PrintWindow` with `PW_RENDERFULLCONTENT` captures the window while it is
+  fully occluded** (mean luma ~55); screen-copy returns ~5 the moment anything
+  covers it. This is what allows capture to happen in the background.
+- **Input needs focus.** `PostMessage`, `SendMessage` and `AttachThreadInput`
+  were all tried against an unfocused client; none delivered. `AttachThreadInput`
+  appears to work only because `SetFocus` foregrounds the window anyway. Hence
+  the bot is an overnight job, and takes focus once per map rather than per
+  sample.
+- **`SetProcessDPIAware()` must run before any window call.** Without it a
+  125%-scaled 2560×1440 display reports 2048×1152, and geometry frozen at the
+  real size lands every crop in the wrong place. Both numbers look plausible.
+- **The scrubber only draws round breaks while the replay events viewer is
+  open.** With it closed, a three-round Control map reads as one continuous
+  segment — confidently and wrongly. `K` toggles the panel, so the bot measures
+  its brightness rather than pressing blind.
+- **Breaks are found by colour, not brightness.** Event ticks and the playhead
+  are bright white; the blue channel's lead over red is clean.
+
+### 14.5 Calibration is frozen, and its provenance is the point
+
+HUD geometry is expressed as fractions *of the calibration box*, so the box must
+be one `auto-calibrate` actually emitted. Auto-calibrate reports "10/10
+portraits confident" for a detection it has **not yet committed** — read
+`boxes.a` before pressing **Use boxes** and you get the `AUTO_STRIPS` default,
+`(129.536, 119.808, 660.224, 97.2)`, which is shifted half a portrait right and
+drops onto the health pips.
+
+`tools/replay_bot/contact_sheet.js` renders the ten crops of a frame so the
+geometry can be looked at rather than believed. Every cell should be a centred
+face.
+
+### 14.6 Sampling
+
+The scrubber states the round structure, so nothing is inferred: breaks are read
+off the bar, and samples are placed **3 per round**, or **5 across the single
+segment** on Push and Flashpoint. Points sit strictly inside a segment — a
+round's first and last instants are setup and aftermath.
+
+Samples snap to a **20-second grid**, because seeking is `JUMP TO START` (`B`)
+followed by *n* presses of `REPLAY FORWARD` (`X`). Positions are counted rather
+than estimated, so they cannot drift across a map.
+
+### 14.7 Output
+
+The bot writes the normal contribution schema into its **own contributor file**
+with `tool_version: "replay-bot-0.1"`, so merge can weight it, audit it, or drop
+it wholesale — and bot rows can be diffed against an operator's on the same map.
+
+`maps[].observations[]` are **per side, per sample**, carrying hero **GUIDs**.
+`owdb` derives comps downstream. Fields the bot cannot honestly read (`pairs`,
+`sub_map`, `phase`) are emitted as the absences the merge already tolerates,
+never guessed — a wrong `sub_map` is worse than none.
+
+### 14.8 Terms of service
+
+Driving the client with synthetic input is **prohibited by the Blizzard EULA**,
+which defines a Bot as software "not expressly authorized by Blizzard, that
+allows the automated control of a Game or part of a Game". There is no carve-out
+for replay or spectator mode. The operator accepted this on a disposable
+account; it is recorded here so nobody later mistakes it for an oversight, and
+it is why all game-touching code sits in one swappable file.
