@@ -19,6 +19,8 @@
 (function (global) {
   'use strict';
 
+  var Mod = {};
+
   var Refs = require('../../docs/capture/engine/refs.js');
   var Util = require('../../docs/capture/engine/util.js');
 
@@ -64,15 +66,30 @@
       if (t) global.REFS.push(t);
     });
 
+    // WHICH LIBRARY IS LOADED IS A GLOBAL, so a second make() re-points the
+    // first handle without saying anything. Sequential use is fine and the
+    // capture does it once per map; reaching for an OLDER handle afterwards is
+    // the bug, and it is silent - it cost a measurement of a taught reference,
+    // where "before" and "after" both read the new library and the fix looked
+    // like it had done nothing. Comparing two libraries needs two processes.
+    var generation = (Mod.generation = (Mod.generation || 0) + 1);
+
     return {
       refCount: function () { return global.REFS.length; },
       // `side` is the variant: refs are stored per side because the team-
       // coloured plate behind a portrait changes what the crop looks like.
-      match: function (b64, side) { return R.matchCrop(b64, side); },
+      match: function (b64, side) {
+        if (generation !== Mod.generation) {
+          throw new Error('this matcher is stale: a newer matcher has replaced ' +
+            'its reference library, which lives in a global. Compare two ' +
+            'libraries in two processes, not two handles.');
+        }
+        return R.matchCrop(b64, side);
+      },
     };
   }
 
-  var Mod = { make: make };
+  Mod.make = make;
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBReplayMatch = Mod;
