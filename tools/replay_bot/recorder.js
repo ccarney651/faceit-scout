@@ -25,6 +25,14 @@
 // SEEKING IS NEVER RECORDED. B plus n presses of X is exact and cannot drift,
 // while a recorded scrub would be a pixel drag meaning something different in
 // every replay. Recording is for the menus, and stops at the replay.
+//
+// A COMPUTED scrub is a different thing, and `playEvents` is how one is sent.
+// The objection above is to a RECORDED drag: fixed pixels replayed on a map
+// whose bar has a different scale, landing at a different time every run. A
+// drag whose target is computed from THIS map's measured bar - capture.js
+// calibrates zeroX and stepPx per map, and timeline.xForSeconds turns a second
+// into a pixel - means exactly the same thing wherever it lands, and is checked
+// against the playhead afterwards like any other seek.
 
 (function (global) {
   'use strict';
@@ -490,8 +498,25 @@
   // through a sequence with the pointer already inside a menu.
   async function play(name, opts) {
     var o = opts || {};
-    var chunk = load(name);
+    return runPlan(load(name), name, o);
+  }
+
+  // Events built right now, for a client area measured right now. The chunk's
+  // recorded client size is the live one by construction, because these
+  // coordinates were computed for it rather than captured under some other.
+  async function playEvents(events, opts) {
+    var o = opts || {};
+    var name = o.name || 'computed';
     var rect = await windowRect();
+    return runPlan({
+      name: name,
+      client: { w: rect.w, h: rect.h },
+      events: events,
+    }, name, o, rect);
+  }
+
+  async function runPlan(chunk, name, o, knownRect) {
+    var rect = knownRect || await windowRect();
     var plan = resolve(chunk, rect, o.code, { speed: o.speed });
 
     var planPath = path.join(os.tmpdir(),
@@ -518,6 +543,7 @@
 
   var Mod = {
     DIR: DIR,
+    playEvents: playEvents,
     safeName: safeName,
     CODE: CODE,
     MAX_WAIT_MS: MAX_WAIT_MS,
