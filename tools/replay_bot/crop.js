@@ -110,11 +110,59 @@
     return n ? bright / n : 0;
   }
 
+  // Where the playhead knob is, so a seek can be checked rather than trusted.
+  //
+  // THIS IS THE ONLY WAY TO KNOW A SEEK LANDED. The driver counts presses, and
+  // counting is exact right up until the client ignores one - which it does,
+  // silently, while it is busy seeking. Six frames retained from the first live
+  // run all read the same ten heroes, and the reason was visible only here: the
+  // knob had moved exactly 45px between consecutive samples, one 20-second
+  // step, no matter how many presses had been sent. The bot believed it was at
+  // 14:40 and was at 1:42.
+  //
+  // The knob is found as the widest bright run along the bar's core rows. In
+  // those frames it was the ONLY run over luma 200, exactly 40px wide, with the
+  // played side at ~186 and the unplayed side at ~77 - so widest-run is
+  // deliberate belt and braces against a bright event tick, not a guess.
+  //
+  // Returns null when no run is wide enough, because a missing playhead is a
+  // frame worth refusing rather than a position worth inventing.
+  function playheadX(img, calib) {
+    var t = calib.FROZEN.timeline;
+    var cv = createCanvas(img.width, img.height);
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    var d = cx.getImageData(0, 0, img.width, img.height).data;
+
+    var best = null;
+    var start = -1;
+    for (var x = t.x0; x <= t.x1 + 1; x++) {
+      var hot = false;
+      if (x <= t.x1) {
+        var l = 0, n = 0;
+        for (var y = t.y0; y <= t.y1; y++) {
+          var i = (y * img.width + x) * 4;
+          l += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          n++;
+        }
+        hot = (l / n) > t.playheadBright;
+      }
+      if (hot && start < 0) start = x;
+      if (!hot && start >= 0) {
+        var run = { x0: start, x1: x - 1, width: x - start, centre: (start + x - 1) / 2 };
+        if (run.width >= t.playheadMinPx && (!best || run.width > best.width)) best = run;
+        start = -1;
+      }
+    }
+    return best;
+  }
+
   var Mod = {
     cell: cell,
     all: all,
     barFlags: barFlags,
     panelBrightFraction: panelBrightFraction,
+    playheadX: playheadX,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;

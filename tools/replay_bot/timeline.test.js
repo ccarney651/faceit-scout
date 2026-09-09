@@ -118,3 +118,48 @@ test('the measured Control replay yields nine samples across three rounds', () =
   assert.strictEqual(got.length, 9);
   assert.ok(got.every((t) => t > 0 && t < 1062));
 });
+
+// --- setup blips are not rounds -------------------------------------------
+//
+// Every map opens with a few seconds of "play" before the round proper. With a
+// 60-second step the nearest reachable grid point to such a segment is 0:00, so
+// the bot sampled the very start of the map - no portraits drawn yet - and read
+// ten cells of confident nonsense.
+
+test('a seven-second stretch of play is not a round', () => {
+  const got = T.dropShortPlay([
+    { from: 10, to: 17, play: true },
+    { from: 17, to: 49, play: false },
+    { from: 49, to: 299, play: true },
+  ], 30);
+  assert.deepStrictEqual(got.map((s) => s.play), [false, false, true]);
+  assert.strictEqual(got[0].tooShort, true, 'marked, so it can be shown as setup');
+});
+
+test('a real round is left alone', () => {
+  const got = T.dropShortPlay([{ from: 49, to: 299, play: true }], 30);
+  assert.strictEqual(got[0].play, true);
+  assert.strictEqual(got[0].tooShort, undefined);
+});
+
+test('dropping the blip changes how many samples the map gets', () => {
+  const raw = [
+    { from: 0, to: 10, play: false },
+    { from: 10, to: 17, play: true },
+    { from: 17, to: 49, play: false },
+    { from: 49, to: 299, play: true },
+  ];
+  assert.strictEqual(T.samplesFor(raw), 3, 'two play segments looks like rounds');
+  assert.strictEqual(T.samplesFor(T.dropShortPlay(raw, 30)), 5,
+    'one real segment gets the denser single-segment sampling');
+});
+
+test('the plan no longer reaches for 0:00', () => {
+  const segs = T.dropShortPlay([
+    { from: 7, to: 21, play: true },
+    { from: 21, to: 53, play: false },
+    { from: 53, to: 555, play: true },
+  ], 30);
+  const plan = T.plan(segs, T.samplesFor(segs), { stepS: 60 });
+  assert.ok(!plan.includes(0), 'sampling the first instant of a map reads no HUD at all');
+});

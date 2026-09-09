@@ -27,6 +27,26 @@
 
   var SCRIPT = path.join(__dirname, 'send_keys.ps1');
 
+  // MEASURED ON THE RIG, 2026-09-09. The replay viewer ignores a seek key that
+  // arrives while it is still seeking, and the loss is silent - the keys are
+  // delivered, the client simply does not act on them. Five presses of REPLAY
+  // FORWARD landed:
+  //
+  //     45ms gap -> 1 of 5      300ms -> 3 of 5
+  //    150ms gap -> 1 of 5      600ms -> 5 of 5      1000ms -> 5 of 5
+  //
+  // 45ms was the old default, which is why the first live run advanced exactly
+  // one 20-second step per batch however many keys it sent, and sampled six
+  // points inside the first two minutes of a seventeen-minute map while
+  // reporting that it had covered all of it.
+  //
+  // 700ms is 600 plus margin, since the cliff sits somewhere between 300 and
+  // 600 and nothing pins where. It costs about 20 seconds of seeking per map,
+  // which is nothing against a minute of grabs - and the driver verifies the
+  // result anyway, because a gap that is merely usually enough is not a thing
+  // to trust hundreds of maps to.
+  var SEEK_GAP_MS = 700;
+
   function parse(stdout) {
     var lines = String(stdout).split(/\r?\n/);
     for (var i = 0; i < lines.length; i++) {
@@ -54,7 +74,7 @@
 
     var args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', SCRIPT, '-KeyFile', keyFile];
-    if (opts && opts.gapMs) args.push('-GapMs', String(opts.gapMs));
+    args.push('-GapMs', String((opts && opts.gapMs) || SEEK_GAP_MS));
 
     return new Promise(function (resolve, reject) {
       execFile('powershell', args, { windowsHide: true }, function (err, stdout, stderr) {
@@ -99,6 +119,7 @@
 
   var Mod = {
     SCRIPT: SCRIPT,
+    SEEK_GAP_MS: SEEK_GAP_MS,
     parse: parse,
     sendKeys: sendKeys,
     makeSettle: makeSettle,

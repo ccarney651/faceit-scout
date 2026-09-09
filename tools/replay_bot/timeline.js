@@ -138,7 +138,88 @@
     return segs.filter(function (s) { return s.play; }).length > 1 ? 3 : 5;
   }
 
+  // Playhead position to seconds, and back.
+  //
+  // `ref` is measured per map, never assumed: `zeroX` is where the knob sits
+  // after JUMP TO START, and `stepPx` is how far one press of REPLAY FORWARD
+  // moves it. Pixels per second differ by map - a 20-second step measured 45px
+  // on a 17-minute Control replay and 69px on an 11-minute Escort one - so a
+  // constant here would be wrong on every map but one.
+  function secondsAt(x, ref) {
+    return (x - ref.zeroX) / ref.stepPx * ref.stepS;
+  }
+
+  // The same, snapped to the grid seeking can actually reach. Positions are
+  // whole presses from the start, so a target between steps is not a target.
+  function stepAt(x, ref) {
+    return Math.round((x - ref.zeroX) / ref.stepPx);
+  }
+
+  function xForSeconds(t, ref) {
+    return ref.zeroX + (t / ref.stepS) * ref.stepPx;
+  }
+
+  // The client's own list of skip intervals. Measured values are snapped to it
+  // because the setting is one of these, not an arbitrary number - and a
+  // measurement that lands nowhere near any of them means something else is
+  // wrong and should be refused rather than rounded into looking fine.
+  var INTERVALS = [5, 10, 20, 30, 60];
+
+  // What one press of REPLAY FORWARD is worth in seconds, from how far it moved
+  // the knob and how fast the knob moves during playback.
+  //
+  // THE SETTING CANNOT BE TRUSTED ACROSS SESSIONS. Replay viewer options are a
+  // known Blizzard bug: they apply while the client runs and revert to defaults
+  // at the next start, so an interval set to 60 last night is 20 tonight and
+  // nothing on screen says which. Assuming 20 when it is 60 would place every
+  // sample at a third of its intended time - inside the wrong round, with a
+  // wholly plausible-looking result.
+  function stepSecondsFrom(stepPx, pxPerSec, opts) {
+    var allowed = (opts && opts.allowed) || INTERVALS;
+    var tolerance = (opts && opts.tolerance) === undefined ? 0.2 : opts.tolerance;
+    if (!(pxPerSec > 0) || !(stepPx > 0)) {
+      return { ok: false, raw: null, stepS: null, reason: 'nothing moved' };
+    }
+
+    var raw = stepPx / pxPerSec;
+    var best = allowed[0];
+    allowed.forEach(function (v) {
+      if (Math.abs(v - raw) < Math.abs(best - raw)) best = v;
+    });
+    var off = Math.abs(best - raw) / best;
+    return {
+      ok: off <= tolerance,
+      raw: raw,
+      stepS: best,
+      reason: off <= tolerance ? null :
+        'a press measured ' + raw.toFixed(1) + 's, which is not near any of ' +
+        allowed.join('/') + 's - the playback rate or the step reading is wrong',
+    };
+  }
+
+  // Play segments too short to be a round, reclassified as breaks.
+  //
+  // Every map measured so far opens with a blip of play a few seconds long -
+  // 0:10-0:17 on one, 0:07-0:21 on another - which is the assemble phase, not a
+  // round. It matters more than it looks: with a 60-second step the only grid
+  // point anywhere near such a segment is 0:00, so the bot sampled the very
+  // start of the map, where no portraits are drawn yet, and read ten cells of
+  // confident nonsense (Zarya 0.52, Jetpack Cat 0.47) that would have gone
+  // straight into the output.
+  function dropShortPlay(segs, minPlayS) {
+    return segs.map(function (s) {
+      if (!s.play || (s.to - s.from) >= minPlayS) return s;
+      return { from: s.from, to: s.to, play: false, tooShort: true };
+    });
+  }
+
   var Mod = {
+    INTERVALS: INTERVALS,
+    dropShortPlay: dropShortPlay,
+    stepSecondsFrom: stepSecondsFrom,
+    secondsAt: secondsAt,
+    stepAt: stepAt,
+    xForSeconds: xForSeconds,
     segments: segments,
     plan: plan,
     samplesFor: samplesFor,

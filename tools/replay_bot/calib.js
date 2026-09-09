@@ -46,7 +46,17 @@
     // minRunPx discards runs too narrow to be a real break - the playhead knob
     // is a few pixels of blue, and taking it for a boundary would cut a round
     // in half and invent a segment that never happened.
-    timeline: { x0: 73, x1: 2449, y0: 1254, y1: 1262, blueLead: 20, minRunPx: 15 },
+    //
+    // playheadBright/playheadMinPx find the knob, which is how the bot checks
+    // where a seek actually landed rather than trusting that it landed. In all
+    // six frames retained from the first live run the bar's core rows held
+    // exactly ONE run brighter than 200: the knob, 40px wide, at luma 255,
+    // with the played side at ~186 and the unplayed side at ~77. Event ticks
+    // sit above these rows and do not intrude.
+    timeline: {
+      x0: 73, x1: 2449, y0: 1254, y1: 1262, blueLead: 20, minRunPx: 15,
+      playheadBright: 200, playheadMinPx: 12,
+    },
 
     // The replay events viewer - the ROUND 1/2/3 panel down the left.
     //
@@ -56,9 +66,27 @@
     //
     // K toggles it, so a blind press is as likely to close it as open it. The
     // bot measures instead: the panel is a large pale rectangle, and the
-    // fraction of bright pixels in this box separates the two states cleanly.
-    // Measured on the rig: 0.755 open, 0.211 closed.
-    eventsPanel: { x0: 30, x1: 530, y0: 280, y1: 480, minBrightFrac: 0.5, brightAt: 170 },
+    // fraction of bright pixels in this box separates the two states.
+    //
+    // MEASURED ON TWO MAPS, AND THE SPREAD IS THE POINT:
+    //
+    //     Control, Busan     0.755 open   0.211 closed
+    //     Escort, Gibraltar  0.504 open   0.024 closed
+    //
+    // The panel is translucent, so how bright it reads depends on the map
+    // behind it. The first threshold was 0.5, chosen from the Busan pair alone,
+    // and Gibraltar's open panel read 0.504 - it passed by four thousandths.
+    // A map one shade brighter behind the panel would have aborted the run.
+    //
+    // 0.35 sits above the highest closed reading and below the lowest open one,
+    // with room either side. If a future map lands between 0.211 and 0.504,
+    // this stops being a threshold problem and becomes a "measure the panel by
+    // pressing K and comparing" problem.
+    // minBrightFrac only answers "was it ALREADY open"; whether a press worked
+    // is decided by the rise, in driver.ensureEventsViewer. See the readings
+    // there - an open panel on one map reads dimmer than a closed one on
+    // another, so the level alone cannot separate the two states.
+    eventsPanel: { x0: 30, x1: 530, y0: 280, y1: 480, minBrightFrac: 0.35, brightAt: 170 },
   };
 
   // Whether the events viewer is open, given the bright fraction crop.js read
