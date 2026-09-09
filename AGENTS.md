@@ -312,6 +312,16 @@ canonical and this copy is the bug.
   `npm install --no-save @napi-rs/canvas`, which **prunes** any other
   `--no-save` package - reinstall `playwright-core tesseract.js` in ONE command
   when you next need them. The traps below are the ones that cost time.
+- **Reproduce it offline before you spend a code.** `fakeio.js` is capture.js's
+  injected I/O backed by recorded frames instead of a client - no PowerShell, no
+  grabs, no waiting - and it records every grab, key and wait so a test can say
+  *"N was pressed before K"* rather than *"the answer came out right"*. The
+  ordering bugs were never visible in the answers. `corpus.js` names the frames
+  that have been **looked at** and says what is in each; `corpus.test.js` and
+  `capture.offline.test.js` are graded against those, and skip themselves when
+  `frames/` is empty. `node tools/replay_bot/corpus_sweep.js` runs every
+  detector over every retained frame, which is how the panel detector was
+  caught.
 
 - **A league code can only be imported once, and that shapes everything.**
   Importing one the account already holds makes the client warn and demand a
@@ -341,9 +351,12 @@ canonical and this copy is the bug.
   mistake cost live codes: a level refused two maps that had opened, then
   false-positived on a bright sky and skipped N and K entirely; a rise then
   refused two more with the panel plainly open on screen.
-  `crop.panelFlatRows` counts the flat horizontal bands the panel is built from
-  instead - closed 0.000/0.120/0.000 against open 0.595/0.690/0.345 on those
-  same maps.
+  Counting the panel's flat horizontal bands instead separated those same three
+  maps cleanly - and was then caught by the offline sweep reading a night sky, a
+  loading screen, a black frame and **the ESC menu** as open panels, because all
+  four are perfectly uniform. `crop.panelRowFraction` requires a row to be
+  uniform **and light**: closed tops out at 0.015 against 0.340 for the weakest
+  open frame, over the whole corpus rather than three maps.
 - **Seek acceptance is PROBABILISTIC, not a threshold.** The client ignores a
   seek key arriving while it is still seeking. Bisecting for the cliff twice
   gave two different answers: 550ms dropped a press in one run and landed all

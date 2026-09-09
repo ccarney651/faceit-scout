@@ -1715,14 +1715,17 @@ an operator's: the same matcher, not a lookalike.
 | `vote.js` | One slot resolved by agreement across frames | yes |
 | `emit.js` | Per-side observations in the contribution schema | yes |
 | `calib.js` | Frozen HUD geometry and the smoke check | yes |
-| `crop.js` | Frame regions to matcher buffers; playhead; panel brightness | no |
+| `crop.js` | Frame regions to matcher buffers; playhead; the events panel | no |
 | `match.js` | The shipped hero matcher, headless | no |
 | `grab.js` | Overwatch window to PNG | no |
 | `input.js` | Key delivery, and settling by measurement | no |
 | `host.js` | One long-lived PowerShell, so a grab costs 204ms not 585 | no |
 | `driver.js` | **The only module that sends keys** | no |
 | `recorder.js` | Recorded menu input, replayed per code | part |
+| `screen.js` | Which static screen is showing, by fingerprint | no |
 | `capture.js` | One open replay, start to finish | no |
+| `fakeio.js` | `capture.js`'s I/O, backed by recorded frames | yes |
+| `corpus.js` | The labelled frames, and what a human saw in each | yes |
 | `run.js` | The queue loop; the CLI | no |
 
 `driver.js` and `recorder.js` are the two that automate the client. Everything
@@ -1734,6 +1737,37 @@ them: `contact_sheet.js` renders the ten crops of a frame, `probe_grab.ps1` and
 measures how many seek presses land, `probe_limits.js` pushes the waits until
 they break, and `probe_chunk.js` does the same for chunk playback. Every number
 in §14.7 came out of one of these.
+
+### 14.3a Running it without a client
+
+Twelve replay codes were spent on bugs in one night and three of them were the
+same shape: **the client was not where the code assumed, so the code carried on
+anyway.** Each was invisible in the output and obvious in the retained frames
+afterwards. A code imports exactly once, ever, so those frames are the only
+corpus there will ever be — and nothing could re-run the code against them.
+
+`capture.js` already takes everything that touches the machine as one injected
+object. `fakeio.js` is that object backed by a script instead of a rig: no
+PowerShell, no grabs, and **no waiting** — `sleep` is injected too, so the
+harness counts the waits rather than serving them and a refusal that took 1.1
+seconds live takes none here. `loadImage` is the real decoder, so the pixels the
+detectors see are the pixels they saw on the night.
+
+What it *records* matters as much as what it serves. Every grab, key and wait
+goes into a transcript, which is how a test asserts **"N was pressed before K"**
+rather than "the answer came out right" — the ordering bugs were never visible
+in the answers. A screen can also be a picture rather than a path, which is how
+"the frame is the wrong resolution" gets a test without a 7MB PNG.
+
+`corpus.js` is the other half: the frames that have actually been **looked at**,
+each with a note on what is in it. Nothing there was labelled by running a
+detector over it, because a detector graded against its own output grades
+nothing. The frames are gitignored (a few megabytes each); the labels are the
+part worth keeping, and the tests skip themselves when the frames are absent.
+
+`corpus_sweep.js` runs every detector over every retained frame and prints the table.
+That is what caught the panel detector in §14.7: a metric measured on three maps,
+clean on all three, and wrong on six frames already sitting on disk.
 
 ### 14.4 The run loop
 
@@ -1844,9 +1878,18 @@ until you look. Several looked entirely healthy while being wrong.
   closed to 0.770 open, a bright one 0.488 to 0.519, and a neon one 0.548 *down*
   to 0.519. Closed readings span 0.045-0.548 and open ones 0.519-0.770 -
   overlapping in both directions, so neither a level nor a change can separate
-  them, and each attempt at one cost live codes. `crop.panelFlatRows` counts the
-  flat horizontal bands the panel is made of: closed 0.000/0.120/0.000 against
-  open 0.595/0.690/0.345 on those same three maps.
+  them, and each attempt at one cost live codes.
+- **Structure meant "flat rows" for one day, and that was wrong too.** Counting
+  uniform rows separated the three maps that were to hand perfectly - closed
+  0.000/0.120/0.000 against open 0.595/0.690/0.345 - and the offline sweep then
+  found six frames on disk with no panel on them at all that read as open:
+  a night sky, a loading screen, a black frame, and **the ESC menu**. All four
+  are perfectly uniform. Across the whole corpus, closed spanned 0.000-1.000
+  against open 0.345-0.805: no threshold at all.
+  `crop.panelRowFraction` requires a row to be uniform **and light**, which
+  separates the corpus completely - closed tops out at 0.015, open bottoms out
+  at 0.340 - and holds anywhere from 150 to 210 luminance, so the number is the
+  middle of a plateau rather than a fit. **Three maps is not a measurement.**
 - **Breaks are found by colour, not brightness.** Event ticks and the playhead
   are bright white; the blue channel's lead over red is clean.
 - **A 20-second step is not a fixed number of pixels** — 45px on a 17-minute

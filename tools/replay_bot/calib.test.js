@@ -55,17 +55,21 @@ test('a frame matching the bootstrap is accepted', () => {
 // The round breaks only render on the scrubber while the replay events viewer
 // is open, so the bot must know whether it is. K toggles it, which means a
 // blind press is as likely to close it as open it.
-test('a bright events panel reads as open', () => {
-  assert.strictEqual(C.eventsViewerOpen(0.755), true);
+test('a box full of panel rows reads as open', () => {
+  assert.strictEqual(C.eventsViewerOpen(0.340), true);
 });
 
-test('a dim events panel reads as closed', () => {
-  assert.strictEqual(C.eventsViewerOpen(0.211), false);
+test('a box with none of them reads as closed', () => {
+  assert.strictEqual(C.eventsViewerOpen(0.015), false);
 });
 
+// 0.340 and 0.015 are the extremes crop.panelRowFraction returned over the
+// whole retained corpus - the weakest open frame and the strongest closed one.
+// corpus.test.js measures them again from the frames; this pins the threshold
+// against them so a number moved by hand fails here too.
 test('the open/closed threshold sits between the two measured states', () => {
-  const t = C.FROZEN.eventsPanel.minBrightFrac;
-  assert.ok(t > 0.211 && t < 0.755, `threshold ${t} must separate the measurements`);
+  const t = C.FROZEN.eventsPanel.minPanelRows;
+  assert.ok(t > 0.015 && t < 0.340, `threshold ${t} must separate the measurements`);
 });
 
 // --- is a replay even on screen? ------------------------------------------

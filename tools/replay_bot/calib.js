@@ -86,17 +86,28 @@
     // is decided by the rise, in driver.ensureEventsViewer. See the readings
     // there - an open panel on one map reads dimmer than a closed one on
     // another, so the level alone cannot separate the two states.
-    // minFlatRows is the test; brightAt/minBrightFrac survive only because the
-    // probes still print a brightness. flatSd is how uniform a row must be to
-    // count as one of the panel's bars.
+    // minPanelRows is the test; brightAt/minBrightFrac survive only because the
+    // probes still print a brightness. A row counts as one of the panel's bars
+    // when it is uniform across the box (sd under flatSd) AND light (mean over
+    // panelRowLum). Both halves are load-bearing, and the second half was
+    // learned the expensive way.
     //
-    // Measured open/closed across three maps - a dark one, a bright daylight
-    // one and a neon one: closed 0.000/0.120/0.000, open 0.595/0.690/0.345.
-    // 0.22 sits in the gap. Brightness over the same six frames overlapped
-    // completely, which is what this replaced.
+    // FLATNESS ALONE WAS MEASURED ON THREE MAPS AND WRONG ON SIX FRAMES. The
+    // first cut of this counted uniform rows and nothing else: closed
+    // 0.000/0.120/0.000 against open 0.595/0.690/0.345, so 0.22 looked like it
+    // sat in a gap. Run over the whole retained corpus instead of three maps,
+    // the gap is not there - a night sky, a loading screen, a black frame and
+    // the ESC MENU ITSELF are all perfectly uniform, and read 0.490 to 1.000.
+    // Closed spanned 0.000 to 1.000 against open 0.345 to 0.805.
+    //
+    // Requiring the rows to be light as well separates them completely, and
+    // stays separated anywhere between 150 and 210, so 170 is the middle of a
+    // plateau rather than a fitted number: closed tops out at 0.015, open
+    // bottoms out at 0.340. 0.15 sits between, ten times the worst closed
+    // reading and under half the weakest open one.
     eventsPanel: {
       x0: 30, x1: 530, y0: 280, y1: 480,
-      minFlatRows: 0.22, flatSd: 12,
+      minPanelRows: 0.15, flatSd: 12, panelRowLum: 170,
       minBrightFrac: 0.35, brightAt: 170,
     },
   };
@@ -104,20 +115,28 @@
   // Whether a replay is on screen at all, from the team tint crop.js read off
   // the two portrait bands.
   //
-  // Both sides must be tinted: a black loading screen reads 0.0 on each, and
-  // the smallest margin measured on a real replay frame was 29. 15 sits between
-  // them with room on both sides. This does NOT depend on the media controls
-  // being up, which is the whole point - they are hidden when a replay opens.
+  // Both sides must be tinted: a black loading screen reads 0.0 on each, and a
+  // replay reads tens. This does NOT depend on the media controls being up,
+  // which is the whole point - they are hidden when a replay opens.
+  //
+  // 15 WAS CHOSEN AGAINST A SMALLEST-MEASURED-MARGIN OF 29, AND THAT NUMBER IS
+  // NO LONGER TRUE. Run over the retained frames rather than the handful that
+  // were to hand, the dimmest real replay reads 15.1 - an explosion bright
+  // enough to wash out team A's plate, one tenth of a point above the line.
+  // Nothing has been changed on the strength of one frame, but the headroom
+  // this was picked for is not there, and corpus.test.js pins that frame so a
+  // threshold raised without measuring fails there instead of on a live code.
   var HUD_TINT = 15;
 
   function hudPresent(tint) {
     return tint.a >= HUD_TINT && tint.b >= HUD_TINT;
   }
 
-  // Whether the events viewer is open, given the flat-row fraction crop.js read
-  // out of the panel box. See crop.panelFlatRows for why it is not brightness.
-  function eventsViewerOpen(flatRows) {
-    return flatRows >= FROZEN.eventsPanel.minFlatRows;
+  // Whether the events viewer is open, given the panel-row fraction crop.js
+  // read out of the box. See crop.panelRowFraction for why it is neither
+  // brightness nor flatness on its own.
+  function eventsViewerOpen(panelRows) {
+    return panelRows >= FROZEN.eventsPanel.minPanelRows;
   }
 
   // The five portrait crops for one side, left to right.

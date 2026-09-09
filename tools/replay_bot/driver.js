@@ -59,9 +59,12 @@
   // directions, so neither a level nor a rise could separate them, and two maps
   // were refused with the panel plainly open on screen.
   //
-  // crop.panelFlatRows counts the flat horizontal bands the panel is made of
-  // instead: closed 0.000/0.120/0.000 against open 0.595/0.690/0.345 on those
-  // same three maps. See calib.FROZEN.eventsPanel.
+  // crop.panelRowFraction reads the panel's own rows instead - bands that are
+  // both uniform across the box and light. Over every retained frame, closed
+  // tops out at 0.015 against 0.340 for the weakest open one. Counting uniform
+  // rows WITHOUT the brightness looked just as clean on three maps and was
+  // wrong on six frames: a night sky, a loading screen, a black frame and the
+  // ESC menu are all perfectly uniform. See calib.FROZEN.eventsPanel.
   //
   async function ensureEventsViewer(ctx) {
     var steps = [];

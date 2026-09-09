@@ -87,8 +87,8 @@
     return out;
   }
 
-  // How much of the events-panel box is flat horizontal bands, which is how the
-  // bot tells whether the replay events viewer is open.
+  // How much of the events-panel box is made of the panel's own rows, which is
+  // how the bot tells whether the replay events viewer is open.
   //
   // BRIGHTNESS CANNOT ANSWER THIS AND THREE MAPS PROVED IT. The panel is
   // translucent, so what it reads depends on the map behind it - on a dark map
@@ -98,11 +98,20 @@
   // can separate them. Two maps were refused with the panel plainly open on
   // screen.
   //
-  // Structure survives all of it. The panel is a stack of flat light bars - the
-  // round rows and the two dropdowns - and a row of one is nearly uniform
-  // across its width whatever is behind it. Measured on the same three maps:
-  // closed 0.000/0.120/0.000, open 0.595/0.690/0.345.
-  function panelFlatRows(img, calib) {
+  // FLATNESS CANNOT ANSWER IT EITHER, WHICH TOOK LONGER TO FIND. The panel is a
+  // stack of flat bars - the round rows and the two dropdowns - and on the
+  // three maps that were to hand, counting uniform rows separated the states
+  // cleanly. It does not generalise: a night sky is uniform, so is a loading
+  // screen, so is a black frame, and so is the ESC menu. Run over the retained
+  // frames rather than three maps, closed spanned 0.000 to 1.000 against open
+  // 0.345 to 0.805, and six frames with no panel on them at all were read as
+  // having one.
+  //
+  // The panel's bars are flat AND LIGHT. That pair separates the whole corpus
+  // with a factor of twenty in hand, and holds anywhere from 150 to 210, so the
+  // luminance is the middle of a plateau and not a fitted number. See
+  // corpus.js: every frame behind those numbers was labelled by looking at it.
+  function panelRowFraction(img, calib) {
     var p = calib.FROZEN.eventsPanel;
     var cv = createCanvas(img.width, img.height);
     var cx = cv.getContext('2d', { willReadFrequently: true });
@@ -121,7 +130,7 @@
       }
       var mean = sum / n;
       var sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
-      if (sd < p.flatSd) flat++;
+      if (sd < p.flatSd && mean > p.panelRowLum) flat++;
       rows++;
     }
     return rows ? flat / rows : 0;
@@ -239,7 +248,7 @@
     all: all,
     barFlags: barFlags,
     panelBrightFraction: panelBrightFraction,
-    panelFlatRows: panelFlatRows,
+    panelRowFraction: panelRowFraction,
     playheadX: playheadX,
   };
 

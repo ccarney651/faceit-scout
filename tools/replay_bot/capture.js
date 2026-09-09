@@ -167,11 +167,14 @@
       // a frame caught mid-transition shows up as a low match score, and that
       // is the thing worth reacting to.
       quiesce: async function (ms) {
-        await sleep(ms === undefined ? QUIESCE_MS : ms);
+        await realSleep(ms === undefined ? QUIESCE_MS : ms);
         lastSettled = await grabTo('q');
         return { settled: true, frame: lastSettled };
       },
       lastFrame: function () { return lastSettled; },
+      // Named here so the live io and fakeio.js have the same surface, and
+      // nothing has to know which of the two it is holding.
+      sleep: realSleep,
       // Retained frames are a regression corpus, so a frame that gets read as a
       // sample is copied to a name that says which sample it was. Copying a PNG
       // is a few milliseconds against a 497ms grab.
@@ -185,7 +188,13 @@
     };
   }
 
-  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var realSleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  // Waiting is something that touches the machine too, so it comes out of the
+  // injected io like every other machine-touching thing. Offline, the harness
+  // counts the waits instead of serving them, which is the difference between
+  // a run that costs a second and one that costs a minute for no reason.
+  function napOf(io) { return (io && io.sleep) || realSleep; }
 
   // Is the replay moving, and stop it if it is.
   //
@@ -205,6 +214,7 @@
   //
   // SPACE is a toggle, so this measures first and presses only if it must.
   async function ensurePaused(io, drv) {
+    var sleep = napOf(io);
     async function moving() {
       var a = await io.grabTo('pause');
       await sleep(250);
@@ -231,6 +241,7 @@
   // The media controls are absent while the client loads, so the playhead is
   // the signal. No playhead means WAIT, not read, and not fail.
   async function readyFrame(io, first) {
+    var sleep = napOf(io);
     var p = first || await io.grabTo('ready');
     for (var i = 0; i < LOAD_TRIES; i++) {
       var img = await io.loadImage(p);
@@ -246,6 +257,7 @@
   // The same wait, for the bar rather than the HUD. Calibration needs the
   // playhead specifically, and by then N has been pressed so it should be up.
   async function barFrame(io, first) {
+    var sleep = napOf(io);
     var p = first || await io.grabTo('bar');
     for (var i = 0; i < LOAD_TRIES; i++) {
       var img = await io.loadImage(p);
@@ -262,6 +274,7 @@
   // already playing is measured rather than assumed - two reads a beat apart,
   // and a press only if nothing moved.
   async function measureRate(io, drv) {
+    var sleep = napOf(io);
     async function knob(tag) {
       var k = Crop.playheadX(await io.loadImage(await io.grabTo(tag)), calib);
       if (!k) throw new Error('lost the playhead while timing playback');
@@ -382,7 +395,7 @@
       var viewer = await D.ensureEventsViewer({
         read: async function () {
           img0 = await io.loadImage(await io.grabTo('panel'));
-          return Crop.panelFlatRows(img0, calib);
+          return Crop.panelRowFraction(img0, calib);
         },
         isOpen: calib.eventsViewerOpen,
         // The playhead is drawn only while the media controls are up, so it

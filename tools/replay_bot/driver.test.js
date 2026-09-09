@@ -101,7 +101,7 @@ test('a viewer that is already open is left alone', async () => {
   let presses = 0;
   const got = await D.ensureEventsViewer({
     read: async () => 0.60,
-    isOpen: (f) => f >= 0.22,
+    isOpen: (f) => f >= 0.15,
     toggle: async () => { presses++; },
   });
   assert.strictEqual(presses, 0, 'pressing K would have closed it');
@@ -234,7 +234,7 @@ function viewerCtx(opts) {
     log,
     ctx: {
       read: async () => (reads.length > 1 ? reads.shift() : reads[0]),
-      isOpen: (f) => f >= 0.22,     // calib.FROZEN.eventsPanel.minFlatRows
+      isOpen: (f) => f >= 0.15,     // calib.FROZEN.eventsPanel.minPanelRows
       mediaVisible: o.mediaVisible === undefined ? undefined : async () => o.mediaVisible(),
       showMedia: async () => { log.push('N'); },
       toggle: async () => { log.push('K'); },

@@ -21,6 +21,40 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Added
 
+- **The replay bot can be run without a client, against recorded frames.**
+  `tools/replay_bot/fakeio.js` is `capture.js`'s injected I/O backed by a script
+  instead of a rig - no PowerShell, no grabs, and no waiting, since the waits
+  are counted rather than served. It records every grab, key and wait, so a test
+  can assert *the order the keys were pressed in* rather than only the answer;
+  the bugs that cost the most were never visible in the answers.
+
+  `corpus.js` names the retained frames that have actually been looked at and
+  says what is in each - a night sky, a loading screen, the ESC menu - and
+  nothing there was labelled by running a detector over it.
+  `node tools/replay_bot/corpus_sweep.js` runs every detector over every retained frame
+  and prints the table. The frames stay out of git; the tests skip themselves
+  when they are absent.
+
+  This matters because **a replay code imports exactly once, ever.** Twelve were
+  spent on bugs in one night, three of them the same shape - the client was not
+  where the code assumed, so the code clicked blind - and every one was
+  reproducible for nothing from frames already on disk.
+
+### Fixed
+
+- **The events panel was read as open on a night sky, a loading screen, a black
+  frame, and the ESC menu.** The detector counted uniform horizontal rows, which
+  separated the three maps it was measured on perfectly and does not generalise:
+  all four of those are perfectly uniform. Over the whole retained corpus,
+  closed readings spanned 0.000-1.000 against open ones 0.345-0.805 - no
+  threshold at all. A row now has to be uniform **and light**, which separates
+  the corpus completely (closed tops out at 0.015, open bottoms out at 0.340)
+  and holds anywhere between 150 and 210 luminance. Found by the offline sweep
+  above, at the cost of no codes. `crop.panelFlatRows` is now
+  `crop.panelRowFraction`, because the reading is no longer flatness alone.
+
+### Added
+
 - **An unattended replay scout, `tools/replay_bot/`.** It drives an Overwatch
   client through FACEIT replay codes and reads hero compositions off the HUD,
   because capture was otherwise bounded by operator time and a code dies at the

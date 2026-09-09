@@ -81,3 +81,12 @@ refuse loudly rather than carrying on: only a broken *grab* is unrecoverable.
 They are gitignored like everything else here. `contact_sheet.js` renders the
 ten crops of any of them, which is how a geometry problem gets looked at rather
 than believed.
+
+**The ones that have been looked at are named in `../corpus.js`**, with a note
+on what is actually in each. That file is the committed half of this directory:
+the frames are megabytes and stay out of git, the labels are small and are the
+whole point. `../fakeio.js` replays frames through `capture.js` with no client
+attached, and `node tools/replay_bot/corpus_sweep.js` runs every detector over
+everything here and prints what it said - which is how a detector that was
+measured on three maps and wrong on six frames got caught without spending a
+code.
