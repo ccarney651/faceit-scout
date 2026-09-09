@@ -107,10 +107,23 @@
   // 0.345 to 0.805, and six frames with no panel on them at all were read as
   // having one.
   //
-  // The panel's bars are flat AND LIGHT. That pair separates the whole corpus
-  // with a factor of twenty in hand, and holds anywhere from 150 to 210, so the
-  // luminance is the middle of a plateau and not a fitted number. See
-  // corpus.js: every frame behind those numbers was labelled by looking at it.
+  // The panel's bars are flat AND LIGHT, and the bars that are read are the two
+  // DROPDOWNS, not the round rows.
+  //
+  // THE ROUND ROWS ARE A DIFFERENT PANEL ON EVERY MAP TYPE. Push and Flashpoint
+  // play one long round, Control up to three, Escort and Hybrid at least two -
+  // so a fraction taken over them means something different each time. Measured
+  // live: three-round frames read 0.340 and up, and a one-round map read 0.170
+  // against a threshold of 0.15, on a panel that was plainly open.
+  //
+  // The dropdowns are there whenever the panel is, whatever the map. They are
+  // read as two boxes rather than one because of the gap between them: a row
+  // crossing it goes white, dark, white, which is not uniform and reads as no
+  // panel at all. The weaker of the two is the answer, so a lucky bright patch
+  // in one place cannot carry it - and across every labelled frame the weakest
+  // open reading is 0.587 while nothing shut registers anything at all.
+  //
+  // See corpus.js: every frame behind those numbers was labelled by looking.
   function panelRowFraction(img, calib) {
     var p = calib.FROZEN.eventsPanel;
     var cv = createCanvas(img.width, img.height);
@@ -118,22 +131,31 @@
     cx.drawImage(img, 0, 0);
     var d = cx.getImageData(0, 0, img.width, img.height).data;
 
-    var flat = 0, rows = 0;
-    for (var y = p.y0; y < p.y1; y++) {
-      var sum = 0, sum2 = 0, n = 0;
-      for (var x = p.x0; x < p.x1; x += 2) {
-        var i = (y * img.width + x) * 4;
-        var l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        sum += l;
-        sum2 += l * l;
-        n++;
+    function fractionOf(box) {
+      var flat = 0, rows = 0;
+      for (var y = box.y0; y < box.y1; y++) {
+        var sum = 0, sum2 = 0, n = 0;
+        for (var x = box.x0; x < box.x1; x += 2) {
+          var i = (y * img.width + x) * 4;
+          var l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          sum += l;
+          sum2 += l * l;
+          n++;
+        }
+        var mean = sum / n;
+        var sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+        if (sd < p.flatSd && mean > p.panelRowLum) flat++;
+        rows++;
       }
-      var mean = sum / n;
-      var sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
-      if (sd < p.flatSd && mean > p.panelRowLum) flat++;
-      rows++;
+      return rows ? flat / rows : 0;
     }
-    return rows ? flat / rows : 0;
+
+    var worst = 1;
+    p.dropdowns.forEach(function (box) {
+      var f = fractionOf(box);
+      if (f < worst) worst = f;
+    });
+    return worst;
   }
 
   // How much of the events-panel box is bright. Kept because the probes and the
@@ -216,8 +238,21 @@
   // entirely.
   //
   // The plates are always there and always coloured: side a blue, side b red.
-  // Measured across real frames, the smallest margins were 29 and 35, against
-  // exactly 0.0 on a black loading screen.
+  //
+  // ONLY THE PORTRAIT BAND IS READ, AND NOT READING IT COST A CODE. This used
+  // to average the whole plate box, which also takes in the name plates, the
+  // health pips, and whatever the map shows in the gaps between the five cells.
+  // On a bright blue map that is enough to cancel team B's red outright: 4.8
+  // against a threshold of 15, on a replay that was open on screen at the time.
+  // run.js reads this to decide whether a replay loaded, so it waited its 90
+  // seconds, gave up, and spent the code. That was RCR3NK.
+  //
+  // The fix is the crop `cells` already uses and for the same stated reason -
+  // "below that sit the name plate and the health pips, and both are poison".
+  // Keeping the top TF of the box takes the tinted band and nothing else.
+  // Measured over every frame known to be a replay because its events panel is
+  // open: the dimmest reads 31.3, against exactly 0.0 on a loading screen, a
+  // black frame and the ESC menu. The threshold of 15 never moved.
   function hudTint(img, calib) {
     var cv = createCanvas(img.width, img.height);
     var cx = cv.getContext('2d', { willReadFrequently: true });
@@ -228,7 +263,8 @@
     ['a', 'b'].forEach(function (side) {
       var box = calib.FROZEN.boxes[side];
       var r = 0, b = 0, n = 0;
-      for (var y = Math.round(box.y); y < Math.round(box.y + box.h); y += 3) {
+      var bottom = Math.round(box.y + box.h * calib.FROZEN.ref.TF);
+      for (var y = Math.round(box.y); y < bottom; y += 3) {
         for (var x = Math.round(box.x); x < Math.round(box.x + box.w); x += 3) {
           var i = (y * img.width + x) * 4;
           r += d[i];

@@ -44,11 +44,6 @@
   // in the meantime rather than averaged away.
   var LOW_SCORE = 0.6;
 
-  // How much the events panel's bright fraction must move for a press to count
-  // as having done something. Same number driver.js uses, and for the same
-  // reason: the level is map-dependent, the change is not.
-  var VIEWER_RISE = 0.125;
-
   // How long a seek needs to have drawn before its frame is worth reading:
   // MEASURED AT NOTHING.
   //
@@ -428,21 +423,25 @@
       //     have put the controls on screen, and the interval has to change
       //     BEFORE the step is measured, or the run caches the old one.
       if (o.afterViewer) {
-        var openedAt = viewer.after;
         await o.afterViewer();
 
-        // A trip through a menu can leave the panel shut. Judged the same way
-        // opening it was - by the drop from a reading known to be open, since
-        // the level alone means nothing.
+        // A trip through a menu can leave the panel shut, so it is looked at
+        // again rather than assumed.
+        //
+        // THIS USED TO COMPARE A ROW FRACTION AGAINST A BRIGHTNESS FRACTION.
+        // It was a rise test from the brightness era - a drop from a reading
+        // known to be open - and when the reading became structural the two
+        // sides of the subtraction stopped being the same quantity. Nothing
+        // said so: on one map it would never reopen a shut panel, and on
+        // another it would press K on an open one and shut it. Asking whether
+        // the panel is open is now simply a question worth asking, the same
+        // way driver.ensureEventsViewer stopped dancing around it.
         img0 = await io.loadImage(await io.grabTo('timeline'));
-        var back = Crop.panelBrightFraction(img0, calib);
-        if (openedAt - back >= VIEWER_RISE) {
-          log('the events panel closed while the menu was open (' +
-            back.toFixed(3) + ' from ' + openedAt.toFixed(3) + ') - reopening');
+        if (!calib.eventsViewerOpen(Crop.panelRowFraction(img0, calib))) {
+          log('the events panel closed while the menu was open - reopening');
           await drv.eventsViewer();
           img0 = await io.loadImage(await io.grabTo('timeline'));
-          var again = Crop.panelBrightFraction(img0, calib);
-          if (again - back < VIEWER_RISE) {
+          if (!calib.eventsViewerOpen(Crop.panelRowFraction(img0, calib))) {
             throw new Error('the events panel would not reopen after the options ' +
               'menu, so the scrubber shows no round breaks');
           }

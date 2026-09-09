@@ -16,7 +16,7 @@ const skip = Corpus.absent() || false;
 // The guards all refuse long before anything is matched, and building the real
 // matcher means reading the whole reference library off disk.
 const NO_MATCHER = { read: () => ({ a: [], b: [] }) };
-const run = (io) => C.make(io).captureMap({ matcher: NO_MATCHER });
+const run = (io, opts) => C.make(io).captureMap(Object.assign({ matcher: NO_MATCHER }, opts));
 
 test('a frame that is not the frozen resolution is refused before a key is pressed', async () => {
   const io = F.make({ screen: canvas.createCanvas(1920, 1080) });
@@ -56,4 +56,34 @@ test('an open panel is not toggled, and the run goes on to the bar', { skip }, a
   // guard along, and exactly where this run should get to.
   await assert.rejects(run(io), /the forward key is not working/);
   assert.deepStrictEqual(io.keys, ['N', 'B', 'X'], 'no K: the panel was already open');
+});
+
+// The skip-interval chunk walks through the client's options menu, and a trip
+// through a menu can leave the events panel shut behind it. The check that
+// catches that was comparing a ROW FRACTION against a BRIGHTNESS FRACTION -
+// two different units, one threshold - which could as easily have pressed K on
+// an open panel and shut it.
+test('a panel the options menu shut is reopened', { skip }, async () => {
+  const open = Corpus.at('probe-panelopen-live.png');
+  const shut = Corpus.at('probe-panelshut-live.png');
+  let throughMenu = false;
+  const io = F.make({
+    screen: (c) => {
+      if (!throughMenu) return open;
+      return c.keys.filter((k) => k === 'K').length ? open : shut;
+    },
+  });
+
+  await assert.rejects(run(io, { afterViewer: async () => { throughMenu = true; } }),
+    /the forward key is not working/);
+  assert.strictEqual(io.keys.filter((k) => k === 'K').length, 1,
+    'K once, to reopen what the menu shut - and not once more');
+});
+
+test('a panel the options menu left alone is not touched', { skip }, async () => {
+  const io = F.make({ screen: Corpus.at('probe-panelopen-live.png') });
+
+  await assert.rejects(run(io, { afterViewer: async () => {} }),
+    /the forward key is not working/);
+  assert.deepStrictEqual(io.keys, ['N', 'B', 'X'], 'no K on a panel that stayed open');
 });

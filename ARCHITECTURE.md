@@ -1867,6 +1867,22 @@ until you look. Several looked entirely healthy while being wrong.
   125%-scaled 2560×1440 display reports 2048×1152, and geometry frozen at the
   real size lands every crop in the wrong place. Both numbers look plausible.
 
+**Is a replay even on screen**
+
+- **Only the portrait band is read, and not reading it cost a code.** The tint
+  used to be averaged over the whole plate box, which also takes in the name
+  plates, the health pips, and whatever the map shows in the gaps between the
+  five cells. On a bright blue map that cancels team B's red outright: **4.8
+  against a threshold of 15**, on a replay open on screen at the time. `run.js`
+  reads this to decide whether a replay loaded, so it waited its 90 seconds,
+  gave up and spent the code. That was **RCR3NK**.
+- **The fix was the crop `cells` already used, for the reason already written
+  down** - *"below that sit the name plate and the health pips, and both are
+  poison"*. `hudTint` was the one place that never got the memo. Over every
+  frame known to be a replay because its events panel is open, the dimmest now
+  reads **31.3**, against exactly 0.0 for a loading screen, a black frame and
+  the ESC menu. **The threshold of 15 never moved; the region had drifted.**
+
 **The scrubber**
 
 - **It only draws round breaks while the events viewer is open**, and that
@@ -1884,12 +1900,20 @@ until you look. Several looked entirely healthy while being wrong.
   0.000/0.120/0.000 against open 0.595/0.690/0.345 - and the offline sweep then
   found six frames on disk with no panel on them at all that read as open:
   a night sky, a loading screen, a black frame, and **the ESC menu**. All four
-  are perfectly uniform. Across the whole corpus, closed spanned 0.000-1.000
-  against open 0.345-0.805: no threshold at all.
-  `crop.panelRowFraction` requires a row to be uniform **and light**, which
-  separates the corpus completely - closed tops out at 0.015, open bottoms out
-  at 0.340 - and holds anywhere from 150 to 210 luminance, so the number is the
-  middle of a plateau rather than a fit. **Three maps is not a measurement.**
+  are perfectly uniform. Requiring the rows to be **light** as well fixed that.
+- **Then the round rows turned out not to be the same panel on every map.**
+  Push and Flashpoint play one long round, Control up to three, Escort and
+  Hybrid at least two - so a fraction taken over the ROUND rows means something
+  different on each. Three-round frames read 0.340 and up; a live **one-round**
+  map read **0.170 against a threshold of 0.15**, on a panel that was plainly
+  open on screen.
+- **So the reading is taken off the panel's two dropdowns**, which are there
+  whenever it is open, whatever the map. They are measured as two boxes because
+  of the gap between them - a row crossing it goes white, dark, white, which is
+  not uniform - and the weaker of the two is the answer, so a lucky bright patch
+  in one place cannot carry it. Over every labelled frame the weakest open
+  reading is **0.587** and nothing shut registers **anything at all**.
+  **Three maps is not a measurement, and neither is one map type.**
 - **Breaks are found by colour, not brightness.** Event ticks and the playhead
   are bright white; the blue channel's lead over red is clean.
 - **A 20-second step is not a fixed number of pixels** — 45px on a 17-minute

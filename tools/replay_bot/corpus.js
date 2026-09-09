@@ -87,6 +87,26 @@
   // No detector was consulted. This is the population a panel test needs -
   // eight of anything is not enough to catch a detector that is right about
   // bright maps and wrong about dark ones.
+  // Tonight's frames, taken live off RCR3NK on a bright one-round map. This is
+  // the state neither detector had, and both were wrong about it: the events
+  // panel is plainly open and read 0.170 against a threshold of 0.15, and the
+  // replay is plainly on screen and read as no replay at all.
+  var LIVE = [
+    { file: 'probe-panelopen-live.png', open: true, hud: true,
+      saw: 'RCR3NK paused, panel open, media controls up. ONE round row, where ' +
+        'every other open frame here has two or three - the reading that ' +
+        'depends on the round count nearly refused this map.' },
+    { file: 'probe-panelshut-live.png', open: false, hud: true,
+      saw: 'The same frame with K pressed once. The only open/shut pair here ' +
+        'taken on one map, seconds apart, with nothing else changed.' },
+    { file: 'probe-pre-3x.png', open: true, hud: true,
+      saw: 'The same replay with the skip interval at 20, before the ' +
+        'set-interval chunk was replayed at 3x.' },
+    { file: 'probe-post-3x.png', open: true, hud: true,
+      saw: 'And at 60, after. The pair that shows the chunk landed: the two ' +
+        'frames differ by 0.061 over the whole picture.' },
+  ];
+
   var PANELS = [
     { file: 'cap-panel-13.png', open: true },
     { file: 'cap-panel-72.png', open: true },
@@ -108,9 +128,11 @@
 
   // Every frame with a panel verdict on it, witnesses included.
   function panels() {
-    return PANELS.concat(Object.keys(WITNESSES).map(function (k) {
-      return { file: WITNESSES[k].file, open: WITNESSES[k].open };
-    }));
+    return PANELS
+      .concat(LIVE.map(function (l) { return { file: l.file, open: l.open }; }))
+      .concat(Object.keys(WITNESSES).map(function (k) {
+        return { file: WITNESSES[k].file, open: WITNESSES[k].open };
+      }));
   }
 
   function file(name) {
@@ -145,6 +167,7 @@
     DIR: DIR,
     WITNESSES: WITNESSES,
     PANELS: PANELS,
+    LIVE: LIVE,
     panels: panels,
     file: file,
     at: at,

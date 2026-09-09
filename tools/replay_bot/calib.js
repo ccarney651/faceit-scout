@@ -87,27 +87,43 @@
     // there - an open panel on one map reads dimmer than a closed one on
     // another, so the level alone cannot separate the two states.
     // minPanelRows is the test; brightAt/minBrightFrac survive only because the
-    // probes still print a brightness. A row counts as one of the panel's bars
-    // when it is uniform across the box (sd under flatSd) AND light (mean over
-    // panelRowLum). Both halves are load-bearing, and the second half was
-    // learned the expensive way.
+    // probes still print a brightness. A row counts as part of a dropdown when
+    // it is uniform across the box (sd under flatSd) AND light (mean over
+    // panelRowLum). Both halves are load-bearing, and both were learned the
+    // expensive way.
     //
     // FLATNESS ALONE WAS MEASURED ON THREE MAPS AND WRONG ON SIX FRAMES. The
-    // first cut of this counted uniform rows and nothing else: closed
-    // 0.000/0.120/0.000 against open 0.595/0.690/0.345, so 0.22 looked like it
-    // sat in a gap. Run over the whole retained corpus instead of three maps,
-    // the gap is not there - a night sky, a loading screen, a black frame and
-    // the ESC MENU ITSELF are all perfectly uniform, and read 0.490 to 1.000.
-    // Closed spanned 0.000 to 1.000 against open 0.345 to 0.805.
+    // first cut counted uniform rows and nothing else, over the ROUND rows:
+    // closed 0.000/0.120/0.000 against open 0.595/0.690/0.345, so 0.22 looked
+    // like it sat in a gap. Over the whole retained corpus it is not there - a
+    // night sky, a loading screen, a black frame and the ESC MENU are all
+    // perfectly uniform, and read 0.490 to 1.000.
     //
-    // Requiring the rows to be light as well separates them completely, and
-    // stays separated anywhere between 150 and 210, so 170 is the middle of a
-    // plateau rather than a fitted number: closed tops out at 0.015, open
-    // bottoms out at 0.340. 0.15 sits between, ten times the worst closed
-    // reading and under half the weakest open one.
+    // REQUIRING LIGHT ROWS FIXED THAT AND LEFT A WORSE PROBLEM: THE ROUND ROWS
+    // ARE NOT THE SAME PANEL ON EVERY MAP. Push and Flashpoint play one long
+    // round, Control up to three, Escort and Hybrid at least two. Three-round
+    // frames read 0.340 and up; a live one-round map read 0.170 against a
+    // threshold of 0.15, and would have been refused on a panel that was
+    // plainly open on screen.
+    //
+    // The dropdowns do not vary. Measured over every labelled frame - 12 open,
+    // 16 shut, one of the pairs taken seconds apart on one map with only K
+    // pressed between them - the weakest open reading is 0.587 and NOTHING
+    // shut registers at all. 0.25 is less than half the weakest open, and the
+    // shut side has no floor to clear.
     eventsPanel: {
+      // The panel's two dropdowns - the player picker and ALL EVENTS - which
+      // are there whenever it is open, on every map. Measured as two boxes
+      // because there is a gap between them and a row crossing it is not
+      // uniform, which reads as no panel at all.
+      dropdowns: [
+        { x0: 40, x1: 250, y0: 212, y1: 258 },
+        { x0: 310, x1: 520, y0: 212, y1: 258 },
+      ],
+      minPanelRows: 0.25, flatSd: 12, panelRowLum: 170,
+      // The old box, over the ROUND rows. panelBrightFraction still reads it
+      // and the probes still print it; nothing decides anything on it.
       x0: 30, x1: 530, y0: 280, y1: 480,
-      minPanelRows: 0.15, flatSd: 12, panelRowLum: 170,
       minBrightFrac: 0.35, brightAt: 170,
     },
   };
@@ -119,13 +135,11 @@
   // replay reads tens. This does NOT depend on the media controls being up,
   // which is the whole point - they are hidden when a replay opens.
   //
-  // 15 WAS CHOSEN AGAINST A SMALLEST-MEASURED-MARGIN OF 29, AND THAT NUMBER IS
-  // NO LONGER TRUE. Run over the retained frames rather than the handful that
-  // were to hand, the dimmest real replay reads 15.1 - an explosion bright
-  // enough to wash out team A's plate, one tenth of a point above the line.
-  // Nothing has been changed on the strength of one frame, but the headroom
-  // this was picked for is not there, and corpus.test.js pins that frame so a
-  // threshold raised without measuring fails there instead of on a live code.
+  // 15 was chosen against a smallest-measured-margin of 29, and it holds: over
+  // every frame known to be a replay because its events panel is open, the
+  // dimmest reads 31.3 against exactly 0.0 for a loading screen, a black frame
+  // and the ESC menu. What had drifted was the REGION, not the number - see
+  // crop.hudTint, and the code it cost.
   var HUD_TINT = 15;
 
   function hudPresent(tint) {

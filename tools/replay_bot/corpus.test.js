@@ -33,6 +33,30 @@ test('the events panel is read open exactly where it is open', { skip }, async (
   assert.deepStrictEqual(wrong, []);
 });
 
+// THE READING MUST NOT DEPEND ON HOW MANY ROUNDS THE MAP HAS. Push and
+// Flashpoint have one long round, Control up to three, Escort and Hybrid at
+// least two - so a reading taken off the ROUND rows means something different
+// on every map type. It read 0.170 on a live one-round map against a threshold
+// of 0.15, where the three-round frames read 0.340 and up. The panel's two
+// dropdowns are there whatever the map, which is what is measured instead.
+test('the panel reads the same on a one-round map as on a three-round one', { skip }, async () => {
+  const oneRound = Crop.panelRowFraction(await load(C.at('probe-panelopen-live.png')), calib);
+  const threeRound = Crop.panelRowFraction(await load(C.at('cap-panel-13.png')), calib);
+  assert.ok(oneRound > 0.4, 'a one-round panel is still plainly a panel: ' + oneRound.toFixed(3));
+  assert.ok(Math.abs(oneRound - threeRound) < 0.2,
+    'and reads close to a three-round one (' + oneRound.toFixed(3) + ' vs ' + threeRound.toFixed(3) + ')');
+});
+
+// The only open/shut pair taken on one map seconds apart, with nothing else
+// changed - so the difference between them is the panel and nothing else.
+test('one K press is the whole difference between open and shut', { skip }, async () => {
+  const open = Crop.panelRowFraction(await load(C.at('probe-panelopen-live.png')), calib);
+  const shut = Crop.panelRowFraction(await load(C.at('probe-panelshut-live.png')), calib);
+  assert.strictEqual(calib.eventsViewerOpen(open), true);
+  assert.strictEqual(calib.eventsViewerOpen(shut), false);
+  assert.strictEqual(shut, 0, 'a shut panel registers nothing at all, not a little');
+});
+
 test('the panel reading separates open from shut with room on both sides', { skip }, async () => {
   let worstOpen = 1, bestShut = 0;
   for (const p of C.panels()) {
@@ -43,7 +67,8 @@ test('the panel reading separates open from shut with room on both sides', { ski
   const t = calib.FROZEN.eventsPanel.minPanelRows;
   assert.ok(bestShut < t, 'the highest shut reading (' + bestShut.toFixed(3) + ') must sit under ' + t);
   assert.ok(worstOpen > t, 'the lowest open reading (' + worstOpen.toFixed(3) + ') must sit over ' + t);
-  assert.ok(worstOpen / Math.max(bestShut, 0.001) > 5, 'and the gap must be wide, not a hair');
+  assert.ok(worstOpen / Math.max(bestShut, 0.001) > 100,
+    'and the gap must be a chasm, not a hair: ' + worstOpen.toFixed(3) + ' against ' + bestShut.toFixed(3));
 });
 
 // The media controls hide themselves, so a replay is often on screen with no
@@ -62,15 +87,28 @@ test('a loading screen is not mistaken for a replay', { skip }, async () => {
   }
 });
 
-// The tint threshold is 15 and the dimmest real replay frame here reads 15.1.
-// That is not a margin, it is a coincidence, and the comment in calib.js
-// claiming 29 was written before this frame existed. Pinned so that a threshold
-// raised without measuring fails here instead of on a live code.
-test('the dimmest replay frame clears the tint threshold, barely', { skip }, async () => {
-  const tint = Crop.hudTint(await load(C.file('panel-open')), calib);
-  const margin = Math.min(tint.a, tint.b) - calib.HUD_TINT;
-  assert.ok(margin > 0, 'a real replay must read as one');
-  assert.ok(margin < 1, 'and this frame is the one that says how little room is left: ' + margin.toFixed(1));
+// AN OPEN EVENTS PANEL ONLY EXISTS INSIDE A REPLAY, so every frame labelled
+// open is a replay whether or not anyone wrote "hud" next to it. That is the
+// ground truth this is graded against, and it is independent of the tint.
+//
+// The measure used to be taken over the whole plate box, which catches the name
+// plates, the health pips and whatever the map shows between the cells. On a
+// bright blue map that cancelled team B's red entirely: 4.8 against a threshold
+// of 15, on a replay that was on screen at the time. run.js reads exactly this
+// to decide whether a replay loaded, waited 90 seconds, gave up, and spent the
+// code - which is what happened to RCR3NK.
+test('every replay frame in the corpus reads as a replay', { skip }, async () => {
+  const missed = [];
+  let worst = Infinity;
+  for (const p of C.panels()) {
+    if (!p.open) continue;               // shut tells us nothing either way
+    const tint = Crop.hudTint(await load(C.at(p.file)), calib);
+    worst = Math.min(worst, tint.a, tint.b);
+    if (!calib.hudPresent(tint)) missed.push(p.file + ' read ' + Math.min(tint.a, tint.b).toFixed(1));
+  }
+  assert.deepStrictEqual(missed, []);
+  assert.ok(worst > calib.HUD_TINT * 2,
+    'and the dimmest clears the threshold with room: ' + worst.toFixed(1) + ' against ' + calib.HUD_TINT);
 });
 
 test('two frames of the ESC menu are the same screen, and a replay is not', { skip }, async () => {

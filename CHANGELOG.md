@@ -42,6 +42,33 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Fixed
 
+- **A replay on a bright map was read as no replay at all, and it cost a code.**
+  `hudTint` averaged the team colour over the whole plate box, which also takes
+  in the name plates, the health pips and whatever the map shows between the
+  five cells. On a bright blue map that cancels team B's red outright - 4.8
+  against a threshold of 15, measured live on a replay that was open on screen.
+  `run.js` decides whether a replay loaded on exactly this, so it waited its 90
+  seconds, gave up, and spent the code; the ledger records that as RCR3NK
+  "timed out waiting for the replay to load". It had loaded. The tint is now
+  read off the portrait band only - the crop `calib.cells` already used, for the
+  reason already written next to it - and the dimmest known replay reads 31.3
+  against 0.0 for a loading screen. The threshold of 15 never moved.
+
+- **The events panel reading depended on how many rounds the map has.** Push and
+  Flashpoint play one long round, Control up to three, Escort and Hybrid at
+  least two, so a fraction taken over the panel's ROUND rows means something
+  different on every map type: three-round frames read 0.340 and up, and a live
+  one-round map read 0.170 against a threshold of 0.15. It is now read off the
+  panel's two dropdowns, which are there whatever the map - weakest open 0.587,
+  and nothing shut registers at all.
+
+- **The check that reopens the panel after the options menu compared two
+  different units.** It measured a row fraction before the menu and a brightness
+  fraction after, against one threshold - a leftover from the brightness era
+  that nothing flagged when the reading changed. Depending on the map it would
+  either never reopen a shut panel or press K on an open one and shut it. It now
+  simply asks whether the panel is open.
+
 - **The events panel was read as open on a night sky, a loading screen, a black
   frame, and the ESC menu.** The detector counted uniform horizontal rows, which
   separated the three maps it was measured on perfectly and does not generalise:

@@ -354,9 +354,23 @@ canonical and this copy is the bug.
   Counting the panel's flat horizontal bands instead separated those same three
   maps cleanly - and was then caught by the offline sweep reading a night sky, a
   loading screen, a black frame and **the ESC menu** as open panels, because all
-  four are perfectly uniform. `crop.panelRowFraction` requires a row to be
-  uniform **and light**: closed tops out at 0.015 against 0.340 for the weakest
-  open frame, over the whole corpus rather than three maps.
+  four are perfectly uniform. Requiring the rows to be **light** as well fixed
+  that, and left a worse problem: **the ROUND rows are not the same panel on
+  every map type.** Push and Flashpoint play one long round, Control up to
+  three, Escort and Hybrid at least two, so the fraction means something
+  different each time - a live one-round map read 0.170 against a threshold of
+  0.15, on a panel that was plainly open. `crop.panelRowFraction` reads the
+  panel's **two dropdowns** instead, which do not vary: weakest open 0.587,
+  and nothing shut registers at all.
+
+- **`hudTint` reads the PORTRAIT BAND only, and the day it did not cost a code.**
+  Averaged over the whole plate box it also takes in the name plates, the health
+  pips and the map showing between the cells; on a bright blue map that cancels
+  team B's red outright, 4.8 against a threshold of 15, with the replay open on
+  screen. `run.js` decides "did the replay load" on this, so it waited 90s, gave
+  up and spent RCR3NK. The fix was the crop `calib.cells` already used for the
+  same stated reason. Dimmest replay now 31.3 against 0.0 for a loading screen.
+  **The threshold was never wrong - the region had drifted.**
 - **Seek acceptance is PROBABILISTIC, not a threshold.** The client ignores a
   seek key arriving while it is still seeking. Bisecting for the cliff twice
   gave two different answers: 550ms dropped a press in one run and landed all
