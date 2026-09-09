@@ -29,6 +29,8 @@ const path = require('path');
 
 const C = require('./capture.js');
 const H = require('./host.js');
+const S = require('./screen.js');
+const I = require('./input.js');
 const R = require('./recorder.js');
 const Q = require('./queue.js');
 const E = require('./emit.js');
@@ -144,6 +146,23 @@ async function inReplay(io) {
   }
 }
 
+// Whether the client is sitting in the ESC menu.
+//
+// Menus can be recognised as pictures; replays cannot. Two frames of the ESC
+// menu differ by 3.4, and it differs from a replay by 82 - but two frames of a
+// REPLAY differ from each other by 55, because the game behind the HUD is a
+// different scene entirely. So this trick works here and nowhere else.
+async function escMenuUp(io) {
+  try {
+    const known = readJson(path.join(__dirname, 'screens', 'esc-menu.json'), null);
+    if (!known) return false;
+    const img = await io.loadImage(await io.grabTo('probe'));
+    return S.looksLike(S.thumb(img), known.thumb).same;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function waitFor(io, want, timeoutMs, label) {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
@@ -239,6 +258,20 @@ async function main() {
     };
     writeJson(STATE, state);
     try {
+      // The ESC menu is the other place the client gets stuck: a leave-replay
+      // whose click misses leaves it up, and the import chunk then clicks
+      // SOCIAL and CAREER PROFILE instead of the replay list. It is a static
+      // screen, so it can be recognised outright.
+      if (await escMenuUp(io)) {
+        console.log('the ESC menu is up - clearing it before importing');
+        await I.sendKeys(['ESC']);
+        await wait(1200);
+        if (await escMenuUp(io)) {
+          throw new Error('the ESC menu will not close - the client is not where ' +
+            'the chunks expect it');
+        }
+      }
+
       // The import chunk clicks the replay history tab. Playing it while a
       // replay is still open puts those clicks somewhere else entirely, which
       // is how one failed map turned into a run that spent two more codes
