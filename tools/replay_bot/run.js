@@ -28,6 +28,7 @@ const fs = require('fs');
 const path = require('path');
 
 const C = require('./capture.js');
+const H = require('./host.js');
 const R = require('./recorder.js');
 const Q = require('./queue.js');
 const E = require('./emit.js');
@@ -304,5 +305,9 @@ module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness };
 // Only when run as a command. Requiring this file - which the tests do - must
 // never start driving the client.
 if (require.main === module) {
-  main().catch(function (e) { console.error('FAILED: ' + e.message); process.exit(1); });
+  main()
+    .catch(function (e) { console.error('FAILED: ' + e.message); process.exitCode = 1; })
+    // The PowerShell host holds a pipe, and a held pipe keeps Node alive after
+    // the work is done.
+    .then(function () { H.close(); });
 }

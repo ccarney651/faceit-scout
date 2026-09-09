@@ -70,7 +70,31 @@
   // Send a whole key sequence in one process. The script foregrounds Overwatch
   // itself and refuses if it cannot, because keys sent to an unfocused window
   // are silently discarded and would leave the bot believing it had seeked.
-  function sendKeys(keys, opts) {
+  async function sendKeys(keys, opts) {
+    var gapMs = (opts && opts.gapMs) || SEEK_GAP_MS;
+    var keyFile = path.join(os.tmpdir(), 'owdb-keys-' + process.pid + '-' + (seqNo++) + '.txt');
+    fs.writeFileSync(keyFile, keys.join(String.fromCharCode(10)), 'utf8');
+
+    var H = require('./host.js');
+    try {
+      var line = await H.keys(keyFile, gapMs, keys.length);
+      if (line) {
+        try { fs.unlinkSync(keyFile); } catch (e) { /* already gone */ }
+        var got = parse(line);
+        if (!got.ok) throw new Error('send refused: ' + got.reason);
+        return got;
+      }
+    } catch (e) {
+      if (/send refused/.test(e.message)) {
+        try { fs.unlinkSync(keyFile); } catch (e2) { /* already gone */ }
+        throw e;
+      }
+      // anything else is the host failing, not the keys: use the script
+    }
+    return await sendKeysBySpawn(keys, opts);
+  }
+
+  function sendKeysBySpawn(keys, opts) {
     // Via a file, one key per line. Inline arguments were tried three ways and
     // all of them broke on Node/PowerShell separator disagreement; a path has
     // nothing in it to re-split.
@@ -125,6 +149,7 @@
   var Mod = {
     SCRIPT: SCRIPT,
     SEEK_GAP_MS: SEEK_GAP_MS,
+    sendKeysBySpawn: sendKeysBySpawn,
     parse: parse,
     sendKeys: sendKeys,
     makeSettle: makeSettle,

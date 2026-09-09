@@ -21,6 +21,7 @@
 const path = require('path');
 const { loadImage } = require('@napi-rs/canvas');
 const G = require('./grab.js');
+const H = require('./host.js');
 const I = require('./input.js');
 const D = require('./driver.js');
 const calib = require('./calib.js');
@@ -186,4 +187,6 @@ async function quiesceNeed(M, delays) {
 
   console.log('\nNothing here changes any setting. Feed the numbers back and the ' +
     'defaults get moved deliberately, with the measurement recorded beside them.');
-})().catch((e) => { console.error('FAILED: ' + e.message); process.exit(1); });
+})()
+  .catch((e) => { console.error('FAILED: ' + e.message); process.exitCode = 1; })
+  .then(() => H.close());

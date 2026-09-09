@@ -349,6 +349,15 @@ canonical and this copy is the bug.
   open.** With it closed a three-round Control map reads as one continuous
   segment - confidently and wrongly. `K` toggles the panel, so check its
   brightness (`crop.panelBrightFraction`) rather than pressing blind.
+- **One PowerShell process does the grabs and key sends** (`host.js` +
+  `host.ps1`). Measured: a grab through it is 204ms against 585ms for a fresh
+  spawn, because 341ms of the old cost was `Add-Type` and process startup, paid
+  about twenty times a map. It falls back to the standalone scripts if it will
+  not start or dies mid-run, and `OWDB_NO_HOST=1` forces that path. The child
+  and its pipes are **unref'd**: a caller that forgets `close()` would otherwise
+  wait forever on an open pipe for a host that is waiting for it - which cost
+  the test suite 72 seconds of doing nothing. In-flight requests always hold a
+  timeout timer, so the process can only exit while the host is idle.
 - **Seek acceptance is PROBABILISTIC, not a threshold.** Bisecting for the cliff
   twice gave two different answers: 550ms dropped a press in one run and landed
   all five in the next; 375ms landed 2 of 5, then 4 of 5. Any timing probe here

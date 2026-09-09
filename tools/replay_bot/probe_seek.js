@@ -26,6 +26,7 @@
 const path = require('path');
 const { loadImage } = require('@napi-rs/canvas');
 const G = require('./grab.js');
+const H = require('./host.js');
 const I = require('./input.js');
 const D = require('./driver.js');
 const calib = require('./calib.js');
@@ -111,4 +112,6 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('cost per map is presses x gap. If it stays at 1 whatever the gap,');
   console.log('the client is coalescing repeats and the driver has to seek in');
   console.log('single verified steps, checking the playhead after each one.');
-})().catch((e) => { console.error('FAILED: ' + e.message); process.exit(1); });
+})()
+  .catch((e) => { console.error('FAILED: ' + e.message); process.exitCode = 1; })
+  .then(() => H.close());

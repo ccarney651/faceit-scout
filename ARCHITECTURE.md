@@ -1720,6 +1720,7 @@ an operator's: the same matcher, not a lookalike.
 | `grab.js` | Overwatch window to PNG | no |
 | `driver.js` | **The only module that sends keys** | no |
 | `input.js` | Key delivery, and settling by measurement | no |
+| `host.js` | One long-lived PowerShell, so a grab costs 204ms not 585 | no |
 | `recorder.js` | Recorded menu clicks, replayed per code | part |
 
 `driver.js` is deliberately alone in automating the client. Everything else

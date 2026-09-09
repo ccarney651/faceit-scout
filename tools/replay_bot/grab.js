@@ -55,7 +55,22 @@
   // Capture the window to `outPath`. Resolves with the same shape parse()
   // returns; a failed capture resolves ok:false rather than throwing, so a
   // sweep can record the miss and carry on to the next sample.
-  function capture(outPath) {
+  // The long-lived host does this in about 150ms; a fresh PowerShell needs 497,
+  // two thirds of which is starting up. If the host is not available - or dies
+  // - this falls straight back to the standalone script, which is slower and
+  // just as correct.
+  async function capture(outPath) {
+    var H = require('./host.js');
+    try {
+      var line = await H.grab(outPath);
+      if (line) return parse(line);
+    } catch (e) {
+      // fall through to the script; a broken host must not stop a run
+    }
+    return await captureBySpawn(outPath);
+  }
+
+  function captureBySpawn(outPath) {
     return new Promise(function (resolve, reject) {
       execFile('powershell', [
         '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
@@ -74,6 +89,7 @@
     SCRIPT: SCRIPT,
     parse: parse,
     capture: capture,
+    captureBySpawn: captureBySpawn,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;

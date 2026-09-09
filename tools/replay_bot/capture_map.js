@@ -17,6 +17,7 @@
 
 const path = require('path');
 const C = require('./capture.js');
+const H = require('./host.js');
 
 const FRAMES = path.join(__dirname, 'frames');
 
@@ -63,4 +64,6 @@ const FRAMES = path.join(__dirname, 'frames');
       console.log(`       at ${times.join(', ')}`);
     }
   }
-})().catch((e) => { console.error('FAILED: ' + e.message); process.exit(1); });
+})()
+  .catch((e) => { console.error('FAILED: ' + e.message); process.exitCode = 1; })
+  .then(() => H.close());
