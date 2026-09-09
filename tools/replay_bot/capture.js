@@ -44,24 +44,33 @@
   // in the meantime rather than averaged away.
   var LOW_SCORE = 0.6;
 
-  // How long a seek needs to have drawn before its frame is worth reading:
-  // MEASURED AT NOTHING.
+  // How long a seek needs to have drawn before its frame is worth reading.
   //
-  // probe_limits.js seeks, reads immediately, then reads the same position again
-  // after everything has stopped, and compares the least confident of the ten
-  // cells. Across two runs and four delays the early read matched the settled
-  // one every time - 0.66 at +0ms against 0.66 at +640ms.
+  // THIS WAS ZERO, AND ZERO WAS RIGHT UNTIL GRABBING GOT FAST. probe_limits.js
+  // seeks, reads immediately, then reads the same position again once
+  // everything has stopped, and compares the least confident of the ten cells:
+  // across two runs and four delays the early read matched the settled one
+  // every time, 0.66 at +0ms against 0.66 at +640ms. The reason was that a grab
+  // was not free - a PowerShell spawn plus PrintWindow ran about half a second,
+  // so the HUD had long finished moving by the time the frame was taken. The
+  // wait was waiting for something that had already happened.
   //
-  // The reason is that a grab is not free: a PowerShell spawn plus PrintWindow
-  // is about half a second, so by the time the frame is taken the HUD has long
-  // since finished moving. The wait was 320ms of waiting for something that had
-  // already happened. If grabbing ever gets fast (a persistent host would make
-  // it ~150ms), measure this again - the free wait disappears with it.
+  // The old comment here ended "if grabbing ever gets fast (a persistent host
+  // would make it ~150ms), measure this again - the free wait disappears with
+  // it". Then host.js took a grab from 585ms to 204ms and nobody did. The free
+  // wait went with it, exactly as predicted, and the reads started landing
+  // mid-transition: TEN OF THE TWENTY-EIGHT SAMPLES in the first five-map
+  // competitive run needed a second look, which is the loop noticing a bad
+  // frame and paying for another grab to replace it.
+  //
+  // 400ms costs about 2s a map and buys back most of those retakes, each of
+  // which was a grab of its own. Worth re-measuring with probe_limits.js if the
+  // grab time moves again - in either direction.
   //
   // Menus still get the two-frame settle, because a half-drawn panel is
-  // measured as a brightness and then believed; a half-drawn HUD only scores
-  // badly, and the sample loop re-reads when it does.
-  var QUIESCE_MS = 0;
+  // measured and then believed; a half-drawn HUD only scores badly, and the
+  // sample loop re-reads when it does.
+  var QUIESCE_MS = 400;
 
   // Shorter than this, a stretch of play is the assemble phase rather than a
   // round. Every map measured opens with one.
