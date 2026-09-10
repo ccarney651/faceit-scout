@@ -82,9 +82,14 @@ function parseArgs(argv) {
     // so it is a flag and not a default.
     stepS: Number(flag('--step')) || null,
     intervalChunk: flag('--interval-chunk'),
-    // Divides the waits inside every chunk. 1 is as recorded; probe_chunk.js
-    // says what the client will actually keep up with.
-    chunkSpeed: Number(flag('--chunk-speed')) || 1,
+    // Divides the waits inside every chunk. A 2026-09-10 sweep ran the loop at
+    // 1x / 1.5x / 2x / 2.5x clean and BROKE at 3x - open-import's click on the
+    // VIEW button landed before the button had drawn, so the replay imported
+    // but never opened and the run timed out. 2x is the fast default that
+    // held; --chunk-speed overrides it (down to 1 for a slow client, and no
+    // higher than 2.5 until open-import waits for the button rather than
+    // timing the click).
+    chunkSpeed: Number(flag('--chunk-speed')) || 2,
     // Timing overrides, for sweeping the pipeline to find the fastest that
     // still reads clean. null leaves each at its measured default.
     //   --sample-quiesce  ms after a seek settles, before the HUD is read
