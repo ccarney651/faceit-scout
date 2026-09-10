@@ -462,22 +462,47 @@
       //    N then K, in that order and every time: the media controls have to
       //    be up before the events viewer will open. A run that pressed only K
       //    sat at 0.023 before and after, having done nothing.
+      //
+      // DIAGNOSTIC LOGGING BELOW, added 2026-09-10 after two live failures
+      // ("K did not open the panel") that could not be reverse-engineered from
+      // the frames alone - ruled out "still in the assemble phase" (K also
+      // failed well into live round-1 gameplay in one manual repro) and found
+      // Crop.playheadX can false-positive on a bright background element at
+      // the scrubber's own pixel band (measured a 495px run on one map, where
+      // a real knob is ~40px - see specs/2026-09-10-replay-bot-player-attribution-design.md's
+      // sibling investigation notes). This logs the raw playhead run (width
+      // tells a real knob from a false positive) and the panel reading at
+      // every step, so the next live occurrence is diagnosable from the log
+      // alone rather than needing frames reconstructed after the fact.
+      var t0Viewer = Date.now();
+      function logPlayheadState(step) {
+        var knob = Crop.playheadX(img0, calib);
+        log('    [diag +' + (Date.now() - t0Viewer) + 'ms] ' + step + ': playhead=' +
+          (knob ? ('x' + knob.x0 + '-' + knob.x1 + ' w' + knob.width) : 'none'));
+      }
       var viewer = await D.ensureEventsViewer({
         read: async function () {
           img0 = await io.loadImage(await io.grabTo('panel'));
-          return Crop.panelRowFraction(img0, calib);
+          var rows = Crop.panelRowFraction(img0, calib);
+          log('    [diag +' + (Date.now() - t0Viewer) + 'ms] read: panelRows=' + rows.toFixed(3));
+          return rows;
         },
         isOpen: calib.eventsViewerOpen,
         // The playhead is drawn only while the media controls are up, so it
         // doubles as the check that N went the right way.
-        mediaVisible: async function () { return !!Crop.playheadX(img0, calib); },
+        mediaVisible: async function () {
+          logPlayheadState('mediaVisible check');
+          return !!Crop.playheadX(img0, calib);
+        },
         showMedia: async function () {
           await drv.mediaControls();
           img0 = await io.loadImage(io.lastFrame());
+          logPlayheadState('after N');
         },
         toggle: async function () {
           await drv.eventsViewer();
           img0 = await io.loadImage(io.lastFrame());
+          logPlayheadState('after K');
         },
       });
       log('events viewer ' + (viewer.open ? 'open' : 'CLOSED') +
