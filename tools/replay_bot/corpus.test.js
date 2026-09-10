@@ -85,6 +85,17 @@ test('a replay is recognised while the media controls are down', { skip }, async
   assert.strictEqual(calib.hudPresent(Crop.hudTint(img, calib)), true);
 });
 
+// The two codes lost on 2026-09-10: a bright map's scenery in the bar's y-band,
+// with the media controls down, read as the playhead - so mediaVisible() said
+// the controls were up when they were not, and K was pressed at a closed panel.
+// playheadX must find nothing on either frame, whatever bright offcuts the
+// scenery leaves in those rows.
+test('scenery in the bar rows with the controls down is not a playhead', { skip }, async () => {
+  for (const name of ['assemble-brightbar-xtk7mm', 'assemble-brightbar-4tneaj']) {
+    assert.strictEqual(Crop.playheadX(await load(C.file(name)), calib), null, name);
+  }
+});
+
 test('a loading screen is not mistaken for a replay', { skip }, async () => {
   for (const name of ['loading', 'black', 'esc-menu']) {
     const tint = Crop.hudTint(await load(C.file(name)), calib);

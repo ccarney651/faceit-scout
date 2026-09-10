@@ -110,6 +110,32 @@ test('a frame with no playhead reports none rather than guessing', () => {
   assert.strictEqual(Crop.playheadX(withBar(500, 3), calib), null);
 });
 
+// A wide bright band across the bar's own pixel rows is a map or HUD element
+// showing through, not the knob. Measured live on 2026-09-10: a 537px bright
+// run of pavement at y1254-1262 (XTK7MM, GET READY phase, media controls DOWN)
+// read as the playhead, which let ensureEventsViewer believe the controls were
+// up when a stray N had just hidden them - and K was then pressed at a closed
+// panel. The real knob is ~40px.
+test('a bright band far wider than the knob is not the playhead', () => {
+  assert.strictEqual(Crop.playheadX(withBar(462, 537), calib), null);
+});
+
+test('the real knob still wins when a wide bright wash shares its rows', () => {
+  const f = calib.FROZEN.frame;
+  const t = calib.FROZEN.timeline;
+  const cv = createCanvas(f.w, f.h);
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#000000';
+  cx.fillRect(0, 0, f.w, f.h);
+  cx.fillStyle = '#4d4d4d';
+  cx.fillRect(t.x0, t.y0, t.x1 - t.x0 + 1, t.y1 - t.y0 + 1);
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(300, t.y0, 400, t.y1 - t.y0 + 1);   // a 400px wash
+  cx.fillRect(1500, t.y0, 40, t.y1 - t.y0 + 1);   // the real knob
+  const got = Crop.playheadX(cv, calib);
+  assert.deepStrictEqual([got.x0, got.width], [1500, 40]);
+});
+
 test('the playhead is found at either end of the bar', () => {
   const t = calib.FROZEN.timeline;
   assert.strictEqual(Crop.playheadX(withBar(t.x0, 40), calib).x0, t.x0);

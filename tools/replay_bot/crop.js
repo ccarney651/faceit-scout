@@ -191,12 +191,15 @@
   // step, no matter how many presses had been sent. The bot believed it was at
   // 14:40 and was at 1:42.
   //
-  // The knob is found as the widest bright run along the bar's core rows. In
-  // those frames it was the ONLY run over luma 200, exactly 40px wide, with the
-  // played side at ~186 and the unplayed side at ~77 - so widest-run is
-  // deliberate belt and braces against a bright event tick, not a guess.
+  // The knob is found as the widest bright run along the bar's core rows,
+  // BETWEEN playheadMinPx and playheadMaxPx wide. In those frames it was the
+  // ONLY run over luma 200, exactly 40px wide, with the played side at ~186 and
+  // the unplayed side at ~77 - so widest-run is deliberate belt and braces
+  // against a bright event tick, not a guess. The upper bound rejects a wide
+  // bright band that is scenery showing through with the controls down, not a
+  // knob (see calib.FROZEN.timeline.playheadMaxPx).
   //
-  // Returns null when no run is wide enough, because a missing playhead is a
+  // Returns null when no run is in range, because a missing playhead is a
   // frame worth refusing rather than a position worth inventing.
   function playheadX(img, calib) {
     var t = calib.FROZEN.timeline;
@@ -221,7 +224,9 @@
       if (hot && start < 0) start = x;
       if (!hot && start >= 0) {
         var run = { x0: start, x1: x - 1, width: x - start, centre: (start + x - 1) / 2 };
-        if (run.width >= t.playheadMinPx && (!best || run.width > best.width)) best = run;
+        var inRange = run.width >= t.playheadMinPx &&
+          (t.playheadMaxPx === undefined || run.width <= t.playheadMaxPx);
+        if (inRange && (!best || run.width > best.width)) best = run;
         start = -1;
       }
     }

@@ -47,15 +47,24 @@
     // is a few pixels of blue, and taking it for a boundary would cut a round
     // in half and invent a segment that never happened.
     //
-    // playheadBright/playheadMinPx find the knob, which is how the bot checks
-    // where a seek actually landed rather than trusting that it landed. In all
-    // six frames retained from the first live run the bar's core rows held
-    // exactly ONE run brighter than 200: the knob, 40px wide, at luma 255,
-    // with the played side at ~186 and the unplayed side at ~77. Event ticks
-    // sit above these rows and do not intrude.
+    // playheadBright/playheadMinPx/playheadMaxPx find the knob, which is how the
+    // bot checks where a seek actually landed rather than trusting that it
+    // landed. In all six frames retained from the first live run the bar's core
+    // rows held exactly ONE run brighter than 200: the knob, 40px wide, at luma
+    // 255, with the played side at ~186 and the unplayed side at ~77. Event
+    // ticks sit above these rows and do not intrude.
+    //
+    // playheadMinPx/playheadMaxPx bound how wide a bright run may be and still
+    // be the knob. With the media controls DOWN there is no knob, and the bar's
+    // y-band is just scenery - on XTK7MM (2026-09-10) that scenery held a 537px
+    // run of sunlit pavement AND a 27px offcut, either of which read as the
+    // playhead and let ensureEventsViewer press K at a closed panel. Every knob
+    // actually drawn across the corpus measures 39-65px (parked at the far left
+    // it is 39; the widest, on a dark map, 65), so 33-100 keeps all of them and
+    // rejects both of XTK7MM's false runs and 4TNEAJ's 14px one.
     timeline: {
       x0: 73, x1: 2449, y0: 1254, y1: 1262, blueLead: 20, minRunPx: 15,
-      playheadBright: 200, playheadMinPx: 12,
+      playheadBright: 200, playheadMinPx: 33, playheadMaxPx: 100,
     },
 
     // The replay events viewer - the ROUND 1/2/3 panel down the left.

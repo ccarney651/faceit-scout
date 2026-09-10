@@ -85,6 +85,19 @@
   var LOAD_TRIES = 12;
   var LOAD_WAIT_MS = 400;
 
+  // After N is pressed to raise the media controls, how long to keep looking for
+  // the playhead before concluding N went the wrong way.
+  //
+  // THIS USED TO BE A SINGLE READ ~400ms AFTER N, AND IT COST TWO CODES
+  // (XTK7MM, 4TNEAJ, 2026-09-10). The controls fade in over a beat and the knob
+  // at the start position takes a moment to draw; a read that early saw nothing,
+  // concluded N had failed, and pressed N AGAIN - which hid the controls it had
+  // just shown. K then went to a closed panel. Polling for the knob instead of
+  // checking once removes the guess. Tries, not a wall clock, so fakeio (which
+  // does not advance time) still terminates.
+  var MEDIA_TRIES = 10;
+  var MEDIA_WAIT_MS = 250;
+
   var mmss = function (s) {
     return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
   };
@@ -489,10 +502,16 @@
         },
         isOpen: calib.eventsViewerOpen,
         // The playhead is drawn only while the media controls are up, so it
-        // doubles as the check that N went the right way.
+        // doubles as the check that N went the right way - but only once it has
+        // actually drawn. Polled, not read once: see MEDIA_TRIES.
         mediaVisible: async function () {
-          logPlayheadState('mediaVisible check');
-          return !!Crop.playheadX(img0, calib);
+          for (var i = 0; i < MEDIA_TRIES; i++) {
+            await io.sleep(MEDIA_WAIT_MS);
+            img0 = await io.loadImage(await io.grabTo('media-check'));
+            logPlayheadState('mediaVisible check');
+            if (Crop.playheadX(img0, calib)) return true;
+          }
+          return false;
         },
         showMedia: async function () {
           await drv.mediaControls();

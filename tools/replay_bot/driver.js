@@ -50,7 +50,11 @@
   //
   // N is a toggle, so pressing it blind can hide the controls instead of
   // showing them. `mediaVisible()` catches that - the playhead is drawn only
-  // while the controls are up - and one more press puts them back.
+  // while the controls are up - and one more press puts them back. It must
+  // POLL for the playhead, not read once: the controls fade in over a beat and
+  // the knob takes a moment to draw, and a single early read that saw nothing
+  // pressed N a second time and hid the controls it had just raised (two codes,
+  // XTK7MM/4TNEAJ, 2026-09-10).
   //
   // THE PANEL IS READ BY ITS STRUCTURE, NOT ITS BRIGHTNESS. It is translucent,
   // so brightness depends on the map behind it: on a dark map opening it took

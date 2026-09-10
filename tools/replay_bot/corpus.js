@@ -91,6 +91,24 @@
         'playhead cannot answer "is a replay on screen".',
       open: false, hud: true, playhead: false,
     },
+    'assemble-brightbar-xtk7mm': {
+      file: 'cap-panel-20-xtk7mm.png',
+      saw: 'XTK7MM (Shambali) in GET READY, media controls DOWN, panel shut. ' +
+        'The bar\'s y-band falls on sunlit pavement: a 537px bright run at ' +
+        'x462 and a 27px offcut at x202, no knob anywhere. Read as the ' +
+        'playhead on 2026-09-10, which convinced ensureEventsViewer the ' +
+        'controls were up after a stray N had hidden them - K then went to a ' +
+        'closed panel and the code was lost. playheadX must return null here.',
+      open: false, hud: true, playhead: false,
+    },
+    'assemble-brightbar-4tneaj': {
+      file: 'cap-panel-42-4tneaj.png',
+      saw: 'The second loss the same night: 4TNEAJ (Neon Junction) in GET ' +
+        'READY, controls down. A 14px bright run at x95 near the left end - ' +
+        'far too narrow to be the knob, which is never under 39px. Same ' +
+        'failure. playheadX must return null here too.',
+      open: false, hud: true, playhead: false,
+    },
     'black': {
       file: 'cap-t180-36.png',
       saw: 'A black loading screen, taken as the t=180 sample. Perfectly flat ' +

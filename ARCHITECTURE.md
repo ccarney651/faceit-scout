@@ -1889,6 +1889,15 @@ until you look. Several looked entirely healthy while being wrong.
   viewer needs **N then K, every time** — the media controls must be up before K
   will open the panel. A run that pressed only K measured 0.023 before and
   0.023 after, having done nothing, and refused two maps.
+- **N is a toggle, and the check that it went the right way is polled, not read
+  once.** The controls fade in over a beat and the knob at the start position
+  takes a moment to draw; a single read ~400ms after N saw nothing, decided N
+  had failed, pressed N *again* — hiding the controls — and then K went to a
+  closed panel. Two more codes (XTK7MM, 4TNEAJ, 2026-09-10), both in the GET
+  READY phase where the scenery in the bar's own pixel rows had bright runs
+  wide enough to pass as the knob. The knob is now bounded at **33–100px** (every
+  one actually drawn measures 39–65), and `mediaVisible()` polls for it for
+  ~2.5s before concluding N misfired.
 - **The panel's state is read from its structure, never its brightness.** It is
   translucent, so the box follows the map behind it: a dark map went 0.045
   closed to 0.770 open, a bright one 0.488 to 0.519, and a neon one 0.548 *down*
