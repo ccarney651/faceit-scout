@@ -85,6 +85,14 @@ function parseArgs(argv) {
     // Divides the waits inside every chunk. 1 is as recorded; probe_chunk.js
     // says what the client will actually keep up with.
     chunkSpeed: Number(flag('--chunk-speed')) || 1,
+    // Timing overrides, for sweeping the pipeline to find the fastest that
+    // still reads clean. null leaves each at its measured default.
+    //   --sample-quiesce  ms after a seek settles, before the HUD is read
+    //   --load-settle     ms after the replay loads, before capture starts
+    //   --esc-wait        ms after an ESC press, before re-checking the screen
+    sampleQuiesce: flag('--sample-quiesce') != null ? Number(flag('--sample-quiesce')) : null,
+    loadSettle: flag('--load-settle') != null ? Number(flag('--load-settle')) : null,
+    escWait: flag('--esc-wait') != null ? Number(flag('--esc-wait')) : null,
   };
 }
 
@@ -228,6 +236,17 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const state = readJson(STATE, {});
 
+  // The two run.js waits the timing sweep can override; the sample quiesce is
+  // threaded into captureMap below. Defaults match the measured values.
+  const ESC_WAIT = args.escWait != null ? args.escWait : 1200;
+  const LOAD_SETTLE = args.loadSettle != null ? args.loadSettle : 500;
+  if (args.sampleQuiesce != null || args.loadSettle != null || args.escWait != null ||
+      args.chunkSpeed !== 1) {
+    console.log(`timing: chunk-speed ${args.chunkSpeed}, sample-quiesce ` +
+      `${args.sampleQuiesce != null ? args.sampleQuiesce : 'default'}, load-settle ` +
+      `${LOAD_SETTLE}, esc-wait ${ESC_WAIT}`);
+  }
+
   // Attribution wants the feed's lineups/hero_roles even on an ad-hoc run, so
   // it is read once here rather than staying scoped to the queue-building
   // branch below. An ad-hoc code has no lineup entry regardless (synthesise()
@@ -345,8 +364,8 @@ async function main() {
       // screen, so it can be recognised outright.
       if (await escMenuUp(io)) {
         console.log('the ESC menu is up - clearing it before importing');
-        await I.sendKeys(['ESC']);
-        await wait(1200);
+        await I.sendKeys(["ESC"]);
+        await wait(ESC_WAIT);
         if (await escMenuUp(io)) {
           throw new Error('the ESC menu will not close - the client is not where ' +
             'the chunks expect it');
@@ -364,8 +383,8 @@ async function main() {
             'click blind and spend the code for nothing');
         }
         console.log('the replay list is up - backing out before importing');
-        await I.sendKeys(['ESC']);
-        await wait(1200);
+        await I.sendKeys(["ESC"]);
+        await wait(ESC_WAIT);
       }
 
       // The import chunk clicks the replay history tab. Playing it while a
@@ -393,7 +412,7 @@ async function main() {
       // A short beat here before the capture starts poking it. If the next
       // failure logs (capture.js's events-viewer diagnostics) show this
       // helped, or did not, tune or drop it then.
-      await wait(500);
+      await wait(LOAD_SETTLE);
 
       // The interval chunk runs INSIDE the capture, not before it: the options
       // button only exists once N and K have put the controls on screen, and
@@ -405,7 +424,10 @@ async function main() {
 
       // The first map measures the interval; the rest are told it, which saves
       // the eight seconds of timed playback per map.
-      const got = await capture.captureMap({ stepS: sessionStepS, afterViewer: setInterval });
+      const got = await capture.captureMap({
+        stepS: sessionStepS, afterViewer: setInterval,
+        sampleQuiesceMs: args.sampleQuiesce,
+      });
       if (!sessionStepS && got.stepS) {
         sessionStepS = got.stepS;
         console.log(`session step is ${sessionStepS}s - later maps will use it without re-timing`);

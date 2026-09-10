@@ -686,8 +686,9 @@
           continue;
         }
 
-        // Let the portrait band finish drawing before it is read (SAMPLE_QUIESCE_MS).
-        await io.quiesce(SAMPLE_QUIESCE_MS);
+        // Let the portrait band finish drawing before it is read. Overridable
+        // (run.js --sample-quiesce) for the timing sweep.
+        await io.quiesce(o.sampleQuiesceMs != null ? o.sampleQuiesceMs : SAMPLE_QUIESCE_MS);
 
         // The frame the seek left behind IS the sample - unless the client is
         // still loading, in which case it is black and would read as ten heroes
