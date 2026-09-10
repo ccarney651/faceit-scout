@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>replay-bot review</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --panel2: #232730; --line: #333a46;
+    --fg: #e8eaed; --dim: #9aa3b2; --accent: #6ea8fe; --ok: #57c98b;
+    --flag: #e8b13d; --flagbg: #3a2f16; --bad: #e0685f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex;
+    gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sp { flex: 1; }
+  button { background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #0b1220; border-color: var(--accent); font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .map { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    margin-bottom: 20px; overflow: hidden; }
+  .map.reviewed { opacity: .72; }
+  .maphead { padding: 12px 16px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+  .maphead b { font-size: 15px; }
+  .maphead .code { font-family: ui-monospace, monospace; color: var(--accent); }
+  .summary { color: var(--dim); font-size: 13px; }
+  .summary .has-flags { color: var(--flag); }
+  .flagstrip { padding: 8px 16px; background: var(--flagbg); border-bottom: 1px solid var(--line);
+    font-size: 13px; color: var(--flag); }
+  .flagstrip a { color: var(--flag); cursor: pointer; text-decoration: underline; margin-right: 10px; }
+  .round { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .round:last-child { border-bottom: 0; }
+  .round h3 { margin: 0 0 8px; font-size: 13px; color: var(--dim); font-weight: 600; }
+  .round h3 .rflag { color: var(--flag); margin-left: 8px; }
+  .side { margin-bottom: 12px; }
+  .side > .team { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .strip { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 6px; }
+  .slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .slot { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font-size: 12.5px; }
+  .slot.flagged { border-color: var(--flag); background: var(--flagbg); }
+  .slot .hero { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: 600; }
+  .slot .hero img { width: 20px; height: 20px; border-radius: 3px; }
+  .slot .hero.none { color: var(--bad); }
+  .slot .player { color: var(--dim); margin-top: 3px; font-size: 11.5px; }
+  .slot .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+  .tag { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #3a2f16; color: var(--flag); }
+  .tag.sw { background: #16303a; color: #6cc6e0; }
+  .editrow { margin-top: 5px; }
+  .editrow input { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--accent);
+    border-radius: 4px; padding: 3px 5px; font: inherit; }
+  .opts { list-style: none; margin: 3px 0 0; padding: 0; max-height: 160px; overflow: auto;
+    border: 1px solid var(--line); border-radius: 4px; }
+  .opts li { padding: 3px 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .opts li:hover, .opts li.on { background: var(--accent); color: #0b1220; }
+  .opts li img { width: 16px; height: 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+  .chip { font-size: 11px; padding: 1px 5px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); cursor: pointer; }
+  .chip.on { background: var(--accent); color: #0b1220; border-color: var(--accent); }
+  .mapfoot { padding: 10px 16px; display: flex; gap: 10px; align-items: center; }
+  .note { font-size: 13px; color: var(--dim); }
+  .note.ok { color: var(--ok); } .note.bad { color: var(--bad); }
+  #banner { padding: 10px 16px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>replay-bot review</h1>
+  <span id="sessionname" class="summary"></span>
+  <span class="sp"></span>
+  <span id="savenote" class="note"></span>
+  <button id="save">Save</button>
+  <button id="finalize">Finalize</button>
+  <button id="upload" class="primary" disabled>Upload</button>
+</header>
+<div id="banner" class="note"></div>
+<main id="maps"></main>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const esc = (s) => String(s == null ? '' : s);
+
+let DATA = null;
+let HEROES = [];
+let HERO_BY_GUID = {};
+let dirty = false;
+
+async function load() {
+  try {
+    DATA = await (await fetch('/review.json')).json();
+  } catch (e) { $('#banner').textContent = 'no review artifact - run a capture first'; return; }
+  const hl = await (await fetch('/hero-list')).json();
+  HEROES = hl.heroes || [];
+  HERO_BY_GUID = Object.fromEntries(HEROES.map((h) => [h.guid, h]));
+  $('#sessionname').textContent = DATA.session + ' · ' + (DATA.maps || []).length + ' maps';
+  render();
+}
+
+function mapFlagCount(m) {
+  let n = 0;
+  for (const r of m.rounds || []) {
+    n += (r.flags || []).length;
+    for (const s of (r.a || []).concat(r.b || [])) n += (s.flags || []).length;
+  }
+  return n;
+}
+function attributionScore(m) {
+  let have = 0, all = 0;
+  const a = m.attribution || {};
+  for (const side of ['a', 'b']) for (const id of ((a[side] || {}).ids || [])) { all++; if (id) have++; }
+  return all ? have + '/' + all : '–';
+}
+
+// The effective slot after this map's corrections - what the operator sees.
+function effSlot(m, round_no, side, i) {
+  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const s = Object.assign({}, base);
+  for (const c of m.corrections || []) {
+    if (c.round_no !== round_no || c.side !== side || c.slot !== i) continue;
+    if (c.kind === 'hero') { s.guid = c.now_guid; s.name = c.now_name || c.now_guid; s.corrected = true; }
+    if (c.kind === 'player') { s.player_id = c.now_id; s.player_corrected = true; }
+  }
+  return s;
+}
+function setCorrection(m, c) {
+  m.corrections = (m.corrections || []).filter(
+    (x) => !(x.round_no === c.round_no && x.side === c.side && x.slot === c.slot && x.kind === c.kind));
+  m.corrections.push(c);
+  dirty = true; markDirty();
+}
+function markDirty() { $('#savenote').textContent = 'unsaved'; $('#savenote').className = 'note bad'; }
+
+function render() {
+  const host = $('#maps'); host.textContent = '';
+  (DATA.maps || []).forEach((m, mi) => host.appendChild(renderMap(m, mi)));
+  refreshFooter();
+}
+
+function renderMap(m, mi) {
+  const box = el('div', 'map' + (m.status === 'reviewed' ? ' reviewed' : ''));
+  box.id = 'map-' + mi;
+  const head = el('div', 'maphead');
+  head.appendChild(el('b', null, m.map_name || '(unknown map)'));
+  head.appendChild(el('span', 'code', m.demo_code));
+  head.appendChild(el('span', 'summary', (m.side_a_team || 'A') + ' vs ' + (m.side_b_team || 'B')));
+  const fc = mapFlagCount(m);
+  const sm = el('span', 'summary' + (fc ? ' has-flags' : ''),
+    (m.rounds || []).length + ' rounds · ' + fc + ' flags · attribution ' + attributionScore(m));
+  head.appendChild(sm);
+  box.appendChild(head);
+
+  const flagged = [];
+  (m.rounds || []).forEach((r) => {
+    box.appendChild(renderRound(m, mi, r, flagged));
+  });
+  if (flagged.length) {
+    const strip = el('div', 'flagstrip');
+    strip.appendChild(el('span', null, flagged.length + ' flagged: '));
+    flagged.forEach((f) => {
+      const a = el('a', null, f.label); a.onclick = () => f.node.scrollIntoView({ block: 'center' });
+      strip.appendChild(a);
+    });
+    box.insertBefore(strip, box.children[1]);
+  }
+
+  const foot = el('div', 'mapfoot');
+  const rev = el('button', null, m.status === 'reviewed' ? 'Reviewed ✓' : 'Mark reviewed');
+  rev.onclick = () => { m.status = m.status === 'reviewed' ? 'unreviewed' : 'reviewed'; dirty = true; markDirty(); render(); };
+  foot.appendChild(rev);
+  box.appendChild(foot);
+  return box;
+}
+
+function renderRound(m, mi, r, flagged) {
+  const wrap = el('div', 'round');
+  const h = el('h3', null, 'Round ' + r.round_no);
+  (r.flags || []).forEach((fl) => h.appendChild(el('span', 'rflag', ' ' + fl)));
+  wrap.appendChild(h);
+  ['a', 'b'].forEach((side) => {
+    const sd = el('div', 'side');
+    sd.appendChild(el('div', 'team', side === 'a' ? (m.side_a_team || 'Side A') : (m.side_b_team || 'Side B')));
+    const cropRel = ((m.frames || {})[r.round_no] || {})[side];
+    if (cropRel) { const im = el('img', 'strip'); im.src = '/' + cropRel; im.loading = 'lazy'; sd.appendChild(im); }
+    const slots = el('div', 'slots');
+    for (let i = 0; i < 5; i++) slots.appendChild(renderSlot(m, mi, r.round_no, side, i, flagged));
+    sd.appendChild(slots);
+    wrap.appendChild(sd);
+  });
+  return wrap;
+}
+
+function renderSlot(m, mi, round_no, side, i, flagged) {
+  const s = effSlot(m, round_no, side, i);
+  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const flags = base.flags || [];
+  const cell = el('div', 'slot' + (flags.length && !s.corrected ? ' flagged' : ''));
+  if (flags.length) flagged.push({ label: 'R' + round_no + ' ' + side + (i + 1), node: cell });
+
+  const hero = el('div', 'hero' + (s.guid ? '' : ' none'));
+  const h = HERO_BY_GUID[s.guid];
+  if (h && h.icon) { const im = el('img'); im.src = h.icon; hero.appendChild(im); }
+  hero.appendChild(el('span', null, (h && h.name) || s.name || (s.guid ? s.guid : 'no read') + (s.corrected ? '' : '')));
+  if (s.corrected) hero.appendChild(el('span', 'tag sw', 'fixed'));
+  hero.onclick = () => openHeroEdit(cell, m, mi, round_no, side, i);
+  cell.appendChild(hero);
+
+  const roster = (m.roster || {})[side] || [];
+  const pid = s.player_id;
+  const pname = (roster.find((p) => p.id === pid) || {}).name || (pid ? pid.slice(0, 8) : '—');
+  cell.appendChild(el('div', 'player', 'player: ' + pname));
+
+  if (flags.length) {
+    const tags = el('div', 'tags');
+    flags.forEach((f) => tags.appendChild(el('span', 'tag', f)));
+    if (base.contested && base.alt_guid) {
+      const alt = HERO_BY_GUID[base.alt_guid];
+      tags.appendChild(el('span', 'tag sw', 'also ' + ((alt && alt.name) || base.alt_guid)));
+    }
+    cell.appendChild(tags);
+  }
+
+  if (roster.length) {
+    const chips = el('div', 'chips');
+    roster.forEach((p) => {
+      const c = el('span', 'chip' + (p.id === pid ? ' on' : ''), p.name);
+      c.onclick = () => setCorrection(m, { kind: 'player', round_no, side, slot: i,
+        was_id: base.player_id || null, now_id: p.id === pid ? null : p.id }) || render();
+      chips.appendChild(c);
+    });
+    cell.appendChild(chips);
+  }
+  return cell;
+}
+
+function openHeroEdit(cell, m, mi, round_no, side, i) {
+  if ($('.editrow', cell)) { $('.editrow', cell).remove(); return; }
+  const row = el('div', 'editrow');
+  const inp = el('input'); inp.placeholder = 'hero name, or blank to drop';
+  const opts = el('ul', 'opts');
+  row.appendChild(inp); row.appendChild(opts);
+  cell.appendChild(row);
+  inp.focus();
+  let on = -1;
+  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const commit = (guid, name) => {
+    setCorrection(m, { kind: 'hero', round_no, side, slot: i,
+      was_guid: base.guid || null, now_guid: guid || null, now_name: name || null });
+    render();
+  };
+  const refresh = () => {
+    const q = inp.value.trim().toLowerCase();
+    const list = (q ? HEROES.filter((h) => h.name.toLowerCase().includes(q)) : HEROES).slice(0, 40);
+    opts.textContent = '';
+    if (!q) { const li = el('li', null, '(drop this read)'); li.onclick = () => commit(null, null); opts.appendChild(li); }
+    list.forEach((h, k) => {
+      const li = el('li', k === on ? 'on' : null);
+      if (h.icon) { const im = el('img'); im.src = h.icon; li.appendChild(im); }
+      li.appendChild(el('span', null, h.name + (h.role ? ' · ' + h.role : '')));
+      li.onclick = () => commit(h.guid, h.name);
+      opts.appendChild(li);
+    });
+  };
+  inp.oninput = () => { on = -1; refresh(); };
+  inp.onkeydown = (e) => {
+    const lis = [...opts.children];
+    if (e.key === 'ArrowDown') { on = Math.min(lis.length - 1, on + 1); refresh(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { on = Math.max(0, on - 1); refresh(); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (lis[on]) lis[on].click(); e.preventDefault(); }
+    else if (e.key === 'Escape') { row.remove(); }
+  };
+  refresh();
+}
+
+function refreshFooter() {
+  const maps = DATA.maps || [];
+  const allReviewed = maps.length && maps.every((m) => m.status === 'reviewed');
+  $('#upload').disabled = !allReviewed;
+  $('#finalize').disabled = !maps.length;
+  $('#banner').textContent = allReviewed
+    ? 'every map reviewed — Finalize to rebuild the contribution, then Upload'
+    : (maps.filter((m) => m.status !== 'reviewed').length + ' map(s) still to review');
+}
+
+async function save() {
+  const r = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(DATA) });
+  if (r.ok) { dirty = false; $('#savenote').textContent = 'saved'; $('#savenote').className = 'note ok'; }
+  else { $('#savenote').textContent = 'save failed'; $('#savenote').className = 'note bad'; }
+}
+
+$('#save').onclick = save;
+$('#finalize').onclick = async () => {
+  if (dirty) await save();
+  const r = await fetch('/finalize', { method: 'POST' });
+  const j = await r.json();
+  $('#banner').textContent = r.ok
+    ? 'finalized: ' + j.maps + ' maps, ' + j.observations + ' observations → ' + j.wrote
+    : 'finalize failed: ' + (j.error || r.status);
+  $('#banner').className = r.ok ? 'note ok' : 'note bad';
+};
+$('#upload').onclick = async () => {
+  if (dirty) await save();
+  if (!confirm('Upload ' + (DATA.maps || []).length + ' reviewed maps to owdb.io as replay-bot?')) return;
+  $('#banner').textContent = 'uploading…'; $('#banner').className = 'note';
+  const r = await fetch('/upload', { method: 'POST' });
+  const j = await r.json();
+  const b = (j && j.body) || {};
+  $('#banner').textContent = j.ok
+    ? 'uploaded: ' + (b.action || 'ok') + ' · ' + (b.maps != null ? b.maps + ' maps' : '') + ' — site rebuilds in ~2 min'
+    : 'upload failed: ' + (b.error || (j && j.error) || (j && j.status) || 'error');
+  $('#banner').className = j.ok ? 'note ok' : 'note bad';
+};
+window.onbeforeunload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+
+load();
+</script>
+</body>
+</html>

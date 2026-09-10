@@ -18,12 +18,24 @@
   var fs = require('fs');
   var path = require('path');
   var canvas = require('@napi-rs/canvas');
+  var Attribute = require('./attribute.js');
 
   // A little vertical slack around the frozen box so a plate that drew a few
   // pixels low is still whole in the crop.
   var PAD_Y = 12;
 
   function ensureDir(p) { fs.mkdirSync(p, { recursive: true }); }
+
+  // One side's five players as { id, name } - the review page's player chips.
+  // Reuses attribute.playersFor so the id/name pairing is the one attribution
+  // itself used. An ad-hoc code or a feed with no lineup yields [].
+  function rosterFor(feed, code, side) {
+    try {
+      return Attribute.playersFor(feed || {}, code, side).map(function (p) {
+        return { id: p.id, name: (p.names && p.names[0]) || p.id };
+      });
+    } catch (e) { return []; }
+  }
 
   // Cut one side's portrait band out of a frame and write it as a PNG.
   function writeStrip(img, box, dest) {
@@ -44,7 +56,9 @@
   //   attribution attribute.attributeMap() result, or null
   //   got         captureMap() result (for the per-round first-sample frame)
   //   calib       calib.js
-  async function mapEntry(io, sessionDir, code, resolved, attribution, got, calib) {
+  //   feed        docs/capture/data.json, for the per-side roster the review
+  //               page shows as player chips (optional - {} is fine)
+  async function mapEntry(io, sessionDir, code, resolved, attribution, got, calib, feed) {
     var cropsDir = path.join(sessionDir, 'crops');
     ensureDir(cropsDir);
 
@@ -65,16 +79,21 @@
       frames[String(r.round_no)] = pair;
     }
 
+    var roster = { a: rosterFor(feed, code, 'a'), b: rosterFor(feed, code, 'b') };
+
     return {
       demo_code: code.code,
       match_id: code.match_id,
       game_no: code.game_no,
+      map_guid: code.map_guid,
       map_name: code.map,
       map_category: code.map_category,
       side_a_team: code.team_a,
       side_b_team: code.team_b,
       side_a_team_id: code.t1,
       side_b_team_id: code.t2,
+      captured_at: new Date().toISOString(),
+      roster: roster,
       rounds: resolved,
       attribution: attribution || null,
       frames: frames,

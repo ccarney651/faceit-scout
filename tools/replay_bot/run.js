@@ -454,7 +454,7 @@ async function main() {
           attribution: attribution,
           planned: countPlanned(got.plan, rounds),
         });
-        const reviewEntry = await RO.mapEntry(io, sessionDir, code, resolved, attribution, got, calib);
+        const reviewEntry = await RO.mapEntry(io, sessionDir, code, resolved, attribution, got, calib, feed);
         reviewMaps.push(reviewEntry);
         RO.writeSession(reviewPath, reviewMaps, { session, feedBuilt: feed.built_at });
         const flagged = resolved.reduce((n, r) => n + r.flags.length +
