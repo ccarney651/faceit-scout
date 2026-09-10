@@ -1722,11 +1722,14 @@ an operator's: the same matcher, not a lookalike.
 | `match.js` | The shipped hero matcher, headless | no |
 | `grab.js` | Overwatch window to PNG | no |
 | `input.js` | Key delivery, and settling by measurement | no |
+| `timing.js` | Every tunable wait, namespaced, + the console's override file | yes |
 | `host.js` | One long-lived PowerShell, so a grab costs 204ms not 585 | no |
 | `driver.js` | **The only module that sends keys** | no |
 | `recorder.js` | Recorded menu input, replayed per code | part |
 | `screen.js` | Which static screen is showing, by fingerprint | no |
-| `capture.js` | One open replay, start to finish | no |
+| `clientstate.js` | Where the client is (in a replay / ESC menu / list), + clear a stuck ESC menu | no |
+| `phases.js` | The stages of a capture, each callable alone | no |
+| `capture.js` | One open replay, start to finish — a sequence over `phases.js` | no |
 | `fakeio.js` | `capture.js`'s I/O, backed by recorded frames | yes |
 | `corpus.js` | The labelled frames, and what a human saw in each | yes |
 | `run.js` | The queue loop; the CLI | no |

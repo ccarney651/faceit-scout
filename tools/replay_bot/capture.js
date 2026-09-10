@@ -34,96 +34,33 @@
   var D = require('./driver.js');
   var calib = require('./calib.js');
   var Crop = require('./crop.js');
-  var Match = require('./match.js');
   var T = require('./timeline.js');
   var Drag = require('./drag.js');
   var Recorder = require('./recorder.js');
   var TIMING = require('./timing.js');
+  var P = require('./phases.js');
 
   var STEP_S = 20;
 
-  // Below this a match is a suggestion, not a reading. Downstream, vote.js
-  // resolves a slot across frames; this is what makes a doubtful cell visible
-  // in the meantime rather than averaged away.
+  // Below this a match is a suggestion, not a reading. vote.js resolves a slot
+  // across frames downstream; this makes a doubtful cell visible in the
+  // meantime rather than averaged away. (phases.js has its own copy for
+  // sampleAt's re-read; they mean the same thing.)
   var LOW_SCORE = 0.6;
 
-  // How long a seek needs to have drawn before its frame is worth reading.
-  //
-  // THIS WAS ZERO, AND ZERO WAS RIGHT UNTIL GRABBING GOT FAST. probe_limits.js
-  // seeks, reads immediately, then reads the same position again once
-  // everything has stopped, and compares the least confident of the ten cells:
-  // across two runs and four delays the early read matched the settled one
-  // every time, 0.66 at +0ms against 0.66 at +640ms. The reason was that a grab
-  // was not free - a PowerShell spawn plus PrintWindow ran about half a second,
-  // so the HUD had long finished moving by the time the frame was taken. The
-  // wait was waiting for something that had already happened.
-  //
-  // The old comment here ended "if grabbing ever gets fast (a persistent host
-  // would make it ~150ms), measure this again - the free wait disappears with
-  // it". Then host.js took a grab from 585ms to 204ms and nobody did. The free
-  // wait went with it, exactly as predicted, and the reads started landing
-  // mid-transition: TEN OF THE TWENTY-EIGHT SAMPLES in the first five-map
-  // competitive run needed a second look, which is the loop noticing a bad
-  // frame and paying for another grab to replace it.
-  //
-  // 400ms costs about 2s a map and buys back most of those retakes, each of
-  // which was a grab of its own. Worth re-measuring with probe_limits.js if the
-  // grab time moves again - in either direction.
-  //
-  // The waits this module spends live in timing.js (TIMING.quiesce, .sample,
-  // .load, .media), each with its measured history there:
-  //   TIMING.quiesce.ms      the post-seek wait before a one-frame grab - was
-  //                          zero until host.js made a grab fast enough that
-  //                          the free wait disappeared with it
-  //   TIMING.sample.quiesceMs an extra beat after a seek settles, for the
-  //                          portrait band to finish drawing (run.js
-  //                          --sample-quiesce still overrides it per run)
-  //   TIMING.load.tries/waitMs readyFrame/barFrame's poll for the HUD - a
-  //                          loading screen is black, still, and settles
-  //                          beautifully, so the signal is the HUD drawn
-  //   TIMING.media.tries/waitMs the poll for the playhead after N, which
-  //                          doubles as the check N went the right way; a
-  //                          single early read here cost two codes
-  //                          (XTK7MM, 4TNEAJ, 2026-09-10)
-
-  // Shorter than this, a stretch of play is the assemble phase rather than a
-  // round. Every map measured opens with one.
-  var MIN_PLAY_S = 30;
-
-  // Mean absolute difference above which two frames are a moving picture rather
-  // than the same still one. A settled screen sits under 0.6; a playing replay
-  // is far above this.
-  var MOTION_DIFF = 1.5;
+  // The stages of a capture - the events viewer, bar calibration, the structure
+  // read, the sample loop - are phases.js now, so the console can run any one
+  // alone. The waits they spend live in timing.js (TIMING.quiesce, .sample,
+  // .load, .media), each with its measured history there.
 
   var mmss = function (s) {
     return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
   };
 
-  // Mean absolute difference over the play area. The control bar animates on
-  // its own, so it is excluded - otherwise the screen would never read as
-  // settled.
-  async function pixelDiff(pa, pb) {
-    var a = await pixels(pa);
-    var b = await pixels(pb);
-    var sum = 0, n = 0;
-    for (var y = 200; y < 1100; y += 8) {
-      for (var x = 0; x < a.img.width; x += 8) {
-        var i = (y * a.img.width + x) * 4;
-        sum += Math.abs(a.data[i] - b.data[i]) +
-          Math.abs(a.data[i + 1] - b.data[i + 1]) +
-          Math.abs(a.data[i + 2] - b.data[i + 2]);
-        n += 3;
-      }
-    }
-    return sum / n;
-  }
-
-  async function pixels(p) {
-    var img = await canvas.loadImage(p);
-    var cv = canvas.createCanvas(img.width, img.height);
-    cv.getContext('2d').drawImage(img, 0, 0);
-    return { img: img, data: cv.getContext('2d').getImageData(0, 0, img.width, img.height).data };
-  }
+  // The frame math (pixelDiff/pixels) and the client-waits (ensurePaused,
+  // readyFrame, barFrame, measureRate, worstOf) are phases.js now; makeIo below
+  // reaches for P.pixelDiff the same way the phases do.
+  var pixelDiff = P.pixelDiff;
 
   // Everything that touches the machine, in one object, so a caller can point
   // the capture at recorded frames instead of a live client.
@@ -274,134 +211,6 @@
 
   var realSleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
-  // Waiting is something that touches the machine too, so it comes out of the
-  // injected io like every other machine-touching thing. Offline, the harness
-  // counts the waits instead of serving them, which is the difference between
-  // a run that costs a second and one that costs a minute for no reason.
-  function napOf(io) { return (io && io.sleep) || realSleep; }
-
-  // Is the replay moving, and stop it if it is.
-  //
-  // THIS IS WORTH A MINUTE A MAP. A replay opens PLAYING, and settling is
-  // defined as two consecutive frames agreeing - which never happens while the
-  // picture is moving. Every settle before the first pause ran its full retries
-  // and gave up, about seven seconds each, for N, for K, and for both
-  // calibration presses. The bot looked like it was doing nothing because it
-  // was: proving, four times over, that a playing replay does not hold still.
-  //
-  // MOTION IS MEASURED ON THE PICTURE, not on the playhead. Two frames a
-  // quarter-second apart differ enormously while a replay plays and barely at
-  // all when it is stopped, so the signal is huge and the test is quick. The
-  // playhead would work too, but it moves slowly - under two pixels a second on
-  // a long map - so it needs a second of waiting to say anything, and it cannot
-  // say anything at all before the media controls are up.
-  //
-  // SPACE is a toggle, so this measures first and presses only if it must.
-  async function ensurePaused(io, drv) {
-    var sleep = napOf(io);
-    async function moving() {
-      var a = await io.grabTo('pause');
-      await sleep(250);
-      var b = await io.grabTo('pause');
-      return await pixelDiff(a, b) > MOTION_DIFF;
-    }
-
-    if (!await moving()) return { known: true, paused: true, pressed: false };
-    await drv.pause();
-    await sleep(400);
-    return { known: true, paused: !await moving(), pressed: true };
-  }
-
-  // A frame with the replay actually on screen.
-  //
-  // A LOADING SCREEN IS BLACK, PERFECTLY STILL, AND SETTLES BEAUTIFULLY. That
-  // is the worst possible input: every readiness test built so far - two frames
-  // agreeing, waiting a fixed time, the picture not moving - says a loading
-  // screen is ready, and the matcher then scores hero templates against black
-  // and returns 0.29 to 0.63 with no sign anything is wrong. It happened three
-  // ways in one run: two samples of a map read as nonsense, and another map
-  // died calibrating because the bar was not there.
-  //
-  // The media controls are absent while the client loads, so the playhead is
-  // the signal. No playhead means WAIT, not read, and not fail.
-  async function readyFrame(io, first) {
-    var sleep = napOf(io);
-    var p = first || await io.grabTo('ready');
-    for (var i = 0; i < TIMING.load.tries; i++) {
-      var img = await io.loadImage(p);
-      // The HUD, not the playhead: the media controls hide themselves, and a
-      // frame with the portraits drawn is exactly what a sample needs.
-      if (calib.hudPresent(Crop.hudTint(img, calib))) return { path: p, img: img };
-      await sleep(TIMING.load.waitMs);
-      p = await io.grabTo('ready');
-    }
-    return null;
-  }
-
-  // The same wait, for the bar rather than the HUD. Calibration needs the
-  // playhead specifically, and by then N has been pressed so it should be up.
-  async function barFrame(io, first) {
-    var sleep = napOf(io);
-    var p = first || await io.grabTo('bar');
-    for (var i = 0; i < TIMING.load.tries; i++) {
-      var img = await io.loadImage(p);
-      if (Crop.playheadX(img, calib)) return { path: p, img: img };
-      await sleep(TIMING.load.waitMs);
-      p = await io.grabTo('bar');
-    }
-    return null;
-  }
-
-  // Pixels per second of playback, by playing the replay and watching the knob.
-  //
-  // SPACE is a toggle like every other control here, so whether the replay is
-  // already playing is measured rather than assumed - two reads a beat apart,
-  // and a press only if nothing moved.
-  async function measureRate(io, drv) {
-    var sleep = napOf(io);
-    async function knob(tag) {
-      var k = Crop.playheadX(await io.loadImage(await io.grabTo(tag)), calib);
-      if (!k) throw new Error('lost the playhead while timing playback');
-      return k.centre;
-    }
-
-    var a = await knob('rate');
-    await sleep(1200);
-    var b = await knob('rate');
-    var pressed = false;
-    if (b === a) {
-      await drv.pause();               // SPACE - start it playing
-      pressed = true;
-      await sleep(600);
-      a = await knob('rate');
-      await sleep(1200);
-      b = await knob('rate');
-      if (b === a) throw new Error('the replay will not play, so a press cannot be timed');
-    }
-
-    var from = b;
-    var t0 = Date.now();
-    await sleep(6000);
-    var to = await knob('rate');
-    var elapsed = (Date.now() - t0) / 1000;
-
-    // Leave it as it was found: paused, so nothing drifts under the sampling.
-    if (!pressed) await drv.pause();
-    await io.settle();
-
-    return { pxPerSec: (to - from) / elapsed, elapsed: elapsed };
-  }
-
-  // The least confident cell of a read, which is what says whether a frame was
-  // caught mid-transition.
-  function worstOf(read) {
-    var worst = 1;
-    ['a', 'b'].forEach(function (side) {
-      read[side].forEach(function (r) { if (r.score < worst) worst = r.score; });
-    });
-    return worst;
-  }
-
   function make(io) {
     var log = io.log || function () {};
 
@@ -421,8 +230,7 @@
       var told = o.told || null;
       var stepS = o.stepS || STEP_S;
 
-      var M = o.matcher || Match.make(require(
-        path.join(__dirname, '../../docs/capture/refs.json')), { PAD: calib.FROZEN.ref.PAD });
+      var M = o.matcher || P.makeMatcher();
 
       // Where the playhead says we are, in seconds. Null before the bar is
       // calibrated, and on any frame with no readable knob - which the driver
@@ -480,262 +288,80 @@
       };
       var drv = D.make(drvCtx);
 
+      var ctx = { io: io, drv: drv, log: log };
+
       // 1. A frame, and the guard that the HUD is where it was frozen.
       var img0 = await io.loadImage(await io.grabTo('timeline'));
       var chk = calib.check({ w: img0.width, h: img0.height });
       if (!chk.ok) throw new Error('calibration smoke check failed: ' + chk.reason);
 
       // 1b. Stop the replay before anything waits for the screen to be still.
-      //     The media controls may not be up yet, in which case this cannot see
-      //     the playhead and the attempt is repeated after step 2.
       mark('first frame');
-      var stopped = await ensurePaused(io, drv);
+      var stopped = await P.ensurePaused(io, drv);
       log('replay ' + (stopped.pressed ? 'was playing, paused it' : 'already paused'));
       if (!stopped.paused) {
         throw new Error('the replay will not stop - every read after this would ' +
           'be of a moving picture');
       }
-
       mark('pause check');
 
-      // 2. The events viewer, without which the bar shows no round breaks.
-      //
-      //    N then K, in that order and every time: the media controls have to
-      //    be up before the events viewer will open. A run that pressed only K
-      //    sat at 0.023 before and after, having done nothing.
-      //
-      // DIAGNOSTIC LOGGING BELOW, added 2026-09-10 after two live failures
-      // ("K did not open the panel") that could not be reverse-engineered from
-      // the frames alone - ruled out "still in the assemble phase" (K also
-      // failed well into live round-1 gameplay in one manual repro) and found
-      // Crop.playheadX can false-positive on a bright background element at
-      // the scrubber's own pixel band (measured a 495px run on one map, where
-      // a real knob is ~40px - see specs/2026-09-10-replay-bot-player-attribution-design.md's
-      // sibling investigation notes). This logs the raw playhead run (width
-      // tells a real knob from a false positive) and the panel reading at
-      // every step, so the next live occurrence is diagnosable from the log
-      // alone rather than needing frames reconstructed after the fact.
-      var t0Viewer = Date.now();
-      function logPlayheadState(step) {
-        var knob = Crop.playheadX(img0, calib);
-        log('    [diag +' + (Date.now() - t0Viewer) + 'ms] ' + step + ': playhead=' +
-          (knob ? ('x' + knob.x0 + '-' + knob.x1 + ' w' + knob.width) : 'none'));
-      }
-      var viewer = await D.ensureEventsViewer({
-        read: async function () {
-          img0 = await io.loadImage(await io.grabTo('panel'));
-          var rows = Crop.panelRowFraction(img0, calib);
-          log('    [diag +' + (Date.now() - t0Viewer) + 'ms] read: panelRows=' + rows.toFixed(3));
-          return rows;
-        },
-        isOpen: calib.eventsViewerOpen,
-        // The playhead is drawn only while the media controls are up, so it
-        // doubles as the check that N went the right way - but only once it has
-        // actually drawn. Polled, not read once: see TIMING.media.tries.
-        mediaVisible: async function () {
-          for (var i = 0; i < TIMING.media.tries; i++) {
-            await io.sleep(TIMING.media.waitMs);
-            img0 = await io.loadImage(await io.grabTo('media-check'));
-            logPlayheadState('mediaVisible check');
-            if (Crop.playheadX(img0, calib)) return true;
-          }
-          return false;
-        },
-        showMedia: async function () {
-          await drv.mediaControls();
-          img0 = await io.loadImage(io.lastFrame());
-          logPlayheadState('after N');
-        },
-        toggle: async function () {
-          await drv.eventsViewer();
-          img0 = await io.loadImage(io.lastFrame());
-          logPlayheadState('after K');
-        },
-      });
-      log('events viewer ' + (viewer.open ? 'open' : 'CLOSED') +
-        ' (panel rows ' + (viewer.after === null ? '?' : viewer.after.toFixed(3)) +
-        (viewer.steps.length ? ', pressed ' + viewer.steps.join(' then ') : ', untouched') + ')');
-      if (!viewer.open) {
-        throw new Error('events viewer would not open' +
-          (viewer.reason ? ' - ' + viewer.reason : '') +
-          ' - the scrubber shows no round breaks without it, so the timeline ' +
-          'read would be wrong');
-      }
-
+      // 2. The events viewer, without which the scrubber shows no round breaks.
+      var viewer = await P.openEventsViewer(ctx);
+      img0 = viewer.img0;
       mark('events viewer');
 
-      // 2b. Anything that needs the controls up but must happen before the
-      //     measuring starts - in practice, the once-a-session trip to set the
-      //     skip interval to 60s. The options button only exists once N and K
-      //     have put the controls on screen, and the interval has to change
-      //     BEFORE the step is measured, or the run caches the old one.
+      // 2b. The once-a-session trip to set the skip interval - needs the
+      //     controls up, must land before the step is measured - then a check
+      //     that the menu did not leave the panel shut behind it.
       if (o.afterViewer) {
         await o.afterViewer();
-
-        // A trip through a menu can leave the panel shut, so it is looked at
-        // again rather than assumed.
-        //
-        // THIS USED TO COMPARE A ROW FRACTION AGAINST A BRIGHTNESS FRACTION.
-        // It was a rise test from the brightness era - a drop from a reading
-        // known to be open - and when the reading became structural the two
-        // sides of the subtraction stopped being the same quantity. Nothing
-        // said so: on one map it would never reopen a shut panel, and on
-        // another it would press K on an open one and shut it. Asking whether
-        // the panel is open is now simply a question worth asking, the same
-        // way driver.ensureEventsViewer stopped dancing around it.
-        img0 = await io.loadImage(await io.grabTo('timeline'));
-        if (!calib.eventsViewerOpen(Crop.panelRowFraction(img0, calib))) {
-          log('the events panel closed while the menu was open - reopening');
-          await drv.eventsViewer();
-          img0 = await io.loadImage(await io.grabTo('timeline'));
-          if (!calib.eventsViewerOpen(Crop.panelRowFraction(img0, calib))) {
-            throw new Error('the events panel would not reopen after the options ' +
-              'menu, so the scrubber shows no round breaks');
-          }
-        }
-        if (!Crop.playheadX(img0, calib)) {
-          throw new Error('the media controls are gone after the options menu, ' +
-            'so there is no bar to read');
-        }
+        img0 = (await P.ensurePanelOpen(ctx)).img0;
       }
-
       mark('interval chunk');
 
-      // 3. The bar's scale, measured on this map by moving it and looking.
-      await io.sendKeys([D.KEY.jumpToStart]);
-      await io.settle();
-      var zeroFrame = await barFrame(io, io.lastFrame());
-      await io.sendKeys([D.KEY.forward]);
-      await io.settle();
-      var oneFrame = await barFrame(io, io.lastFrame());
-      if (!zeroFrame || !oneFrame) {
-        throw new Error('the bar never appeared - the replay is still loading, or ' +
-          'the media controls are down');
-      }
-      var atZero = Crop.playheadX(zeroFrame.img, calib);
-      var atOne = Crop.playheadX(oneFrame.img, calib);
-
-      ref = { zeroX: atZero.centre, stepPx: atOne.centre - atZero.centre, stepS: stepS };
-      if (ref.stepPx <= 0) {
-        throw new Error('one press moved ' + ref.stepPx + 'px - the forward key is not working');
-      }
-
-      // 3b. How many SECONDS is one press? Measured, never read off the setting.
-      //
-      //     The client's time-skip interval is a known Blizzard bug: replay
-      //     viewer options apply while the client runs and revert to defaults
-      //     at the next start. An interval set to 60 last night is 20 tonight,
-      //     and nothing on screen says which. Assuming 20 when it is really 60
-      //     would put every sample at a third of its intended time - in the
-      //     wrong round, with an entirely plausible-looking result.
-      //
-      //     So the replay itself is the ruler: play it for a few seconds and
-      //     watch the knob. That gives pixels per second, and the step divided
-      //     by it is the interval. It costs about eight seconds a map and pays
-      //     for itself many times over whenever the interval really is 60.
-      var pxPerSec = null;
-      if (!o.stepS) {
-        var rate = await measureRate(io, drv);
-        pxPerSec = rate.pxPerSec;
-        var derived = T.stepSecondsFrom(ref.stepPx, pxPerSec, {});
-        if (!derived.ok) throw new Error(derived.reason);
-        stepS = derived.stepS;
-        ref.stepS = stepS;
-        drvCtx.stepS = stepS;
-        log('playback ' + pxPerSec.toFixed(2) + 'px/s, one press = ' +
-          derived.raw.toFixed(1) + 's -> taken as ' + stepS + 's');
-      }
-
+      // 3. The bar's scale on this map, and how many seconds one press is worth.
+      var cal = await P.calibrateBar(ctx, { stepS: o.stepS, log: log });
+      ref = cal.ref;
+      stepS = cal.stepS;
+      drvCtx.stepS = stepS;
+      var pxPerSec = cal.pxPerSec;
       mark('bar calibration');
-      drv.reset();
 
-      var bar = calib.FROZEN.timeline;
-      var span = bar.x1 - bar.x0 + 1 - atZero.width;
-      // With a measured playback rate the duration is a measurement too, rather
-      // than the bar span divided by an assumed step.
-      var implied = Math.round(pxPerSec ? span / pxPerSec : (span / ref.stepPx) * ref.stepS);
-      var duration = told || implied;
+      var dur = P.deriveDuration({
+        ref: ref, pxPerSec: pxPerSec, atZeroWidth: cal.atZero.width, told: told,
+      });
+      var duration = dur.duration;
+      var implied = dur.implied;
       log('one step = ' + ref.stepPx.toFixed(1) + 'px (' + stepS + 's), zero at ' + ref.zeroX);
       log('duration ' + mmss(duration) + ' (' + (told ? 'given' : 'measured off the bar') +
         (told ? ', bar implies ' + mmss(implied) : '') + ')');
 
       // 4. Round structure, and where to sample inside it.
-      var segs = T.dropShortPlay(T.segments(Crop.barFlags(img0, calib), {
-        duration: duration,
-        minRun: calib.FROZEN.timeline.minRunPx,
-      }), MIN_PLAY_S);
-      segs.forEach(function (sg) {
-        log('  ' + (sg.play ? 'PLAY ' : sg.tooShort ? 'setup' : 'BREAK') +
-          '  ' + mmss(sg.from) + ' - ' + mmss(sg.to));
+      var struct = P.readStructure(img0, {
+        ref: ref, duration: duration, stepS: stepS, log: log, mmss: mmss,
       });
+      var segs = struct.segments;
+      var plan = struct.plan;
 
-      var per = T.samplesFor(segs);
-      var plan = T.plan(segs, per, { stepS: stepS });
-      log('');
-      log(per + ' samples per round -> ' + plan.length + ' grabs: ' +
-        plan.map(mmss).join(', '));
-
-      // 5. Drive to each sample and read the HUD.
-      async function readHud(framePath) {
-        var img = await io.loadImage(framePath);
-        var crops = Crop.all(img, calib);
-        var out = { a: [], b: [] };
-        ['a', 'b'].forEach(function (side) {
-          out[side] = crops[side].map(function (c) { return M.match(c, side); });
-        });
-        return out;
-      }
-
+      // 5. Drive to each sample and read the HUD. The driver is in sampling mode
+      //    now - its settle is the fixed quiesce, not the two-frame one.
       var samples = [];
       var missed = [];
       sampling = true;
       for (var i = 0; i < plan.length; i++) {
         var t = plan[i];
         var started = Date.now();
-        var at = await drv.seekTo(t);
-
-        // A seek that could not be corrected is a sample somewhere else. The
-        // measurement wins: drop it rather than label a frame with a time it
-        // was never at.
-        if (Math.abs(at - t) >= stepS / 2) {
-          missed.push({ t: t, at: at });
-          log(mmss(t).padStart(6) + '  MISSED - landed at ' + mmss(at) + ', dropped');
+        var s = await P.sampleAt(ctx, t, {
+          matcher: M, stepS: stepS, mmss: mmss, log: log,
+        });
+        if (s.missed) {
+          missed.push({ t: s.t, at: s.at, reason: s.reason === 'seek' ? undefined : s.reason });
           continue;
         }
-
-        // No wait here: the settle inside driver.seekTo already paused
-        // sampleQuiesceMs() for the portrait band to draw and left that frame
-        // in io.lastFrame(). (--sample-quiesce still tunes it, through that
-        // settle.) One wait per sample, not two.
-        //
-        // The frame the seek left behind IS the sample - unless the client is
-        // still loading, in which case it is black and would read as ten heroes
-        // that are not there.
-        var ready = await readyFrame(io, io.lastFrame());
-        if (!ready) {
-          missed.push({ t: t, at: at, reason: 'still loading' });
-          log(mmss(t).padStart(6) + '  NOT LOADED - dropped');
-          continue;
-        }
-        var framePath = io.keepAs ? await io.keepAs('t' + t, ready.path) : ready.path;
-        var read = await readHud(framePath);
-
-        // ONE SECOND LOOK IF IT LOOKS WRONG. A frame caught while the HUD is
-        // still sliding into place scores badly, and that is cheaper to detect
-        // than to prevent: the alternative was a two-frame settle before every
-        // sample, paying a second each time to avoid a case that is rare.
-        if (worstOf(read) < LOW_SCORE) {
-          var retry = await readHud(await io.grabTo('t' + t + '-again'));
-          if (worstOf(retry) > worstOf(read)) {
-            log('        (first read was mid-transition, took a second look)');
-            read = retry;
-          }
-        }
-        samples.push({ t: t, at: at, a: read.a, b: read.b, framePath: framePath });
-
+        samples.push({ t: s.t, at: s.at, a: s.a, b: s.b, framePath: s.framePath });
         log(mmss(t).padStart(6) + '  (' + ((Date.now() - started) / 1000).toFixed(1) + 's)');
         ['a', 'b'].forEach(function (side) {
-          log('        ' + side + ': ' + read[side].map(function (r) {
+          log('        ' + side + ': ' + s[side].map(function (r) {
             return r.name + ' ' + r.score.toFixed(2) + (r.score < LOW_SCORE ? ' ??' : '');
           }).join(' | '));
         });
