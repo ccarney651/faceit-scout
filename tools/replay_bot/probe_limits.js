@@ -6,6 +6,7 @@
 //   node tools/replay_bot/probe_limits.js --gap      just the seek cadence
 //   node tools/replay_bot/probe_limits.js --quiesce  just the read delay
 //   node tools/replay_bot/probe_limits.js --gap --trials=5
+//   node tools/replay_bot/probe_limits.js --quiesce --delays=0,125,250,375,500
 //
 // A REPLAY MUST BE OPEN AND PAUSED. Nothing here imports anything, so it costs
 // no codes and can be run as often as you like.
@@ -148,7 +149,7 @@ async function quiesceNeed(M, delays) {
   const clean = rows.filter((r) => r.early >= r.late - 0.02);
   if (clean.length) {
     console.log(`  reading at +${clean[0].delay}ms is as good as waiting -> ` +
-      `QUIESCE_MS could be ${clean[0].delay} (currently 320)`);
+      `SAMPLE_QUIESCE_MS could be ${clean[0].delay} (currently 500)`);
   } else {
     console.log('  every early read scored worse - the wait is doing real work, keep it');
   }
@@ -182,7 +183,11 @@ async function quiesceNeed(M, delays) {
     await wait(1000);
     await I.sendKeys([D.KEY.forward, D.KEY.forward, D.KEY.forward]);
     await wait(1500);
-    await quiesceNeed(M, [0, 150, 320, 640]);
+    // Brackets the live SAMPLE_QUIESCE_MS (500). Override with --delays=a,b,c.
+    var dArg = (only.find((a) => a.startsWith('--delays=')) || '').split('=')[1];
+    var delays = dArg ? dArg.split(',').map(Number).filter((n) => !Number.isNaN(n))
+      : [0, 125, 250, 375, 500];
+    await quiesceNeed(M, delays);
   }
 
   console.log('\nNothing here changes any setting. Feed the numbers back and the ' +
