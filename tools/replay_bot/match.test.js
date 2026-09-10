@@ -13,7 +13,14 @@ const aRefs = REFS_JSON.refs.filter((r) => r.v === 'a');
 
 test('the whole shipped library is loaded, both variants', () => {
   assert.strictEqual(M.refCount(), REFS_JSON.refs.length);
-  assert.strictEqual(aRefs.length, 53);
+  // Each hero contributes up to two variant-'a' entries (alive + dead, same
+  // {n,g,v} shape - see build_capture_refs.py), so count distinct heroes, not
+  // rows. The roster is ~53; keep a floor so a truncated rebuild still trips.
+  const aGuids = new Set(aRefs.map((r) => r.g));
+  assert.ok(aGuids.size >= 50, `only ${aGuids.size} heroes have a blue ref`);
+  const bGuids = new Set(REFS_JSON.refs.filter((r) => r.v === 'b').map((r) => r.g));
+  assert.deepStrictEqual([...aGuids].sort(), [...bGuids].sort(),
+    'blue and red libraries cover the same heroes');
 });
 
 // The strongest end-to-end check available offline: feed a stored reference
