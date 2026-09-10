@@ -17,6 +17,7 @@ side.
 """
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import os
@@ -25,7 +26,6 @@ from collections.abc import Callable, Iterable
 
 OWDB_DB = "owdb.sqlite3"
 FACEIT_DB = "faceit.sqlite3"
-PROFILE_ID = 4
 REF_W, REF_H = 64, 36
 OUT = os.path.join("docs", "capture", "refs.json")
 
@@ -45,6 +45,21 @@ def hero_names() -> dict[str, str]:
     except sqlite3.Error:
         pass
     return names
+
+
+def active_profile_id(conn: sqlite3.Connection, hud_variant: str = "default") -> int:
+    """The newest un-retired ROI profile for a HUD variant — the one `owdb
+    calibrate` last wrote and everything else reads. Hardcoding an id (this was
+    `PROFILE_ID = 4`) silently rebuilds from a retired profile after a
+    recalibration."""
+    row = conn.execute(
+        "SELECT id FROM roi_profiles WHERE hud_variant=? AND retired_at IS NULL "
+        "ORDER BY id DESC LIMIT 1",
+        (hud_variant,),
+    ).fetchone()
+    if row is None:
+        raise SystemExit(f"no active '{hud_variant}' profile — run `owdb calibrate`")
+    return int(row[0])
 
 
 def select_ref_rows(conn: sqlite3.Connection, profile_id: int) -> list[RefRow]:
@@ -100,19 +115,26 @@ def _cv2_loader() -> Callable[[str], bytes | None]:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--profile", type=int, default=None,
+                    help="ROI profile id (default: the active 'default' profile)")
+    args = ap.parse_args()
+
     names = hero_names()
     with sqlite3.connect(OWDB_DB) as c:
-        rows = select_ref_rows(c, PROFILE_ID)
+        pid = args.profile if args.profile is not None else active_profile_id(c)
+        rows = select_ref_rows(c, pid)
     refs = ref_entries(rows, names, _cv2_loader())
     if not refs:
-        raise SystemExit("no profile refs found — is owdb.sqlite3 trained?")
+        raise SystemExit(f"no refs for profile {pid} — is owdb.sqlite3 trained?")
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     payload = {"w": REF_W, "h": REF_H, "left_fraction": 0.42, "top_fraction": 0.45, "refs": refs}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh)
     a = sum(1 for r in refs if r["v"] == "a")
     b = sum(1 for r in refs if r["v"] == "b")
-    print(f"wrote {OUT}  ({len(refs)} refs: {a} blue + {b} red, {os.path.getsize(OUT)//1024} KB)")
+    print(f"wrote {OUT} from profile {pid}  "
+          f"({len(refs)} refs: {a} blue + {b} red, {os.path.getsize(OUT)//1024} KB)")
 
 
 if __name__ == "__main__":

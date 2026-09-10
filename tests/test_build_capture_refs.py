@@ -22,9 +22,36 @@ def _db() -> sqlite3.Connection:
             hero_guid TEXT, profile_id INTEGER, state TEXT,
             variant TEXT, image_path TEXT, source TEXT
         );
+        CREATE TABLE roi_profiles (
+            id INTEGER PRIMARY KEY, hud_variant TEXT, retired_at TEXT
+        );
         """
     )
     return conn
+
+
+def test_active_profile_id_is_the_newest_unretired() -> None:
+    from tools.build_capture_refs import active_profile_id
+
+    conn = _db()
+    conn.executemany(
+        "INSERT INTO roi_profiles VALUES (?,?,?)",
+        [(4, "default", "2026-09-10T00:00:00Z"), (5, "default", None), (6, "scrim", None)],
+    )
+    assert active_profile_id(conn) == 5
+
+
+def test_active_profile_id_raises_when_none_active() -> None:
+    from tools.build_capture_refs import active_profile_id
+
+    conn = _db()
+    conn.execute("INSERT INTO roi_profiles VALUES (4, 'default', '2026-01-01T00:00:00Z')")
+    try:
+        active_profile_id(conn)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("expected SystemExit when no active profile")
 
 
 def test_select_ref_rows_returns_both_states() -> None:
