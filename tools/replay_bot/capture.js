@@ -72,6 +72,17 @@
   // sample loop re-reads when it does.
   var QUIESCE_MS = 400;
 
+  // An extra beat after a seek settles, before the HUD is read. The seek's own
+  // settle watches the PLAY area (y 200-1100); the portrait band sits above
+  // that (y ~95-205) and finishes drawing a little later - so a settle that
+  // says "the scene has stopped moving" can still hand over a frame whose
+  // portraits and name plates are half-rendered. Every sample after the first
+  // on the 2026-09-10 ten-map run came back mid-transition and needed a
+  // re-read; the first (which attribution runs on) did not, because nothing
+  // seeks to it. Paid once per sample, and the replay is paused so the band is
+  // genuinely static by the time it elapses.
+  var SAMPLE_QUIESCE_MS = 500;
+
   // Shorter than this, a stretch of play is the assemble phase rather than a
   // round. Every map measured opens with one.
   var MIN_PLAY_S = 30;
@@ -674,6 +685,9 @@
           log(mmss(t).padStart(6) + '  MISSED - landed at ' + mmss(at) + ', dropped');
           continue;
         }
+
+        // Let the portrait band finish drawing before it is read (SAMPLE_QUIESCE_MS).
+        await io.quiesce(SAMPLE_QUIESCE_MS);
 
         // The frame the seek left behind IS the sample - unless the client is
         // still loading, in which case it is black and would read as ten heroes

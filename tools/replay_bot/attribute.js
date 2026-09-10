@@ -22,6 +22,7 @@
   var calib = require('./calib.js');
   var Nameplate = require('./nameplate.js');
   var Assign = require('../../docs/capture/engine/assign.js');
+  var Names = require('../../docs/capture/engine/names.js');
 
   var SIDES = ['a', 'b'];
   var BLANK_READS = ['', '', '', '', ''];
@@ -55,42 +56,67 @@
     return reads.map(function (r) { return (r && r.guid && heroRoles[r.guid]) || null; });
   }
 
+  // Every name string a roster can be matched against - both the Battle.net
+  // game_name (what the HUD shows) and the FACEIT nick (which can read nothing
+  // like it). names.js's affinity takes the max over the whole list, so a
+  // player matches on whichever one OCR came closest to.
+  function rosterNames(players) {
+    var out = [];
+    players.forEach(function (p) { (p.names || []).forEach(function (n) { if (n) out.push(n); }); });
+    return out;
+  }
+
   // ocr(canvas) -> Promise<string>, injected so a test can supply canned
   // strings instead of a real tesseract worker - the same shape `io` is
   // injected into capture.js throughout the rest of the bot.
   function make(ocr) {
     async function attributeMap(img, sample, feed, code) {
       var heroRoles = feed.hero_roles || {};
-      var out = {};
 
+      // 1. OCR both name strips - left (screen side 'a') then right ('b'),
+      //    five each, in that order.
+      var reads = { a: BLANK_READS.slice(), b: BLANK_READS.slice() };
       for (var s = 0; s < SIDES.length; s++) {
         var side = SIDES[s];
-        var box = calib.FROZEN.boxes[side];
-        var row = Nameplate.nameRow(img, box);
+        var row = Nameplate.nameRow(img, calib.FROZEN.boxes[side]);
+        if (!row) continue;
         var slotCells = calib.slots(side);
-
-        var reads;
-        if (row) {
-          reads = [];
-          for (var i = 0; i < slotCells.length; i++) {
-            reads.push(await ocr(Nameplate.nameCrop(img, slotCells[i], row)));
-          }
-        } else {
-          reads = BLANK_READS.slice();
+        var got = [];
+        for (var i = 0; i < slotCells.length; i++) {
+          got.push(await ocr(Nameplate.nameCrop(img, slotCells[i], row)));
         }
-
-        var players = playersFor(feed, code, side);
-        var slotRoles = slotRolesFor(heroRoles, sample[side]);
-        out[side] = Assign.assign(reads, players, slotRoles);
+        reads[side] = got;
       }
 
-      return out;
+      // 2. Which team is on which side of the screen. code.t1 is the feed's
+      //    "team A"; the replay viewer does NOT always put it on the left, and
+      //    getting this wrong attributes every hero on the map to the opponent.
+      //    OCR'd names decide it, exactly as the browser tool's side-detect
+      //    does - null means the read was not clean enough to be sure, and the
+      //    feed's default order (t1 left) is the best remaining guess.
+      var t1 = playersFor(feed, code, 'a');   // playersFor 'a' == code.t1
+      var t2 = playersFor(feed, code, 'b');
+      var orient = Names.confidentOrientation(
+        reads.a, reads.b, rosterNames(t1), rosterNames(t2));
+      var swapped = orient === 'b';           // 'b' => t2 is on the left
+      var leftTeam = swapped ? t2 : t1;
+      var rightTeam = swapped ? t1 : t2;
+
+      // 3. Assign each screen side against the team that is actually on it.
+      return {
+        a: Assign.assign(reads.a, leftTeam, slotRolesFor(heroRoles, sample.a)),
+        b: Assign.assign(reads.b, rightTeam, slotRolesFor(heroRoles, sample.b)),
+        // 'direct' = feed order held (t1 left); 'swapped' = teams are the other
+        // way round and the caller must relabel side_a/side_b; null = unproven,
+        // treated as direct but flagged so the operator eyeballs it.
+        orientation: orient === null ? null : (swapped ? 'swapped' : 'direct'),
+      };
     }
 
     return { attributeMap: attributeMap };
   }
 
-  var Mod = { make: make, playersFor: playersFor, slotRolesFor: slotRolesFor };
+  var Mod = { make: make, playersFor: playersFor, slotRolesFor: slotRolesFor, rosterNames: rosterNames };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBReplayAttribute = Mod;

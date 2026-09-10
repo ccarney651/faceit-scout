@@ -432,8 +432,24 @@ async function main() {
         }
       }
 
+      // The replay viewer does not always put the feed's "team A" on the left,
+      // and heroes_a is whatever is on the left. When attribution's name read
+      // says the teams are the other way round, relabel so side_a carries the
+      // team that is actually on the left - otherwise every comp on the map is
+      // filed under the opponent. `null` orientation (read not clean enough to
+      // be sure) keeps the feed's order and the review page flags it.
+      const oriented = (attribution && attribution.orientation === 'swapped')
+        ? Object.assign({}, code, {
+            t1: code.t2, t2: code.t1, team_a: code.team_b, team_b: code.team_a })
+        : code;
+      if (attribution && attribution.orientation === 'swapped') {
+        console.log(`sides: the replay shows ${code.team_b} on the left, not ${code.team_a} - relabelled`);
+      } else if (attribution && attribution.orientation === null) {
+        console.log('sides: name read was not decisive - kept feed order, review will flag it');
+      }
+
       const rounds = C.roundsOf(got.segments);
-      const record = E.mapRecord(code, C.observationsOf(got.samples), rounds, {
+      const record = E.mapRecord(oriented, C.observationsOf(got.samples), rounds, {
         profile: { w: calib.FROZEN.frame.w, h: calib.FROZEN.frame.h, hud_variant: 'replay-bot' },
         attribution: attribution,
       });
@@ -454,7 +470,8 @@ async function main() {
           attribution: attribution,
           planned: countPlanned(got.plan, rounds),
         });
-        const reviewEntry = await RO.mapEntry(io, sessionDir, code, resolved, attribution, got, calib, feed);
+        const reviewEntry = await RO.mapEntry(io, sessionDir, oriented, resolved, attribution, got, calib, feed);
+        reviewEntry.orientation = attribution ? attribution.orientation : null;
         reviewMaps.push(reviewEntry);
         RO.writeSession(reviewPath, reviewMaps, { session, feedBuilt: feed.built_at });
         const flagged = resolved.reduce((n, r) => n + r.flags.length +

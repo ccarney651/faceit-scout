@@ -100,12 +100,55 @@ test('attributeMap resolves all ten slots against a real frame with an injected 
   out.a.conf.concat(out.b.conf).forEach((c) => assert.ok(c === 'forced' || c === 'matched'));
 });
 
+// The replay viewer put the feed's team B on the LEFT strip. attributeMap must
+// notice from the names and match each screen side against the team actually on
+// it - otherwise every hero is filed under the opponent.
+test('attributeMap detects a swapped orientation and assigns each side its real team', { skip }, async () => {
+  const img = await canvas.loadImage(C.at(witness.file));
+  // The frame's left names are team-a's, right are team-b's. Feed team-a/-b as
+  // if the FEED had them the other way round: now the LEFT screen shows the
+  // feed's "team B".
+  const swappedFeed = lineupFeed();
+  const tmp = swappedFeed.lineups['m1:1']['team-a'];
+  swappedFeed.lineups['m1:1']['team-a'] = swappedFeed.lineups['m1:1']['team-b'];
+  swappedFeed.lineups['m1:1']['team-b'] = tmp;
+
+  const calls = [];
+  const reads = { a: witness.a.slice(), b: witness.b.slice() };
+  const stub = A.make(async () => {
+    calls.push(1);
+    const side = calls.length <= 5 ? 'a' : 'b';
+    return reads[side][side === 'a' ? calls.length - 1 : calls.length - 6];
+  });
+  const out = await stub.attributeMap(img, sampleHeroes(), swappedFeed, CODE);
+
+  assert.strictEqual(out.orientation, 'swapped', 'code.t2 is on the left');
+  // The left screen shows Noki's team (a-* ids, now under the feed's team-b
+  // key). Matched against the team actually on that side, not code.t1's.
+  assert.deepStrictEqual(out.a.ids, ['a-noki', 'a-vilperttis', 'a-jopez', 'a-lambinen', 'a-karhu']);
+  assert.deepStrictEqual(out.b.ids, ['b-rawan', 'b-moon', 'b-cat', 'b-cioudo', 'b-zayano']);
+});
+
+test('attributeMap reports orientation direct when the feed order holds', { skip }, async () => {
+  const img = await canvas.loadImage(C.at(witness.file));
+  const calls = [];
+  const reads = { a: witness.a.slice(), b: witness.b.slice() };
+  const stub = A.make(async () => {
+    calls.push(1);
+    const side = calls.length <= 5 ? 'a' : 'b';
+    return reads[side][side === 'a' ? calls.length - 1 : calls.length - 6];
+  });
+  const out = await stub.attributeMap(img, sampleHeroes(), lineupFeed(), CODE);
+  assert.strictEqual(out.orientation, 'direct');
+});
+
 test('attributeMap abstains every slot rather than guessing, when the feed has no lineup', { skip }, async () => {
   const img = await canvas.loadImage(C.at(witness.file));
   const stub = A.make(async () => 'irrelevant');
   const out = await stub.attributeMap(img, sampleHeroes(), {}, CODE);
   assert.deepStrictEqual(out.a.ids, [null, null, null, null, null]);
   assert.deepStrictEqual(out.b.ids, [null, null, null, null, null]);
+  assert.strictEqual(out.orientation, null, 'no roster, so the side cannot be proven');
 });
 
 test('attributeMap still forces the singleton role when the name row cannot be found', async () => {

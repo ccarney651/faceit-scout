@@ -156,6 +156,12 @@ function renderMap(m, mi) {
   const sm = el('span', 'summary' + (fc ? ' has-flags' : ''),
     (m.rounds || []).length + ' rounds · ' + fc + ' flags · attribution ' + attributionScore(m));
   head.appendChild(sm);
+  if (m.orientation === 'swapped' || m.orientation === null) {
+    head.appendChild(el('span', 'summary has-flags',
+      m.orientation === 'swapped'
+        ? '⇄ sides were swapped (' + (m.side_a_team || 'A') + ' is on the left) — check the strips'
+        : '⚠ side detection was not sure — check ' + (m.side_a_team || 'A') + ' is really on the left'));
+  }
   box.appendChild(head);
 
   const flagged = [];
