@@ -75,6 +75,41 @@ npm run decompile:dkeeh   # regenerate dkeeh.opy from a fresh dkeeh_raw.txt expo
 `scrim_owdb.txt` is the file you paste into Overwatch. The `.opy` source is
 the versioned, patchable form — edit that, then rebuild.
 
+## Refs trainer (`refs_trainer.opy`)
+
+A separate throwaway code — nothing to do with scrims — that automates building
+the owdb hero-ref library. It spawns 10 dummy bots and marches all of them
+through the whole roster (`n` steps of 5, ~6 s each), drawing a `REFS <n>` step
+counter top-centre. `owdb refs learn --auto` OCRs that counter and, on each new
+step, crops all ten HUD portraits and stores them as the refs for the heroes it
+knows are in that step.
+
+```bash
+python ../../tools/scrim_code/gen_refs_trainer.py   # roster -> refs_trainer.opy
+npm run build:refs-trainer                          # -> refs_trainer.txt
+```
+
+`gen_refs_trainer.py` bakes the roster (sorted, chunked) into the `.opy`; the
+same `owdb.refs_trainer.plan_sequence` runs tool-side, so both agree on which
+hero is in which slot. Heroes with no OverPy `Hero.<X>` constant (owdb custom
+heroes; a brand-new hero not yet in `owdb/refs_trainer.py` `_HERO_ENUM`) are
+skipped and reported — learn those with plain `owdb refs learn`.
+
+Then, in Overwatch: paste `refs_trainer.txt` into an empty lobby, pick a
+Control or Push map with unlimited round time, **start the match**, move to
+spectators, and run `owdb refs learn --auto`. Not yet validated in-game — see
+the checklist below.
+
+**In-game validation (must be done by a human):**
+
+1. Bots spawn on both teams and their portraits show on the spectator HUD strip.
+2. The `REFS <n>` counter is readable and not hidden behind the objective HUD —
+   if it is, change `HudPosition.TOP` in `refs_trainer.opy`, or pass
+   `owdb refs learn --auto --index-roi x,y,w,h`.
+3. `--auto` labels line up with what's on screen. If the right-hand team's refs
+   come out shuffled, re-run with `--flip-b`.
+4. `owdb refs verify` after the run — only `D.Mon` (custom) should be missing.
+
 ## Server load
 
 The mode was tuned for server load on 2026-09-06. Every change below is

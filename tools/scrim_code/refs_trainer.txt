@@ -1,0 +1,84 @@
+settings
+{
+	main
+	{
+		Description: "owdb refs trainer -- throwaway hero-ref capture code"
+		Mode Name: "owdb refs trainer"
+	}
+	lobby
+	{
+		Max Spectators: 6
+	}
+	modes
+	{
+		Control
+		{
+			enabled maps
+			{
+				Ilios
+			}
+			Competitive Rules: Off
+			Game Mode Start: Immediately
+		}
+	}
+}
+
+variables {
+    global:
+        0: step
+        1: shown
+        2: slot
+        3: SEQ
+}
+
+rule ("refs trainer: force the round live") {
+    event {
+        Ongoing - Global;
+    }
+    actions {
+        "The spectator HUD portrait strip only renders once the match is in\nprogress. Blow straight past \"assemble your heroes\" and the setup phase by\nzeroing their timers -- otherwise the bots exist but show no portrait."
+        While(True);
+            If(Or(Is In Setup, Is Assembling Heroes));
+                Set Match Time(0);
+            End;
+            Wait(0.25, Ignore Condition);
+        End;
+    }
+}
+
+rule ("refs trainer: march the roster") {
+    event {
+        Ongoing - Global;
+    }
+    actions {
+        Set Global Variable(SEQ, Array(Array(Hero(Ana), Hero(Anran), Hero(Ashe), Hero(Baptiste), Hero(Bastion)), Array(Hero(Brigitte), Hero(Cassidy), Hero(Domina), Hero(Doomfist), Hero(D.Va)), Array(Hero(Echo), Hero(Emre), Hero(Freja), Hero(Genji), Hero(Hanzo)), Array(Hero(Hazard), Hero(Illari), Hero(Jetpack Cat), Hero(Junker Queen), Hero(Junkrat)), Array(Hero(Juno), Hero(Kiriko), Hero(Lifeweaver), Hero(Lúcio), Hero(Mauga)), Array(Hero(Mei), Hero(Mercy), Hero(Mizuki), Hero(Moira), Hero(Orisa)), Array(Hero(Pharah), Hero(Ramattra), Hero(Reaper), Hero(Reinhardt), Hero(Roadhog)), Array(Hero(Shion), Hero(Sierra), Hero(Sigma), Hero(Sojourn), Hero(Soldier: 76)), Array(Hero(Sombra), Hero(Symmetra), Hero(Torbjörn), Hero(Tracer), Hero(Vendetta)), Array(Hero(Venture), Hero(Widowmaker), Hero(Winston), Hero(Wrecking Ball), Hero(Wuyang)), Array(Hero(Zarya), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta))));
+        Set Global Variable(step, 0);
+        Set Global Variable(shown, 999);
+        Wait Until(Is Game In Progress, 120);
+        Wait(2, Ignore Condition);
+        While(Compare(Global.step, <, 11));
+            Destroy All Dummy Bots;
+            Wait(0.5, Ignore Condition);
+            For Global Variable(slot, 0, 5, 1);
+                Create Dummy Bot(Value In Array(Value In Array(Global.SEQ, Global.step), Global.slot), Team 1, Global.slot, Null, Null);
+                Create Dummy Bot(Value In Array(Value In Array(Global.SEQ, Global.step), Global.slot), Team 2, Global.slot, Null, Null);
+            End;
+            Wait(2.0, Ignore Condition);
+            Set Global Variable(shown, Global.step);
+            Wait(6.0, Ignore Condition);
+            Modify Global Variable(step, Add, 1);
+        End;
+        Destroy All Dummy Bots;
+        Set Global Variable(shown, 999);
+    }
+}
+
+rule ("refs trainer: draw the step counter") {
+    event {
+        Ongoing - Global;
+    }
+    actions {
+        Create HUD Text(Null, Custom String("REFS {0}", Global.shown), Null, Null, Top, 0, Color(White), Null, Null, Visible To and String, Visible Always);
+    }
+}
+

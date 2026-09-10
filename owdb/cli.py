@@ -40,10 +40,18 @@ from .derive import (
 from .errors import CaptureError
 from .integrity import verify_codes_report
 from .match import DEFAULT_CONFIDENCE_FLOOR, run_match
-from .models import DEFAULT_DIVISION, DEFAULT_TEAM_SIZE, REF_STATES, REGIONS, SIDE_LEFT
+from .models import (
+    DEFAULT_DIVISION,
+    DEFAULT_TEAM_SIZE,
+    REF_STATES,
+    REGIONS,
+    SIDE_LEFT,
+    Rect,
+)
 from .refs import (
     DEFAULT_CLOSE_THRESHOLD,
     default_refs_dir,
+    run_refs_autolearn,
     run_refs_capture,
     run_refs_from_frame,
     run_refs_from_sheet,
@@ -157,17 +165,37 @@ def cmd_refs_from_sheet(args: argparse.Namespace) -> int:
 def cmd_refs_learn(args: argparse.Namespace) -> int:
     db_path = _db_path(args)
     refs_dir = args.refs_dir or default_refs_dir(db_path)
+    index_roi = None
+    if getattr(args, "index_roi", None):
+        try:
+            index_roi = Rect.from_list([int(v) for v in args.index_roi.split(",")])
+        except (ValueError, TypeError):
+            print("error: --index-roi must be 'x,y,w,h' in pixels", file=sys.stderr)
+            return 2
     try:
         with Database(db_path) as db:
-            run_refs_learn(
-                db,
-                _faceit_db_path(args),
-                hud_variant=args.hud_variant,
-                refs_dir=refs_dir,
-                state=args.state,
-                calibrate_slot=args.calibrate_slot,
-                dry_run=args.dry_run,
-            )
+            if args.auto:
+                run_refs_autolearn(
+                    db,
+                    _faceit_db_path(args),
+                    hud_variant=args.hud_variant,
+                    refs_dir=refs_dir,
+                    state=args.state,
+                    index_roi=index_roi,
+                    flip_b=args.flip_b,
+                    only=args.only,
+                    dry_run=args.dry_run,
+                )
+            else:
+                run_refs_learn(
+                    db,
+                    _faceit_db_path(args),
+                    hud_variant=args.hud_variant,
+                    refs_dir=refs_dir,
+                    state=args.state,
+                    calibrate_slot=args.calibrate_slot,
+                    dry_run=args.dry_run,
+                )
     except (CaptureError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -1069,6 +1097,19 @@ def build_parser() -> argparse.ArgumentParser:
     rl.add_argument("--calibrate-slot", action="store_true",
                     help="first drag ONE box around a single portrait, then learn from "
                          "only that box (best for a solo custom-game replay)")
+    rl.add_argument("--auto", action="store_true",
+                    help="unattended: read the refs_trainer.opy workshop code's step "
+                         "counter and label every HUD slot from its baked-in sequence "
+                         "(no per-hero confirmation)")
+    rl.add_argument("--flip-b", action="store_true",
+                    help="--auto: the right HUD strip runs right-to-left vs bot slots "
+                         "(set this if side-b refs come out shuffled)")
+    rl.add_argument("--only", default=None,
+                    help="--auto: comma-separated hero names — MUST match the "
+                         "gen_refs_trainer.py --only used to build the workshop code")
+    rl.add_argument("--index-roi", default=None,
+                    help="--auto: 'x,y,w,h' pixel box around the 'REFS <n>' counter "
+                         "(default: a fraction-based guess for HudPosition.TOP)")
     rl.add_argument("--refs-dir", default=None,
                     help="where to store ref crops (default: refs/ next to the DB)")
     rl.add_argument("--dry-run", action="store_true", help="guess + preview but do not write")
