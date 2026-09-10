@@ -156,3 +156,74 @@ test('ts is milliseconds, not the sweep\'s seconds', () => {
   const got = EM.observations(s, oneRound(s));
   assert.strictEqual(got[0].ts, 90000);
 });
+
+// --- fromRounds: the per-round shape, after review -----------------------
+
+// A resolved slot as resolve.rounds() produces it.
+function slot(guid, over) {
+  return Object.assign({
+    guid, name: guid, support: 1, reads: [0.95], contested: false, alt_guid: null,
+    player_id: null, player_conf: null, flags: [],
+  }, over);
+}
+function round(round_no, a, b, over) {
+  return Object.assign({ round_no, from_t: 0, to_t: 300, a, b, flags: [] }, over);
+}
+const COMP = (p) => [slot('t' + p), slot('d1' + p), slot('d2' + p), slot('s1' + p), slot('s2' + p)];
+
+test('fromRounds emits one observation per side per round', () => {
+  const rounds = [
+    round(1, COMP('a'), COMP('b')),
+    round(2, COMP('a'), COMP('b'), { from_t: 400, to_t: 700 }),
+  ];
+  const got = EM.fromRounds(rounds);
+  assert.strictEqual(got.length, 4);
+  assert.deepStrictEqual(got.map((o) => [o.side, o.round_no]), [['a', 1], ['b', 1], ['a', 2], ['b', 2]]);
+  assert.strictEqual(got[2].ts, 400000, 'ts is from_t in ms');
+});
+
+test('fromRounds carries the reviewed player ids as pairs, null through', () => {
+  const a = COMP('a');
+  a[2] = slot('d2a', { player_id: null });
+  a[0] = slot('ta', { player_id: 'p1' });
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  assert.deepStrictEqual(got[0].pairs[0], ['ta', 'p1']);
+  assert.deepStrictEqual(got[0].pairs[2], ['d2a', null]);
+  assert.strictEqual(got[0].heroes.length, 5);
+});
+
+test('a slot the operator left unresolved drops out of that round, not a hole', () => {
+  const a = COMP('a');
+  a[3] = slot(null);
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  assert.strictEqual(got[0].heroes.length, 4);
+  assert.strictEqual(got[0].pairs.length, 4);
+  assert.ok(!got[0].heroes.includes(null));
+});
+
+test('an unsampled round-side ships no observation at all', () => {
+  const empty = [slot(null), slot(null), slot(null), slot(null), slot(null)];
+  const got = EM.fromRounds([round(1, empty, COMP('b'))]);
+  assert.deepStrictEqual(got.map((o) => o.side), ['b'], 'only side b had a comp');
+});
+
+test('a slot still contested after review ships a second observation with the runner-up', () => {
+  const a = COMP('a');
+  a[0] = slot('DVA', { contested: true, alt_guid: 'DMON' });
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  const aSide = got.filter((o) => o.side === 'a');
+  assert.strictEqual(aSide.length, 2, 'primary + swap');
+  assert.strictEqual(aSide[0].heroes[0], 'DVA');
+  assert.strictEqual(aSide[1].heroes[0], 'DMON');
+  assert.ok(aSide[1].ts > aSide[0].ts, 'the swap observation is later in the round');
+  assert.strictEqual(got.filter((o) => o.side === 'b').length, 1, 'side b was not contested');
+});
+
+test('mapRecordFromRounds renames the feed fields and uses the per-round observations', () => {
+  const m = EM.mapRecordFromRounds(codeEntry(), [round(1, COMP('a'), COMP('b'))], { profile: PROFILE });
+  assert.strictEqual(m.demo_code, '2T857A');
+  assert.strictEqual(m.map_name, 'Samoa');
+  assert.strictEqual(m.winner_side, null);
+  assert.strictEqual(m.observations.length, 2);
+  assert.strictEqual(m.observations[0].sub_map, null);
+});

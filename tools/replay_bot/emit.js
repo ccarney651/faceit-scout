@@ -66,13 +66,15 @@
     return out;
   }
 
-  // One captured map, ready to sit in a contribution's `maps[]`.
+  // The map's identity and the fields FACEIT owns - everything a record has
+  // except its observations. Shared by mapRecord (per-sample, pre-review) and
+  // mapRecordFromRounds (per-round, post-review) so the renames are stated once.
   //
   // The renames are the whole risk surface here: the feed calls a map `map` and
   // a code `code`, while the schema wants `map_name` and `demo_code`; and t1/t2
   // are side A and side B in that order. Swapping the teams would attribute
   // every comp to the opponent, and nothing downstream would notice.
-  function mapRecord(code, samples, rounds, opts) {
+  function baseRecord(code, opts) {
     return {
       match_id: code.match_id,
       game_no: code.game_no,
@@ -89,9 +91,73 @@
       winner_side: null,
       bans: [],
       captured_at: (opts && opts.capturedAt) || new Date().toISOString(),
-      profile: opts.profile,
-      observations: observations(samples, rounds, opts && opts.attribution),
+      profile: opts && opts.profile,
     };
+  }
+
+  // One captured map, ready to sit in a contribution's `maps[]` - the per-sample
+  // shape, one observation per side per sample, used by run.js before review.
+  function mapRecord(code, samples, rounds, opts) {
+    return Object.assign(baseRecord(code, opts), {
+      observations: observations(samples, rounds, opts && opts.attribution),
+    });
+  }
+
+  // The same record from resolve.js's per-round output, after the operator has
+  // reviewed it. See specs/2026-09-10-replay-bot-autonomous-scouting-design.md §5.
+  //
+  // One observation per round per side - the confirmed comp - which is the shape
+  // a human contributor produces and the frequency owdb's opening-comp and
+  // hero-pool derivations assume. A slot the operator left unresolved (null
+  // guid) drops out of that round's comp rather than shipping a hole; a slot
+  // still marked `contested` after review ships a SECOND observation for that
+  // round with the runner-up swapped in, at the round's midpoint, so a real
+  // mid-round hero swap is not flattened to one hero.
+  function fromRounds(rounds) {
+    var out = [];
+    (rounds || []).forEach(function (round) {
+      SIDES.forEach(function (side) {
+        var slots = round[side] || [];
+
+        var heroes = [];
+        var pairs = [];
+        var hasContest = false;
+        slots.forEach(function (s) {
+          if (!s || !s.guid) return;
+          heroes.push(s.guid);
+          pairs.push([s.guid, (s.player_id === undefined || s.player_id === null) ? null : s.player_id]);
+          if (s.contested && s.alt_guid) hasContest = true;
+        });
+        if (!heroes.length) return;   // an unsampled/empty round-side ships nothing
+
+        out.push({
+          side: side, ts: Math.round(round.from_t * 1000), sub_map: null,
+          round_no: round.round_no, phase: null, heroes: heroes, pairs: pairs,
+        });
+
+        if (hasContest) {
+          var altHeroes = [];
+          var altPairs = [];
+          slots.forEach(function (s) {
+            if (!s || !s.guid) return;
+            var g = (s.contested && s.alt_guid) ? s.alt_guid : s.guid;
+            altHeroes.push(g);
+            altPairs.push([g, (s.player_id === undefined || s.player_id === null) ? null : s.player_id]);
+          });
+          out.push({
+            side: side,
+            ts: Math.round((round.from_t + (round.to_t - round.from_t) / 2) * 1000),
+            sub_map: null, round_no: round.round_no, phase: null,
+            heroes: altHeroes, pairs: altPairs,
+          });
+        }
+      });
+    });
+    return out;
+  }
+
+  function mapRecordFromRounds(code, rounds, opts) {
+    return Object.assign(baseRecord(code, opts), { observations: fromRounds(rounds) });
   }
 
   // What distinguishes a bot run from an operator's, and the reason the output
@@ -117,6 +183,8 @@
     roundNoFor: roundNoFor,
     observations: observations,
     mapRecord: mapRecord,
+    fromRounds: fromRounds,
+    mapRecordFromRounds: mapRecordFromRounds,
     file: file,
   };
 
