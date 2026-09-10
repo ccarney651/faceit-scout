@@ -364,6 +364,15 @@ async function main() {
       console.log(`import ${((tPlayed - tOpen) / 1000).toFixed(1)}s, ` +
         `client loaded the replay in ${((tLoaded - tPlayed) / 1000).toFixed(1)}s`);
 
+      // waitFor returns the moment the team plates are drawn, which is NOT the
+      // same as the client being ready for control input - the two live
+      // "K did not open the panel" failures (2026-09-10) both hit this window,
+      // where the replay has rendered but N/K do not land as expected yet.
+      // A short beat here before the capture starts poking it. If the next
+      // failure logs (capture.js's events-viewer diagnostics) show this
+      // helped, or did not, tune or drop it then.
+      await wait(500);
+
       // The interval chunk runs INSIDE the capture, not before it: the options
       // button only exists once N and K have put the controls on screen, and
       // the interval must change before the step is measured.
