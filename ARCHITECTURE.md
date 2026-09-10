@@ -1733,6 +1733,7 @@ an operator's: the same matcher, not a lookalike.
 | `fakeio.js` | `capture.js`'s I/O, backed by recorded frames | yes |
 | `corpus.js` | The labelled frames, and what a human saw in each | yes |
 | `run.js` | The queue loop; the CLI | no |
+| `console/server.js` | Run one phase at a time against the live client (§14.3b) | no |
 
 `driver.js` and `recorder.js` are the two that automate the client. Everything
 else reads pixels, which is ordinary use.
@@ -1756,7 +1757,8 @@ them: `contact_sheet.js` renders the ten crops of a frame, `probe_grab.ps1` and
 `probe_input.ps1` established how capture and input work at all, `probe_seek.js`
 measures how many seek presses land, `probe_limits.js` pushes the waits until
 they break, and `probe_chunk.js` does the same for chunk playback. Every number
-in §14.7 came out of one of these.
+in §14.7 came out of one of these. The **console** (§14.3b) is the interactive
+version — one phase at a time, with the timings on sliders.
 
 ### 14.3a Running it without a client
 
@@ -1788,6 +1790,31 @@ part worth keeping, and the tests skip themselves when the frames are absent.
 `corpus_sweep.js` runs every detector over every retained frame and prints the table.
 That is what caught the panel detector in §14.7: a metric measured on three maps,
 clean on all three, and wrong on six frames already sitting on disk.
+
+### 14.3b The console
+
+`fakeio.js` reproduces a bug offline once the frames exist. The console is the
+other side of that: **run one phase at a time against the live client**, to see
+where it breaks and try a different wait. `node tools/replay_bot/console/server.js`
+serves a page on `127.0.0.1:8789` with a button per phase — the ones
+`clientstate.js` exposes (client state, clear-ESC, back-out-of-list) and the
+ones `phases.js` does (pause, events viewer, calibrate bar, measure rate,
+structure, seek, sample) — plus `import` and `leave`. Each run shows its result,
+its log, and the frame it took; a **sequence** control walks a span of phases
+with an optional checkpoint. The **timing** panel is a slider per `timing.js`
+knob, applied for one run via an in-place override (the console is
+one-phase-at-a-time, so the mutation is never concurrent) and saved to
+`state/console_timing.json`.
+
+`import` is the only phase that spends a code. It draws from a **rotating 20-code
+stack** in `state/console_codes.json`: the top is imported, then pushed to the
+bottom. The client keeps only its 10 most-recent imports, so by the time a code
+comes back to the top it has been evicted and re-imports cleanly — which is what
+makes the console usable for more than ten import cycles between wipes. The stack
+is per-machine and gitignored, and dies at a patch like any other code list.
+
+Same rules as `gui.js` and `review/server.js`: binds loopback, refuses a
+cross-origin or non-loopback request, one operation at a time.
 
 ### 14.4 The run loop
 

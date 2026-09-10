@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>replay-bot console</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 22px; background: #14161a; color: #d8dde3;
+    font: 13px/1.5 ui-monospace, Consolas, "DejaVu Sans Mono", monospace; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .sub { color: #8b949e; margin: 0 0 16px; max-width: 900px; }
+  a { color: #7aa2f7; }
+  .rect { color: #7ec699; } .rect.bad { color: #e5786d; }
+  .cols { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 22px; align-items: start; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+  .card { background: #0f1115; border: 1px solid #262b33; padding: 12px 14px; margin: 0 0 12px; }
+  .card h2 { font-size: 13px; margin: 0 0 8px; color: #e6d08a; }
+  .phase { display: grid; grid-template-columns: 12em 1fr auto; gap: 8px 10px;
+    align-items: center; padding: 6px 0; border-bottom: 1px solid #1c2027; }
+  .phase:last-child { border-bottom: 0; }
+  .phase .name { color: #e6d08a; }
+  .phase .desc { color: #8b949e; font-size: 12px; }
+  .phase .args { grid-column: 2; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .phase .out { grid-column: 1 / -1; }
+  .spends { color: #e5786d; }
+  button { font: inherit; background: #222831; color: #d8dde3; border: 1px solid #39414d;
+    padding: 3px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #2c3441; }
+  button:disabled { opacity: .4; cursor: default; }
+  input[type=number], input[type=text] { font: inherit; background: #0f1115; color: #d8dde3;
+    border: 1px solid #39414d; padding: 2px 5px; width: 6em; }
+  textarea { font: inherit; background: #0f1115; color: #d8dde3; border: 1px solid #39414d;
+    width: 100%; box-sizing: border-box; }
+  pre { background: #0b0d10; border: 1px solid #1c2027; padding: 8px; margin: 6px 0 0;
+    overflow-x: auto; white-space: pre-wrap; font-size: 12px; }
+  .thumb { max-width: 260px; border: 1px solid #262b33; margin-top: 6px; cursor: zoom-in; }
+  .knobgroup { margin: 0 0 8px; }
+  .knobgroup > .gh { color: #7aa2f7; }
+  .knob { display: grid; grid-template-columns: 7.5em 1fr 4em; gap: 6px; align-items: center; }
+  .knob output { text-align: right; } .knob output.changed { color: #e6d08a; }
+  .knob input[type=range] { width: 100%; }
+  #status { min-height: 1.4em; margin: 8px 0; }
+  #status.bad { color: #e5786d; } #status.good { color: #7ec699; } #status.working { color: #e6d08a; }
+  .stack { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  .stack span { padding: 1px 6px; border: 1px solid #39414d; border-radius: 3px; color: #8b949e; }
+  .stack span.next { border-color: #7ec699; color: #7ec699; }
+  .warn { color: #e5786d; }
+</style>
+</head>
+<body>
+
+<h1>replay-bot console</h1>
+<p class="sub">
+  Runs one capture phase at a time against the live client. Needs Overwatch
+  running; most phases need a replay already open. Only <b>import</b> spends a
+  code, from the rotating stack below.
+</p>
+<p>window: <span id="rect" class="rect">checking…</span> &nbsp; session:
+  <span id="sess">new</span> &nbsp; codes spent this session: <span id="spent">0</span>
+  &nbsp; <button id="btnReset">reset session</button></p>
+
+<div class="cols">
+  <div>
+    <div class="card">
+      <h2>sequence</h2>
+      from <select id="seqFrom"></select> to <select id="seqTo"></select>
+      <label><input type="checkbox" id="seqPause"> pause between</label>
+      <button id="btnSeq">run</button>
+      <span id="seqAt" class="desc"></span>
+    </div>
+    <div class="card" id="phases"></div>
+    <div class="card">
+      <h2>log</h2>
+      <pre id="log">Ready.</pre>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>code stack</h2>
+      <div class="stack" id="stack"></div>
+      <p id="wipe" class="desc"></p>
+      <textarea id="codeInput" rows="3" placeholder="paste ~20 codes, space/comma/newline separated"></textarea>
+      <div style="margin-top:6px">
+        <button id="btnCodes">replace stack</button>
+        <button id="btnRotate">rotate</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>timing</h2>
+      <div id="knobs"></div>
+      <div style="margin-top:8px">
+        <button id="btnSave">save</button>
+        <button id="btnTReset">reset saved</button>
+        <button id="btnTRevert">revert sliders</button>
+      </div>
+      <p class="desc">save writes <code>state/console_timing.json</code>, which
+        every module loads over its defaults.</p>
+    </div>
+  </div>
+</div>
+
+<p id="status"></p>
+
+<script>
+const PHASE_META = {
+  clientState:  { desc: 'in a replay / ESC menu / on the list?' },
+  grab:         { desc: 'one screenshot' },
+  clearEsc:     { desc: 'ESC out of a stuck menu' },
+  backOutOfList:{ desc: 'ESC off the replay list' },
+  import:       { desc: 'import the next stack code — SPENDS A CODE', spends: true, confirm: true },
+  leave:        { desc: 'leave the replay, back to the list' },
+  pause:        { desc: 'stop the replay if it is playing' },
+  eventsViewer: { desc: 'N then K — raise the events panel' },
+  setInterval:  { desc: 'play the set-interval chunk (needs N,K first)' },
+  calibrateBar: { desc: 'jump/read/forward/read — the bar scale', arg: 'stepS' },
+  measureRate:  { desc: 'time playback for px/sec' },
+  structure:    { desc: 'round segments + sample plan (calibrate first)', arg: 'duration' },
+  seek:         { desc: 'drive the playhead to a second (calibrate first)', arg: 't' },
+  sample:       { desc: 'seek there, grab, read the HUD', arg: 't' },
+};
+const ORDER = ['clientState','grab','clearEsc','backOutOfList','import','leave',
+  'pause','eventsViewer','setInterval','calibrateBar','measureRate','structure','seek','sample'];
+const RANGE = {
+  'chunk.speed':{min:1,max:4,step:0.5}, 'esc.tries':{min:1,max:8,step:1},
+  'esc.waitMs':{min:0,max:3000,step:100}, 'load.timeoutMs':{min:10000,max:180000,step:5000},
+  'load.settleMs':{min:0,max:3000,step:50}, 'load.tries':{min:1,max:30,step:1},
+  'load.waitMs':{min:0,max:1500,step:50}, 'exit.timeoutMs':{min:5000,max:90000,step:5000},
+  'poll.ms':{min:200,max:3000,step:100}, 'media.tries':{min:1,max:30,step:1},
+  'media.waitMs':{min:0,max:1000,step:25}, 'seek.gapMs':{min:0,max:1500,step:25},
+  'drag.prePress':{min:0,max:200,step:5}, 'drag.postPress':{min:0,max:200,step:5},
+  'drag.perPoint':{min:0,max:80,step:2}, 'drag.dwell':{min:0,max:600,step:10},
+  'drag.hopPx':{min:2,max:96,step:2}, 'sample.quiesceMs':{min:0,max:1500,step:25},
+  'quiesce.ms':{min:0,max:1500,step:25},
+};
+
+let S = { timing: {}, defaults: {}, codes: [], phases: [] };
+let working = false;
+const el = (id) => document.getElementById(id);
+const say = (t, k) => { el('status').textContent = t || ''; el('status').className = k || ''; };
+
+async function api(path, body) {
+  const res = await fetch(path, body
+    ? { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) } : {});
+  const out = await res.json();
+  if (!res.ok) throw new Error(out.error || res.statusText);
+  return out;
+}
+
+// --- timing panel ---
+function liveTiming() {
+  const t = {};
+  document.querySelectorAll('[data-knob]').forEach((inp) => {
+    const [ns, k] = inp.dataset.knob.split('.');
+    (t[ns] = t[ns] || {})[k] = Number(inp.value);
+  });
+  return t;
+}
+function changedTiming() {
+  const live = liveTiming(); const out = {};
+  for (const ns in live) for (const k in live[ns]) {
+    if (live[ns][k] !== (S.defaults[ns] || {})[k]) (out[ns] = out[ns] || {})[k] = live[ns][k];
+  }
+  return out;
+}
+function renderKnobs() {
+  el('knobs').innerHTML = '';
+  for (const ns of Object.keys(S.timing)) {
+    const g = document.createElement('div'); g.className = 'knobgroup';
+    g.innerHTML = '<div class="gh">' + ns + '</div>';
+    for (const k of Object.keys(S.timing[ns])) {
+      const key = ns + '.' + k, r = RANGE[key] || { min:0, max:1000, step:10 };
+      const v = S.timing[ns][k];
+      const row = document.createElement('div'); row.className = 'knob';
+      row.innerHTML = '<label>' + k + '</label>' +
+        '<input type="range" data-knob="' + key + '" min="' + r.min + '" max="' + r.max +
+          '" step="' + r.step + '" value="' + v + '">' +
+        '<output id="o-' + key + '">' + v + '</output>';
+      g.appendChild(row);
+      const inp = row.querySelector('input');
+      inp.addEventListener('input', () => syncKnob(key));
+      syncKnob(key);
+    }
+    el('knobs').appendChild(g);
+  }
+}
+function syncKnob(key) {
+  const inp = document.querySelector('[data-knob="' + key + '"]');
+  const o = el('o-' + key); const [ns, k] = key.split('.');
+  o.textContent = inp.value;
+  o.className = Number(inp.value) !== (S.defaults[ns] || {})[k] ? 'changed' : '';
+}
+
+// --- phases ---
+function renderPhases() {
+  el('phases').innerHTML = '<h2>phases</h2>';
+  el('seqFrom').innerHTML = el('seqTo').innerHTML =
+    ORDER.map((p) => '<option>' + p + '</option>').join('');
+  for (const name of ORDER) {
+    const m = PHASE_META[name] || {};
+    const d = document.createElement('div'); d.className = 'phase';
+    d.innerHTML =
+      '<span class="name">' + name + '</span>' +
+      '<span class="desc' + (m.spends ? ' spends' : '') + '">' + (m.desc || '') + '</span>' +
+      '<button data-run="' + name + '">run</button>' +
+      '<span class="args" id="args-' + name + '"></span>' +
+      '<div class="out" id="out-' + name + '"></div>';
+    el('phases').appendChild(d);
+    const args = d.querySelector('#args-' + name);
+    if (m.arg) args.innerHTML = m.arg + ' <input type="number" id="in-' + name + '" ' +
+      (m.arg === 't' || m.arg === 'duration' ? 'value="120" step="10"' : 'placeholder="auto"') + '>';
+    if (m.confirm) args.innerHTML += ' <label><input type="checkbox" id="ok-' + name +
+      '"> confirm</label>';
+    d.querySelector('[data-run]').onclick = () => runPhase(name);
+  }
+}
+function phaseArgs(name) {
+  const m = PHASE_META[name] || {}; const a = {};
+  if (m.arg) {
+    const v = el('in-' + name).value;
+    if (v !== '') a[m.arg] = Number(v);
+  }
+  if (m.confirm) a.confirm = el('ok-' + name) && el('ok-' + name).checked;
+  return a;
+}
+
+async function runPhase(name) {
+  if (working) return;
+  working = true; renderButtons(); say('running ' + name + ' — hands off the mouse', 'working');
+  try {
+    const r = await api('/api/run', { phase: name, args: phaseArgs(name), timing: changedTiming() });
+    showOut(name, r);
+    say(name + ' done', 'good');
+    await refresh();
+  } catch (e) {
+    showOut(name, { error: e.message });
+    say(e.message, 'bad');
+  } finally { working = false; renderButtons(); }
+}
+
+function showOut(name, r) {
+  const box = el('out-' + name);
+  let h = '<pre>' + JSON.stringify(r.error ? { error: r.error } : r.result, null, 1) + '</pre>';
+  if (r.log && r.log.length) h += '<pre>' + r.log.join('\n') + '</pre>';
+  if (r.frame) h += '<img class="thumb" src="/frames/' + r.frame + '?t=' + Date.now() +
+    '" onclick="window.open(this.src)">';
+  box.innerHTML = h;
+  if (r.log) el('log').textContent = r.log.join('\n') || '(no log)';
+}
+
+async function runSequence() {
+  if (working) return;
+  const from = ORDER.indexOf(el('seqFrom').value), to = ORDER.indexOf(el('seqTo').value);
+  if (to < from) { say('"to" is before "from"', 'bad'); return; }
+  for (let i = from; i <= to; i++) {
+    el('seqAt').textContent = 'at ' + ORDER[i];
+    await runPhase(ORDER[i]);
+    if (el('status').className === 'bad') { say('sequence stopped at ' + ORDER[i], 'bad'); return; }
+    if (el('seqPause').checked && i < to) {
+      if (!confirm('ran ' + ORDER[i] + '. continue to ' + ORDER[i + 1] + '?')) return;
+    }
+  }
+  el('seqAt').textContent = ''; say('sequence done', 'good');
+}
+
+// --- codes ---
+function renderStack() {
+  el('stack').innerHTML = S.codes.map((c, i) =>
+    '<span class="' + (i === 0 ? 'next' : '') + '">' + c + '</span>').join('') ||
+    '<span class="warn">empty — paste codes below</span>';
+  el('spent').textContent = S.spentThisSession || 0;
+  if (S.wipeDate) {
+    const dead = new Date().toISOString().slice(0, 10) > S.wipeDate;
+    el('wipe').innerHTML = 'feed wipe ' + S.wipeDate + (dead
+      ? ' — <span class="warn">past; the stack is dead, rescrape</span>' : ' (stack still live)');
+  }
+}
+
+function renderButtons() {
+  document.querySelectorAll('button').forEach((b) => { b.disabled = working; });
+}
+
+async function refresh() {
+  try {
+    const fresh = await api('/api/state');
+    const first = !S.phases.length;
+    S = fresh;
+    el('rect').textContent = S.rect ? S.rect.w + 'x' + S.rect.h + ' at ' + S.rect.ox + ',' + S.rect.oy
+      : (S.rectError || 'not found');
+    el('rect').className = 'rect' + (S.rect ? '' : ' bad');
+    el('sess').textContent = S.calibrated ? 'calibrated' : (S.busy ? 'busy' : 'live');
+    if (first) { renderPhases(); renderKnobs(); }
+    renderStack();
+  } catch (e) { say('cannot reach the console server: ' + e.message, 'bad'); }
+  renderButtons();
+}
+
+el('btnReset').onclick = async () => { await api('/api/session/reset', {}); say('session reset', 'good'); refresh(); };
+el('btnSeq').onclick = runSequence;
+el('btnSave').onclick = async () => { await api('/api/timing/save', { timing: changedTiming() }); say('saved', 'good'); refresh().then(renderKnobs); };
+el('btnTReset').onclick = async () => { await api('/api/timing/reset', {}); say('reset saved timing', 'good'); refresh().then(renderKnobs); };
+el('btnTRevert').onclick = () => { renderKnobs(); say('sliders back to loaded values', ''); };
+el('btnCodes').onclick = async () => { const r = await api('/api/codes', { codes: el('codeInput').value }); say(r.codes.length + ' codes loaded', 'good'); el('codeInput').value = ''; refresh(); };
+el('btnRotate').onclick = async () => { await api('/api/codes/rotate', {}); refresh(); };
+
+refresh();
+</script>
+</body>
+</html>

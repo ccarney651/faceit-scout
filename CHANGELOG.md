@@ -19,6 +19,24 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-10
 
+### Added
+
+- **`tools/replay_bot/console/` — a local page to run any capture phase on its
+  own against the live client.** `node tools/replay_bot/console/server.js`, then
+  `http://127.0.0.1:8789`. Buttons for each phase in pipeline order — client
+  state, clear-ESC, back-out-of-list, import, leave, pause, events viewer,
+  set-interval, calibrate bar, measure rate, structure, seek, sample — each
+  showing its result, its log lines, and the frame it took. A **sequence**
+  runner walks a span of phases with an optional checkpoint pause. A **timing**
+  panel is a slider per `timing.js` knob, tried live per run and saved to
+  `state/console_timing.json`. **import** is the only phase that spends a code,
+  drawn from a rotating 20-code stack (`state/console_codes.json`): pull the
+  top, import it, push it to the bottom — 20 is clear of the client's 10-import
+  ring, so a returning code has been evicted and re-imports cleanly. Binds
+  loopback, refuses cross-origin, one phase at a time. Replaces the `drag_tuner`
+  page added earlier the same day. `probe_drag` / `probe_seek` / `probe_limits`
+  / `probe_chunk` stay for multi-trial rate measurement.
+
 ### Changed
 
 - **Every tunable wait in the replay bot lives in one file, `timing.js`.** The
@@ -27,17 +45,20 @@ Entries before 2026-08-11 were reconstructed from git history.
   the ESC retries, the load settle, the chunk speed, the drag gesture's five
   waits — are now namespaced entries in `timing.js`, each carrying its measured
   history. `timing.js` merges `state/console_timing.json` over the defaults when
-  present (per-machine, gitignored), so the numbers can be tuned without editing
-  four files. `run.js`'s `--sample-quiesce` / `--load-settle` / `--esc-wait` /
-  `--chunk-speed` flags still override per run. Structural constants that have
-  never moved (`MIN_PLAY_S`, `MOTION_DIFF`, `MIN_STEPS`) stay put — not
-  everything is a knob. `play_input.ps1`'s drag branch reads the four gesture
-  waits off the stamped event. Groundwork for a pipeline-wide tuning/debug
-  console; the standalone `drag_tuner` page added earlier the same day is folded
-  into it.
+  present (per-machine, gitignored). `run.js`'s `--sample-quiesce` /
+  `--load-settle` / `--esc-wait` / `--chunk-speed` flags still override per run.
+  Structural constants that have never moved (`MIN_PLAY_S`, `MOTION_DIFF`,
+  `MIN_STEPS`) stay put. `play_input.ps1`'s drag branch reads the four gesture
+  waits off the stamped event.
 
-- **The replay bot seeks by dragging the scrubber, not by pressing the skip
-  key.**
+- **`capture.js`'s `captureMap` is a sequence over `phases.js`.** The events
+  viewer, bar calibration, the structure read and the sample loop were one
+  300-line function; they are units now (`openEventsViewer`, `calibrateBar`,
+  `readStructure`, `sampleAt`, …), which is what lets the console run any one
+  alone. Screen-state detection (`inReplay` / `escMenuUp` / `replayHistoryUp` /
+  `clearEscMenu` / `waitFor`) likewise moved out of `run.js` into
+  `clientstate.js`. Behaviour and every refusal message are unchanged — the
+  offline corpus pins them.
 
 - **The replay bot seeks by dragging the scrubber, not by pressing the skip
   key.** `driver.seekTo` now drives the playhead straight to the target second
