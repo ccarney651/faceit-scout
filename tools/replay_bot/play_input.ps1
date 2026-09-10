@@ -154,23 +154,31 @@ foreach ($e in $events) {
       # why it did nothing at all.
       $flags = $MOUSE[[string]$e.button]
       if (-not $flags) { Write-Output ("ERR unknown button {0}" -f $e.button); exit 1 }
+      # The gesture's timings come stamped on the event (drag.js TIMING, turned
+      # live by drag_tuner.js). An older plan carried none, so each falls back
+      # to the value that used to be hardcoded right here. The dense path - no
+      # hop over hopPx - carries most of the landing; the waits below stop the
+      # client's scrubber, which lags the cursor, from snapping back on release
+      # (too short) or coasting past (too long).
+      $prePress  = if ($null -ne $e.prePress)  { [Math]::Max(0, [int]$e.prePress) }  else { 40 }
+      $postPress = if ($null -ne $e.postPress) { [Math]::Max(0, [int]$e.postPress) } else { 30 }
+      $perPoint  = if ($null -ne $e.perPoint)  { [Math]::Max(0, [int]$e.perPoint) }  else { 16 }
+      $dwell     = if ($null -ne $e.dwell)     { [Math]::Max(0, [int]$e.dwell) }     else { 120 }
       if ($DryRun) {
-        Write-Output ("WOULD drag {0} from {1},{2} to {3},{4} via {5} points" -f
-          $e.button, [int]$e.x, [int]$e.y, [int]$e.toX, [int]$e.toY, @($e.path).Count)
+        Write-Output ("WOULD drag {0} from {1},{2} to {3},{4} via {5} points (pre {6} post {7} perPt {8} dwell {9})" -f
+          $e.button, [int]$e.x, [int]$e.y, [int]$e.toX, [int]$e.toY, @($e.path).Count,
+          $prePress, $postPress, $perPoint, $dwell)
       } else {
         [void][PlayWin]::SetCursorPos([int]$e.x, [int]$e.y)
-        Start-Sleep -Milliseconds 60
+        Start-Sleep -Milliseconds $prePress
         [PlayWin]::mouse_event([uint32]$flags.down, 0, 0, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 40
+        Start-Sleep -Milliseconds $postPress
         foreach ($pt in @($e.path)) {
           [void][PlayWin]::SetCursorPos([int]$pt.x, [int]$pt.y)
-          Start-Sleep -Milliseconds 25
+          Start-Sleep -Milliseconds $perPoint
         }
         [void][PlayWin]::SetCursorPos([int]$e.toX, [int]$e.toY)
-        # Dwell at the final position before releasing: the client's scrubber
-        # lags a fast drag, and a 60ms settle let it release while the playhead
-        # was still catching up (probe_drag: a long drag landed 100s short).
-        Start-Sleep -Milliseconds 150
+        Start-Sleep -Milliseconds $dwell
         [PlayWin]::mouse_event([uint32]$flags.up, 0, 0, 0, [UIntPtr]::Zero)
       }
       $played++

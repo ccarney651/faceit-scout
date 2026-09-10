@@ -25,6 +25,7 @@ const G = require('./grab.js');
 const H = require('./host.js');
 const I = require('./input.js');
 const D = require('./driver.js');
+const Drag = require('./drag.js');
 const calib = require('./calib.js');
 const Crop = require('./crop.js');
 const Match = require('./match.js');
@@ -149,7 +150,7 @@ async function quiesceNeed(M, delays) {
   const clean = rows.filter((r) => r.early >= r.late - 0.02);
   if (clean.length) {
     console.log(`  reading at +${clean[0].delay}ms is as good as waiting -> ` +
-      `SAMPLE_QUIESCE_MS could be ${clean[0].delay} (currently 500)`);
+      `SAMPLE_QUIESCE_MS could be ${clean[0].delay} (currently ${Drag.TIMING.settle})`);
   } else {
     console.log('  every early read scored worse - the wait is doing real work, keep it');
   }
@@ -183,10 +184,10 @@ async function quiesceNeed(M, delays) {
     await wait(1000);
     await I.sendKeys([D.KEY.forward, D.KEY.forward, D.KEY.forward]);
     await wait(1500);
-    // Brackets the live SAMPLE_QUIESCE_MS (500). Override with --delays=a,b,c.
+    // Brackets the live SAMPLE_QUIESCE_MS (Drag.TIMING.settle). Override with --delays=a,b,c.
     var dArg = (only.find((a) => a.startsWith('--delays=')) || '').split('=')[1];
     var delays = dArg ? dArg.split(',').map(Number).filter((n) => !Number.isNaN(n))
-      : [0, 125, 250, 375, 500];
+      : [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * Drag.TIMING.settle));
     await quiesceNeed(M, delays);
   }
 

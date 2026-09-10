@@ -19,6 +19,22 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-10
 
+### Added
+
+- **`tools/replay_bot/drag_tuner.js` — a local page for tuning the seek-by-drag
+  gesture's timings by hand.** Every hardcoded wait in the drag
+  (`prePress`/`postPress`/`perPoint`/`dwell`/`hopPx`) plus the post-seek
+  `settle` is now a slider; **Test** runs one real drag with the live values and
+  reports both the landing error and the HUD's worst cell (did it land / had it
+  settled), **Sweep** runs `probe_drag`'s four targets, **Save** writes
+  `drag_timing.json`. It binds `127.0.0.1`, costs no codes (needs a replay open
+  with its controls up), and runs one gesture at a time. `drag.js` now exposes
+  those numbers as `TIMING` and loads `drag_timing.json` over the defaults when
+  present; `play_input.ps1` reads the four drag waits off the event, and
+  `capture.js`'s `SAMPLE_QUIESCE_MS` defaults from `Drag.TIMING.settle`. Once a
+  set holds across several replays it gets written into `drag.js` as the new
+  defaults and the json (gitignored) is deleted.
+
 ### Changed
 
 - **The replay bot seeks by dragging the scrubber, not by pressing the skip

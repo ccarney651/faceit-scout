@@ -67,6 +67,39 @@ test('the plan is one drag event the player already understands', () => {
   assert.ok(p.holdMs > 0 && p.waitMs >= 0);
 });
 
+// play_input.ps1 reads the gesture's waits off the event rather than restating
+// them, so every drag plan carries the four it uses.
+test('the plan stamps the gesture timings play_input.ps1 reads', () => {
+  const p = D.plan(REF, 100, 500);
+  assert.strictEqual(p.prePress, D.TIMING.prePress);
+  assert.strictEqual(p.postPress, D.TIMING.postPress);
+  assert.strictEqual(p.perPoint, D.TIMING.perPoint);
+  assert.strictEqual(p.dwell, D.TIMING.dwell);
+});
+
+test('TIMING carries every knob drag_tuner.js turns', () => {
+  for (const k of ['prePress', 'postPress', 'perPoint', 'dwell', 'hopPx', 'settle']) {
+    assert.strictEqual(typeof D.TIMING[k], 'number', k + ' is a number');
+  }
+});
+
+// drag_tuner.js passes live slider values as a fourth arg to try them without
+// writing drag_timing.json.
+test('a timing override changes the stamped waits and the path density', () => {
+  const base = D.plan(REF, 100, 600);
+  const over = D.plan(REF, 100, 600, { prePress: 5, dwell: 7, hopPx: 8 });
+  assert.strictEqual(over.prePress, 5);
+  assert.strictEqual(over.dwell, 7);
+  // untouched knobs still come from TIMING
+  assert.strictEqual(over.postPress, D.TIMING.postPress);
+  // a smaller hopPx means more points along the same drag
+  assert.ok(over.path.length > base.path.length,
+    `${over.path.length} points at hopPx 8 vs ${base.path.length} at ${D.TIMING.hopPx}`);
+  for (let i = 1; i < over.path.length; i++) {
+    assert.ok(Math.abs(over.path[i].x - over.path[i - 1].x) <= 8);
+  }
+});
+
 // A target outside the bar is a bug upstream - a sample planned past the end of
 // the map - and clamping it silently would seek somewhere plausible and wrong.
 test('a target off the end of the bar is refused, not clamped', () => {

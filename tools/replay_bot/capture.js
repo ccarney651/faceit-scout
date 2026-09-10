@@ -83,7 +83,11 @@
   // re-read; the first (which attribution runs on) did not, because nothing
   // seeks to it. Paid once per sample, and the replay is paused so the band is
   // genuinely static by the time it elapses.
-  var SAMPLE_QUIESCE_MS = 500;
+  //
+  // The default lives in Drag.TIMING alongside the drag gesture's own timings:
+  // a seek-by-drag and the settle that follows it are one dial, and
+  // drag_tuner.js turns them together. --sample-quiesce still overrides it.
+  var SAMPLE_QUIESCE_MS = Drag.TIMING.settle;
 
   // Shorter than this, a stretch of play is the assemble phase rather than a
   // round. Every map measured opens with one.
@@ -457,9 +461,14 @@
       // measuring the step needs the driver to press the keys.
       // Setup presses (N, K, and the two calibration keys) get the careful
       // two-frame settle, because a panel read while it is still drawing is
-      // measured as a brightness and then believed. Sampling gets the cheap
-      // one, because a half-drawn HUD announces itself in the scores.
+      // measured as a brightness and then believed. Sampling gets a single
+      // fixed wait - a half-drawn HUD announces itself in the scores - and
+      // that ONE wait is shared: the settle inside driver.seekTo leaves the
+      // frame the sample loop then reads, rather than each paying its own.
       var sampling = false;
+      var sampleQuiesceMs = function () {
+        return o.sampleQuiesceMs != null ? o.sampleQuiesceMs : SAMPLE_QUIESCE_MS;
+      };
 
       // Seek by dragging the scrubber straight to the target second, instead of
       // pressing the skip key n times with a 700ms gap between each. The key
@@ -484,7 +493,7 @@
       var drvCtx = {
         sendKeys: io.sendKeys,
         focus: async function () {},
-        settle: function () { return sampling ? io.quiesce() : io.settle(); },
+        settle: function () { return sampling ? io.quiesce(sampleQuiesceMs()) : io.settle(); },
         position: positionNow,
         seekDrag: o.noDrag ? undefined : seekDrag,
         stepS: stepS,
@@ -714,10 +723,11 @@
           continue;
         }
 
-        // Let the portrait band finish drawing before it is read. Overridable
-        // (run.js --sample-quiesce) for the timing sweep.
-        await io.quiesce(o.sampleQuiesceMs != null ? o.sampleQuiesceMs : SAMPLE_QUIESCE_MS);
-
+        // No wait here: the settle inside driver.seekTo already paused
+        // sampleQuiesceMs() for the portrait band to draw and left that frame
+        // in io.lastFrame(). (--sample-quiesce still tunes it, through that
+        // settle.) One wait per sample, not two.
+        //
         // The frame the seek left behind IS the sample - unless the client is
         // still loading, in which case it is black and would read as ten heroes
         // that are not there.
