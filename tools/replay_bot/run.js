@@ -38,8 +38,8 @@ const path = require('path');
 
 const C = require('./capture.js');
 const H = require('./host.js');
-const S = require('./screen.js');
 const I = require('./input.js');
+const CS = require('./clientstate.js');
 const R = require('./recorder.js');
 const Q = require('./queue.js');
 const E = require('./emit.js');
@@ -47,7 +47,6 @@ const A = require('./attribute.js');
 const Resolve = require('./resolve.js');
 const RO = require('./review_out.js');
 const calib = require('./calib.js');
-const Crop = require('./crop.js');
 const TIMING = require('./timing.js');
 const Tesseract = require('tesseract.js');
 
@@ -176,106 +175,9 @@ function writeJson(p, value) {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Whether a replay is on screen, judged by the two team plates being tinted.
-//
-// NOT THE PLAYHEAD, which is what this used and why a run once did nothing at
-// all: the media controls are HIDDEN when a replay opens, so there is no
-// scrubber to find. The bot waited ninety seconds for one inside a replay that
-// was already playing, gave up, and then ran the import chunk from inside that
-// replay - clicking at coordinates that mean something else there.
-//
-// The plates are drawn whether the controls are up or not.
-async function inReplay(io) {
-  try {
-    const img = await io.loadImage(await io.grabTo('probe'));
-    return calib.hudPresent(Crop.hudTint(img, calib));
-  } catch (e) {
-    return false;
-  }
-}
-
-// Whether the client is sitting in the ESC menu.
-//
-// Menus can be recognised as pictures; replays cannot. Two frames of the ESC
-// menu differ by 3.4, and it differs from a replay by 82 - but two frames of a
-// REPLAY differ from each other by 55, because the game behind the HUD is a
-// different scene entirely. So this trick works here and nowhere else.
-async function onScreen(io, name) {
-  try {
-    const known = readJson(path.join(__dirname, 'screens', name + '.json'), null);
-    if (!known) return false;
-    const img = await io.loadImage(await io.grabTo('probe'));
-    return S.looksLike(S.thumb(img), known.thumb).same;
-  } catch (e) {
-    return false;
-  }
-}
-
-const escMenuUp = (io) => onScreen(io, 'esc-menu');
-
-// Clear the ESC menu if it is up, before the import chunk plays. A leave-replay
-// whose closing click missed leaves it up, and the import chunk then clicks
-// SOCIAL and CAREER PROFILE instead of the replay list - a spent code and
-// nothing captured.
-//
-// ESC is pressed up to `tries` times, re-checking between each, because one
-// press is not reliably taken (TIMING.esc.tries). It only ever presses while the menu
-// still reads as up, so an extra press cannot land somewhere it matters. If the
-// menu outlasts every press the map is failed - but a frame is kept first,
-// tagged with the code: the 2026-09-10 "will not close" failure left nothing to
-// diagnose from, and this is the same move the K-bug instrumentation made.
-//
-// Returns the number of presses it took (0 if the menu was not up). `isUp`
-// defaults to the screen-fingerprint check and is a seam for tests.
-async function clearEscMenu(io, opts) {
-  const { sendKeys, wait, escWait, tries, tag } = opts;
-  const log = opts.log || (() => {});
-  const isUp = opts.isUp || escMenuUp;
-  let n = 0;
-  while (await isUp(io)) {
-    if (n >= tries) {
-      let kept = null;
-      try {
-        const frame = await io.grabTo('esc-stuck');
-        kept = await io.keepAs(`esc-stuck-${tag}`, frame);
-      } catch (e) { /* diagnosis is best-effort; the throw below is the point */ }
-      throw new Error(`the ESC menu will not close after ${tries} presses - the ` +
-        'client is not where the chunks expect it' +
-        (kept ? ` (frame kept: ${path.basename(kept)})` : ''));
-    }
-    log(n === 0
-      ? 'the ESC menu is up - clearing it before importing'
-      : `the ESC menu is still up - ESC again (${n + 1}/${tries})`);
-    await sendKeys(['ESC']);
-    await wait(escWait);
-    n++;
-  }
-  return n;
-}
-
-// Whether the client is sitting on the career-profile REPLAYS list.
-//
-// THE IMPORT CHUNK NAVIGATES FROM WHEREVER IT IS, so starting a run already on
-// this screen puts its first clicks somewhere else entirely. That is how 7V4END
-// was lost: the code never imported, the bot waited its ninety seconds for a
-// replay that was never opening, and every code after it worked because leaving
-// the first map normalises the state. Only the FIRST code of a run is exposed,
-// which is exactly the kind of fault that hides.
-//
-// The list's contents change as replays are imported and evicted, and that does
-// not matter: across ninety seconds of probes the fingerprint moved between 0.6
-// and 5.3 against a threshold of 18, while a replay sits at 100 and the ESC
-// menu at 121.
-const replayHistoryUp = (io) => onScreen(io, 'replay-history');
-
-async function waitFor(io, want, timeoutMs, label) {
-  const until = Date.now() + timeoutMs;
-  while (Date.now() < until) {
-    if (await inReplay(io) === want) return true;
-    await wait(TIMING.poll.ms);
-  }
-  throw new Error(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${label}`);
-}
+// Reading where the client is - inReplay / escMenuUp / replayHistoryUp - and
+// clearEscMenu / waitFor all live in clientstate.js now, so the console can ask
+// the same questions this loop asks between maps.
 
 // Module-scoped so the top-level .then() below can terminate it on any exit
 // path, success or failure - the same reason H.close() lives out there
@@ -415,7 +317,7 @@ async function main() {
       // whose click misses leaves it up, and the import chunk then clicks
       // SOCIAL and CAREER PROFILE instead of the replay list. It is a static
       // screen, so it can be recognised outright.
-      await clearEscMenu(io, {
+      await CS.clearEscMenu(io, {
         sendKeys: I.sendKeys, wait, escWait: ESC_WAIT,
         tries: TIMING.esc.tries, tag: code.code, log: (m) => console.log(m),
       });
@@ -424,7 +326,7 @@ async function main() {
       // Backed out of rather than clicked through, and refused loudly if it
       // will not go - a chunk played from the wrong screen spends the code and
       // reports nothing useful.
-      for (let back = 0; await replayHistoryUp(io); back++) {
+      for (let back = 0; await CS.replayHistoryUp(io); back++) {
         if (back >= 2) {
           throw new Error('the client is stuck on the replay list - the import ' +
             'chunk navigates from somewhere else, so playing it here would ' +
@@ -439,16 +341,16 @@ async function main() {
       // replay is still open puts those clicks somewhere else entirely, which
       // is how one failed map turned into a run that spent two more codes
       // achieving nothing.
-      if (await inReplay(io)) {
+      if (await CS.inReplay(io)) {
         console.log('still inside a replay - leaving before importing');
         await R.play('leave-replay', { speed: args.chunkSpeed });
-        await waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
+        await CS.waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
       }
 
       const tOpen = Date.now();
       await R.play('open-import', { code: code.code, speed: args.chunkSpeed });
       const tPlayed = Date.now();
-      await waitFor(io, true, TIMING.load.timeoutMs, 'the replay to load');
+      await CS.waitFor(io, true, TIMING.load.timeoutMs, 'the replay to load');
       const tLoaded = Date.now();
       console.log(`import ${((tPlayed - tOpen) / 1000).toFixed(1)}s, ` +
         `client loaded the replay in ${((tLoaded - tPlayed) / 1000).toFixed(1)}s`);
@@ -589,9 +491,9 @@ async function main() {
     // tab; if the client is already in the menus, playing the chunk would click
     // at coordinates that mean something else, so it is checked first.
     try {
-      if (await inReplay(io)) {
+      if (await CS.inReplay(io)) {
         await R.play('leave-replay', { speed: args.chunkSpeed });
-        await waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
+        await CS.waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
       }
     } catch (e) {
       console.log(`could not get back to the replay list: ${e.message}`);
@@ -602,7 +504,7 @@ async function main() {
   console.log(`\nrun finished. ${maps.length} map${maps.length === 1 ? '' : 's'} in ${outPath}`);
 }
 
-module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness, clearEscMenu };
+module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness };
 
 // Only when run as a command. Requiring this file - which the tests do - must
 // never start driving the client.
