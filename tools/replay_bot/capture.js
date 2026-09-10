@@ -36,6 +36,8 @@
   var Crop = require('./crop.js');
   var Match = require('./match.js');
   var T = require('./timeline.js');
+  var Drag = require('./drag.js');
+  var Recorder = require('./recorder.js');
 
   var STEP_S = 20;
 
@@ -188,6 +190,10 @@
       grabTo: grabTo,
       loadImage: canvas.loadImage,
       sendKeys: function (keys) { return I.sendKeys(keys); },
+      // One computed mouse gesture into the live window. Named on the io so the
+      // driver reaches seeking-by-drag the same way it reaches seeking-by-key,
+      // and fakeio.js can record the events instead of moving a real cursor.
+      playEvents: function (events) { return Recorder.playEvents(events, { name: 'seek' }); },
       settle: async function () {
         var r = await settle();
         lastSettled = r.frame;
@@ -454,11 +460,33 @@
       // measured as a brightness and then believed. Sampling gets the cheap
       // one, because a half-drawn HUD announces itself in the scores.
       var sampling = false;
+
+      // Seek by dragging the scrubber straight to the target second, instead of
+      // pressing the skip key n times with a 700ms gap between each. The key
+      // moves a fixed interval and the client silently ignores a press that
+      // lands mid-seek, so crossing five minutes was five presses and ~3.5s;
+      // one drag crosses any distance in ~3s. drag.js turns the target second
+      // into the pixel it sits at on THIS map's measured bar (`ref`), so the
+      // playhead check that guards a key seek guards this one too.
+      //
+      // Declines to the keys when there is nothing to drag from - the bar is
+      // not calibrated yet, or no readable playhead - and when the target is
+      // off the bar, which the sample loop's miss-detection then drops.
+      var seekDrag = Drag.seeker({
+        ref: function () { return ref; },
+        frame: function () { return (io.lastFrame && io.lastFrame()) || io.grabTo('drag-from'); },
+        loadImage: io.loadImage,
+        playhead: function (img) { return Crop.playheadX(img, calib); },
+        play: io.playEvents,
+        log: log,
+      });
+
       var drvCtx = {
         sendKeys: io.sendKeys,
         focus: async function () {},
         settle: function () { return sampling ? io.quiesce() : io.settle(); },
         position: positionNow,
+        seekDrag: o.noDrag ? undefined : seekDrag,
         stepS: stepS,
       };
       var drv = D.make(drvCtx);

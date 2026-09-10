@@ -6,6 +6,7 @@
 //   node tools/replay_bot/run.js --codes A1B2C3,... arbitrary codes, for testing
 //   node tools/replay_bot/run.js --divisions "EMEA Master,EMEA Expert"
 //   node tools/replay_bot/run.js --teams Wasp,Crabs --newest
+//   node tools/replay_bot/run.js --codes A1B2C3 --no-drag   seek by key, not drag
 //
 // The league produces about 127 coded games a day across every region and tier,
 // which is roughly nine hours of capture a week - hours the client cannot be
@@ -105,6 +106,10 @@ function parseArgs(argv) {
     sampleQuiesce: flag('--sample-quiesce') != null ? Number(flag('--sample-quiesce')) : null,
     loadSettle: flag('--load-settle') != null ? Number(flag('--load-settle')) : null,
     escWait: flag('--esc-wait') != null ? Number(flag('--esc-wait')) : null,
+    // Seeks drag the scrubber by default; --no-drag forces the old counted key
+    // presses, for an A/B against the drag or as an escape hatch if a client
+    // update breaks it.
+    noDrag: argv.includes('--no-drag'),
   };
 }
 
@@ -293,10 +298,10 @@ async function main() {
   const ESC_WAIT = args.escWait != null ? args.escWait : 1200;
   const LOAD_SETTLE = args.loadSettle != null ? args.loadSettle : 500;
   if (args.sampleQuiesce != null || args.loadSettle != null || args.escWait != null ||
-      args.chunkSpeed !== 1) {
+      args.chunkSpeed !== 1 || args.noDrag) {
     console.log(`timing: chunk-speed ${args.chunkSpeed}, sample-quiesce ` +
       `${args.sampleQuiesce != null ? args.sampleQuiesce : 'default'}, load-settle ` +
-      `${LOAD_SETTLE}, esc-wait ${ESC_WAIT}`);
+      `${LOAD_SETTLE}, esc-wait ${ESC_WAIT}, seek ${args.noDrag ? 'keys' : 'drag'}`);
   }
 
   // Attribution wants the feed's lineups/hero_roles even on an ad-hoc run, so
@@ -474,6 +479,7 @@ async function main() {
       const got = await capture.captureMap({
         stepS: sessionStepS, afterViewer: setInterval,
         sampleQuiesceMs: args.sampleQuiesce,
+        noDrag: args.noDrag,
       });
       if (!sessionStepS && got.stepS) {
         sessionStepS = got.stepS;

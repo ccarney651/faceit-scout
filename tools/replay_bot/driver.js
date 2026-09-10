@@ -150,10 +150,16 @@
     return rew.length <= forwardFromStart.length ? rew : forwardFromStart;
   }
 
-  // `ctx` supplies the three things that touch the outside world:
-  //   send(key)  - deliver one keypress to the game
-  //   focus()    - bring the window forward, since keys need it
-  //   settle()   - wait until the UI has stopped moving after a seek
+  // `ctx` supplies the things that touch the outside world:
+  //   sendKeys(keys)  - deliver keypresses to the game
+  //   focus()         - bring the window forward, since keys need it
+  //   settle()        - wait until the UI has stopped moving after a seek
+  //   position()      - read the playhead, in seconds (optional; enables the
+  //                     post-seek correction)
+  //   seekDrag(toT)   - drag the scrubber to toT in one gesture, resolving
+  //                     true if it did and false if it could not (no bar
+  //                     scale yet, no readable playhead). Optional: without
+  //                     it every seek is counted key presses, as before.
   function make(ctx) {
     // Read from ctx on every use rather than captured once: the step's length
     // is measured after the driver exists, because measuring it needs the
@@ -186,9 +192,18 @@
     // MEASUREMENT WINS: if correction runs out of attempts, `pos` becomes where
     // the replay actually is, never where it was supposed to be. A caller that
     // knows the sample is misplaced can drop it; one that was lied to cannot.
+    // One move to `toT`: the drag when the context offers it and it takes, the
+    // counted key presses otherwise. `forceKeys` skips the drag outright - used
+    // for the last correction attempt, since a drag that has already missed
+    // twice will miss the same way a third time.
+    async function moveTo(fromT, toT, forceKeys) {
+      if (!forceKeys && ctx.seekDrag && await ctx.seekDrag(toT)) return;
+      await press(seekPlan(fromT, toT, stepOf()));
+    }
+
     async function seekTo(t) {
       var stepS = stepOf();
-      await press(seekPlan(pos, t, stepS));
+      await moveTo(pos, t, false);
       pos = t;
       await ctx.settle();
       if (!ctx.position) return pos;
@@ -197,7 +212,7 @@
       var at = await ctx.position();
       while (at !== null && Math.abs(at - t) >= stepS / 2 && left > 0) {
         left--;
-        await press(seekPlan(at, t, stepS));
+        await moveTo(at, t, left === 0);
         await ctx.settle();
         at = await ctx.position();
       }

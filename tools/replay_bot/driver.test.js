@@ -220,6 +220,81 @@ test('without a position reader the driver behaves as it always did', async () =
   assert.deepStrictEqual(sent, ['B', 'X', 'X']);
 });
 
+// --- seeking by drag ------------------------------------------------------
+//
+// The skip key moves a fixed interval and is silently dropped mid-seek, so a
+// five-minute seek was five checked presses. A drag crosses any distance in
+// one gesture. `ctx.seekDrag(toT)` does it and resolves true; false means it
+// could not (no bar scale yet, no readable playhead) and the keys take over.
+
+test('a seek drags to the target instead of pressing the key', async () => {
+  const sent = [];
+  const dragged = [];
+  const drv = D.make({
+    sendKeys: async (ks) => ks.forEach((k) => sent.push(k)),
+    focus: async () => {},
+    settle: async () => {},
+    seekDrag: async (toT) => { dragged.push(toT); return true; },
+    position: async () => 100,
+    stepS: 20,
+  });
+  assert.strictEqual(await drv.seekTo(100), 100);
+  assert.deepStrictEqual(dragged, [100], 'one drag, straight to the target');
+  assert.deepStrictEqual(sent, [], 'not a single key press');
+});
+
+test('a drag that declines falls back to counted key presses', async () => {
+  const sent = [];
+  const drv = D.make({
+    sendKeys: async (ks) => ks.forEach((k) => sent.push(k)),
+    focus: async () => {},
+    settle: async () => {},
+    seekDrag: async () => false,      // e.g. bar not calibrated yet
+    position: async () => 100,
+    stepS: 20,
+  });
+  await drv.seekTo(100);
+  assert.strictEqual(sent[0], 'B', 'restarts from a known origin, as before');
+  assert.strictEqual(sent.filter((k) => k === 'X').length, 5);
+});
+
+test('a drag that lands short is re-dragged, not pressed', async () => {
+  const dragged = [];
+  const sent = [];
+  const positions = [60, 100];        // landed at 60, then good after re-drag
+  const drv = D.make({
+    sendKeys: async (ks) => ks.forEach((k) => sent.push(k)),
+    focus: async () => {},
+    settle: async () => {},
+    seekDrag: async (toT) => { dragged.push(toT); return true; },
+    position: async () => positions.shift(),
+    stepS: 20,
+  });
+  assert.strictEqual(await drv.seekTo(100), 100);
+  assert.deepStrictEqual(dragged, [100, 100], 'first drag, then one correction drag');
+  assert.deepStrictEqual(sent, [], 'still no keys');
+});
+
+// A drag that keeps missing will miss the same way again; the last correction
+// attempt is handed to the keys, and the count is taken from where the replay
+// actually ended up.
+test('the final correction after repeated drag misses uses the keys', async () => {
+  const dragged = [];
+  const sent = [];
+  const drv = D.make({
+    sendKeys: async (ks) => ks.forEach((k) => sent.push(k)),
+    focus: async () => {},
+    settle: async () => {},
+    seekDrag: async (toT) => { dragged.push(toT); return true; },
+    position: async () => 20,         // never gets close
+    maxCorrections: 3,
+    stepS: 20,
+  });
+  await drv.seekTo(200);
+  assert.strictEqual(dragged.length, 3, 'initial drag + two correction drags');
+  assert.ok(sent.includes('B') || sent.includes('X'), 'the third correction pressed keys');
+});
+
 // --- N then K, and the verdict is the change ------------------------------
 //
 // The media controls have to be up before the events viewer will open, so N is

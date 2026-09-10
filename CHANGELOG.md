@@ -17,6 +17,19 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-10
+
+### Changed
+
+- **The replay bot seeks by dragging the scrubber, not by pressing the skip
+  key.** `driver.seekTo` now drives the playhead straight to the target second
+  in one drag (`drag.js` / `drag.seeker`), crossing any distance in a flat ~3s
+  where counted presses cost ~0.7s each with a mandatory gap. `probe_drag.js`
+  measured the landing at ≤0.3s once the drag path was densified so no cursor
+  hop outruns the client's scrubber tracking. Keypress seeking remains as the
+  fallback — before the bar is calibrated, when the playhead is unreadable, or
+  on a target off the bar — and `run.js --no-drag` forces it for a whole run.
+
 ## 2026-09-09
 
 ### Added

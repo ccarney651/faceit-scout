@@ -79,11 +79,16 @@
       return { settled: true, frame: await grabTo(tag) };
     }
 
+    var events = [];
+
     var io = {
       grabs: grabs,
       keys: keys,
       kept: kept,
       logs: logs,
+      // Every computed mouse gesture the run played - a drag seek is one of
+      // these - so a test can say "the sample loop dragged rather than pressed".
+      events: events,
       get slept() { return slept; },
 
       log: function (line) { logs.push(line); },
@@ -92,6 +97,7 @@
         return typeof p === 'string' ? canvas.loadImage(p) : Promise.resolve(p);
       },
       sendKeys: async function (ks) { Array.prototype.push.apply(keys, ks); },
+      playEvents: async function (evs) { Array.prototype.push.apply(events, evs); },
       settle: function () { return settleAs('settle'); },
       quiesce: function () { return settleAs('q'); },
       lastFrame: function () { return last; },

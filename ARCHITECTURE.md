@@ -1971,6 +1971,17 @@ until you look. Several looked entirely healthy while being wrong.
   failure yet seen, and `driver.seekTo` verifies the result regardless — when
   correction runs out of attempts, **the measurement wins**, and a misplaced
   sample is dropped rather than labelled with a time it was never at.
+- **Seeks are dragged, not pressed, by default.** `drag.js` turns a target
+  second into the pixel it sits at on this map's measured bar and `drag.seeker`
+  drives the scrubber there in one gesture — any distance for a flat ~3s,
+  against ~0.7s per fixed-interval press. `probe_drag.js` measured the landing
+  at ≤0.3s across forward and backward seeks once the drag path was split so no
+  cursor hop exceeds `MAX_HOP_PX` (a single 690px jump lost the client's
+  tracking and landed 100s short). The keypress path in `driver.seekPlan`
+  stays as the fallback: `seeker` declines to it before the bar is calibrated,
+  when the playhead is unreadable, or when the target is off the bar, and the
+  last correction attempt after repeated drag misses forces it. `run.js
+  --no-drag` forces keys for the whole run.
 
 **The client's own settings**
 

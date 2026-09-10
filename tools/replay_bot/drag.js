@@ -33,8 +33,16 @@
 
   // Points along the drag. play_input.ps1's own comment records that a drag
   // with no intermediate points used to arrive as a click at the start, so the
-  // path is not decoration.
-  var STEPS = 8;
+  // path is not decoration - and MIN_STEPS keeps even a tiny drag a gesture.
+  var MIN_STEPS = 8;
+
+  // The client tracks the scrubber by cursor position while the button is
+  // down. probe_drag measured a 690px backward drag walked in 8 hops of 86px
+  // each land 100s short: the playhead stopped following partway and the
+  // release snapped it to wherever it had got to. Splitting the path so no hop
+  // exceeds MAX_HOP_PX - the cursor never jumps further than the client can
+  // follow between two SetCursorPos calls - fixed it.
+  var MAX_HOP_PX = 24;
 
   // How long the button stays down. Long enough for the client to register a
   // grab on the scrubber rather than a click on the bar.
@@ -64,9 +72,10 @@
     var y = Math.round((bar.y0 + bar.y1) / 2);
     var from = Math.round(fromX);
 
+    var steps = Math.max(MIN_STEPS, Math.ceil(Math.abs(toX - from) / MAX_HOP_PX));
     var path = [];
-    for (var i = 0; i <= STEPS; i++) {
-      path.push({ x: Math.round(from + (toX - from) * (i / STEPS)), y: y });
+    for (var i = 0; i <= steps; i++) {
+      path.push({ x: Math.round(from + (toX - from) * (i / steps)), y: y });
     }
 
     return {
@@ -82,10 +91,47 @@
     };
   }
 
+  // A seek-by-drag bound to one map and one client, in the shape the driver
+  // wants: `(toT) -> boolean`, true if it dragged and false if the counted key
+  // presses should take over instead. `deps` is everything that touches the
+  // outside world or the run's state:
+  //
+  //   ref()          {zeroX, stepPx, stepS} for THIS map's bar, or null before
+  //                  calibration has measured it - drag has no scale yet
+  //   frame()        the current frame (path or image) to read the playhead off
+  //   loadImage(x)   decode it
+  //   playhead(img)  {centre} in pixels, or null when the knob is not drawn
+  //   play(events)   perform the gesture
+  //   log(line)      note a skipped drag
+  //
+  // It declines - returns false - rather than guessing whenever it cannot do
+  // the seek honestly: no bar scale, no readable playhead, or a target off the
+  // bar (a sample planned past the end of the map, which the caller's
+  // miss-detection then drops).
+  function seeker(deps) {
+    return async function (toT) {
+      var ref = deps.ref();
+      if (!ref) return false;
+      var knob = deps.playhead(await deps.loadImage(await deps.frame()));
+      if (!knob) return false;
+      var ev;
+      try {
+        ev = plan(ref, knob.centre, toT);
+      } catch (e) {
+        deps.log('    (drag skipped: ' + e.message + ')');
+        return false;
+      }
+      await deps.play([ev]);
+      return true;
+    };
+  }
+
   var Mod = {
-    STEPS: STEPS,
+    MIN_STEPS: MIN_STEPS,
+    MAX_HOP_PX: MAX_HOP_PX,
     HOLD_MS: HOLD_MS,
     plan: plan,
+    seeker: seeker,
     secondsPerPixel: secondsPerPixel,
   };
 

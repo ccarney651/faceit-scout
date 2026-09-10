@@ -38,6 +38,28 @@ test('the drag carries intermediate points', () => {
   assert.ok(p.path.every((q) => q.y === p.y), 'every point stays on the bar');
 });
 
+// The client tracks the scrubber by cursor position, and a hop too large
+// between two points is not followed: probe_drag measured a 690px backward
+// drag in 8 hops (86px each) land 100s short, the playhead having stopped
+// following partway. Every hop stays under MAX_HOP_PX.
+test('a long drag is split into hops the client can follow', () => {
+  // playhead near 405s (x~1084), dragged back to 122s (x~393): ~690px.
+  const p = D.plan(REF, 1084, 122);
+  assert.ok(p.path.length > D.MIN_STEPS + 1, 'a long drag needs more than the floor');
+  for (let i = 1; i < p.path.length; i++) {
+    const hop = Math.abs(p.path[i].x - p.path[i - 1].x);
+    assert.ok(hop <= D.MAX_HOP_PX, `hop ${hop}px exceeds MAX_HOP_PX ${D.MAX_HOP_PX}`);
+  }
+});
+
+// A short drag does not collapse to a teleport just because the distance is
+// under one hop - the floor keeps it a recognisable gesture.
+test('a short drag keeps the minimum number of points', () => {
+  const p = D.plan(REF, 100, 5);    // x~100 is ~2s; a few seconds is a few px
+  assert.ok(Math.abs(p.toX - 100) < D.MAX_HOP_PX, 'this case must be under one hop');
+  assert.strictEqual(p.path.length, D.MIN_STEPS + 1);
+});
+
 test('the plan is one drag event the player already understands', () => {
   const p = D.plan(REF, 100, 500);
   assert.strictEqual(p.type, 'drag');
@@ -52,6 +74,51 @@ test('a target off the end of the bar is refused, not clamped', () => {
   const beyond = (t.x1 - REF.zeroX) / REF.stepPx * REF.stepS + 120;
   assert.throws(() => D.plan(REF, 100, beyond), /off the bar/);
   assert.throws(() => D.plan(REF, 100, -30), /off the bar/);
+});
+
+// --- seeker: the driver-facing (toT) -> boolean ---------------------------
+
+const seekerDeps = (over) => Object.assign({
+  ref: () => REF,
+  frame: async () => 'frame',
+  loadImage: async (x) => x,
+  playhead: () => ({ centre: 1084 }),   // ~405s on REF
+  play: async () => {},
+  log: () => {},
+}, over);
+
+test('the seeker drags from the playhead to the target once the bar is known', async () => {
+  const played = [];
+  const seek = D.seeker(seekerDeps({ play: async (evs) => { played.push(...evs); } }));
+  assert.strictEqual(await seek(122), true);
+  assert.strictEqual(played.length, 1);
+  assert.strictEqual(played[0].type, 'drag');
+  assert.strictEqual(played[0].x, 1084, 'starts at the playhead it read');
+});
+
+test('the seeker defers to the keys before the bar is calibrated', async () => {
+  let played = false;
+  const seek = D.seeker(seekerDeps({ ref: () => null, play: async () => { played = true; } }));
+  assert.strictEqual(await seek(60), false);
+  assert.strictEqual(played, false, 'nothing is dragged without a bar scale');
+});
+
+test('the seeker defers to the keys when the playhead is not readable', async () => {
+  const seek = D.seeker(seekerDeps({
+    playhead: () => null,
+    play: async () => { throw new Error('must not drag'); },
+  }));
+  assert.strictEqual(await seek(60), false);
+});
+
+test('the seeker defers to the keys when the target is off the bar', async () => {
+  const logs = [];
+  const seek = D.seeker(seekerDeps({
+    play: async () => { throw new Error('must not drag'); },
+    log: (l) => logs.push(l),
+  }));
+  assert.strictEqual(await seek(99999), false);
+  assert.ok(logs.some((l) => /drag skipped/.test(l)), 'and it says why');
 });
 
 // How precisely a drag can place the playhead, which is what decides whether

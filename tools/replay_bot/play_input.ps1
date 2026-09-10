@@ -167,7 +167,10 @@ foreach ($e in $events) {
           Start-Sleep -Milliseconds 25
         }
         [void][PlayWin]::SetCursorPos([int]$e.toX, [int]$e.toY)
-        Start-Sleep -Milliseconds 60
+        # Dwell at the final position before releasing: the client's scrubber
+        # lags a fast drag, and a 60ms settle let it release while the playhead
+        # was still catching up (probe_drag: a long drag landed 100s short).
+        Start-Sleep -Milliseconds 150
         [PlayWin]::mouse_event([uint32]$flags.up, 0, 0, 0, [UIntPtr]::Zero)
       }
       $played++
