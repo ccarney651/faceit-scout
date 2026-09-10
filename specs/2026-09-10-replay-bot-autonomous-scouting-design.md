@@ -126,6 +126,25 @@ review sessions retune them.
 - It is pure. `capture.js`/`run.js` call it; it imports `vote.js` and the
   feed's `hero_roles`, nothing that touches the machine.
 
+## 2.5 Side detection (added 2026-09-10 after the first review session)
+
+The replay viewer does not always put the feed's `code.t1` on the left of the
+screen, and `heroes_a` is whatever is on the left. When it is reversed, every
+comp on the map is filed under the opponent, and nothing downstream catches it.
+
+`attribute.js` OCRs both name strips on its once-per-map frame and runs
+`docs/capture/engine/names.js`'s `confidentOrientation` — the browser tool's
+own side-detect, unmodified — against both rosters. It returns:
+
+- `'direct'` — the feed order holds, `side_a` = `code.t1`;
+- `'swapped'` — `code.t2` is on the left; `run.js` relabels so `side_a_team*`
+  is the team actually on the left (screen side stays `a` = left);
+- `null` — the read was not decisive; feed order is kept and the review page
+  flags the map so the operator confirms which team is on the left.
+
+The per-side assignment inside `attribute.js` already uses the detected team,
+so a swapped map's players are attributed correctly regardless of the label.
+
 ## 3. The session artifact
 
 `run.js` currently writes one file: `out/replay-bot-<date>.json`, the
