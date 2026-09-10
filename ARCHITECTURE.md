@@ -1713,7 +1713,10 @@ an operator's: the same matcher, not a lookalike.
 | `timeline.js` | Round structure off the scrubber; bar arithmetic; the sampling plan | yes |
 | `segment.js` | Observations to rounds, opening comp and hero pool | yes |
 | `vote.js` | One slot resolved by agreement across frames | yes |
-| `emit.js` | Per-side observations in the contribution schema | yes |
+| `resolve.js` | Per-sample reads to a per-round per-slot result + confidence flags | yes |
+| `emit.js` | Per-side observations in the contribution schema (per-sample, and per-round after review) | yes |
+| `review_out.js` | The session review artifact + per-round portrait crops | no |
+| `review/server.js` | The local review page: render, correct, finalize, upload | no |
 | `calib.js` | Frozen HUD geometry and the smoke check | yes |
 | `crop.js` | Frame regions to matcher buffers; playhead; the events panel | no |
 | `match.js` | The shipped hero matcher, headless | no |
@@ -1730,6 +1733,20 @@ an operator's: the same matcher, not a lookalike.
 
 `driver.js` and `recorder.js` are the two that automate the client. Everything
 else reads pixels, which is ordinary use.
+
+A run writes the contribution (`out/<session>.json`) **and** a review artifact
+(`out/<session>.review.json`, with portrait crops under `out/<session>/`).
+`resolve.js` groups the map's samples into rounds, votes each slot across the
+round's frames with `vote.js`, and turns thin evidence — a slot the frames
+disagreed on, a winner whose best frame still scored badly, an attribution the
+role constraint could not settle — into a flag. Nothing is dropped; a flagged
+slot keeps its best guess. `review/server.js` serves a localhost page over the
+newest artifact where the operator checks every map against its portrait strip,
+corrects heroes and players (corrections are appended as data and replayed at
+finalize, so the machine's original read stays visible), and then Finalize
+rebuilds the contribution one-observation-per-round via `emit.fromRounds` and
+Upload POSTs it to the worker as `replay-bot`. See
+`specs/2026-09-10-replay-bot-autonomous-scouting-design.md`.
 
 Alongside them sit tools whose only job is to look at things rather than do
 them: `contact_sheet.js` renders the ten crops of a frame, `probe_grab.ps1` and

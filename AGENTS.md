@@ -307,10 +307,14 @@ canonical and this copy is the bug.
 
 - **The replay bot lives in `tools/replay_bot/` and its facts were all measured,
   not reasoned.** See `ARCHITECTURE.md` §14 for the full account,
-  `specs/2026-09-08-replay-bot-design.md` for the capture design, and
+  `specs/2026-09-08-replay-bot-design.md` for the capture design,
   `specs/2026-09-10-replay-bot-player-attribution-design.md` for player
-  attribution (`attribute.js`/`nameplate.js`). Run its tests with
-  `node --test "tools/replay_bot/*.test.js"`. It needs
+  attribution (`attribute.js`/`nameplate.js`), and
+  `specs/2026-09-10-replay-bot-autonomous-scouting-design.md` for the
+  confidence + review + upload layer (`resolve.js`, `review_out.js`,
+  `review/server.js`). Run its tests from inside the directory with
+  `node --test` (a repo-root `node --test tools/replay_bot/` does not
+  discover them). It needs
   `npm install --no-save @napi-rs/canvas tesseract.js`, both in one command -
   a `--no-save` install **prunes** any other `--no-save` package, so installing
   just one of them silently removes the other. Reinstall `playwright-core`
@@ -326,6 +330,19 @@ canonical and this copy is the bug.
   `frames/` is empty. `node tools/replay_bot/corpus_sweep.js` runs every
   detector over every retained frame, which is how the panel detector was
   caught.
+
+- **A run writes two files.** `out/<session>.json` is the contribution;
+  `out/<session>.review.json` (plus portrait crops under `out/<session>/`) is
+  what the operator checks first. `resolve.js` votes each slot across a round's
+  frames and flags the thin evidence (`low-support`, `contested`, `no-read`,
+  `attribution-abstained`, ...); nothing is dropped, a flagged slot keeps its
+  best guess. `node tools/replay_bot/review/server.js` serves a localhost page
+  over the newest review artifact - every map, round by round, flags surfaced -
+  where heroes and player attribution are corrected, then **Finalize** rebuilds
+  the contribution one-observation-per-round (`emit.fromRounds`) and **Upload**
+  POSTs it to the worker as `replay-bot`. It refuses to upload while any map is
+  unreviewed. `out/` and `state/` are gitignored; a merged contribution belongs
+  in `data/captures/`.
 
 - **Test codes come from `scrape_codes.js`, and picking them by hand goes wrong.**
   `node tools/replay_bot/scrape_codes.js` pulls fresh ones off owreplays.tv
