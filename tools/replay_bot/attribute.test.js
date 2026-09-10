@@ -74,6 +74,20 @@ test('slotRolesFor looks up each slot\'s recognised hero in hero_roles', () => {
   assert.deepStrictEqual(A.slotRolesFor(heroRoles, reads), ['Tank', 'Damage', null, null, null]);
 });
 
+// A custom: guid (D.Mon, or any hero FACEIT has not added yet) is absent from
+// the feed's guid->role map. heroes.js's name-keyed ROLE_MAP is the fallback,
+// so a role-locked tank still gets attributed.
+test('slotRolesFor falls back to the name-keyed role map for a custom hero', () => {
+  const reads = [
+    { guid: 'custom:d_mon', name: 'D.Mon' },
+    { guid: '0xKnown', name: 'Ana' },
+    { guid: 'custom:nobody', name: 'Nobody' },
+  ];
+  assert.deepStrictEqual(
+    A.slotRolesFor({ '0xKnown': 'Support' }, reads),
+    ['Tank', 'Support', null]);
+});
+
 test('attributeMap resolves all ten slots against a real frame with an injected OCR', { skip }, async () => {
   const img = await canvas.loadImage(C.at(witness.file));
   const calls = [];
