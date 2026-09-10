@@ -79,10 +79,12 @@ the versioned, patchable form — edit that, then rebuild.
 
 A separate throwaway code — nothing to do with scrims — that automates building
 the owdb hero-ref library. It spawns 10 dummy bots and marches all of them
-through the whole roster (`n` steps of 5, ~6 s each), drawing a `REFS <n>` step
-counter top-centre. `owdb refs learn --auto` OCRs that counter and, on each new
-step, crops all ten HUD portraits and stores them as the refs for the heroes it
-knows are in that step.
+through the whole roster (`n` steps of 5). Each step is shown twice — bots
+alive, then killed and held dead (respawn disabled, so no countdown over the
+face) — ~6 s each. The `REFS <n>` counter it draws top-centre encodes both:
+`n = 2*step` for the alive pass, `+1` for the dead one. `owdb refs learn --auto`
+OCRs that counter and, on each new marker, crops all ten HUD portraits and
+stores them as the refs for the heroes in that step, in that visual state.
 
 ```bash
 python ../../tools/scrim_code/gen_refs_trainer.py   # roster -> refs_trainer.opy
@@ -91,8 +93,10 @@ npm run build:refs-trainer                          # -> refs_trainer.txt
 
 `gen_refs_trainer.py` bakes the roster (sorted, chunked) into the `.opy`; the
 same `owdb.refs_trainer.plan_sequence` runs tool-side, so both agree on which
-hero is in which slot. Heroes with no OverPy `Hero.<X>` constant (owdb custom
-heroes; a brand-new hero not yet in `owdb/refs_trainer.py` `_HERO_ENUM`) are
+hero is in which slot, and `encode_marker`/`decode_marker` there are the one
+place the counter's alive/dead encoding is defined. Heroes with no OverPy
+`Hero.<X>` constant (owdb custom heroes; a brand-new hero not yet in
+`owdb/refs_trainer.py` `_HERO_ENUM`, or one that needs a newer `overpy`) are
 skipped and reported — learn those with plain `owdb refs learn`.
 
 Then, in Overwatch: paste `refs_trainer.txt` into an empty lobby, pick a
@@ -108,7 +112,11 @@ the checklist below.
    `owdb refs learn --auto --index-roi x,y,w,h`.
 3. `--auto` labels line up with what's on screen. If the right-hand team's refs
    come out shuffled, re-run with `--flip-b`.
-4. `owdb refs verify` after the run — only `D.Mon` (custom) should be missing.
+4. The dead pass actually kills the bots and they stay down (no respawn) for the
+   full hold, and the spectator portrait shows the eliminated look with nothing
+   stamped over the face.
+5. `owdb refs verify` after the run — every roster hero should have an `alive`
+   ref; `dead` is optional but should be present for most.
 
 ## Server load
 

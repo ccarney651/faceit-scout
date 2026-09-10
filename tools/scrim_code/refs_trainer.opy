@@ -4,10 +4,12 @@
 # fresh custom game (Settings > orange Paste button), move to spectators, start
 # the match. It sets Ilios Control (non-competitive) so the idle bots never cap
 # and the round runs forever. It spawns 10 dummy bots and cycles all of them
-# through the roster, 11 steps of 5, holding each step ~6s. The
-# "REFS <n>" counter it draws top-centre is what `owdb refs learn --auto` reads.
+# through the roster, 11 steps of 5. Each step is shown twice --
+# bots alive, then killed -- ~6s per state, so the library gets both the
+# living and the eliminated portrait. The "REFS <n>" counter it draws top-centre
+# is what `owdb refs learn --auto` reads (n = 2*step, +1 for the dead pass).
 #
-# Roster baked in below (52 heroes). Regenerate if the roster changes.
+# Roster baked in below (53 heroes). Regenerate if the roster changes.
 
 settings {
     "main": {
@@ -44,16 +46,16 @@ rule "refs trainer: force the round live":
 rule "refs trainer: march the roster":
     @Event global
     SEQ = [[Hero.ANA, Hero.ANRAN, Hero.ASHE, Hero.BAPTISTE, Hero.BASTION],
-           [Hero.BRIGITTE, Hero.CASSIDY, Hero.DOMINA, Hero.DOOMFIST, Hero.DVA],
-           [Hero.ECHO, Hero.EMRE, Hero.FREJA, Hero.GENJI, Hero.HANZO],
-           [Hero.HAZARD, Hero.ILLARI, Hero.JETPACK_CAT, Hero.JUNKER_QUEEN, Hero.JUNKRAT],
-           [Hero.JUNO, Hero.KIRIKO, Hero.LIFEWEAVER, Hero.LUCIO, Hero.MAUGA],
-           [Hero.MEI, Hero.MERCY, Hero.MIZUKI, Hero.MOIRA, Hero.ORISA],
-           [Hero.PHARAH, Hero.RAMATTRA, Hero.REAPER, Hero.REINHARDT, Hero.ROADHOG],
-           [Hero.SHION, Hero.SIERRA, Hero.SIGMA, Hero.SOJOURN, Hero.SOLDIER],
-           [Hero.SOMBRA, Hero.SYMMETRA, Hero.TORBJORN, Hero.TRACER, Hero.VENDETTA],
-           [Hero.VENTURE, Hero.WIDOWMAKER, Hero.WINSTON, Hero.WRECKING_BALL, Hero.WUYANG],
-           [Hero.ZARYA, Hero.ZENYATTA, Hero.ZENYATTA, Hero.ZENYATTA, Hero.ZENYATTA]]
+           [Hero.BRIGITTE, Hero.CASSIDY, Hero.DMON, Hero.DOMINA, Hero.DOOMFIST],
+           [Hero.DVA, Hero.ECHO, Hero.EMRE, Hero.FREJA, Hero.GENJI],
+           [Hero.HANZO, Hero.HAZARD, Hero.ILLARI, Hero.JETPACK_CAT, Hero.JUNKER_QUEEN],
+           [Hero.JUNKRAT, Hero.JUNO, Hero.KIRIKO, Hero.LIFEWEAVER, Hero.LUCIO],
+           [Hero.MAUGA, Hero.MEI, Hero.MERCY, Hero.MIZUKI, Hero.MOIRA],
+           [Hero.ORISA, Hero.PHARAH, Hero.RAMATTRA, Hero.REAPER, Hero.REINHARDT],
+           [Hero.ROADHOG, Hero.SHION, Hero.SIERRA, Hero.SIGMA, Hero.SOJOURN],
+           [Hero.SOLDIER, Hero.SOMBRA, Hero.SYMMETRA, Hero.TORBJORN, Hero.TRACER],
+           [Hero.VENDETTA, Hero.VENTURE, Hero.WIDOWMAKER, Hero.WINSTON, Hero.WRECKING_BALL],
+           [Hero.WUYANG, Hero.ZARYA, Hero.ZENYATTA, Hero.ZENYATTA, Hero.ZENYATTA]]
     step = 0
     shown = 999
     waitUntil(isGameInProgress(), 120)
@@ -65,7 +67,15 @@ rule "refs trainer: march the roster":
             createDummy(SEQ[step][slot], Team.1, slot, null, null)
             createDummy(SEQ[step][slot], Team.2, slot, null, null)
         wait(2.0)
-        shown = step
+        shown = step * 2
+        wait(6.0)
+        # Dead pass: kill every bot and stop it respawning, so the spectator
+        # portrait holds its eliminated state (no respawn countdown) through the
+        # whole capture window. Fresh bots next step are spawned from scratch.
+        getAllPlayers().disableRespawn()
+        kill(getAllPlayers(), null)
+        wait(1.0)
+        shown = step * 2 + 1
         wait(6.0)
         step += 1
     destroyAllDummies()

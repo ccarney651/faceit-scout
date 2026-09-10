@@ -51,7 +51,7 @@ rule ("refs trainer: march the roster") {
         Ongoing - Global;
     }
     actions {
-        Set Global Variable(SEQ, Array(Array(Hero(Ana), Hero(Anran), Hero(Ashe), Hero(Baptiste), Hero(Bastion)), Array(Hero(Brigitte), Hero(Cassidy), Hero(Domina), Hero(Doomfist), Hero(D.Va)), Array(Hero(Echo), Hero(Emre), Hero(Freja), Hero(Genji), Hero(Hanzo)), Array(Hero(Hazard), Hero(Illari), Hero(Jetpack Cat), Hero(Junker Queen), Hero(Junkrat)), Array(Hero(Juno), Hero(Kiriko), Hero(Lifeweaver), Hero(Lúcio), Hero(Mauga)), Array(Hero(Mei), Hero(Mercy), Hero(Mizuki), Hero(Moira), Hero(Orisa)), Array(Hero(Pharah), Hero(Ramattra), Hero(Reaper), Hero(Reinhardt), Hero(Roadhog)), Array(Hero(Shion), Hero(Sierra), Hero(Sigma), Hero(Sojourn), Hero(Soldier: 76)), Array(Hero(Sombra), Hero(Symmetra), Hero(Torbjörn), Hero(Tracer), Hero(Vendetta)), Array(Hero(Venture), Hero(Widowmaker), Hero(Winston), Hero(Wrecking Ball), Hero(Wuyang)), Array(Hero(Zarya), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta))));
+        Set Global Variable(SEQ, Array(Array(Hero(Ana), Hero(Anran), Hero(Ashe), Hero(Baptiste), Hero(Bastion)), Array(Hero(Brigitte), Hero(Cassidy), Hero(D.Mon), Hero(Domina), Hero(Doomfist)), Array(Hero(D.Va), Hero(Echo), Hero(Emre), Hero(Freja), Hero(Genji)), Array(Hero(Hanzo), Hero(Hazard), Hero(Illari), Hero(Jetpack Cat), Hero(Junker Queen)), Array(Hero(Junkrat), Hero(Juno), Hero(Kiriko), Hero(Lifeweaver), Hero(Lúcio)), Array(Hero(Mauga), Hero(Mei), Hero(Mercy), Hero(Mizuki), Hero(Moira)), Array(Hero(Orisa), Hero(Pharah), Hero(Ramattra), Hero(Reaper), Hero(Reinhardt)), Array(Hero(Roadhog), Hero(Shion), Hero(Sierra), Hero(Sigma), Hero(Sojourn)), Array(Hero(Soldier: 76), Hero(Sombra), Hero(Symmetra), Hero(Torbjörn), Hero(Tracer)), Array(Hero(Vendetta), Hero(Venture), Hero(Widowmaker), Hero(Winston), Hero(Wrecking Ball)), Array(Hero(Wuyang), Hero(Zarya), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta))));
         Set Global Variable(step, 0);
         Set Global Variable(shown, 999);
         Wait Until(Is Game In Progress, 120);
@@ -64,7 +64,13 @@ rule ("refs trainer: march the roster") {
                 Create Dummy Bot(Value In Array(Value In Array(Global.SEQ, Global.step), Global.slot), Team 2, Global.slot, Null, Null);
             End;
             Wait(2.0, Ignore Condition);
-            Set Global Variable(shown, Global.step);
+            Set Global Variable(shown, Multiply(Global.step, 2));
+            Wait(6.0, Ignore Condition);
+            "Dead pass: kill every bot and stop it respawning, so the spectator\nportrait holds its eliminated state (no respawn countdown) through the\nwhole capture window. Fresh bots next step are spawned from scratch."
+            Disable Built-In Game Mode Respawning(All Players(All Teams));
+            Kill(All Players(All Teams), Null);
+            Wait(1.0, Ignore Condition);
+            Set Global Variable(shown, Add(Multiply(Global.step, 2), 1));
             Wait(6.0, Ignore Condition);
             Modify Global Variable(step, Add, 1);
         End;

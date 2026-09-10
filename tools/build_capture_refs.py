@@ -7,6 +7,13 @@ commit the output. The browser app fetches it same-origin.
 Each ref = a grayscale face crop resized to REF_W x REF_H, base64-encoded, with
 its hero name and team variant ('a'=left/blue, 'b'=right/red). Mirrors the
 desktop matcher's inputs so recognition behaves the same in the browser.
+
+Both the ALIVE and the DEAD portrait are emitted, under the same variant. The
+engine matcher (docs/capture/engine/refs.js `bestMatch`) scores a crop against
+every ref sharing its variant and keeps the best, so a dimmed/eliminated replay
+portrait matches its dead exemplar instead of drifting onto another hero. The
+entry shape is unchanged ({n,g,v,d}) — a hero just contributes up to two per
+side.
 """
 from __future__ import annotations
 
@@ -14,14 +21,16 @@ import base64
 import json
 import os
 import sqlite3
-
-import cv2
+from collections.abc import Callable, Iterable
 
 OWDB_DB = "owdb.sqlite3"
 FACEIT_DB = "faceit.sqlite3"
 PROFILE_ID = 4
 REF_W, REF_H = 64, 36
 OUT = os.path.join("docs", "capture", "refs.json")
+
+# (hero_guid, variant, state, image_path)
+RefRow = tuple[str, str, str, str]
 
 
 def hero_names() -> dict[str, str]:
@@ -38,28 +47,63 @@ def hero_names() -> dict[str, str]:
     return names
 
 
-def main() -> None:
-    names = hero_names()
-    refs: list[dict[str, str]] = []
-    with sqlite3.connect(OWDB_DB) as c:
-        rows = c.execute(
-            "SELECT hero_guid, variant, image_path FROM hero_refs "
-            "WHERE profile_id=? AND state='alive'",
-            (PROFILE_ID,),
-        ).fetchall()
-    for guid, variant, path in rows:
-        if not path or not os.path.exists(path):
+def select_ref_rows(conn: sqlite3.Connection, profile_id: int) -> list[RefRow]:
+    """Every ref for a profile — both alive and dead states, and both the
+    canonical `capture` refs and any additive `review` exemplars. The engine
+    matcher keeps the best score across all of a hero's refs, so more is fine."""
+    return list(
+        conn.execute(
+            "SELECT hero_guid, variant, state, image_path FROM hero_refs "
+            "WHERE profile_id=?",
+            (profile_id,),
+        )
+    )
+
+
+def ref_entries(
+    rows: Iterable[RefRow],
+    names: dict[str, str],
+    load_small: Callable[[str], bytes | None],
+) -> list[dict[str, str]]:
+    """Turn DB ref rows into refs.json entries. `load_small` returns the
+    REF_W*REF_H grayscale bytes for an image path, or None if it can't be read —
+    those rows are dropped."""
+    entries: list[dict[str, str]] = []
+    for guid, variant, _state, path in rows:
+        if not path:
             continue
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
+        small = load_small(path)
+        if small is None:
             continue
-        small = cv2.resize(img, (REF_W, REF_H), interpolation=cv2.INTER_AREA)
-        refs.append({
+        entries.append({
             "n": names.get(guid, guid[:6]),
             "g": guid,                          # hero GUID — the contribution format uses guids
             "v": variant,
-            "d": base64.b64encode(small.tobytes()).decode("ascii"),
+            "d": base64.b64encode(bytes(small)).decode("ascii"),
         })
+    return entries
+
+
+def _cv2_loader() -> Callable[[str], bytes | None]:
+    import cv2
+
+    def load(path: str) -> bytes | None:
+        if not os.path.exists(path):
+            return None
+        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return None
+        small = cv2.resize(img, (REF_W, REF_H), interpolation=cv2.INTER_AREA)
+        return small.tobytes()
+
+    return load
+
+
+def main() -> None:
+    names = hero_names()
+    with sqlite3.connect(OWDB_DB) as c:
+        rows = select_ref_rows(c, PROFILE_ID)
+    refs = ref_entries(rows, names, _cv2_loader())
     if not refs:
         raise SystemExit("no profile refs found — is owdb.sqlite3 trained?")
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

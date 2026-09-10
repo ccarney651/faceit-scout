@@ -61,7 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     src = render_opy(rows, hold=args.hold, settle=args.settle)
     Path(args.out).write_text(src, encoding="utf-8")
 
-    est = len(rows) * (args.hold + args.settle + 0.5) + 5
+    # Each step is held twice (bots alive, then killed) plus the destroy/settle/
+    # kill-settle gaps (~0.5 + ~1.0).
+    est = len(rows) * (2 * args.hold + args.settle + 1.5) + 5
     print(f"wrote {args.out}")
     print(f"  {len(mappable)} heroes, {len(rows)} steps, ~{est:.0f}s to run")
     if unmapped:

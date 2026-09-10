@@ -12,6 +12,6 @@
   "private": true,
   "type": "commonjs",
   "dependencies": {
-    "overpy": "^9.7.9"
+    "overpy": "^9.7.16"
   }
 }

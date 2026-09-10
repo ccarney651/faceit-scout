@@ -180,7 +180,6 @@ def cmd_refs_learn(args: argparse.Namespace) -> int:
                     _faceit_db_path(args),
                     hud_variant=args.hud_variant,
                     refs_dir=refs_dir,
-                    state=args.state,
                     index_roi=index_roi,
                     flip_b=args.flip_b,
                     only=args.only,
@@ -1093,14 +1092,16 @@ def build_parser() -> argparse.ArgumentParser:
                               "(the reliable way to seed/upgrade the library)")
     rl.add_argument("--hud-variant", default="default", help="HUD variant to capture for")
     rl.add_argument("--state", default="alive", choices=REF_STATES,
-                    help="visual state shown while learning (default: alive)")
+                    help="visual state shown while learning (default: alive); "
+                         "ignored with --auto, which captures alive AND dead from "
+                         "the workshop's kill cycle")
     rl.add_argument("--calibrate-slot", action="store_true",
                     help="first drag ONE box around a single portrait, then learn from "
                          "only that box (best for a solo custom-game replay)")
     rl.add_argument("--auto", action="store_true",
-                    help="unattended: read the refs_trainer.opy workshop code's step "
-                         "counter and label every HUD slot from its baked-in sequence "
-                         "(no per-hero confirmation)")
+                    help="unattended: read the refs_trainer.opy workshop code's "
+                         "counter and label every HUD slot from its baked-in "
+                         "sequence, alive then dead (no per-hero confirmation)")
     rl.add_argument("--flip-b", action="store_true",
                     help="--auto: the right HUD strip runs right-to-left vs bot slots "
                          "(set this if side-b refs come out shuffled)")

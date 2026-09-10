@@ -21,6 +21,7 @@ from .db import Database
 from .errors import CaptureError
 from .faceit import connect_ro, load_heroes
 from .models import REF_STATES, STATE_ALIVE, FaceitHero, HeroRef, Rect, RoiProfile
+from .refs_trainer import DONE_SENTINEL, decode_marker
 
 log = logging.getLogger("owdb.refs")
 
@@ -760,6 +761,35 @@ def parse_step_index(text: str) -> int | None:
     return None
 
 
+def classify_marker(
+    marker: int | None, done: set[int], nrows: int,
+) -> tuple[str, tuple[int, str] | None, list[int]]:
+    """Decide what ``run_refs_autolearn`` should do with an OCR'd counter value.
+
+    The workshop marches markers 0, 1, 2, … monotonically (``2*step`` alive,
+    ``+1`` dead) and then the ``DONE_SENTINEL``. ``done`` is the set of markers
+    already captured. Returns ``(kind, decoded, lost)`` where:
+
+    * ``("done", None, [])``        — the roster march finished.
+    * ``("expected", (step, state), [])`` — the next marker in sequence; capture it.
+    * ``("ahead", (step, state), lost)``  — the workshop jumped forward; capture it
+      but treat ``lost`` (the skipped markers) as missed.
+    * ``("wait", None, [])``        — behind, already handled, unreadable, or off
+      the end; poll again.
+    """
+    if marker == DONE_SENTINEL:
+        return ("done", None, [])
+    total = 2 * nrows
+    if marker is None or not 0 <= marker < total:
+        return ("wait", None, [])
+    expected = (max(done) + 1) if done else 0
+    if marker == expected:
+        return ("expected", decode_marker(marker), [])
+    if expected < marker < total:
+        return ("ahead", decode_marker(marker), list(range(expected, marker)))
+    return ("wait", None, [])
+
+
 def _ocr_step_index(  # pragma: no cover - needs cv2 + winsdk
     cv2: Any, frame: Any, roi: Rect,
 ) -> tuple[int | None, str]:
@@ -777,7 +807,6 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     *,
     hud_variant: str,
     refs_dir: str | Path,
-    state: str = STATE_ALIVE,
     index_roi: Rect | None = None,
     flip_b: bool = False,
     only: str | None = None,
@@ -787,18 +816,20 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     """Learn the whole library unattended, driven by ``refs_trainer.opy``.
 
     The workshop code cycles 10 dummy bots through the roster and draws a
-    ``REFS <n>`` step counter. This loop grabs frames, OCRs that counter, and
-    whenever it sees a new stable step it crops all ten HUD portraits and stores
-    each as the ref for ``sequence[n][slot]`` — the same plan the workshop was
-    generated from. No per-hero confirmation. Ctrl-C to stop early; it ends on
-    its own when the workshop signals done. Returns a ``refs verify`` exit code.
+    ``REFS <n>`` counter. Each roster row is shown twice — bots alive, then
+    killed — and the counter encodes which (``n = 2*step``, ``+1`` for the dead
+    pass). This loop grabs frames, OCRs that counter, and whenever it sees a new
+    stable marker it crops all ten HUD portraits and stores each as the ref for
+    ``rows[step][slot]`` in that visual state. No per-hero confirmation. Ctrl-C
+    to stop early; it ends on its own when the workshop signals done. Returns a
+    ``refs verify`` exit code.
     """
     import time
 
     from . import capture
     from .match import face_subrect
     from .models import SIDE_LEFT, SIDE_RIGHT
-    from .refs_trainer import DONE_SENTINEL, plan_sequence
+    from .refs_trainer import plan_sequence
 
     cv2 = _import_cv2()
     ctx = prepare_learn(db, faceit_db_path, hud_variant=hud_variant)
@@ -820,9 +851,10 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
         int(_INDEX_ROI_FRAC[3] * profile.resolution_h),
     )
 
+    total = 2 * len(rows)
     print(f"AUTO-LEARN profile #{pid} "
           f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}') — "
-          f"{len(rows)} steps of {profile.team_size}.")
+          f"{len(rows)} steps of {profile.team_size}, alive + dead.")
     print("  Paste refs_trainer.txt, pick a Control/Push map with unlimited time, "
           "START THE MATCH, and spectate. Ctrl-C to stop.\n")
 
@@ -832,7 +864,7 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     written = 0
     misses = 0
     try:
-        while len(done) + len(skipped) < len(rows):
+        while len(done) + len(skipped) < total:
             frame, fw, fh = capture.grab_frame()
             if (fw, fh) != (profile.resolution_w, profile.resolution_h):
                 print(f"  resolution {fw}x{fh} != profile "
@@ -841,41 +873,43 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
                 continue
 
             idx, raw = _ocr_step_index(cv2, frame, roi)
-            if idx == DONE_SENTINEL:
+            kind, decoded, lost = classify_marker(idx, done, len(rows))
+
+            if kind == "done":
                 if done or skipped:
                     print("  workshop signalled DONE.")
                     break
                 time.sleep(poll_interval)  # still warming up — bots not spawned yet
                 continue
 
-            # The workshop marches steps 0,1,2,... monotonically, so the only
-            # index worth acting on is the next one. A read that is behind, or
-            # already handled, or out of range, is a misread — wait it out. A
-            # read that jumps AHEAD means the workshop moved on before we got a
-            # clean number: accept it only after extra confirmations (guards
-            # against a one-frame digit flip mislabelling a whole batch), and
-            # write off the steps we skipped rather than capturing stale bots.
-            expected = (max(done) + 1) if done else 0
-            ahead = idx is not None and expected < idx < len(rows)
-            if idx is None or idx != expected and not ahead:
+            # A read that is behind, already handled, unreadable, or off the end
+            # is a misread — wait it out.
+            if kind == "wait":
                 misses += 1
                 if misses % 20 == 3:
-                    print(f"  (waiting for step {expected} — last OCR read: {raw!r})")
+                    nxt = (max(done) + 1) if done else 0
+                    print(f"  (waiting for marker {nxt} — last OCR read: {raw!r})")
                 pending = None
                 time.sleep(poll_interval)
                 continue
 
+            # kind is "expected" or "ahead". A forward jump means the workshop
+            # moved on before we got a clean number: accept it only after extra
+            # confirmations (guards against a one-frame digit flip mislabelling a
+            # whole batch), and write off the markers we skipped rather than
+            # capturing stale bots.
+            assert idx is not None and decoded is not None  # guaranteed by classify_marker
             pending = (idx, pending[1] + 1) if pending and pending[0] == idx else (idx, 1)
-            need = 4 if ahead else 2  # trust a forward jump only when it persists
+            need = 4 if kind == "ahead" else 2
             if pending[1] < need:
                 time.sleep(poll_interval)
                 continue
 
-            if ahead:
-                lost = sorted(range(expected, idx))
+            if kind == "ahead":
                 skipped.update(lost)
-                print(f"  ! missed step(s) {lost} — workshop already on {idx}")
+                print(f"  ! missed marker(s) {lost} — workshop already on {idx}")
 
+            step, ref_state = decoded
             step_written = 0
             for side in (SIDE_LEFT, SIDE_RIGHT):
                 for slot in range(profile.team_size):
@@ -884,28 +918,35 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
                     # --flip-b reverses the lookup for side b.
                     src = (profile.team_size - 1 - slot
                            if flip_b and side == SIDE_RIGHT else slot)
-                    hero = by_name.get(rows[idx][src])
+                    hero = by_name.get(rows[step][src])
                     if hero is None:
                         continue
                     cell = profile.slots[side][slot]
                     crop = _crop(frame, face_subrect(cell))
                     if not dry_run:
                         save_learn_ref(db, refs_dir, pid=pid, hero=hero, crop=crop,
-                                       state=state, variant=variant_for_cell(cell, profile))
+                                       state=ref_state, variant=variant_for_cell(cell, profile))
                     step_written += 1
             written += step_written
             done.add(idx)
             pending = None
             misses = 0
-            print(f"  step {idx}: {', '.join(dict.fromkeys(rows[idx]))} "
-                  f"→ {step_written} refs  ({len(done)}/{len(rows)} steps)")
+            print(f"  marker {idx} (step {step} {ref_state}): "
+                  f"{', '.join(dict.fromkeys(rows[step]))} → {step_written} refs  "
+                  f"({len(done)}/{total} markers)")
     except KeyboardInterrupt:
         print("\n  stopped by operator.")
 
-    print(f"\ndone. {written} HUD ref(s) across {len(done)}/{len(rows)} steps.")
+    print(f"\ndone. {written} HUD ref(s) across {len(done)}/{total} markers.")
     if skipped:
-        missed = sorted({n for s in skipped for n in dict.fromkeys(rows[s])})
-        print(f"MISSED steps {sorted(skipped)} — re-run for: {', '.join(missed)}\n")
+        missed: set[str] = set()
+        for m in skipped:
+            d = decode_marker(m)
+            if d is None:
+                continue
+            step_i, ref_state = d
+            missed.update(f"{n} [{ref_state}]" for n in dict.fromkeys(rows[step_i]))
+        print(f"MISSED markers {sorted(skipped)} — re-run for: {', '.join(sorted(missed))}\n")
     else:
         print()
     return run_refs_verify(db, faceit_db_path, hud_variant=hud_variant)
