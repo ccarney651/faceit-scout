@@ -23,7 +23,6 @@
   var Nameplate = require('./nameplate.js');
   var Assign = require('../../docs/capture/engine/assign.js');
   var Names = require('../../docs/capture/engine/names.js');
-  var Heroes = require('../../docs/capture/engine/heroes.js');
 
   var SIDES = ['a', 'b'];
   var BLANK_READS = ['', '', '', '', ''];
@@ -48,22 +47,13 @@
     });
   }
 
-  // The role of the hero already recognised in each of a side's five slots.
-  //
-  // The feed's guid->role map is the first source, but it only carries FACEIT's
-  // own roster - a `custom:` guid (D.Mon and anything an operator taught before
-  // FACEIT added it) is absent, which cost a role-locked tank its attribution
-  // on 2026-09-10 (D.Mon read fine, but with no role assign() could not place
-  // "Ozzy" on it). heroes.js's ROLE_MAP is keyed by NAME and does carry the
-  // customs, so it is the fallback. A hero neither knows yields null - the same
-  // "cannot place by role" outcome a genuine role mismatch produces, never a
-  // guess.
+  // The role of the hero already recognised in each of a side's five slots,
+  // from the feed's guid->role map. A hero the feed has never heard of
+  // (freshly added, or an operator's custom hero) yields null for that slot -
+  // the same "cannot place by role" outcome a genuine role mismatch produces,
+  // never a guess.
   function slotRolesFor(heroRoles, reads) {
-    return reads.map(function (r) {
-      if (!r) return null;
-      if (r.guid && heroRoles[r.guid]) return heroRoles[r.guid];
-      return Heroes.inferRole(r.name) || null;
-    });
+    return reads.map(function (r) { return (r && r.guid && heroRoles[r.guid]) || null; });
   }
 
   // Every name string a roster can be matched against - both the Battle.net
