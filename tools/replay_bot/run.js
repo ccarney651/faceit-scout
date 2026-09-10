@@ -43,6 +43,8 @@ const R = require('./recorder.js');
 const Q = require('./queue.js');
 const E = require('./emit.js');
 const A = require('./attribute.js');
+const Resolve = require('./resolve.js');
+const RO = require('./review_out.js');
 const calib = require('./calib.js');
 const Crop = require('./crop.js');
 const Tesseract = require('tesseract.js');
@@ -103,6 +105,18 @@ function synthesise(codes) {
     t2: null,
     finished_at: new Date().toISOString(),
   }));
+}
+
+// How many planned sample times fell in each round, keyed by round_no. resolve.js
+// compares this against how many actually landed to flag a mostly-missed round.
+function countPlanned(plan, rounds) {
+  var out = {};
+  (rounds || []).forEach(function (r, i) {
+    out[i + 1] = (plan || []).filter(function (t) {
+      return t >= r.from_t && t <= r.to_t;
+    }).length;
+  });
+  return out;
 }
 
 function attemptedKeys(state) {
@@ -297,6 +311,14 @@ async function main() {
     path.join(OUT_DIR, `replay-bot-${new Date().toISOString().slice(0, 10)}.json`);
   const maps = readJson(outPath, { maps: [] }).maps || [];
 
+  // The review artifact sits beside the contribution: same basename, .review.json,
+  // with its crops under out/<session>/. The contribution is what uploads; this
+  // is what the operator opens first (specs/2026-09-10-replay-bot-autonomous-scouting-design.md).
+  const session = path.basename(outPath).replace(/\.json$/, '');
+  const reviewPath = path.join(path.dirname(outPath), `${session}.review.json`);
+  const sessionDir = path.join(path.dirname(outPath), session);
+  const reviewMaps = readJson(reviewPath, { maps: [] }).maps || [];
+
   let consecutiveFailures = 0;
 
   for (const code of queue) {
@@ -410,7 +432,8 @@ async function main() {
         }
       }
 
-      const record = E.mapRecord(code, C.observationsOf(got.samples), C.roundsOf(got.segments), {
+      const rounds = C.roundsOf(got.segments);
+      const record = E.mapRecord(code, C.observationsOf(got.samples), rounds, {
         profile: { w: calib.FROZEN.frame.w, h: calib.FROZEN.frame.h, hud_variant: 'replay-bot' },
         attribution: attribution,
       });
@@ -419,6 +442,27 @@ async function main() {
       // Written after every map, not at the end of the night. A run that dies
       // at map 90 must not lose 89 maps that can never be captured again.
       writeJson(outPath, E.file(maps, { contributor: CONTRIBUTOR }));
+
+      // The review artifact, alongside. resolve.js votes each slot across the
+      // round's frames and flags what to look at; review_out.js writes the
+      // per-round portrait crops the review page shows. This does not touch the
+      // contribution above - that stays per-sample until the review page's
+      // finalize step rebuilds it from confirmed rounds.
+      try {
+        const resolved = Resolve.rounds(got.samples, rounds, {
+          heroRoles: feed.hero_roles || {},
+          attribution: attribution,
+          planned: countPlanned(got.plan, rounds),
+        });
+        const reviewEntry = await RO.mapEntry(io, sessionDir, code, resolved, attribution, got, calib);
+        reviewMaps.push(reviewEntry);
+        RO.writeSession(reviewPath, reviewMaps, { session, feedBuilt: feed.built_at });
+        const flagged = resolved.reduce((n, r) => n + r.flags.length +
+          r.a.concat(r.b).reduce((m, s) => m + s.flags.length, 0), 0);
+        console.log(`review: ${resolved.length} round(s), ${flagged} flag(s) -> ${reviewPath}`);
+      } catch (e) {
+        console.log(`review artifact not written for this map: ${e.message}`);
+      }
 
       console.log(`map took ${((Date.now() - tOpen) / 1000).toFixed(1)}s end to end`);
       state[key].status = got.missed.length ? 'captured-with-misses' : 'captured';
