@@ -140,12 +140,12 @@ function tmpSession() {
 }
 
 // Drive the handler through a real one-request server so req/res are genuine.
-function once(ctx, method, urlPath, body) {
+function once(ctx, method, urlPath, body, headers) {
   return new Promise((resolve) => {
     const srv = http.createServer((req, res) => SV.handle(req, res, ctx));
     srv.listen(0, '127.0.0.1', () => {
       const port = srv.address().port;
-      const req = http.request({ host: '127.0.0.1', port, path: urlPath, method }, (res) => {
+      const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, headers: headers || {} }, (res) => {
         let buf = []; res.on('data', (d) => buf.push(d));
         res.on('end', () => { srv.close(); resolve({ status: res.statusCode, buf: Buffer.concat(buf), headers: res.headers }); });
       });
@@ -154,6 +154,22 @@ function once(ctx, method, urlPath, body) {
     });
   });
 }
+
+test('a request with a foreign Host header is refused (DNS rebinding)', async () => {
+  const { dir, ctx } = tmpSession();
+  const r = await once(ctx, 'GET', '/review.json', null, { Host: 'evil.example.com' });
+  assert.strictEqual(r.status, 403);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a mutating request from a cross-origin page is refused (CSRF)', async () => {
+  const { dir, ctx } = tmpSession();
+  const r = await once(ctx, 'POST', '/upload', '{}', { Origin: 'https://evil.example.com' });
+  assert.strictEqual(r.status, 403);
+  const ok = await once(ctx, 'GET', '/review.json', null, { Origin: 'http://localhost:9999' });
+  assert.strictEqual(ok.status, 200, 'a same-origin Origin is fine');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
 
 test('GET /review.json returns the artifact', async () => {
   const { dir, ctx } = tmpSession();

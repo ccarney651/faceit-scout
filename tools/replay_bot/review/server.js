@@ -153,6 +153,28 @@ function send(res, code, type, body) {
 }
 const sendJson = (res, code, obj) => send(res, code, 'application/json', JSON.stringify(obj));
 
+// This server binds to loopback, but "on localhost" is not the same as "only
+// reachable from a program the operator ran". A page open in the operator's
+// browser can POST to http://localhost:<port>/upload, and a domain that
+// resolves to 127.0.0.1 (DNS rebinding) can read /review.json - neither is
+// something a review tool should allow. So:
+//   - the Host header must name loopback (kills DNS rebinding: the attacker's
+//     domain is what the browser sends), and
+//   - a mutating request may not carry a cross-origin Origin (kills the CSRF
+//     form-POST that has no preflight to stop it).
+function crossOrigin(req) {
+  const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') return true;
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      const h = new URL(origin).hostname.toLowerCase();
+      if (h !== 'localhost' && h !== '127.0.0.1' && h !== '::1') return true;
+    } catch (e) { return true; }
+  }
+  return false;
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let s = '';
@@ -169,6 +191,8 @@ async function handle(req, res, ctx) {
   const p = u.pathname;
 
   try {
+    if (crossOrigin(req)) return send(res, 403, 'text/plain', 'cross-origin request refused');
+
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       return send(res, 200, 'text/html', fs.readFileSync(ctx.pagePath));
     }
