@@ -42,8 +42,10 @@ const I = require('./input.js');
 const R = require('./recorder.js');
 const Q = require('./queue.js');
 const E = require('./emit.js');
+const A = require('./attribute.js');
 const calib = require('./calib.js');
 const Crop = require('./crop.js');
+const Tesseract = require('tesseract.js');
 
 const FRAMES = path.join(__dirname, 'frames');
 const STATE = path.join(__dirname, 'state', 'attempts.json');
@@ -200,18 +202,31 @@ async function waitFor(io, want, timeoutMs, label) {
   throw new Error(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${label}`);
 }
 
+// Module-scoped so the top-level .then() below can terminate it on any exit
+// path, success or failure - the same reason H.close() lives out there
+// rather than inside main(). An unterminated worker holds Node open exactly
+// as an unclosed PowerShell pipe does.
+let ocrWorker = null;
+
 // ----------------------------------------------------------------- main ----
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const state = readJson(STATE, {});
 
+  // Attribution wants the feed's lineups/hero_roles even on an ad-hoc run, so
+  // it is read once here rather than staying scoped to the queue-building
+  // branch below. An ad-hoc code has no lineup entry regardless (synthesise()
+  // invents match_id 'adhoc'), so attribute.js just abstains every slot for
+  // those - {} is a safe default, not a fallback that hides a real feed.
+  let feed = {};
+
   let queue;
   if (args.codes) {
     queue = synthesise(args.codes);
     console.log(`ad-hoc queue: ${queue.length} code${queue.length === 1 ? '' : 's'}`);
   } else {
-    const feed = readJson(FEED, null);
+    feed = readJson(FEED, null);
     if (!feed) throw new Error('no feed at ' + FEED);
 
     const fresh = feedFreshness(feed, Date.now());
@@ -245,6 +260,19 @@ async function main() {
 
   const io = C.makeIo({ framesDir: FRAMES, log: (m) => console.log(m) });
   const capture = C.make(io);
+
+  // One worker for the whole run, not one per map - tesseract's own startup
+  // is the expensive part, and attribution only runs once per map anyway
+  // (specs/2026-09-10-replay-bot-player-attribution-design.md §2).
+  ocrWorker = await Tesseract.createWorker('eng');
+  await ocrWorker.setParameters({
+    tessedit_char_whitelist:
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+  });
+  const attributor = A.make(async (cv) => {
+    const { data } = await ocrWorker.recognize(cv.toBuffer('image/png'));
+    return data.text.trim();
+  });
 
   // The time-skip interval is a per-SESSION thing, and both halves of handling
   // it matter.
@@ -352,8 +380,30 @@ async function main() {
         console.log(`session step is ${sessionStepS}s - later maps will use it without re-timing`);
       }
       first = false;
+
+      // Resolved once per map, off the frame the first sample already read -
+      // never per sample (specs/2026-09-10-replay-bot-player-attribution-design.md
+      // §2). Attribution is additive: a captured map with hero comps but no
+      // names is still real scouting value, and this is a one-shot code, so a
+      // failure here degrades to no attribution rather than failing the map
+      // (§6 of that design) - unlike everything else in this loop, which
+      // refuses loudly.
+      let attribution = null;
+      if (got.samples.length) {
+        try {
+          const firstSample = got.samples[0];
+          const frame = await io.loadImage(firstSample.framePath);
+          attribution = await attributor.attributeMap(
+            frame, { a: firstSample.a, b: firstSample.b }, feed, code);
+        } catch (e) {
+          console.log(`attribution failed, map keeps its hero reads without ` +
+            `player names: ${e.message}`);
+        }
+      }
+
       const record = E.mapRecord(code, C.observationsOf(got.samples), C.roundsOf(got.segments), {
         profile: { w: calib.FROZEN.frame.w, h: calib.FROZEN.frame.h, hud_variant: 'replay-bot' },
+        attribution: attribution,
       });
       maps.push(record);
 
@@ -419,6 +469,6 @@ if (require.main === module) {
   main()
     .catch(function (e) { console.error('FAILED: ' + e.message); process.exitCode = 1; })
     // The PowerShell host holds a pipe, and a held pipe keeps Node alive after
-    // the work is done.
-    .then(function () { H.close(); });
+    // the work is done. The OCR worker is the same shape of problem.
+    .then(function () { H.close(); return ocrWorker ? ocrWorker.terminate() : null; });
 }

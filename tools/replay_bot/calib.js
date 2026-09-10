@@ -174,6 +174,23 @@
     return out;
   }
 
+  // The five FULL slot columns for one side, left to right - unlike cells(),
+  // not narrowed past the ult-charge number and not shortened to the
+  // portrait. The name plate sits centred under the whole slot, including the
+  // space cells() drops for the portrait match, so nameplate.js's per-slot
+  // span-finding needs this box instead: cropping to cells()'s narrower x
+  // clips the first letter of a name that starts under where the ult-charge
+  // number was.
+  function slots(side) {
+    var b = FROZEN.boxes[side];
+    var cw = b.w / 5;
+    var out = [];
+    for (var i = 0; i < 5; i++) {
+      out.push({ x: b.x + i * cw, y: b.y, w: cw, h: b.h });
+    }
+    return out;
+  }
+
   // Cheap per-run guard. Not a calibration - the rig does not change between
   // runs, but Blizzard's HUD can, and the bot runs right after every patch
   // because that is when codes are freshest. Refusing loudly beats writing
@@ -194,6 +211,7 @@
     HUD_TINT: HUD_TINT,
     hudPresent: hudPresent,
     cells: cells,
+    slots: slots,
     check: check,
     eventsViewerOpen: eventsViewerOpen,
   };

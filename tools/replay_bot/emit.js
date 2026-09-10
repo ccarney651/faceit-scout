@@ -35,19 +35,31 @@
   }
 
   // Samples to per-side observation records, in sample order, side 'a' first.
-  function observations(samples, rounds) {
+  //
+  // `attribution`, when given, is attribute.js's once-per-map result -
+  // {a: {ids, conf}, b: {ids, conf}} - and applies to every observation of
+  // this map alike, because a map's slot->player mapping is resolved once,
+  // not per sample (specs/2026-09-10-replay-bot-player-attribution-design.md
+  // §2). Absent (null, or a side with no `ids`) yields pairs: [] exactly as
+  // before - a supported absence, never a guess - and `ids[i]` can itself be
+  // null for a slot attribution abstained on, which is written through
+  // rather than dropped: a missing player_id is a schema-tolerated absence,
+  // the same as a missing pair entirely.
+  function observations(samples, rounds, attribution) {
     var out = [];
     samples.forEach(function (s) {
       var round_no = roundNoFor(s, rounds);
       SIDES.forEach(function (side) {
+        var heroes = (side === 'a' ? s.heroes_a : s.heroes_b).slice();
+        var ids = attribution && attribution[side] && attribution[side].ids;
         out.push({
           side: side,
           ts: s.t * 1000,
           sub_map: null,
           round_no: round_no,
           phase: null,
-          heroes: (side === 'a' ? s.heroes_a : s.heroes_b).slice(),
-          pairs: [],
+          heroes: heroes,
+          pairs: ids ? heroes.map(function (guid, i) { return [guid, ids[i] || null]; }) : [],
         });
       });
     });
@@ -78,7 +90,7 @@
       bans: [],
       captured_at: (opts && opts.capturedAt) || new Date().toISOString(),
       profile: opts.profile,
-      observations: observations(samples, rounds),
+      observations: observations(samples, rounds, opts && opts.attribution),
     };
   }
 

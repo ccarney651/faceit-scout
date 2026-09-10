@@ -170,6 +170,25 @@
     { file: 'cap-rate-57.png', open: false },
   ];
 
+  // Frames with legible player names, for nameplate.js/attribute.js testing.
+  // `saw` is the ground truth transcribed by hand off the ten name plates -
+  // real tesseract reads against it as a live sanity check, but the node:test
+  // suite exercises the crop against an injected OCR (§7 of the design), so
+  // this corpus entry does not need to be graded automatically to be useful.
+  var NAMEPLATES = [
+    {
+      file: 'cap-t0-741.png',
+      saw: 'A FACEIT league replay (E9RCSH, Neon Junction) at t=0, assemble ' +
+        'phase, both team plates fully drawn. Side a: NOKI, VILPERTTIS, ' +
+        'JØPEZ, LAMBINEN, KARHU. Side b: RAWAN, MØØN, CAT, ÇIOÜDO, ZAYANO. ' +
+        'Real tesseract reads all ten with the diacritics folded away ' +
+        '(JØPEZ -> "JOPEZ", ÇIOÜDO -> "CIOUDO") except one - ÇIOÜDO scored a ' +
+        'genuinely low 28 confidence, still legible by eye.',
+      a: ['NOKI', 'VILPERTTIS', 'JØPEZ', 'LAMBINEN', 'KARHU'],
+      b: ['RAWAN', 'MØØN', 'CAT', 'ÇIOÜDO', 'ZAYANO'],
+    },
+  ];
+
   // Every frame with a panel verdict on it, witnesses included.
   function panels() {
     return PANELS
@@ -189,6 +208,7 @@
 
   function missing() {
     return panels().map(function (p) { return p.file; })
+      .concat(NAMEPLATES.map(function (p) { return p.file; }))
       .filter(function (f, i, a) { return a.indexOf(f) === i; })
       .filter(function (f) { return !fs.existsSync(at(f)); });
   }
@@ -212,6 +232,7 @@
     WITNESSES: WITNESSES,
     PANELS: PANELS,
     LIVE: LIVE,
+    NAMEPLATES: NAMEPLATES,
     panels: panels,
     file: file,
     at: at,

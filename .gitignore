@@ -83,8 +83,12 @@ tools/scrim_code/scrim_owdb.txt
 # ad hoc to run the eval harness. It must never be committed (a `git add -A`
 # swept it in once).
 /node_modules/
-# Tesseract drops its language data in the repo root on first run.
+# Tesseract drops its language data next to the process's cwd on first run -
+# the repo root for tools/real_frame_eval/, tools/replay_bot/ for the player
+# attribution feature (specs/2026-09-10-replay-bot-player-attribution-design.md),
+# depending on where it was invoked from.
 /eng.traineddata
+/tools/replay_bot/eng.traineddata
 
 # Agent worktrees are their own git repositories; committing one embeds a repo.
 .claude/worktrees/

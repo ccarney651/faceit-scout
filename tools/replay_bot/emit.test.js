@@ -91,6 +91,31 @@ test('every observation is an absence, never a guess, for what the bot cannot re
   });
 });
 
+test('attribution zips ids onto heroes in slot order, for both sides', () => {
+  const s = [obs({ t: 0 })];
+  const attribution = {
+    a: { ids: ['p1', 'p2', null, 'p4', 'p5'], conf: ['matched', 'matched', null, 'forced', 'matched'] },
+    b: { ids: ['q1', 'q2', 'q3', 'q4', 'q5'], conf: ['matched', 'matched', 'matched', 'matched', 'matched'] },
+  };
+  const m = EM.mapRecord(codeEntry(), s, oneRound(s), { profile: PROFILE, attribution });
+  const [oa, ob] = m.observations;
+  assert.deepStrictEqual(oa.pairs, A.map((g, i) => [g, attribution.a.ids[i]]));
+  assert.deepStrictEqual(ob.pairs, B.map((g, i) => [g, attribution.b.ids[i]]));
+  // An abstained slot is a null player_id written through, not a dropped pair -
+  // a missing pair and an abstained one must stay tellable apart.
+  assert.strictEqual(oa.pairs.length, 5);
+  assert.strictEqual(oa.pairs[2][1], null);
+});
+
+test('a side missing from the attribution result still yields pairs: []', () => {
+  const s = [obs({ t: 0 })];
+  const attribution = { a: { ids: ['p1', 'p2', 'p3', 'p4', 'p5'], conf: [] } };
+  const m = EM.mapRecord(codeEntry(), s, oneRound(s), { profile: PROFILE, attribution });
+  const [oa, ob] = m.observations;
+  assert.strictEqual(oa.pairs.length, 5);
+  assert.deepStrictEqual(ob.pairs, []);
+});
+
 test('a sample becomes one observation per side, because the schema is per-side', () => {
   const s = [obs({ t: 0 })];
   const got = EM.observations(s, oneRound(s));

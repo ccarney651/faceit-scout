@@ -654,7 +654,7 @@
             read = retry;
           }
         }
-        samples.push({ t: t, at: at, a: read.a, b: read.b });
+        samples.push({ t: t, at: at, a: read.a, b: read.b, framePath: framePath });
 
         log(mmss(t).padStart(6) + '  (' + ((Date.now() - started) / 1000).toFixed(1) + 's)');
         ['a', 'b'].forEach(function (side) {

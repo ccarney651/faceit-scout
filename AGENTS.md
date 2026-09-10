@@ -306,12 +306,16 @@ canonical and this copy is the bug.
   segment 404s.
 
 - **The replay bot lives in `tools/replay_bot/` and its facts were all measured,
-  not reasoned.** See `ARCHITECTURE.md` §14 for the full account and
-  `specs/2026-09-08-replay-bot-design.md` for the design. Run its tests with
+  not reasoned.** See `ARCHITECTURE.md` §14 for the full account,
+  `specs/2026-09-08-replay-bot-design.md` for the capture design, and
+  `specs/2026-09-10-replay-bot-player-attribution-design.md` for player
+  attribution (`attribute.js`/`nameplate.js`). Run its tests with
   `node --test "tools/replay_bot/*.test.js"`. It needs
-  `npm install --no-save @napi-rs/canvas`, which **prunes** any other
-  `--no-save` package - reinstall `playwright-core tesseract.js` in ONE command
-  when you next need them. The traps below are the ones that cost time.
+  `npm install --no-save @napi-rs/canvas tesseract.js`, both in one command -
+  a `--no-save` install **prunes** any other `--no-save` package, so installing
+  just one of them silently removes the other. Reinstall `playwright-core`
+  alongside them in that same command when you next need it too. The traps
+  below are the ones that cost time.
 - **Reproduce it offline before you spend a code.** `fakeio.js` is capture.js's
   injected I/O backed by recorded frames instead of a client - no PowerShell, no
   grabs, no waiting - and it records every grab, key and wait so a test can say
