@@ -87,7 +87,20 @@ function Do-Grab([string]$outPath) {
 
   $dir = Split-Path -Parent $outPath
   if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory $dir | Out-Null }
-  $bmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
+  # PNG COSTS MORE THAN THE CAPTURE DOES. Measured on the rig: PrintWindow is
+  # 37ms, saving that bitmap as PNG is 116ms, saving it as BMP is 16ms. Two
+  # thirds of a grab was compressing an image that Node decompresses again
+  # immediately - about 100ms, roughly thirty times a map.
+  #
+  # So the extension chooses. A frame being read and thrown away asks for .bmp;
+  # a frame being KEPT as part of the corpus asks for .png, because BMP is nine
+  # megabytes and the retained frames already run to gigabytes.
+  $fmt = if ($outPath -match '\.bmp$') {
+    [System.Drawing.Imaging.ImageFormat]::Bmp
+  } else {
+    [System.Drawing.Imaging.ImageFormat]::Png
+  }
+  $bmp.Save($outPath, $fmt)
   $bmp.Dispose()
   return ('OK {0} {1} {2}' -f $w, $h, $outPath)
 }

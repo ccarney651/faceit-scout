@@ -75,7 +75,14 @@ if (-not $ok) {
 
 $dir = Split-Path -Parent $Out
 if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory $dir | Out-Null }
-$bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
+# Same rule as host.ps1: the extension chooses the encoder, and the two paths
+# must not disagree about what a .bmp means.
+$fmt = if ($Out -match '\.bmp$') {
+  [System.Drawing.Imaging.ImageFormat]::Bmp
+} else {
+  [System.Drawing.Imaging.ImageFormat]::Png
+}
+$bmp.Save($Out, $fmt)
 $bmp.Dispose()
 
 Write-Output ('OK {0} {1} {2}' -f $w, $h, $Out)
