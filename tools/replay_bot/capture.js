@@ -133,10 +133,18 @@
     var n = 0;
     var lastSettled = null;
 
+    // Every grab this makes is scratch until keepAs says otherwise - a settle,
+    // a pause check, a quiesce, a probe, a calibration read. Written as .bmp
+    // (grab.js and host.ps1 pick the encoder off the extension: 65ms against a
+    // PNG's 210ms) and tracked here so a map that finishes cleanly does not
+    // leave thirty raw frames on disk for every handful that became samples.
+    var transient = [];
+
     async function grabTo(tag) {
-      var p = path.join(framesDir, 'cap-' + tag + '-' + (n++) + '.png');
+      var p = path.join(framesDir, 'cap-' + tag + '-' + (n++) + '.bmp');
       var r = await G.capture(p);
       if (!r.ok) throw new Error('grab failed: ' + r.reason);
+      transient.push(p);
       return p;
     }
 
@@ -180,17 +188,75 @@
       // nothing has to know which of the two it is holding.
       sleep: realSleep,
       // Retained frames are a regression corpus, so a frame that gets read as a
-      // sample is copied to a name that says which sample it was. Copying a PNG
-      // is a few milliseconds against a 497ms grab.
+      // sample is kept under a name that says which sample it was - always as
+      // a .png, because the corpus is read by tools with no idea a .bmp is
+      // even possible. The source is scratch (.bmp or .png, whichever this
+      // grabbed it as), so this decodes and re-encodes rather than copying
+      // bytes under a lying extension - a raw BMP copied to a .png name reads
+      // fine until the day something opens it expecting one.
       keepAs: function (tag, src) {
         var from = src || lastSettled;
         if (!from) return null;
         var dest = path.join(framesDir, 'cap-' + tag + '-' + (n++) + '.png');
-        fs.copyFileSync(from, dest);
-        return dest;
+        return canvas.loadImage(from).then(function (img) {
+          var cv = canvas.createCanvas(img.width, img.height);
+          cv.getContext('2d').drawImage(img, 0, 0);
+          fs.writeFileSync(dest, cv.toBuffer('image/png'));
+          return dest;
+        });
+      },
+      // Called once a map is done: sweepTransient on success, so the scratch
+      // frames do not outlive the map they were taken for.
+      sweepTransient: function () {
+        transient.forEach(function (p) {
+          try { fs.unlinkSync(p); } catch (e) { /* already gone, or never written */ }
+        });
+        transient = [];
+      },
+      // Called on failure. A diagnosis never reaches for every scratch frame a
+      // failed map took - finding the stuck-assemble-phase bug that 7V4END hit
+      // used exactly two, out of the fifty-odd it left behind: the very first
+      // grab and one near where the capture actually broke. So this keeps the
+      // first plus the most recent KEEP_ON_FAILURE and drops the rest, rather
+      // than every scratch frame forever - a failed map that loops (retrying a
+      // settle that never settles, say) used to cost as much disk as it took
+      // retries, unbounded. The kept handful is re-encoded to .png because it
+      // is staying for good now, and BMP exists for grab speed, not permanence.
+      forgetTransient: function () {
+        if (!transient.length) return Promise.resolve();
+        var keep = transient.length > KEEP_ON_FAILURE
+          ? [transient[0]].concat(transient.slice(-(KEEP_ON_FAILURE - 1)))
+          : transient.slice();
+        var keepSet = {};
+        keep.forEach(function (p) { keepSet[p] = true; });
+
+        transient.forEach(function (p) {
+          if (keepSet[p]) return;
+          try { fs.unlinkSync(p); } catch (e) { /* already gone, or never written */ }
+        });
+
+        var converted = keep.map(function (p) {
+          if (!/\.bmp$/i.test(p)) return Promise.resolve(p);
+          var dest = p.replace(/\.bmp$/i, '.png');
+          return canvas.loadImage(p).then(function (img) {
+            var cv = canvas.createCanvas(img.width, img.height);
+            cv.getContext('2d').drawImage(img, 0, 0);
+            fs.writeFileSync(dest, cv.toBuffer('image/png'));
+            fs.unlinkSync(p);
+            return dest;
+          });
+        });
+
+        transient = [];
+        return Promise.all(converted);
       },
     };
   }
+
+  // First plus most recent, on a failure: covers "what did the map open on"
+  // and "what was on screen when it broke" without keeping the noisy middle
+  // of a run that retried the same check dozens of times.
+  var KEEP_ON_FAILURE = 12;
 
   var realSleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
@@ -574,7 +640,7 @@
           log(mmss(t).padStart(6) + '  NOT LOADED - dropped');
           continue;
         }
-        var framePath = io.keepAs ? io.keepAs('t' + t, ready.path) : ready.path;
+        var framePath = io.keepAs ? await io.keepAs('t' + t, ready.path) : ready.path;
         var read = await readHud(framePath);
 
         // ONE SECOND LOOK IF IT LOOKS WRONG. A frame caught while the HUD is

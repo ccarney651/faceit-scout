@@ -68,15 +68,25 @@ the heroes and name plates the bot will really meet.
 
 ## What the bot leaves here
 
-A run keeps every frame it takes, named for what it was: `cap-timeline-*` and
+A run names every frame it takes for what it was: `cap-timeline-*` and
 `cap-zero-*`/`cap-one-*` from the setup, `cap-t<seconds>-*` for each sample,
 `cap-settle-*`/`cap-q-*` from waiting, `cap-pause-*` from the motion check, and
-`probe-*` from whichever probe was run.
+`probe-*` from whichever probe was run. Only the samples - the ones read as
+`cap-t<seconds>-*` - are `.png`; everything else is scratch and written as
+`.bmp`, because PNG's compression costs more than the capture itself does.
 
-Retention is not tidiness, it is the recovery path. **A replay code imports
-once**, so a map read badly cannot be re-captured on that account - but a better
-matcher can re-read its frames offline for nothing. That is why the guards
-refuse loudly rather than carrying on: only a broken *grab* is unrecoverable.
+A map that **succeeds** has its scratch frames swept away when it finishes -
+the samples were already copied out. A map that **fails** keeps only the first
+scratch frame it took plus the dozen most recent - what the map opened on, and
+what was on screen when it broke - converted to `.png` since those are staying
+for good; everything else from a failed map is discarded rather than kept
+forever, because a run that loops (retrying a check that never resolves) used
+to leave as many scratch frames as it took retries. Retention is not tidiness,
+it is the recovery path: **a replay code imports once**, so a map read badly
+cannot be re-captured on that account, but a better matcher can re-read its
+frames offline for nothing. That is why the guards refuse loudly rather than
+carrying on: only a broken *grab* is unrecoverable, and a kept scratch frame is
+how that gets told apart from a bad read.
 
 They are gitignored like everything else here. `contact_sheet.js` renders the
 ten crops of any of them, which is how a geometry problem gets looked at rather

@@ -368,12 +368,25 @@ async function main() {
       writeJson(STATE, state);
       consecutiveFailures = 0;
       console.log(`captured ${got.samples.length} samples -> ${outPath}`);
+
+      // The map succeeded, so the scratch frames it took along the way - a
+      // settle, a pause check, every quiesce - are done being useful. The
+      // samples that mattered are already copied out under keepAs.
+      if (io.sweepTransient) io.sweepTransient();
     } catch (e) {
       consecutiveFailures++;
       state[key].status = 'failed';
       state[key].error = e.message;
       writeJson(STATE, state);
       console.log(`FAILED: ${e.message}`);
+
+      // A failed map is the one time the scratch frames matter: only a broken
+      // grab is unrecoverable, and finding out which requires looking at what
+      // was actually on screen. forgetTransient keeps a bounded handful for
+      // that rather than everything, and clears the tracker either way so the
+      // next map's success does not sweep up what it kept.
+      if (io.forgetTransient) await io.forgetTransient();
+
       if (consecutiveFailures >= 2) {
         console.log('two failures in a row - stopping rather than spending more codes ' +
           'against a client that is not where the chunks expect it');

@@ -14,8 +14,9 @@
 // so a checkout without them is green rather than broken.
 //
 // THEY LIVE IN frames/corpus/ BECAUSE THE BOT REUSES FILENAMES. A run names
-// its frames cap-<tag>-<n>.png with n restarting at zero every time, so the
-// next run silently overwrites the last one's. This corpus originally pointed
+// its frames cap-<tag>-<n>.png (or .bmp for a scratch frame - see
+// frames/README.md) with n restarting at zero every time, so the next run
+// silently overwrites the last one's. This corpus originally pointed
 // straight at frames/, and a five-map run replaced three labelled witnesses -
 // including the frame whose 15.1 tint was the entire evidence for reading the
 // team plates off the portrait band. Every test still passed, because the
