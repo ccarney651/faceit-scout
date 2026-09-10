@@ -48,6 +48,7 @@ const Resolve = require('./resolve.js');
 const RO = require('./review_out.js');
 const calib = require('./calib.js');
 const Crop = require('./crop.js');
+const TIMING = require('./timing.js');
 const Tesseract = require('tesseract.js');
 
 const FRAMES = path.join(__dirname, 'frames');
@@ -56,18 +57,13 @@ const OUT_DIR = path.join(__dirname, 'out');
 const FEED = path.join(__dirname, '../../docs/capture/data.json');
 
 const CONTRIBUTOR = 'replay-bot';
-const LOAD_TIMEOUT_MS = 90000;
-const EXIT_TIMEOUT_MS = 30000;
-// A grab already costs half a second, so a one-second poll is a real poll and
-// not a busy loop.
-const POLL_MS = 1000;
-// How many times ESC is pressed at a menu that will not close before the map is
-// given up. One press was not enough: the client drops a key that arrives while
-// it is still animating a transition - the same behaviour SEEK_GAP_MS exists for
-// on seeks - so a single ESC that lands in that window does nothing and the run
-// used to fail the map (and, two failures deep, the night) on it. 2026-09-10,
-// one full run in ten hit this.
-const ESC_TRIES = 3;
+// The waits this loop spends live in timing.js: TIMING.load.timeoutMs (waiting
+// for an imported replay to draw), TIMING.exit.timeoutMs (for one to close),
+// TIMING.poll.ms (the screen-state poll cadence - a grab already costs ~0.5s,
+// so 1s is a real poll not a busy loop), TIMING.esc.tries (ESC at a stuck menu:
+// one press is dropped if it lands mid-transition, the same as a seek key, and
+// one run in ten hit this on 2026-09-10). The --load-settle / --esc-wait /
+// --chunk-speed / --sample-quiesce flags still override per run.
 
 // ------------------------------------------------------------------ pure ----
 
@@ -97,7 +93,7 @@ function parseArgs(argv) {
     // held; --chunk-speed overrides it (down to 1 for a slow client, and no
     // higher than 2.5 until open-import waits for the button rather than
     // timing the click).
-    chunkSpeed: Number(flag('--chunk-speed')) || 2,
+    chunkSpeed: Number(flag('--chunk-speed')) || TIMING.chunk.speed,
     // Timing overrides, for sweeping the pipeline to find the fastest that
     // still reads clean. null leaves each at its measured default.
     //   --sample-quiesce  ms after a seek settles, before the HUD is read
@@ -223,7 +219,7 @@ const escMenuUp = (io) => onScreen(io, 'esc-menu');
 // nothing captured.
 //
 // ESC is pressed up to `tries` times, re-checking between each, because one
-// press is not reliably taken (ESC_TRIES). It only ever presses while the menu
+// press is not reliably taken (TIMING.esc.tries). It only ever presses while the menu
 // still reads as up, so an extra press cannot land somewhere it matters. If the
 // menu outlasts every press the map is failed - but a frame is kept first,
 // tagged with the code: the 2026-09-10 "will not close" failure left nothing to
@@ -276,7 +272,7 @@ async function waitFor(io, want, timeoutMs, label) {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
     if (await inReplay(io) === want) return true;
-    await wait(POLL_MS);
+    await wait(TIMING.poll.ms);
   }
   throw new Error(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${label}`);
 }
@@ -295,8 +291,8 @@ async function main() {
 
   // The two run.js waits the timing sweep can override; the sample quiesce is
   // threaded into captureMap below. Defaults match the measured values.
-  const ESC_WAIT = args.escWait != null ? args.escWait : 1200;
-  const LOAD_SETTLE = args.loadSettle != null ? args.loadSettle : 500;
+  const ESC_WAIT = args.escWait != null ? args.escWait : TIMING.esc.waitMs;
+  const LOAD_SETTLE = args.loadSettle != null ? args.loadSettle : TIMING.load.settleMs;
   if (args.sampleQuiesce != null || args.loadSettle != null || args.escWait != null ||
       args.chunkSpeed !== 1 || args.noDrag) {
     console.log(`timing: chunk-speed ${args.chunkSpeed}, sample-quiesce ` +
@@ -421,7 +417,7 @@ async function main() {
       // screen, so it can be recognised outright.
       await clearEscMenu(io, {
         sendKeys: I.sendKeys, wait, escWait: ESC_WAIT,
-        tries: ESC_TRIES, tag: code.code, log: (m) => console.log(m),
+        tries: TIMING.esc.tries, tag: code.code, log: (m) => console.log(m),
       });
 
       // The replay list is the other screen the import chunk cannot start from.
@@ -446,13 +442,13 @@ async function main() {
       if (await inReplay(io)) {
         console.log('still inside a replay - leaving before importing');
         await R.play('leave-replay', { speed: args.chunkSpeed });
-        await waitFor(io, false, EXIT_TIMEOUT_MS, 'the replay to close');
+        await waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
       }
 
       const tOpen = Date.now();
       await R.play('open-import', { code: code.code, speed: args.chunkSpeed });
       const tPlayed = Date.now();
-      await waitFor(io, true, LOAD_TIMEOUT_MS, 'the replay to load');
+      await waitFor(io, true, TIMING.load.timeoutMs, 'the replay to load');
       const tLoaded = Date.now();
       console.log(`import ${((tPlayed - tOpen) / 1000).toFixed(1)}s, ` +
         `client loaded the replay in ${((tLoaded - tPlayed) / 1000).toFixed(1)}s`);
@@ -595,7 +591,7 @@ async function main() {
     try {
       if (await inReplay(io)) {
         await R.play('leave-replay', { speed: args.chunkSpeed });
-        await waitFor(io, false, EXIT_TIMEOUT_MS, 'the replay to close');
+        await waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
       }
     } catch (e) {
       console.log(`could not get back to the replay list: ${e.message}`);

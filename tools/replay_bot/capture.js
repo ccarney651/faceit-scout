@@ -38,6 +38,7 @@
   var T = require('./timeline.js');
   var Drag = require('./drag.js');
   var Recorder = require('./recorder.js');
+  var TIMING = require('./timing.js');
 
   var STEP_S = 20;
 
@@ -69,25 +70,21 @@
   // which was a grab of its own. Worth re-measuring with probe_limits.js if the
   // grab time moves again - in either direction.
   //
-  // Menus still get the two-frame settle, because a half-drawn panel is
-  // measured and then believed; a half-drawn HUD only scores badly, and the
-  // sample loop re-reads when it does.
-  var QUIESCE_MS = 400;
-
-  // An extra beat after a seek settles, before the HUD is read. The seek's own
-  // settle watches the PLAY area (y 200-1100); the portrait band sits above
-  // that (y ~95-205) and finishes drawing a little later - so a settle that
-  // says "the scene has stopped moving" can still hand over a frame whose
-  // portraits and name plates are half-rendered. Every sample after the first
-  // on the 2026-09-10 ten-map run came back mid-transition and needed a
-  // re-read; the first (which attribution runs on) did not, because nothing
-  // seeks to it. Paid once per sample, and the replay is paused so the band is
-  // genuinely static by the time it elapses.
-  //
-  // The default lives in Drag.TIMING alongside the drag gesture's own timings:
-  // a seek-by-drag and the settle that follows it are one dial, and
-  // drag_tuner.js turns them together. --sample-quiesce still overrides it.
-  var SAMPLE_QUIESCE_MS = Drag.TIMING.settle;
+  // The waits this module spends live in timing.js (TIMING.quiesce, .sample,
+  // .load, .media), each with its measured history there:
+  //   TIMING.quiesce.ms      the post-seek wait before a one-frame grab - was
+  //                          zero until host.js made a grab fast enough that
+  //                          the free wait disappeared with it
+  //   TIMING.sample.quiesceMs an extra beat after a seek settles, for the
+  //                          portrait band to finish drawing (run.js
+  //                          --sample-quiesce still overrides it per run)
+  //   TIMING.load.tries/waitMs readyFrame/barFrame's poll for the HUD - a
+  //                          loading screen is black, still, and settles
+  //                          beautifully, so the signal is the HUD drawn
+  //   TIMING.media.tries/waitMs the poll for the playhead after N, which
+  //                          doubles as the check N went the right way; a
+  //                          single early read here cost two codes
+  //                          (XTK7MM, 4TNEAJ, 2026-09-10)
 
   // Shorter than this, a stretch of play is the assemble phase rather than a
   // round. Every map measured opens with one.
@@ -97,23 +94,6 @@
   // than the same still one. A settled screen sits under 0.6; a playing replay
   // is far above this.
   var MOTION_DIFF = 1.5;
-
-  // How long to let the client finish loading before giving up on a frame.
-  var LOAD_TRIES = 12;
-  var LOAD_WAIT_MS = 400;
-
-  // After N is pressed to raise the media controls, how long to keep looking for
-  // the playhead before concluding N went the wrong way.
-  //
-  // THIS USED TO BE A SINGLE READ ~400ms AFTER N, AND IT COST TWO CODES
-  // (XTK7MM, 4TNEAJ, 2026-09-10). The controls fade in over a beat and the knob
-  // at the start position takes a moment to draw; a read that early saw nothing,
-  // concluded N had failed, and pressed N AGAIN - which hid the controls it had
-  // just shown. K then went to a closed panel. Polling for the knob instead of
-  // checking once removes the guess. Tries, not a wall clock, so fakeio (which
-  // does not advance time) still terminates.
-  var MEDIA_TRIES = 10;
-  var MEDIA_WAIT_MS = 250;
 
   var mmss = function (s) {
     return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
@@ -213,7 +193,7 @@
       // a frame caught mid-transition shows up as a low match score, and that
       // is the thing worth reacting to.
       quiesce: async function (ms) {
-        await realSleep(ms === undefined ? QUIESCE_MS : ms);
+        await realSleep(ms === undefined ? TIMING.quiesce.ms : ms);
         lastSettled = await grabTo('q');
         return { settled: true, frame: lastSettled };
       },
@@ -347,12 +327,12 @@
   async function readyFrame(io, first) {
     var sleep = napOf(io);
     var p = first || await io.grabTo('ready');
-    for (var i = 0; i < LOAD_TRIES; i++) {
+    for (var i = 0; i < TIMING.load.tries; i++) {
       var img = await io.loadImage(p);
       // The HUD, not the playhead: the media controls hide themselves, and a
       // frame with the portraits drawn is exactly what a sample needs.
       if (calib.hudPresent(Crop.hudTint(img, calib))) return { path: p, img: img };
-      await sleep(LOAD_WAIT_MS);
+      await sleep(TIMING.load.waitMs);
       p = await io.grabTo('ready');
     }
     return null;
@@ -363,10 +343,10 @@
   async function barFrame(io, first) {
     var sleep = napOf(io);
     var p = first || await io.grabTo('bar');
-    for (var i = 0; i < LOAD_TRIES; i++) {
+    for (var i = 0; i < TIMING.load.tries; i++) {
       var img = await io.loadImage(p);
       if (Crop.playheadX(img, calib)) return { path: p, img: img };
-      await sleep(LOAD_WAIT_MS);
+      await sleep(TIMING.load.waitMs);
       p = await io.grabTo('bar');
     }
     return null;
@@ -467,7 +447,7 @@
       // frame the sample loop then reads, rather than each paying its own.
       var sampling = false;
       var sampleQuiesceMs = function () {
-        return o.sampleQuiesceMs != null ? o.sampleQuiesceMs : SAMPLE_QUIESCE_MS;
+        return o.sampleQuiesceMs != null ? o.sampleQuiesceMs : TIMING.sample.quiesceMs;
       };
 
       // Seek by dragging the scrubber straight to the target second, instead of
@@ -551,10 +531,10 @@
         isOpen: calib.eventsViewerOpen,
         // The playhead is drawn only while the media controls are up, so it
         // doubles as the check that N went the right way - but only once it has
-        // actually drawn. Polled, not read once: see MEDIA_TRIES.
+        // actually drawn. Polled, not read once: see TIMING.media.tries.
         mediaVisible: async function () {
-          for (var i = 0; i < MEDIA_TRIES; i++) {
-            await io.sleep(MEDIA_WAIT_MS);
+          for (var i = 0; i < TIMING.media.tries; i++) {
+            await io.sleep(TIMING.media.waitMs);
             img0 = await io.loadImage(await io.grabTo('media-check'));
             logPlayheadState('mediaVisible check');
             if (Crop.playheadX(img0, calib)) return true;

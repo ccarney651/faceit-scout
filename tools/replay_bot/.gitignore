@@ -4,9 +4,5 @@
 # state/  - the attempt ledger, which is per-machine: it records which codes
 #           this client has already imported, and a code can only be imported
 #           once, so it must never be shared between rigs or reset by a merge.
-# drag_timing.json - drag_tuner.js's scratch overrides for drag.js TIMING.
-#           Local and temporary: once the numbers hold they get written into
-#           drag.js as the new defaults in an ordinary commit and this deleted.
 out/
 state/
-drag_timing.json

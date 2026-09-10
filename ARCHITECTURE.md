@@ -1982,17 +1982,17 @@ until you look. Several looked entirely healthy while being wrong.
   when the playhead is unreadable, or when the target is off the bar, and the
   last correction attempt after repeated drag misses forces it. `run.js
   --no-drag` forces keys for the whole run.
-- **The drag gesture's timings are one tunable dial.** `drag.js` `TIMING`
-  holds the five waits the gesture spends (`prePress`, `postPress`, `perPoint`,
-  `dwell`, `hopPx`) plus `settle`, the post-seek pause before the HUD is read
-  (`capture.js`'s `SAMPLE_QUIESCE_MS` defaults from it). `play_input.ps1` reads
-  the four drag waits off the stamped event. `drag_tuner.js` serves
-  `drag_tuner.html` on `127.0.0.1:8788` with a slider per knob, a **Test** that
-  runs one real drag and reports landing error and worst HUD cell, a **Sweep**
-  over `probe_drag`'s four targets, and a **Save** that writes `drag_timing.json`
-  for `drag.js` to load over its defaults. The json is gitignored and
-  temporary — once numbers hold across replays they become the new `TIMING`
-  defaults in an ordinary commit.
+- **Every tunable wait lives in `timing.js`.** The numbers that were literals
+  across `capture.js`, `input.js`, `drag.js` and `run.js` — the seek gap, the
+  post-seek and sample quiesces, the media-controls poll, the ESC retries, the
+  load settle, the chunk speed, and the drag gesture's five waits (`prePress`,
+  `postPress`, `perPoint`, `dwell`, `hopPx`) — are namespaced entries in
+  `timing.js`, each keeping its measured history. It merges
+  `state/console_timing.json` over the defaults when a tuning session has
+  written one (per-machine, gitignored); `run.js`'s `--sample-quiesce` /
+  `--load-settle` / `--esc-wait` / `--chunk-speed` still override per run.
+  Structural constants that have never moved stay as plain consts. This is the
+  config a pipeline-wide tuning/debug console reads and writes.
 
 **The client's own settings**
 

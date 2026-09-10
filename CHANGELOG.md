@@ -19,23 +19,25 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-10
 
-### Added
-
-- **`tools/replay_bot/drag_tuner.js` — a local page for tuning the seek-by-drag
-  gesture's timings by hand.** Every hardcoded wait in the drag
-  (`prePress`/`postPress`/`perPoint`/`dwell`/`hopPx`) plus the post-seek
-  `settle` is now a slider; **Test** runs one real drag with the live values and
-  reports both the landing error and the HUD's worst cell (did it land / had it
-  settled), **Sweep** runs `probe_drag`'s four targets, **Save** writes
-  `drag_timing.json`. It binds `127.0.0.1`, costs no codes (needs a replay open
-  with its controls up), and runs one gesture at a time. `drag.js` now exposes
-  those numbers as `TIMING` and loads `drag_timing.json` over the defaults when
-  present; `play_input.ps1` reads the four drag waits off the event, and
-  `capture.js`'s `SAMPLE_QUIESCE_MS` defaults from `Drag.TIMING.settle`. Once a
-  set holds across several replays it gets written into `drag.js` as the new
-  defaults and the json (gitignored) is deleted.
-
 ### Changed
+
+- **Every tunable wait in the replay bot lives in one file, `timing.js`.** The
+  numbers that were literals in `capture.js`, `input.js`, `drag.js` and `run.js`
+  — the seek gap, the post-seek and sample quiesces, the media-controls poll,
+  the ESC retries, the load settle, the chunk speed, the drag gesture's five
+  waits — are now namespaced entries in `timing.js`, each carrying its measured
+  history. `timing.js` merges `state/console_timing.json` over the defaults when
+  present (per-machine, gitignored), so the numbers can be tuned without editing
+  four files. `run.js`'s `--sample-quiesce` / `--load-settle` / `--esc-wait` /
+  `--chunk-speed` flags still override per run. Structural constants that have
+  never moved (`MIN_PLAY_S`, `MOTION_DIFF`, `MIN_STEPS`) stay put — not
+  everything is a knob. `play_input.ps1`'s drag branch reads the four gesture
+  waits off the stamped event. Groundwork for a pipeline-wide tuning/debug
+  console; the standalone `drag_tuner` page added earlier the same day is folded
+  into it.
+
+- **The replay bot seeks by dragging the scrubber, not by pressing the skip
+  key.**
 
 - **The replay bot seeks by dragging the scrubber, not by pressing the skip
   key.** `driver.seekTo` now drives the playhead straight to the target second

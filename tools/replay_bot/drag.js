@@ -30,6 +30,7 @@
 
   var calib = require('./calib.js');
   var T = require('./timeline.js');
+  var TIMING = require('./timing.js');   // the seek gesture's waits live in TIMING.drag
 
   // Points along the drag. play_input.ps1's own comment records that a drag
   // with no intermediate points used to arrive as a click at the start, so the
@@ -42,51 +43,6 @@
   // walk plus `dwell`, and only reads this for the dry-run summary.
   var HOLD_MS = 220;
 
-  // Every millisecond the seek gesture spends waiting, in one place. These were
-  // literals scattered between here and play_input.ps1 until a run that seeked
-  // by drag started landing mid-transition and the only way to find honest
-  // numbers was to turn each one live. drag_tuner.js is that dial; it writes
-  // what it settles on to drag_timing.json, which this loads over the defaults
-  // when it is present. Once a set holds across replays the numbers get written
-  // in here as the new defaults in an ordinary commit and the json goes away.
-  //
-  //   prePress   cursor reaches the scrubber -> mouse button down
-  //   postPress  button down -> the path walk begins
-  //   perPoint   pause at each point along the path
-  //   dwell      last point reached -> button up. The client's scrubber lags a
-  //              fast walk; too short and the release snaps the playhead back
-  //              (probe_drag: a 25ms/no-dwell path landed 100s short), too long
-  //              and it coasts past (~2s over on a 10ms/80ms one).
-  //   hopPx      the path is split so the cursor never jumps further than this
-  //              between two SetCursorPos calls - the client stops following a
-  //              bigger jump, and the release snaps to wherever it stopped (a
-  //              690px drag in 86px hops landed 100s short).
-  //   settle     after a seek, before the HUD is read - capture.js's
-  //              SAMPLE_QUIESCE_MS. The portrait band finishes drawing a beat
-  //              after the play area has stopped moving.
-  var TIMING = {
-    prePress: 40,
-    postPress: 30,
-    perPoint: 16,
-    dwell: 120,
-    hopPx: 24,
-    settle: 500,
-  };
-
-  // drag_timing.json, when drag_tuner.js has written one, wins over the
-  // defaults - numbers only, and only keys TIMING already has, so a typo in the
-  // file is ignored rather than silently steering a run.
-  try {
-    var _override = require('./drag_timing.json');
-    Object.keys(TIMING).forEach(function (k) {
-      if (typeof _override[k] === 'number' && isFinite(_override[k])) TIMING[k] = _override[k];
-    });
-  } catch (e) { /* no override file - the defaults above stand */ }
-
-  // Kept as an export because drag.test.js asserts hops against it; the value
-  // and the one plan() uses are the same knob.
-  var MAX_HOP_PX = TIMING.hopPx;
-
   function secondsPerPixel(ref) {
     return ref.stepS / ref.stepPx;
   }
@@ -97,11 +53,11 @@
   // A target beyond the bar is refused rather than clamped: it means a sample
   // was planned past the end of the map, and dragging to the end instead would
   // read a plausible frame from the wrong moment.
-  // `timing` overrides TIMING for this one plan - what drag_tuner.js passes to
-  // try live slider values without writing the override file. Omitted, the
-  // module defaults (with drag_timing.json folded in) apply.
+  // `timing` overrides TIMING.drag for this one plan - what the console passes
+  // to try live slider values without writing the override file. Omitted, the
+  // module config (with state/console_timing.json folded in) applies.
   function plan(ref, fromX, toS, timing) {
-    var t = timing ? Object.assign({}, TIMING, timing) : TIMING;
+    var t = timing ? Object.assign({}, TIMING.drag, timing) : TIMING.drag;
     var bar = calib.FROZEN.timeline;
     var toX = Math.round(T.xForSeconds(toS, ref));
     if (toX < bar.x0 || toX > bar.x1) {
@@ -178,9 +134,8 @@
 
   var Mod = {
     MIN_STEPS: MIN_STEPS,
-    MAX_HOP_PX: MAX_HOP_PX,
     HOLD_MS: HOLD_MS,
-    TIMING: TIMING,
+    TIMING: TIMING,          // the timing.js config; the gesture's knobs are TIMING.drag
     plan: plan,
     seeker: seeker,
     secondsPerPixel: secondsPerPixel,

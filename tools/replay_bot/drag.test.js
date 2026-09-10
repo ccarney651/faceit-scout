@@ -41,14 +41,14 @@ test('the drag carries intermediate points', () => {
 // The client tracks the scrubber by cursor position, and a hop too large
 // between two points is not followed: probe_drag measured a 690px backward
 // drag in 8 hops (86px each) land 100s short, the playhead having stopped
-// following partway. Every hop stays under MAX_HOP_PX.
+// following partway. Every hop stays under TIMING.drag.hopPx.
 test('a long drag is split into hops the client can follow', () => {
   // playhead near 405s (x~1084), dragged back to 122s (x~393): ~690px.
   const p = D.plan(REF, 1084, 122);
   assert.ok(p.path.length > D.MIN_STEPS + 1, 'a long drag needs more than the floor');
   for (let i = 1; i < p.path.length; i++) {
     const hop = Math.abs(p.path[i].x - p.path[i - 1].x);
-    assert.ok(hop <= D.MAX_HOP_PX, `hop ${hop}px exceeds MAX_HOP_PX ${D.MAX_HOP_PX}`);
+    assert.ok(hop <= D.TIMING.drag.hopPx, `hop ${hop}px exceeds hopPx ${D.TIMING.drag.hopPx}`);
   }
 });
 
@@ -56,7 +56,7 @@ test('a long drag is split into hops the client can follow', () => {
 // under one hop - the floor keeps it a recognisable gesture.
 test('a short drag keeps the minimum number of points', () => {
   const p = D.plan(REF, 100, 5);    // x~100 is ~2s; a few seconds is a few px
-  assert.ok(Math.abs(p.toX - 100) < D.MAX_HOP_PX, 'this case must be under one hop');
+  assert.ok(Math.abs(p.toX - 100) < D.TIMING.drag.hopPx, 'this case must be under one hop');
   assert.strictEqual(p.path.length, D.MIN_STEPS + 1);
 });
 
@@ -71,30 +71,30 @@ test('the plan is one drag event the player already understands', () => {
 // them, so every drag plan carries the four it uses.
 test('the plan stamps the gesture timings play_input.ps1 reads', () => {
   const p = D.plan(REF, 100, 500);
-  assert.strictEqual(p.prePress, D.TIMING.prePress);
-  assert.strictEqual(p.postPress, D.TIMING.postPress);
-  assert.strictEqual(p.perPoint, D.TIMING.perPoint);
-  assert.strictEqual(p.dwell, D.TIMING.dwell);
+  assert.strictEqual(p.prePress, D.TIMING.drag.prePress);
+  assert.strictEqual(p.postPress, D.TIMING.drag.postPress);
+  assert.strictEqual(p.perPoint, D.TIMING.drag.perPoint);
+  assert.strictEqual(p.dwell, D.TIMING.drag.dwell);
 });
 
-test('TIMING carries every knob drag_tuner.js turns', () => {
-  for (const k of ['prePress', 'postPress', 'perPoint', 'dwell', 'hopPx', 'settle']) {
-    assert.strictEqual(typeof D.TIMING[k], 'number', k + ' is a number');
+test('TIMING.drag carries every knob the console turns', () => {
+  for (const k of ['prePress', 'postPress', 'perPoint', 'dwell', 'hopPx']) {
+    assert.strictEqual(typeof D.TIMING.drag[k], 'number', k + ' is a number');
   }
 });
 
-// drag_tuner.js passes live slider values as a fourth arg to try them without
-// writing drag_timing.json.
+// The console passes live slider values as a fourth arg to try them without
+// writing state/console_timing.json.
 test('a timing override changes the stamped waits and the path density', () => {
   const base = D.plan(REF, 100, 600);
   const over = D.plan(REF, 100, 600, { prePress: 5, dwell: 7, hopPx: 8 });
   assert.strictEqual(over.prePress, 5);
   assert.strictEqual(over.dwell, 7);
-  // untouched knobs still come from TIMING
-  assert.strictEqual(over.postPress, D.TIMING.postPress);
+  // untouched knobs still come from TIMING.drag
+  assert.strictEqual(over.postPress, D.TIMING.drag.postPress);
   // a smaller hopPx means more points along the same drag
   assert.ok(over.path.length > base.path.length,
-    `${over.path.length} points at hopPx 8 vs ${base.path.length} at ${D.TIMING.hopPx}`);
+    `${over.path.length} points at hopPx 8 vs ${base.path.length} at ${D.TIMING.drag.hopPx}`);
   for (let i = 1; i < over.path.length; i++) {
     assert.ok(Math.abs(over.path[i].x - over.path[i - 1].x) <= 8);
   }

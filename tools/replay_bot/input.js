@@ -27,30 +27,12 @@
 
   var SCRIPT = path.join(__dirname, 'send_keys.ps1');
 
-  // MEASURED ON THE RIG, 2026-09-09. The replay viewer ignores a seek key that
-  // arrives while it is still seeking, and the loss is silent - the keys are
-  // delivered, the client simply does not act on them. Five presses of REPLAY
-  // FORWARD landed:
-  //
-  //     45ms gap -> 1 of 5      300ms -> 3 of 5
-  //    150ms gap -> 1 of 5      600ms -> 5 of 5      1000ms -> 5 of 5
-  //
-  // 45ms was the old default, which is why the first live run advanced exactly
-  // one 20-second step per batch however many keys it sent, and sampled six
-  // points inside the first two minutes of a seventeen-minute map while
-  // reporting that it had covered all of it.
-  //
-  // THERE IS NO CLIFF. Bisecting for one, twice, gave two different answers:
-  // 550ms dropped a press in one run and landed all five in the next, and 375ms
-  // landed 2 of 5 then 4 of 5. Acceptance is probabilistic - presumably a race
-  // against however long that particular seek takes - so a threshold found by
-  // one clean bisection is a threshold found by luck.
-  //
-  // 700ms sits above every failure yet observed (the highest was 550ms). It
-  // costs a few seconds of seeking per map, and the driver verifies the result
-  // regardless, because a gap that is usually enough is not a thing to trust
-  // hundreds of unrepeatable maps to.
-  var SEEK_GAP_MS = 700;
+  // The gap between seek keypresses. Its measured history and why it is 700ms
+  // are in timing.js (TIMING.seek); the short version is that the client
+  // silently ignores a key arriving mid-seek, acceptance is a race with no
+  // clean cliff, and driver.seekTo verifies the result regardless.
+  var TIMING = require('./timing.js');
+  var seekGapMs = function () { return TIMING.seek.gapMs; };
 
   function parse(stdout) {
     var lines = String(stdout).split(/\r?\n/);
@@ -71,10 +53,10 @@
   // itself and refuses if it cannot, because keys sent to an unfocused window
   // are silently discarded and would leave the bot believing it had seeked.
   async function sendKeys(keys, opts) {
-    // `|| SEEK_GAP_MS` here quietly turned a requested gap of 0 into 700, which
+    // `|| seekGapMs()` here quietly turned a requested gap of 0 into 700, which
     // is how every timing measurement of this path came out 700ms too high.
     var gapMs = (opts && opts.gapMs !== undefined && opts.gapMs !== null)
-      ? opts.gapMs : SEEK_GAP_MS;
+      ? opts.gapMs : seekGapMs();
     var keyFile = path.join(os.tmpdir(), 'owdb-keys-' + process.pid + '-' + (seqNo++) + '.txt');
     fs.writeFileSync(keyFile, keys.join(String.fromCharCode(10)), 'utf8');
 
@@ -107,7 +89,7 @@
     var args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', SCRIPT, '-KeyFile', keyFile];
     args.push('-GapMs', String((opts && opts.gapMs !== undefined && opts.gapMs !== null)
-      ? opts.gapMs : SEEK_GAP_MS));
+      ? opts.gapMs : seekGapMs()));
 
     return new Promise(function (resolve, reject) {
       execFile('powershell', args, { windowsHide: true }, function (err, stdout, stderr) {
@@ -152,7 +134,7 @@
 
   var Mod = {
     SCRIPT: SCRIPT,
-    SEEK_GAP_MS: SEEK_GAP_MS,
+    seekGapMs: seekGapMs,
     sendKeysBySpawn: sendKeysBySpawn,
     parse: parse,
     sendKeys: sendKeys,
