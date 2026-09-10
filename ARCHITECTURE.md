@@ -1793,14 +1793,22 @@ clean on all three, and wrong on six frames already sitting on disk.
 1. `queue.pending()` drops wiped codes and anything already attempted, oldest
    game first.
 2. The code is written to the attempt ledger **before** it is opened.
-3. `recorder.play('open-import')` clicks Import, pastes the code, confirms and
+3. The client's screen is normalised first — the import chunk navigates from
+   wherever it is, so a leftover ESC menu or replay-history list sends its
+   clicks to the wrong controls. Each is recognised by fingerprint and backed
+   out of. `clearEscMenu` presses ESC up to `ESC_TRIES` (3) times, re-checking
+   between each, because one press is not reliably taken when it lands mid
+   animation; if the menu outlasts them the map is failed, but a frame tagged
+   with the code is kept first (a 2026-09-10 "will not close" failure left
+   nothing to diagnose from).
+4. `recorder.play('open-import')` clicks Import, pastes the code, confirms and
    watches; the loop waits for the playhead to appear, which is what says a
    replay is on screen.
-4. On the first map only, `set-interval` runs inside the capture (§14.9).
-5. `capture.js` reads the map.
-6. `emit.js` turns the samples into a contribution record, written after **every**
+5. On the first map only, `set-interval` runs inside the capture (§14.9).
+6. `capture.js` reads the map.
+7. `emit.js` turns the samples into a contribution record, written after **every**
    map rather than at the end of the night.
-7. `recorder.play('leave-replay')` returns to the replay history tab — but only
+8. `recorder.play('leave-replay')` returns to the replay history tab — but only
    if the playhead says a replay is actually open, since those clicks mean
    something else on the menu screen.
 

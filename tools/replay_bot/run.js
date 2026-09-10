@@ -60,6 +60,13 @@ const EXIT_TIMEOUT_MS = 30000;
 // A grab already costs half a second, so a one-second poll is a real poll and
 // not a busy loop.
 const POLL_MS = 1000;
+// How many times ESC is pressed at a menu that will not close before the map is
+// given up. One press was not enough: the client drops a key that arrives while
+// it is still animating a transition - the same behaviour SEEK_GAP_MS exists for
+// on seeks - so a single ESC that lands in that window does nothing and the run
+// used to fail the map (and, two failures deep, the night) on it. 2026-09-10,
+// one full run in ten hit this.
+const ESC_TRIES = 3;
 
 // ------------------------------------------------------------------ pure ----
 
@@ -204,6 +211,46 @@ async function onScreen(io, name) {
 }
 
 const escMenuUp = (io) => onScreen(io, 'esc-menu');
+
+// Clear the ESC menu if it is up, before the import chunk plays. A leave-replay
+// whose closing click missed leaves it up, and the import chunk then clicks
+// SOCIAL and CAREER PROFILE instead of the replay list - a spent code and
+// nothing captured.
+//
+// ESC is pressed up to `tries` times, re-checking between each, because one
+// press is not reliably taken (ESC_TRIES). It only ever presses while the menu
+// still reads as up, so an extra press cannot land somewhere it matters. If the
+// menu outlasts every press the map is failed - but a frame is kept first,
+// tagged with the code: the 2026-09-10 "will not close" failure left nothing to
+// diagnose from, and this is the same move the K-bug instrumentation made.
+//
+// Returns the number of presses it took (0 if the menu was not up). `isUp`
+// defaults to the screen-fingerprint check and is a seam for tests.
+async function clearEscMenu(io, opts) {
+  const { sendKeys, wait, escWait, tries, tag } = opts;
+  const log = opts.log || (() => {});
+  const isUp = opts.isUp || escMenuUp;
+  let n = 0;
+  while (await isUp(io)) {
+    if (n >= tries) {
+      let kept = null;
+      try {
+        const frame = await io.grabTo('esc-stuck');
+        kept = await io.keepAs(`esc-stuck-${tag}`, frame);
+      } catch (e) { /* diagnosis is best-effort; the throw below is the point */ }
+      throw new Error(`the ESC menu will not close after ${tries} presses - the ` +
+        'client is not where the chunks expect it' +
+        (kept ? ` (frame kept: ${path.basename(kept)})` : ''));
+    }
+    log(n === 0
+      ? 'the ESC menu is up - clearing it before importing'
+      : `the ESC menu is still up - ESC again (${n + 1}/${tries})`);
+    await sendKeys(['ESC']);
+    await wait(escWait);
+    n++;
+  }
+  return n;
+}
 
 // Whether the client is sitting on the career-profile REPLAYS list.
 //
@@ -367,15 +414,10 @@ async function main() {
       // whose click misses leaves it up, and the import chunk then clicks
       // SOCIAL and CAREER PROFILE instead of the replay list. It is a static
       // screen, so it can be recognised outright.
-      if (await escMenuUp(io)) {
-        console.log('the ESC menu is up - clearing it before importing');
-        await I.sendKeys(["ESC"]);
-        await wait(ESC_WAIT);
-        if (await escMenuUp(io)) {
-          throw new Error('the ESC menu will not close - the client is not where ' +
-            'the chunks expect it');
-        }
-      }
+      await clearEscMenu(io, {
+        sendKeys: I.sendKeys, wait, escWait: ESC_WAIT,
+        tries: ESC_TRIES, tag: code.code, log: (m) => console.log(m),
+      });
 
       // The replay list is the other screen the import chunk cannot start from.
       // Backed out of rather than clicked through, and refused loudly if it
@@ -558,7 +600,7 @@ async function main() {
   console.log(`\nrun finished. ${maps.length} map${maps.length === 1 ? '' : 's'} in ${outPath}`);
 }
 
-module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness };
+module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness, clearEscMenu };
 
 // Only when run as a command. Requiring this file - which the tests do - must
 // never start driving the client.
