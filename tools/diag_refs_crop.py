@@ -27,6 +27,7 @@ import cv2
 
 from owdb.db import Database
 from owdb.match import (
+    CELL_RIGHT_TRIM_FRACTION,
     PORTRAIT_TOP_FRACTION,
     ULT_OVERLAY_LEFT_FRACTION,
     face_subrect,
@@ -47,6 +48,7 @@ def main() -> None:
     ap.add_argument("--profile", type=int, default=None, help="profile id (default: active)")
     ap.add_argument("--left", type=float, default=ULT_OVERLAY_LEFT_FRACTION)
     ap.add_argument("--top", type=float, default=PORTRAIT_TOP_FRACTION)
+    ap.add_argument("--right", type=float, default=CELL_RIGHT_TRIM_FRACTION)
     args = ap.parse_args()
 
     OUT.mkdir(exist_ok=True)
@@ -74,13 +76,13 @@ def main() -> None:
     if profile is None:
         raise SystemExit("no profile")
     print(f"profile #{profile.id}  {profile.resolution_w}x{profile.resolution_h}  "
-          f"left={args.left} top={args.top}")
+          f"left={args.left} top={args.top} right={args.right}")
 
     overlay = frame.copy()
     tiles = []
     for side in ("a", "b"):
         for i, cell in enumerate(profile.slots[side]):
-            face = face_subrect(cell, args.left, args.top)
+            face = face_subrect(cell, args.left, args.top, args.right)
             cv2.rectangle(overlay, (cell.x, cell.y),
                           (cell.x + cell.w, cell.y + cell.h), (0, 0, 255), 1)
             cv2.rectangle(overlay, (face.x, face.y),

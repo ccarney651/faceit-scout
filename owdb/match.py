@@ -79,6 +79,31 @@ ULT_OVERLAY_LEFT_FRACTION = 0.42
 # name bar. (This is NOT about the ult number, which sits to the left — see above.)
 PORTRAIT_TOP_FRACTION = 0.45
 
+# subdivide_strip's docstring calls its slots "gap-free" — it divides the boxed
+# strip into team_size EQUAL cells, on the assumption the strip is one
+# continuous run of portraits with nothing between them. The real observer HUD
+# is not: there is a ~7-8px seam between adjacent cards (measured on a live
+# 2560x1440 replay-viewer frame, calibration/frame_2560x1440_replay_
+# 20260911T235617.png, by scanning the name-bar row for the card-interior vs
+# gap background colour — profile 7's boxed cell pitch is 140px there; the
+# cards themselves measure ~132-134px).
+#
+# Because every cell is stretched by the same ~6-7px to cover its share of the
+# strip's gaps, and equal division keeps each cell's LEFT edge close to the
+# true card's left edge, nearly all of that overshoot lands on the cell's
+# RIGHT edge as a sliver of the next card's background — worst on slot 0
+# (~8.6% of the post-ult-cut width, since its left edge has no drift yet to
+# absorb the error) and fading toward the last slot (whose accumulated
+# leftward drift from the same equal division happens to cancel it out). This
+# is what showed up as every ref in the trained sheet carrying a different
+# amount of flat, non-portrait colour on its right edge.
+#
+# Trimming a fixed fraction off the right clears slot 0's worst case on every
+# slot; the later slots lose a few more px of true face than they strictly
+# need to, which the matcher's align-slide (MATCH_PAD_PX + ALIGN_SEARCH_SCALES)
+# already exists to tolerate.
+CELL_RIGHT_TRIM_FRACTION = 0.06
+
 # Matching crops a slightly LARGER region than the ref covers, so the ref can be
 # slid inside it to find the true alignment. Refs are learned from the tight
 # face_subrect; only matching pads. Without this the ref and crop are identical
@@ -152,10 +177,12 @@ def face_subrect(
     rect: Rect,
     left_fraction: float = ULT_OVERLAY_LEFT_FRACTION,
     top_fraction: float = PORTRAIT_TOP_FRACTION,
+    right_fraction: float = CELL_RIGHT_TRIM_FRACTION,
 ) -> Rect:
     """The face-only sub-ROI of a portrait cell: the top-right band, past the
-    ult-charge overlay (left ``left_fraction``) and above the player name/ability
-    bar (keep the top ``top_fraction`` of the cell) — SPEC §8.3.
+    ult-charge overlay (left ``left_fraction``), above the player name/ability
+    bar (keep the top ``top_fraction`` of the cell), and clear of the next
+    card's gap seam (drop the right ``right_fraction``) — SPEC §8.3.
 
     Must be applied identically wherever a portrait is cropped — ref capture and
     matching — so a ref and a live crop describe the same pixels.
@@ -164,9 +191,17 @@ def face_subrect(
         raise ValueError(f"left_fraction must be in [0, 1), got {left_fraction}")
     if not 0.0 < top_fraction <= 1.0:
         raise ValueError(f"top_fraction must be in (0, 1], got {top_fraction}")
+    if not 0.0 <= right_fraction < 1.0:
+        raise ValueError(f"right_fraction must be in [0, 1), got {right_fraction}")
+    if left_fraction + right_fraction >= 1.0:
+        raise ValueError(
+            f"left_fraction + right_fraction must be < 1, got "
+            f"{left_fraction} + {right_fraction}"
+        )
     cut = round(rect.w * left_fraction)
+    right_cut = round(rect.w * right_fraction)
     height = round(rect.h * top_fraction)
-    return Rect(rect.x + cut, rect.y, rect.w - cut, height)
+    return Rect(rect.x + cut, rect.y, rect.w - cut - right_cut, height)
 
 
 def reduce_candidates(

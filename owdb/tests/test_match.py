@@ -71,22 +71,32 @@ def test_composition_true_when_incomplete() -> None:
 
 def test_face_subrect_keeps_top_right_portion() -> None:
     # 141px cell, 55% ult overlay -> 78px cut, 63px face wide; full height kept.
-    face = face_subrect(Rect(57, 95, 141, 55), 0.55, top_fraction=1.0)
+    # right_fraction=0 isolates this from the gap-trim default, which is
+    # covered separately below.
+    face = face_subrect(Rect(57, 95, 141, 55), 0.55, top_fraction=1.0, right_fraction=0.0)
     assert face == Rect(57 + 78, 95, 141 - 78, 55)
 
 
 def test_face_subrect_drops_name_bar() -> None:
     # Keep only the top portion (portrait band), dropping the name/bar below.
-    face = face_subrect(Rect(0, 0, 100, 100), 0.55, top_fraction=0.58)
+    face = face_subrect(Rect(0, 0, 100, 100), 0.55, top_fraction=0.58, right_fraction=0.0)
     assert face.x == 55 and face.w == 45
     assert face.y == 0 and face.h == 58
 
 
 def test_face_subrect_default_fractions() -> None:
-    # Defaults: start at 42% (full face width, clear of the left-side ult) and
-    # keep the top 45% (above the name bar).
+    # Defaults: start at 42% (full face width, clear of the left-side ult),
+    # keep the top 45% (above the name bar), and drop the right 6% (clear of
+    # the next card's gap seam — see CELL_RIGHT_TRIM_FRACTION).
     face = face_subrect(Rect(0, 0, 100, 100))
-    assert face.x == 42 and face.w == 58 and face.h == 45
+    assert face.x == 42 and face.w == 52 and face.h == 45
+
+
+def test_face_subrect_trims_right_gap_seam() -> None:
+    # 200px cell, 10% right trim -> 20px dropped from the right edge only.
+    face = face_subrect(Rect(0, 0, 200, 100), left_fraction=0.0, top_fraction=1.0,
+                         right_fraction=0.1)
+    assert face == Rect(0, 0, 180, 100)
 
 
 def test_face_subrect_rejects_bad_fraction() -> None:
@@ -95,6 +105,11 @@ def test_face_subrect_rejects_bad_fraction() -> None:
         face_subrect(Rect(0, 0, 100, 50), 1.0)
     with pytest.raises(ValueError):
         face_subrect(Rect(0, 0, 100, 50), top_fraction=0.0)
+    with pytest.raises(ValueError):
+        face_subrect(Rect(0, 0, 100, 50), right_fraction=1.0)
+    with pytest.raises(ValueError):
+        # left + right consuming the whole cell leaves nothing to crop.
+        face_subrect(Rect(0, 0, 100, 50), left_fraction=0.6, right_fraction=0.4)
 
 
 # --- reduce_candidates -------------------------------------------------------
