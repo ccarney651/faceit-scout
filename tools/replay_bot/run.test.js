@@ -14,6 +14,24 @@ test('no flags means the feed, every code, for real', () => {
   assert.deepStrictEqual([a.codes, a.limit, a.dry, a.staleOk], [null, null, false, false]);
 });
 
+// --code-stack cycles a codestack.js file (console §14.3b) instead of a
+// finite queue. chunkSpeed left unset (null) means "read TIMING live at every
+// map", not "use whatever TIMING said when the process started" - that is
+// what lets a console Save apply without restarting the loop.
+test('--code-stack is read, and chunkSpeed defaults to null not a snapshot', () => {
+  const a = RUN.parseArgs(['--code-stack', 'state/console_codes.json']);
+  assert.strictEqual(a.codeStack, 'state/console_codes.json');
+  assert.strictEqual(a.chunkSpeed, null);
+});
+
+test('--chunk-speed still pins one value for the whole run', () => {
+  assert.strictEqual(RUN.parseArgs(['--chunk-speed', '1.5']).chunkSpeed, 1.5);
+});
+
+test('no --code-stack means codeStack is null', () => {
+  assert.strictEqual(RUN.parseArgs([]).codeStack, null);
+});
+
 // Ad-hoc codes are for testing the loop on replays that are not league games.
 // Inventing a map name for them would send a fiction downstream, where nothing
 // could tell it from a real reading.

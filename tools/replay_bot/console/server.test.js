@@ -68,3 +68,45 @@ test('every phase is an async function', () => {
 test('import refuses without confirm', async () => {
   await assert.rejects(Srv.PHASES.import({ st: { lines: [] } }, {}), /confirm/);
 });
+
+// --- the loop's pause flag: pauseLoop/resumeLoop toggle a file, nothing more.
+// Actually spawning the loop (startLoop) touches the machine - PowerShell,
+// host.js - so it is exercised live, not in this fast suite.
+
+test('the pause flag lives under state/, matching run.js and hotkey.ps1', () => {
+  assert.ok(Srv.PAUSE_FLAG.includes(path.join('state', 'loop_pause.flag')));
+});
+
+test('pauseLoop creates the flag, resumeLoop removes it, loopStatus reports it', () => {
+  const had = fs.existsSync(Srv.PAUSE_FLAG);
+  const bak = Srv.PAUSE_FLAG + '.testbak-' + process.pid;
+  if (had) fs.renameSync(Srv.PAUSE_FLAG, bak);
+  try {
+    assert.strictEqual(Srv.loopStatus().paused, false);
+    Srv.pauseLoop();
+    assert.strictEqual(fs.existsSync(Srv.PAUSE_FLAG), true);
+    assert.strictEqual(Srv.loopStatus().paused, true);
+    Srv.resumeLoop();
+    assert.strictEqual(fs.existsSync(Srv.PAUSE_FLAG), false);
+    assert.strictEqual(Srv.loopStatus().paused, false);
+  } finally {
+    try { fs.unlinkSync(Srv.PAUSE_FLAG); } catch (e) { /* ignore */ }
+    if (had) fs.renameSync(bak, Srv.PAUSE_FLAG);
+  }
+});
+
+test('resumeLoop is a no-op when nothing was paused', () => {
+  assert.strictEqual(fs.existsSync(Srv.PAUSE_FLAG), false);
+  assert.doesNotThrow(() => Srv.resumeLoop());
+});
+
+test('loopStatus with nothing running reports not running, no pid', () => {
+  const s = Srv.loopStatus();
+  assert.strictEqual(s.running, false);
+  assert.strictEqual(s.pid, null);
+  assert.deepStrictEqual(s.log, []);
+});
+
+test('stopLoop with nothing running is a no-op, not a throw', () => {
+  assert.doesNotThrow(() => Srv.stopLoop(false));
+});

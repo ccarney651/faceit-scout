@@ -25,6 +25,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const H = require('../host.js');
 const I = require('../input.js');
@@ -33,6 +34,7 @@ const R = require('../recorder.js');
 const CS = require('../clientstate.js');
 const P = require('../phases.js');
 const C = require('../capture.js');
+const CodeStack = require('../codestack.js');
 const Drag = require('../drag.js');
 const calib = require('../calib.js');
 const Crop = require('../crop.js');
@@ -86,15 +88,10 @@ function crossOrigin(req) {
   return false;
 }
 
-// The 20-code rotating stack. `pull` takes the top and pushes it to the bottom.
-function loadCodes() {
-  const raw = readJson(CODES_FILE, { codes: [] });
-  return Array.isArray(raw.codes) ? raw.codes.map(safeCode) : [];
-}
-function saveCodes(codes) {
-  fs.mkdirSync(path.dirname(CODES_FILE), { recursive: true });
-  fs.writeFileSync(CODES_FILE, JSON.stringify({ codes }, null, 2) + '\n', 'utf8');
-}
+// The 20-code rotating stack - codestack.js, shared with run.js's --code-stack
+// loop mode so both pull from (and rotate) the same file.
+const loadCodes = () => CodeStack.load(CODES_FILE);
+const saveCodes = (codes) => CodeStack.save(CODES_FILE, codes);
 
 // Run `fn` with `over` (a {ns:{key:number}} subset) merged onto TIMING in place,
 // then restore. The console runs one phase at a time, so the mutation is never
@@ -190,12 +187,10 @@ const PHASES = {
 
   import: async (s, args) => {
     if (!args.confirm) throw new Error('import spends a code - pass confirm:true');
-    const codes = loadCodes();
-    if (!codes.length) throw new Error('the code stack is empty - load codes first');
-    const code = codes[0];
-    s.st.lines.push('importing ' + code + ' (stack: ' + codes.length + ')');
+    const code = CodeStack.rotate(CODES_FILE);           // pulls the top, pushes it to the bottom
+    if (!code) throw new Error('the code stack is empty - load codes first');
+    s.st.lines.push('importing ' + code);
     await R.play('open-import', { code, speed: TIMING.chunk.speed });
-    saveCodes(codes.slice(1).concat([code]));           // rotate: top -> bottom
     spent += 1;
     await CS.waitFor(s.io, true, TIMING.load.timeoutMs, 'the replay to load');
     await wait(TIMING.load.settleMs);
@@ -296,6 +291,91 @@ const PHASES = {
 
 const hero = (x) => ({ name: x.name, score: Number(x.score.toFixed(2)) });
 
+// ------------------------------------------------------------------- loop ----
+//
+// "Leave it running overnight" - node run.js --code-stack <CODES_FILE> spawned
+// as a child, so it is the SAME loop that would run the real thing (queue,
+// import, capture, leave, repeat), not a reimplementation. Two ways to reach
+// in without touching the mouse:
+//
+//   PAUSE_FLAG   a file. Present = paused. run.js checks it between maps (never
+//                mid-map - a map in progress always finishes) and polls while it
+//                exists. console/hotkey.ps1 toggles the same file from a global
+//                hotkey, so the game can stay focused; /api/loop/pause and
+//                /resume do the same thing from the page.
+//   TIMING       edited via /api/timing/save while paused; run.js reloads it at
+//                every map boundary, so a slider change applies to the NEXT map
+//                without restarting the loop.
+const PAUSE_FLAG = path.join(RBOT, 'state', 'loop_pause.flag');
+
+let loopChild = null;
+let loopLog = [];
+let loopExit = null;
+const LOOP_LOG_MAX = 500;
+
+function loopLine(s) {
+  String(s).split(/\r?\n/).forEach((l) => {
+    if (!l) return;
+    loopLog.push(l);
+    if (loopLog.length > LOOP_LOG_MAX) loopLog.shift();
+  });
+}
+
+function loopStatus() {
+  return {
+    running: !!loopChild,
+    pid: loopChild ? loopChild.pid : null,
+    paused: fs.existsSync(PAUSE_FLAG),
+    exitCode: loopExit,
+    log: loopLog.slice(-200),
+  };
+}
+
+function startLoop(args) {
+  if (loopChild) throw new Error('the loop is already running');
+  if (busy) throw new Error('a phase is running - wait for it or reset the session');
+  if (session) { try { session.io.sweepTransient && session.io.sweepTransient(); } catch (e) {} session = null; }
+  try { fs.unlinkSync(PAUSE_FLAG); } catch (e) { /* wasn't paused */ }
+  loopLog = [];
+  loopExit = null;
+
+  const outPath = path.join(RBOT, 'out',
+    'console-loop-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json');
+  const runArgs = ['run.js', '--code-stack', CODES_FILE, '--out', outPath];
+  if (args && args.limit) runArgs.push('--limit', String(Number(args.limit)));
+
+  loopChild = spawn(process.execPath, runArgs, { cwd: RBOT, stdio: ['ignore', 'pipe', 'pipe'] });
+  loopLine('--- started: node ' + runArgs.join(' ') + ' (pid ' + loopChild.pid + ') ---');
+  loopChild.stdout.on('data', (d) => loopLine(d));
+  loopChild.stderr.on('data', (d) => loopLine(d));
+  loopChild.on('exit', (code, signal) => {
+    loopExit = code == null ? (signal || 'killed') : code;
+    loopLine('--- exited: ' + loopExit + ' ---');
+    loopChild = null;
+  });
+  return loopStatus();
+}
+
+function pauseLoop() {
+  fs.mkdirSync(path.dirname(PAUSE_FLAG), { recursive: true });
+  fs.writeFileSync(PAUSE_FLAG, new Date().toISOString());
+  return loopStatus();
+}
+function resumeLoop() {
+  try { fs.unlinkSync(PAUSE_FLAG); } catch (e) { /* was not paused */ }
+  return loopStatus();
+}
+
+// SIGINT first: run.js finishes the current map, then exits - "next map
+// boundary", the same granularity the pause flag uses. `force` sends it twice
+// (run.js's second SIGINT exits immediately) rather than waiting.
+function stopLoop(force) {
+  if (!loopChild) return loopStatus();
+  loopChild.kill('SIGINT');
+  if (force) setTimeout(() => { if (loopChild) loopChild.kill('SIGINT'); }, 300);
+  return loopStatus();
+}
+
 // ---------------------------------------------------------------- server ----
 
 let session = null;
@@ -308,6 +388,7 @@ function sessionOf() {
 }
 
 async function exclusive(what, fn) {
+  if (loopChild) throw new Error('the loop is running - stop it before running a phase by hand');
   if (busy) throw new Error('already running "' + busy + '" - one phase at a time');
   busy = what;
   const s = sessionOf();
@@ -364,6 +445,7 @@ async function state() {
     feedBuilt: feed.built_at || null,
     calibrated: !!(session && session.st.ref),
     phases: Object.keys(PHASES),
+    loop: loopStatus(),
   };
 }
 
@@ -401,10 +483,16 @@ const ROUTES = {
   },
 
   'POST /api/codes/rotate': async () => {
-    const codes = loadCodes();
-    if (codes.length) saveCodes(codes.slice(1).concat([codes[0]]));
+    CodeStack.rotate(CODES_FILE);
     return { codes: loadCodes() };
   },
+
+  // --- the supervised loop: node run.js --code-stack <CODES_FILE>, spawned ---
+
+  'POST /api/loop/start': async (body) => startLoop(body || {}),
+  'POST /api/loop/pause': async () => pauseLoop(),
+  'POST /api/loop/resume': async () => resumeLoop(),
+  'POST /api/loop/stop': async (body) => stopLoop(!!(body && body.force)),
 };
 
 function createServer() {
@@ -443,16 +531,24 @@ function createServer() {
 
 function main() {
   if (!fs.existsSync(FRAMES)) fs.mkdirSync(FRAMES, { recursive: true });
-  process.on('SIGINT', () => { try { H.close(); } catch (e) {} process.exit(0); });
+  process.on('SIGINT', () => {
+    // A running loop child is run.js's own process; leaving it behind when the
+    // console exits would keep driving the client with nothing watching it.
+    if (loopChild) stopLoop(false);
+    try { H.close(); } catch (e) {}
+    process.exit(0);
+  });
   createServer().listen(PORT, HOST, () => {
     console.log(`replay-bot console on http://${HOST}:${PORT}`);
     console.log('  Overwatch must be running. Ctrl-C to stop.');
+    console.log(`  pause flag: ${PAUSE_FLAG}`);
   });
 }
 
 module.exports = {
   crossOrigin, safeCode, safeSeconds, loadCodes, saveCodes, pickNs, withTiming,
-  PHASES, createServer, CODES_FILE,
+  PHASES, createServer, CODES_FILE, PAUSE_FLAG,
+  loopStatus, startLoop, pauseLoop, resumeLoop, stopLoop,
 };
 
 if (require.main === module) main();

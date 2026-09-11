@@ -41,6 +41,7 @@
   .knob input[type=range] { width: 100%; }
   #status { min-height: 1.4em; margin: 8px 0; }
   #status.bad { color: #e5786d; } #status.good { color: #7ec699; } #status.working { color: #e6d08a; }
+  #loopLog { max-height: 260px; overflow-y: auto; }
   .stack { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
   .stack span { padding: 1px 6px; border: 1px solid #39414d; border-radius: 3px; color: #8b949e; }
   .stack span.next { border-color: #7ec699; color: #7ec699; }
@@ -62,7 +63,28 @@
 <div class="cols">
   <div>
     <div class="card">
-      <h2>sequence</h2>
+      <h2>loop — simulate leaving it overnight</h2>
+      <p class="desc">
+        Runs the real <code>run.js</code> loop (import → capture → leave →
+        repeat) cycling the code stack on the right, until stopped. Pauses
+        between maps, never mid-map. Interrupt with the global hotkey
+        (<code>console/hotkey.ps1</code>, default Ctrl+Alt+P — works with
+        Overwatch focused) or the buttons below; either toggles the same flag.
+        Timing changes saved while paused apply from the next map.
+      </p>
+      <p>status: <span id="loopStatus">checking…</span>
+        &nbsp; limit <input type="number" id="loopLimit" placeholder="none" style="width:5em"></p>
+      <div>
+        <button id="btnLoopStart">start</button>
+        <button id="btnLoopPause">pause</button>
+        <button id="btnLoopResume">resume</button>
+        <button id="btnLoopStop">stop</button>
+        <button id="btnLoopForce">force stop</button>
+      </div>
+      <pre id="loopLog">not running</pre>
+    </div>
+    <div class="card">
+      <h2>sequence <span class="desc">— manual, phase by phase (not while the loop is running)</span></h2>
       from <select id="seqFrom"></select> to <select id="seqTo"></select>
       <label><input type="checkbox" id="seqPause"> pause between</label>
       <button id="btnSeq">run</button>
@@ -276,8 +298,32 @@ function renderStack() {
   }
 }
 
+// The loop owns the mouse and keyboard exactly like a manual phase does, so
+// everything phase-shaped is disabled while it runs - only the loop's own
+// controls (and the timing panel, which is safe to edit while paused) stay live.
 function renderButtons() {
-  document.querySelectorAll('button').forEach((b) => { b.disabled = working; });
+  const looping = !!(S.loop && S.loop.running);
+  document.querySelectorAll('button').forEach((b) => {
+    if (b.id.startsWith('btnLoop')) return;
+    b.disabled = working || looping;
+  });
+}
+
+function renderLoop() {
+  const L = S.loop || { running: false, paused: false, log: [] };
+  el('loopStatus').textContent = L.running
+    ? (L.paused ? 'PAUSED (pid ' + L.pid + ')' : 'running (pid ' + L.pid + ')')
+    : (L.exitCode != null ? 'stopped (exit ' + L.exitCode + ')' : 'not running');
+  el('loopStatus').className = L.running ? (L.paused ? 'warn' : 'rect') : '';
+  const atBottom = el('loopLog').scrollTop + el('loopLog').clientHeight >= el('loopLog').scrollHeight - 4;
+  el('loopLog').textContent = (L.log && L.log.length) ? L.log.join('\n') : 'not running';
+  if (atBottom) el('loopLog').scrollTop = el('loopLog').scrollHeight;
+
+  el('btnLoopStart').disabled = working || L.running;
+  el('btnLoopPause').disabled = working || !L.running || L.paused;
+  el('btnLoopResume').disabled = working || !L.running || !L.paused;
+  el('btnLoopStop').disabled = working || !L.running;
+  el('btnLoopForce').disabled = working || !L.running;
 }
 
 async function refresh() {
@@ -291,6 +337,7 @@ async function refresh() {
     el('sess').textContent = S.calibrated ? 'calibrated' : (S.busy ? 'busy' : 'live');
     if (first) { renderPhases(); renderKnobs(); }
     renderStack();
+    renderLoop();
   } catch (e) { say('cannot reach the console server: ' + e.message, 'bad'); }
   renderButtons();
 }
@@ -303,7 +350,19 @@ el('btnTRevert').onclick = () => { renderKnobs(); say('sliders back to loaded va
 el('btnCodes').onclick = async () => { const r = await api('/api/codes', { codes: el('codeInput').value }); say(r.codes.length + ' codes loaded', 'good'); el('codeInput').value = ''; refresh(); };
 el('btnRotate').onclick = async () => { await api('/api/codes/rotate', {}); refresh(); };
 
+el('btnLoopStart').onclick = async () => {
+  const limit = el('loopLimit').value ? Number(el('loopLimit').value) : undefined;
+  try { await api('/api/loop/start', { limit }); say('loop started', 'good'); }
+  catch (e) { say(e.message, 'bad'); }
+  refresh();
+};
+el('btnLoopPause').onclick = async () => { await api('/api/loop/pause', {}); refresh(); };
+el('btnLoopResume').onclick = async () => { await api('/api/loop/resume', {}); refresh(); };
+el('btnLoopStop').onclick = async () => { await api('/api/loop/stop', {}); say('stopping after the current map', ''); refresh(); };
+el('btnLoopForce').onclick = async () => { await api('/api/loop/stop', { force: true }); say('forcing exit', 'bad'); refresh(); };
+
 refresh();
+setInterval(() => { if (!working) refresh(); }, 2000);   // keeps the loop log live
 </script>
 </body>
 </html>

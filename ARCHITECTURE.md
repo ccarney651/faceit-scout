@@ -1733,7 +1733,9 @@ an operator's: the same matcher, not a lookalike.
 | `fakeio.js` | `capture.js`'s I/O, backed by recorded frames | yes |
 | `corpus.js` | The labelled frames, and what a human saw in each | yes |
 | `run.js` | The queue loop; the CLI | no |
-| `console/server.js` | Run one phase at a time against the live client (§14.3b) | no |
+| `codestack.js` | The rotating code stack (§14.3b): pull the top, push it to the bottom | yes |
+| `console/server.js` | Run one phase at a time against the live client, or the whole loop, watched and pausable (§14.3b) | no |
+| `console/hotkey.ps1` | The global pause/resume hotkey - a separate process the operator starts | no |
 
 `driver.js` and `recorder.js` are the two that automate the client. Everything
 else reads pixels, which is ordinary use.
@@ -1815,6 +1817,41 @@ is per-machine and gitignored, and dies at a patch like any other code list.
 
 Same rules as `gui.js` and `review/server.js`: binds loopback, refuses a
 cross-origin or non-loopback request, one operation at a time.
+
+**The loop panel is the other mode: not one phase, the real thing, watched.**
+`/api/loop/start` spawns `node run.js --code-stack state/console_codes.json`
+as a child process - the actual queue/import/capture/leave loop (§14.4), not a
+reimplementation of it, cycling the code stack instead of the live feed so
+"leave it running overnight" costs nothing from the real pool. Manual phases
+and the loop both drive the mouse and keyboard, so each refuses while the
+other is active.
+
+Two ways to reach in without touching the mouse, and both are the same
+mechanism - a flag file, `state/loop_pause.flag`, which `run.js`'s loop checks
+**between maps only** (never mid-map: a map in progress always finishes) and
+polls while it exists:
+
+- `console/hotkey.ps1` registers a **global hotkey** (default Ctrl+Alt+P) via
+  `RegisterHotKey`/`WM_HOTKEY` on a hidden form - the same Win32-via-Add-Type
+  pattern `play_input.ps1` uses - so it fires with Overwatch focused. It
+  toggles the flag directly (create/delete) and beeps low for paused, high for
+  resumed, since the point is not having to look at a screen. It is a separate
+  process the operator starts alongside the console; nothing spawns it
+  automatically.
+- The page's Pause/Resume buttons write the same file over HTTP.
+
+Either way, `run.js` also reloads `timing.js` at that same checkpoint, so a
+slider changed on the page while paused - chunk speed, a quiesce, anything -
+applies to the next map without restarting the loop. `chunkSpeed`/`escWait`/
+`loadSettle` in `run.js` read `TIMING` live at every map for exactly this
+reason unless an explicit CLI flag pins one. Stop is the same checkpoint by a
+different door: the console sends SIGINT to the child (finishes the current
+map, then exits); a second SIGINT, or the page's "force stop", exits
+immediately.
+
+Codes cycled through `--code-stack` never touch `state/attempts.json` - that
+ledger's whole point is "this code can never be imported again", which is
+backwards for codes deliberately meant to be reused.
 
 ### 14.4 The run loop
 

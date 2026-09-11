@@ -7,6 +7,20 @@
 //   node tools/replay_bot/run.js --divisions "EMEA Master,EMEA Expert"
 //   node tools/replay_bot/run.js --teams Wasp,Crabs --newest
 //   node tools/replay_bot/run.js --codes A1B2C3 --no-drag   seek by key, not drag
+//   node tools/replay_bot/run.js --code-stack state/console_codes.json
+//                                            cycle a codestack.js file forever
+//                                            instead of a finite queue - what
+//                                            the console (§14.3b) drives to
+//                                            simulate an overnight run
+//
+// PAUSING. Between maps (never mid-map - a map in progress always finishes)
+// this checks for state/loop_pause.flag and, if present, waits for it to go
+// away before starting the next one. console/hotkey.ps1 toggles that file from
+// a global hotkey so the game can stay focused; the console's Pause/Resume
+// buttons do the same thing. TIMING is reloaded at the same checkpoint, so a
+// slider changed while paused applies to the next map without restarting this
+// process. Ctrl-C is the same checkpoint: the first press finishes the current
+// map then exits; a second forces an immediate exit.
 //
 // The league produces about 127 coded games a day across every region and tier,
 // which is roughly nine hours of capture a week - hours the client cannot be
@@ -40,6 +54,7 @@ const C = require('./capture.js');
 const H = require('./host.js');
 const I = require('./input.js');
 const CS = require('./clientstate.js');
+const CodeStack = require('./codestack.js');
 const R = require('./recorder.js');
 const Q = require('./queue.js');
 const E = require('./emit.js');
@@ -75,6 +90,10 @@ function parseArgs(argv) {
     dry: argv.includes('--dry'),
     limit: Number(flag('--limit')) || null,
     codes: flag('--codes') ? flag('--codes').split(',').map((c) => c.trim()).filter(Boolean) : null,
+    // A codestack.js file to cycle forever instead of a finite queue - see the
+    // file header. Mutually pointless with --codes/--divisions/--teams, which
+    // this does not check for; whichever branch main() takes wins.
+    codeStack: flag('--code-stack'),
     out: flag('--out'),
     staleOk: argv.includes('--stale-ok'),
     divisions: flag('--divisions') ? flag('--divisions').split(',').map((d) => d.trim()).filter(Boolean) : null,
@@ -89,12 +108,15 @@ function parseArgs(argv) {
     // 1x / 1.5x / 2x / 2.5x clean and BROKE at 3x - open-import's click on the
     // VIEW button landed before the button had drawn, so the replay imported
     // but never opened and the run timed out. 2x is the fast default that
-    // held; --chunk-speed overrides it (down to 1 for a slow client, and no
-    // higher than 2.5 until open-import waits for the button rather than
-    // timing the click).
-    chunkSpeed: Number(flag('--chunk-speed')) || TIMING.chunk.speed,
+    // held; --chunk-speed pins it (down to 1 for a slow client, and no higher
+    // than 2.5 until open-import waits for the button rather than timing the
+    // click). Left null (not given), main() reads TIMING.chunk.speed AT EACH
+    // MAP rather than once here - console_timing.json edited mid-run then
+    // applies to the next map without a restart.
+    chunkSpeed: flag('--chunk-speed') != null ? Number(flag('--chunk-speed')) : null,
     // Timing overrides, for sweeping the pipeline to find the fastest that
-    // still reads clean. null leaves each at its measured default.
+    // still reads clean. null leaves each at its measured default, re-read from
+    // TIMING at every map for the same reason as chunkSpeed above.
     //   --sample-quiesce  ms after a seek settles, before the HUD is read
     //   --load-settle     ms after the replay loads, before capture starts
     //   --esc-wait        ms after an ESC press, before re-checking the screen
@@ -191,15 +213,18 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const state = readJson(STATE, {});
 
-  // The two run.js waits the timing sweep can override; the sample quiesce is
-  // threaded into captureMap below. Defaults match the measured values.
-  const ESC_WAIT = args.escWait != null ? args.escWait : TIMING.esc.waitMs;
-  const LOAD_SETTLE = args.loadSettle != null ? args.loadSettle : TIMING.load.settleMs;
+  // Re-read at every map boundary rather than captured once, so a value edited
+  // in state/console_timing.json while the loop is paused (console Save, or
+  // hand-editing the file) applies to the next map without a restart - see the
+  // file header. An explicit CLI flag still pins one value for the whole run.
+  const chunkSpeed = () => args.chunkSpeed != null ? args.chunkSpeed : TIMING.chunk.speed;
+  const escWaitMs = () => args.escWait != null ? args.escWait : TIMING.esc.waitMs;
+  const loadSettleMs = () => args.loadSettle != null ? args.loadSettle : TIMING.load.settleMs;
   if (args.sampleQuiesce != null || args.loadSettle != null || args.escWait != null ||
-      args.chunkSpeed !== 1 || args.noDrag) {
-    console.log(`timing: chunk-speed ${args.chunkSpeed}, sample-quiesce ` +
+      args.chunkSpeed != null || args.noDrag) {
+    console.log(`timing: chunk-speed ${chunkSpeed()}, sample-quiesce ` +
       `${args.sampleQuiesce != null ? args.sampleQuiesce : 'default'}, load-settle ` +
-      `${LOAD_SETTLE}, esc-wait ${ESC_WAIT}, seek ${args.noDrag ? 'keys' : 'drag'}`);
+      `${loadSettleMs()}, esc-wait ${escWaitMs()}, seek ${args.noDrag ? 'keys' : 'drag'}`);
   }
 
   // Attribution wants the feed's lineups/hero_roles even on an ad-hoc run, so
@@ -209,8 +234,18 @@ async function main() {
   // those - {} is a safe default, not a fallback that hides a real feed.
   let feed = {};
 
-  let queue;
-  if (args.codes) {
+  // --code-stack cycles a codestack.js file forever rather than working a
+  // finite queue once - "leave it on overnight" without a real league code
+  // going in. It never touches the attempt ledger: those codes are meant to be
+  // re-imported, and the ledger's whole point is "never again".
+  const looping = !!args.codeStack;
+  let queue = [];
+
+  if (looping) {
+    const preview = CodeStack.load(args.codeStack);
+    console.log(`code-stack: ${preview.length} code${preview.length === 1 ? '' : 's'} ` +
+      `(${preview.join(', ') || 'empty'}) - cycling until stopped`);
+  } else if (args.codes) {
     queue = synthesise(args.codes);
     console.log(`ad-hoc queue: ${queue.length} code${queue.length === 1 ? '' : 's'}`);
   } else {
@@ -236,15 +271,19 @@ async function main() {
       `${queue.length} pending after dropping wiped and already-attempted`);
   }
 
-  if (args.limit) queue = queue.slice(0, args.limit);
+  if (args.limit && !looping) queue = queue.slice(0, args.limit);
 
   if (args.dry) {
+    if (looping) {
+      console.log(`\n--dry: nothing was opened. Would cycle the stack above until stopped.`);
+      return;
+    }
     queue.forEach((c) => console.log(`  ${c.code}  ${c.match_id}:${c.game_no}  ` +
       `${c.map || '(unknown map)'}  ${c.finished_at}`));
     console.log(`\n--dry: nothing was opened. ${queue.length} would run.`);
     return;
   }
-  if (!queue.length) { console.log('nothing to do'); return; }
+  if (!looping && !queue.length) { console.log('nothing to do'); return; }
 
   const io = C.makeIo({ framesDir: FRAMES, log: (m) => console.log(m) });
   const capture = C.make(io);
@@ -293,32 +332,85 @@ async function main() {
   const sessionDir = path.join(path.dirname(outPath), session);
   const reviewMaps = readJson(reviewPath, { maps: [] }).maps || [];
 
-  let consecutiveFailures = 0;
+  // The next-map checkpoint, both for a pause and for a graceful stop. Never
+  // mid-map: a map in progress always finishes, so the client is never left
+  // wherever a seek or a menu happened to be.
+  const PAUSE_FLAG = path.join(__dirname, 'state', 'loop_pause.flag');
+  let stopRequested = false;
+  let sigints = 0;
+  process.on('SIGINT', () => {
+    sigints += 1;
+    if (sigints === 1) {
+      stopRequested = true;
+      console.log('\nstopping after this map (Ctrl-C again to force)');
+    } else {
+      console.log('forcing exit');
+      process.exit(130);
+    }
+  });
 
-  for (const code of queue) {
+  async function checkpoint() {
+    if (fs.existsSync(PAUSE_FLAG)) {
+      console.log('paused - waiting for state/loop_pause.flag to clear ' +
+        '(console Resume, or the hotkey)');
+      while (!stopRequested && fs.existsSync(PAUSE_FLAG)) await wait(TIMING.poll.ms);
+      if (!stopRequested) console.log('resumed');
+    }
+    // A slider edited while paused (or between any two maps) takes effect from
+    // here - see the file header on why this is re-read rather than captured.
+    TIMING.reload();
+  }
+
+  let consecutiveFailures = 0;
+  let queueIndex = 0;
+  let mapsRun = 0;
+
+  while (true) {
+    if (stopRequested) break;
+    await checkpoint();
+    if (stopRequested) break;
+    if (looping && args.limit && mapsRun >= args.limit) {
+      console.log(`limit of ${args.limit} map(s) reached`);
+      break;
+    }
+
+    let code;
+    if (looping) {
+      const pulled = CodeStack.rotate(args.codeStack);
+      if (!pulled) { console.log('the code stack is empty - stopping'); break; }
+      code = synthesise([pulled])[0];
+    } else {
+      if (queueIndex >= queue.length) break;
+      code = queue[queueIndex++];
+    }
+    mapsRun += 1;
+
     console.log(`\n=== ${code.code}  ${code.match_id}:${code.game_no}  ` +
       `${code.map || '(unknown map)'} ===`);
 
     // Keyed per GAME, matching queue.key: a match has several maps and each is
     // its own replay, so keying on match_id alone would skip every map after
-    // the first.
+    // the first. Skipped entirely when looping - a code-stack code is meant to
+    // be imported again, and the attempt ledger's whole point is "never again".
     const key = `${code.match_id}:${code.game_no}`;
 
-    // Written before the import, never after. A crash mid-map must not leave a
-    // code looking untried, because trying it again cannot work.
-    state[key] = {
-      code: code.code,
-      started_at: new Date().toISOString(),
-      status: 'opened',
-    };
-    writeJson(STATE, state);
+    if (!looping) {
+      // Written before the import, never after. A crash mid-map must not leave
+      // a code looking untried, because trying it again cannot work.
+      state[key] = {
+        code: code.code,
+        started_at: new Date().toISOString(),
+        status: 'opened',
+      };
+      writeJson(STATE, state);
+    }
     try {
       // The ESC menu is the other place the client gets stuck: a leave-replay
       // whose click misses leaves it up, and the import chunk then clicks
       // SOCIAL and CAREER PROFILE instead of the replay list. It is a static
       // screen, so it can be recognised outright.
       await CS.clearEscMenu(io, {
-        sendKeys: I.sendKeys, wait, escWait: ESC_WAIT,
+        sendKeys: I.sendKeys, wait, escWait: escWaitMs(),
         tries: TIMING.esc.tries, tag: code.code, log: (m) => console.log(m),
       });
 
@@ -334,7 +426,7 @@ async function main() {
         }
         console.log('the replay list is up - backing out before importing');
         await I.sendKeys(["ESC"]);
-        await wait(ESC_WAIT);
+        await wait(escWaitMs());
       }
 
       // The import chunk clicks the replay history tab. Playing it while a
@@ -343,12 +435,12 @@ async function main() {
       // achieving nothing.
       if (await CS.inReplay(io)) {
         console.log('still inside a replay - leaving before importing');
-        await R.play('leave-replay', { speed: args.chunkSpeed });
+        await R.play('leave-replay', { speed: chunkSpeed() });
         await CS.waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
       }
 
       const tOpen = Date.now();
-      await R.play('open-import', { code: code.code, speed: args.chunkSpeed });
+      await R.play('open-import', { code: code.code, speed: chunkSpeed() });
       const tPlayed = Date.now();
       await CS.waitFor(io, true, TIMING.load.timeoutMs, 'the replay to load');
       const tLoaded = Date.now();
@@ -362,14 +454,14 @@ async function main() {
       // A short beat here before the capture starts poking it. If the next
       // failure logs (capture.js's events-viewer diagnostics) show this
       // helped, or did not, tune or drop it then.
-      await wait(LOAD_SETTLE);
+      await wait(loadSettleMs());
 
       // The interval chunk runs INSIDE the capture, not before it: the options
       // button only exists once N and K have put the controls on screen, and
       // the interval must change before the step is measured.
       const setInterval = first && haveIntervalChunk ? async () => {
         console.log(`setting the skip interval (${intervalChunk}), once for this session`);
-        await R.play(intervalChunk, { speed: args.chunkSpeed });
+        await R.play(intervalChunk, { speed: chunkSpeed() });
       } : null;
 
       // The first map measures the interval; the rest are told it, which saves
@@ -455,10 +547,12 @@ async function main() {
       }
 
       console.log(`map took ${((Date.now() - tOpen) / 1000).toFixed(1)}s end to end`);
-      state[key].status = got.missed.length ? 'captured-with-misses' : 'captured';
-      state[key].samples = got.samples.length;
-      state[key].missed = got.missed.length;
-      writeJson(STATE, state);
+      if (!looping) {
+        state[key].status = got.missed.length ? 'captured-with-misses' : 'captured';
+        state[key].samples = got.samples.length;
+        state[key].missed = got.missed.length;
+        writeJson(STATE, state);
+      }
       consecutiveFailures = 0;
       console.log(`captured ${got.samples.length} samples -> ${outPath}`);
 
@@ -468,9 +562,11 @@ async function main() {
       if (io.sweepTransient) io.sweepTransient();
     } catch (e) {
       consecutiveFailures++;
-      state[key].status = 'failed';
-      state[key].error = e.message;
-      writeJson(STATE, state);
+      if (!looping) {
+        state[key].status = 'failed';
+        state[key].error = e.message;
+        writeJson(STATE, state);
+      }
       console.log(`FAILED: ${e.message}`);
 
       // A failed map is the one time the scratch frames matter: only a broken
@@ -492,7 +588,7 @@ async function main() {
     // at coordinates that mean something else, so it is checked first.
     try {
       if (await CS.inReplay(io)) {
-        await R.play('leave-replay', { speed: args.chunkSpeed });
+        await R.play('leave-replay', { speed: chunkSpeed() });
         await CS.waitFor(io, false, TIMING.exit.timeoutMs, 'the replay to close');
       }
     } catch (e) {
@@ -501,7 +597,8 @@ async function main() {
     }
   }
 
-  console.log(`\nrun finished. ${maps.length} map${maps.length === 1 ? '' : 's'} in ${outPath}`);
+  console.log(`\nrun finished. ${maps.length} map${maps.length === 1 ? '' : 's'} in ${outPath}` +
+    (looping ? ` (${mapsRun} cycled)` : '') + (stopRequested ? ' - stopped' : ''));
 }
 
 module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness };

@@ -17,6 +17,33 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-11
+
+### Added
+
+- **The console can run the real overnight loop, not just one phase at a
+  time.** A new **loop** panel spawns `node run.js --code-stack
+  state/console_codes.json` — the actual queue/import/capture/leave loop
+  (`run.js`), cycling the 20-code stack instead of the live feed, so "leave it
+  running" costs nothing from the real pool. Manual phases and the loop refuse
+  to run at the same time — both drive the mouse and keyboard.
+- **`console/hotkey.ps1` — a global pause/resume hotkey (default Ctrl+Alt+P).**
+  Registers via `RegisterHotKey`/`WM_HOTKEY`, so it fires with Overwatch
+  focused, not the browser. Toggles `state/loop_pause.flag`, which `run.js`'s
+  loop checks **between maps only** (never mid-map — the current map always
+  finishes) and waits on while it exists; a beep confirms each toggle (low =
+  paused, high = resumed). The page's Pause/Resume buttons and Stop/force-stop
+  (SIGINT, then a second SIGINT) work the same way. `run.js` also reloads
+  `timing.js` at that checkpoint, so a slider saved while paused — chunk
+  speed, a quiesce, anything — applies to the next map without restarting the
+  loop; `--chunk-speed`/`--esc-wait`/`--load-settle` now read `TIMING` live
+  per map unless an explicit CLI flag pins one.
+- **`codestack.js`** — the rotating code-stack load/save/rotate, shared by the
+  console (the manual `import` phase and the loop) and by `run.js`'s new
+  `--code-stack <file>` mode. Codes cycled this way never touch
+  `state/attempts.json`; that ledger means "never again", which is backwards
+  for a stack of codes meant to be reused.
+
 ## 2026-09-10
 
 ### Added
