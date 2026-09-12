@@ -57,6 +57,39 @@ test('mapEntry writes one crop per round per side and points at them relatively'
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('a round-side with a real swap gets one crop per sample, not just the opening frame', async () => {
+  const dir = tmpdir();
+  const frame = blankFrame();
+  const got = {
+    samples: [{ t: 50, framePath: frame }, { t: 150, framePath: frame }, { t: 250, framePath: frame }],
+  };
+  const swappedSlot = { guid: 'DMON', segments: [
+    { guid: 'DVA', name: 'DVA', from_t: 50, reads: [] },
+    { guid: 'DMON', name: 'DMON', from_t: 250, reads: [] },
+  ] };
+  const stableSlot = { guid: 'ANA', segments: [{ guid: 'ANA', name: 'ANA', from_t: 50, reads: [] }] };
+  const resolved = [
+    { round_no: 1, from_t: 0, to_t: 300,
+      a: [swappedSlot, stableSlot, stableSlot, stableSlot, stableSlot],
+      b: [stableSlot, stableSlot, stableSlot, stableSlot, stableSlot],
+      flags: [] },
+  ];
+
+  const entry = await RO.mapEntry(io, dir, CODE, resolved, null, got, calib);
+
+  // side a swapped: gets a full per-sample gallery, timestamped and in order.
+  assert.ok(Array.isArray(entry.frames['1'].a_samples), 'a_samples should exist for the swapped side');
+  assert.deepStrictEqual(entry.frames['1'].a_samples.map((s) => s.t), [50, 150, 250]);
+  entry.frames['1'].a_samples.forEach((s) => {
+    assert.ok(fs.existsSync(path.join(dir, s.path)), s.path + ' should exist');
+  });
+
+  // side b never swapped: no extra crops written, keeping the common case cheap.
+  assert.strictEqual(entry.frames['1'].b_samples, undefined);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('a round with no frame is skipped, not crashed on', async () => {
   const dir = tmpdir();
   const frame = blankFrame();

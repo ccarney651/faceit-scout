@@ -65,17 +65,40 @@
     var frames = {};
     for (var i = 0; i < resolved.length; i++) {
       var r = resolved[i];
-      var first = (got.samples || []).find(function (s) {
+      var mine = (got.samples || []).filter(function (s) {
         return s.t >= r.from_t && s.t <= r.to_t;
       });
+      var first = mine[0];
       if (!first || !first.framePath) continue;
-      var img = await io.loadImage(first.framePath);
+      var firstImg = await io.loadImage(first.framePath);
       var pair = {};
-      ['a', 'b'].forEach(function (side) {
+      for (var si = 0; si < 2; si++) {
+        var side = ['a', 'b'][si];
         var name = code.code + '-r' + r.round_no + '-' + side + '.png';
-        writeStrip(img, calib.FROZEN.boxes[side], path.join(cropsDir, name));
+        writeStrip(firstImg, calib.FROZEN.boxes[side], path.join(cropsDir, name));
         pair[side] = 'crops/' + name;
-      });
+
+        // A confirmed mid-round swap on this side is worth every read that fed
+        // segmentSlot()'s decision, not just the round's opening frame - one
+        // crop per sample the round actually took. Every other slot/round
+        // keeps the single opening crop above; this only grows disk use where
+        // there is something to actually verify by eye.
+        var swapped = (r[side] || []).some(function (s) {
+          return Array.isArray(s.segments) && s.segments.length > 1;
+        });
+        if (swapped && mine.length > 1) {
+          var gallery = [];
+          for (var k = 0; k < mine.length; k++) {
+            var samp = mine[k];
+            if (!samp.framePath) continue;
+            var img = (samp === first) ? firstImg : await io.loadImage(samp.framePath);
+            var sname = code.code + '-r' + r.round_no + '-' + side + '-s' + k + '.png';
+            writeStrip(img, calib.FROZEN.boxes[side], path.join(cropsDir, sname));
+            gallery.push({ t: samp.t, path: 'crops/' + sname });
+          }
+          pair[side + '_samples'] = gallery;
+        }
+      }
       frames[String(r.round_no)] = pair;
     }
 

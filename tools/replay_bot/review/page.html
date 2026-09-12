@@ -76,6 +76,11 @@
   .segrow img { width: 14px; height: 14px; border-radius: 2px; }
   .segtime { color: var(--dim); margin-left: auto; }
   .slot.swapped { border-color: #6cc6e0; background: #16303a; }
+  .gallabel { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+  .gallery { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; }
+  .galitem { flex: 0 0 auto; text-align: center; }
+  .galitem .strip { width: 170px; max-width: 170px; margin-bottom: 2px; }
+  .galtime { font-size: 10.5px; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -102,6 +107,11 @@ let HEROES = [];
 let HERO_BY_GUID = {};
 let dirty = false;
 let onlyIssues = true;
+// TEMP: player attribution UI hidden while hero-capture accuracy is the
+// priority - attribution and orientation detection still run in run.js
+// unchanged (they share one OCR pass), only its display here is off. Flip
+// this back to true to restore the player line and roster chips.
+const SHOW_ATTRIBUTION = false;
 
 async function load() {
   try {
@@ -207,7 +217,8 @@ function renderMap(m, mi) {
   head.appendChild(el('span', 'summary', (m.side_a_team || 'A') + ' vs ' + (m.side_b_team || 'B')));
   const fc = mapFlagCount(m);
   const sm = el('span', 'summary' + (fc ? ' has-flags' : ''),
-    (m.rounds || []).length + ' rounds · ' + fc + ' flags · attribution ' + attributionScore(m));
+    (m.rounds || []).length + ' rounds · ' + fc + ' flags'
+    + (SHOW_ATTRIBUTION ? ' · attribution ' + attributionScore(m) : ''));
   head.appendChild(sm);
   if (m.orientation === 'swapped' || m.orientation === null) {
     head.appendChild(el('span', 'summary has-flags',
@@ -263,6 +274,26 @@ function renderRound(m, mi, r, flagged) {
     }
     const cropRel = ((m.frames || {})[r.round_no] || {})[side];
     if (cropRel) { const im = el('img', 'strip'); im.src = '/' + cropRel; im.loading = 'lazy'; sd.appendChild(im); }
+
+    // Every sample this round-side actually took, when a slot on it holds a
+    // confirmed swap - review_out.js only writes this gallery for a side with
+    // a real swap, so its presence alone means "look here". One gallery per
+    // side, not per slot, since these are the same full portrait-band crops a
+    // swapped slot's segments were read off.
+    const gallery = ((m.frames || {})[r.round_no] || {})[side + '_samples'];
+    if (Array.isArray(gallery) && gallery.length) {
+      sd.appendChild(el('div', 'gallabel', 'every sample this round took (a slot below swapped):'));
+      const gal = el('div', 'gallery');
+      gallery.forEach((g) => {
+        const item = el('div', 'galitem');
+        const im = el('img', 'strip'); im.src = '/' + g.path; im.loading = 'lazy';
+        item.appendChild(im);
+        item.appendChild(el('div', 'galtime', mmss(g.t)));
+        gal.appendChild(item);
+      });
+      sd.appendChild(gal);
+    }
+
     const slots = el('div', 'slots');
     for (let i = 0; i < 5; i++) {
       const base = (r[side] || [])[i] || {};
@@ -316,8 +347,10 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
 
   const roster = (m.roster || {})[side] || [];
   const pid = s.player_id;
-  const pname = (roster.find((p) => p.id === pid) || {}).name || (pid ? pid.slice(0, 8) : '—');
-  cell.appendChild(el('div', 'player', 'player: ' + pname));
+  if (SHOW_ATTRIBUTION) {
+    const pname = (roster.find((p) => p.id === pid) || {}).name || (pid ? pid.slice(0, 8) : '—');
+    cell.appendChild(el('div', 'player', 'player: ' + pname));
+  }
 
   if (flags.length) {
     const tags = el('div', 'tags');
@@ -325,7 +358,7 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
     cell.appendChild(tags);
   }
 
-  if (roster.length) {
+  if (SHOW_ATTRIBUTION && roster.length) {
     const chips = el('div', 'chips');
     roster.forEach((p) => {
       const c = el('span', 'chip' + (p.id === pid ? ' on' : ''), p.name);
