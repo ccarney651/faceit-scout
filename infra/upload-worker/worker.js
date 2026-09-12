@@ -1,15 +1,37 @@
 /**
- * owdb upload endpoint (Cloudflare Worker) - OPEN ACCESS.
+ * owdb upload endpoint (Cloudflare Worker) - OPERATOR-ONLY.
  *
- * Anyone may contribute; nobody is issued anything. The tool generates a random
- * identity token on first publish and sends it with the chosen display name.
- * The first install to upload under a name CLAIMS it (name -> token hash in
- * KV); later uploads must present the same token, so a stranger cannot
- * overwrite someone else's file - but no curator ever hands out keys. The
- * GitHub token exists only as a server secret; contributors never hold any
- * credential worth stealing.
+ * 2026-09-12: capture is no longer open to the public. Publishing a
+ * contribution, and holding/releasing a live scouting claim, both now require
+ * a verified Discord session whose id is in ADMIN_IDS - see isAdminSession()
+ * below, checked at the top of the upload handler, the /claims|/claim|/unclaim
+ * HTTP paths, and the ClaimRoom Durable Object's websocket `identify` message
+ * (the one identity path that never reaches the top-level fetch() gate, since
+ * a WS upgrade carries no session - identity arrives in-band, after connect).
+ * The read-only /claims GET is gated the same way as the write paths, so the
+ * whole capture surface is consistently operator-only. /refresh is untouched -
+ * "ask the site to rebuild from cache" is a general dashboard feature, not
+ * part of capture, and stays public.
  *
- * What keeps an open endpoint sane:
+ * ONE exception: the local replay-bot tool (tools/replay_bot/review/server.js)
+ * uploads under the fixed name REPLAY_BOT_NAME with its own per-install
+ * token, never a Discord session - it is the operator's own automation, not
+ * a public contributor, so the upload gate admits that one keyless name.
+ * Nothing else about it changed: the pre-existing token-hash ownership check
+ * below still stops anyone but the real replay-bot install from publishing
+ * under that name.
+ *
+ * Everything below this point - the name-claim, per-name rate limit, and
+ * token-hash ownership check - predates that decision and is now UNREACHABLE
+ * in normal operation (isAdminSession() requires a session, and every keyless
+ * branch only runs when there is none). It is left in place rather than torn
+ * out in the same change that added the gate - ripping out untested,
+ * deployed-only infra with no test harness is a separate, riskier piece of
+ * work than adding one early return, and worth doing deliberately if the
+ * public/keyless path is never coming back.
+ *
+ * What the (now dormant) open-access design kept sane, for whoever does that
+ * cleanup:
  *  - a name writes exactly one file: data/captures/<season>/<name>.json
  *  - shape checks + 5 MB cap here; REAL validation (games must exist on
  *    FACEIT, teams must match) runs at site build, where junk is dropped
@@ -25,6 +47,13 @@
  */
 
 const NAME_RE = /^[a-z0-9_-]{2,24}$/;
+// The local replay-bot tool (tools/replay_bot/review/server.js) uploads under
+// this fixed name with its own per-install token - not a Discord session. It
+// is the operator's own automation, not a public contributor, so it is the
+// one keyless identity the operator-only gate below still admits; the
+// pre-existing token-hash ownership check further down (unchanged) still
+// stops anyone else from publishing under this name once it has claimed it.
+const REPLAY_BOT_NAME = "replay-bot";
 const MAX_BYTES = 5 * 1024 * 1024;
 const MIN_INTERVAL_MS = 30_000;
 const REFRESH_COOLDOWN_MS = 10 * 60_000;   // a site rebuild takes ~2 minutes
@@ -110,13 +139,26 @@ export default {
     // claim/release across everyone, and a dropped connection frees that scout's
     // maps at once. GET /claims + POST /claim|/unclaim stay as HTTP fallbacks that
     // hit the same DO. The Worker resolves identity, then forwards to the DO.
-    if (url.pathname === "/claims" || url.pathname === "/claim" || url.pathname === "/unclaim" || url.pathname === "/claims/ws") {
+    //
+    // Capture is operator-only: these HTTP paths are gated here, before ever
+    // reaching the DO. /claims/ws is handled separately just below - a WS
+    // upgrade carries no session to check yet, so that gate lives in the DO's
+    // `identify` handler instead, once identity arrives in-band.
+    if (url.pathname === "/claims" || url.pathname === "/claim" || url.pathname === "/unclaim") {
+      const sess = await verifySession(request.headers.get("x-owdb-session"), env);
+      if (!isAdminSession(sess, env)) {
+        return json(403, { error: "capture is not open to the public right now" });
+      }
       const { owner, by } = await claimIdentity(request, env);
       const stub = env.CLAIM_ROOM.get(env.CLAIM_ROOM.idFromName("global"));
-      const fwd = new Request(request.url, request);   // preserves method/body and the Upgrade header for WS
+      const fwd = new Request(request.url, request);   // preserves method/body
       fwd.headers.set("x-owner", owner);
       fwd.headers.set("x-by", by);
       return stub.fetch(fwd);
+    }
+    if (url.pathname === "/claims/ws") {
+      const stub = env.CLAIM_ROOM.get(env.CLAIM_ROOM.idFromName("global"));
+      return stub.fetch(new Request(request.url, request));   // admin check happens at `identify`, in-band
     }
 
     // Discord OAuth (scaffold). Inert until DISCORD_* + SESSION_SECRET are set:
@@ -142,6 +184,13 @@ export default {
     // the existing name-claim unchanged. That prefix is reserved for verified
     // sessions, so a keyless upload can't hand-craft one to impersonate a login.
     const sess = await verifySession(request.headers.get("x-owdb-session"), env);
+    // Capture is operator-only: refused here, before any of the legacy
+    // keyless/name-claim logic below runs, so a stranger never reaches GitHub.
+    // The one exception is the operator's own replay-bot tool (see
+    // REPLAY_BOT_NAME above), which has no Discord session at all.
+    if (!isAdminSession(sess, env) && name !== REPLAY_BOT_NAME) {
+      return json(403, { error: "capture is not open to the public right now - log in with the operator's Discord account" });
+    }
     if (sess) token = "discord:" + sess.d;
     else if (token.startsWith("discord:")) return json(400, { error: "that token prefix is reserved for Discord login" });
     // Resolve identity. A Discord session is AUTHORITATIVE: the display name and
@@ -277,6 +326,15 @@ async function verifySession(tok, env) {
     const p = JSON.parse(new TextDecoder().decode(b64urlToBytes(body)));
     return p.exp && Date.now() < p.exp ? p : null;
   } catch { return null; }
+}
+// The one authority for "is this the operator": a verified session whose
+// Discord id is in ADMIN_IDS. Mirrors the admin/* endpoints' own inline check
+// (kept separate there rather than refactored onto this, to keep this change
+// to the capture-gating surface); used by every capture-access gate below.
+function isAdminSession(sess, env) {
+  if (!sess) return false;
+  const admins = (env.ADMIN_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return admins.includes(String(sess.d));
 }
 function oauthReady(env) {
   return !!(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET &&
@@ -539,6 +597,17 @@ export class ClaimRoom {
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (m.type === "identify") {
+      // Capture is operator-only. This is the one identity path the Worker's
+      // top-level fetch() cannot gate up front - a WS upgrade carries no
+      // session, identity arrives in-band on this first message - so the
+      // check has to live here instead. A refused socket never gets
+      // serializeAttachment() below, which is what the claim/unclaim guard
+      // further down keys off.
+      const sess = await verifySession(m.session, this.env);
+      if (!isAdminSession(sess, this.env)) {
+        try { ws.send(JSON.stringify({ type: "identify-refused", error: "capture is not open to the public right now" })); } catch (e) {}
+        return;
+      }
       const { owner, by } = await resolveIdentity({
         session: m.session, name: m.name, token: m.token,
       }, this.env);
@@ -547,6 +616,16 @@ export class ClaimRoom {
       return;
     }
     const { owner, by } = ws.deserializeAttachment() || {};
+    // No identity attached means never identified, or identify was refused
+    // above - either way this socket is not an admin, and doClaim/doRelease
+    // must not run with an undefined owner (an unclaimed key would otherwise
+    // happily claim itself to "nobody").
+    if (!owner) {
+      if (m.type === "claim") {
+        try { ws.send(JSON.stringify({ type: "claimresult", key: m.key, ok: false, error: "not identified" })); } catch (e) {}
+      }
+      return;
+    }
     if (m.type === "claim" && this.ok(m.key)) {
       const r = this.doClaim(m.key, owner, by);
       try { ws.send(JSON.stringify({ type: "claimresult", key: m.key, ok: r.ok, by: r.by })); } catch (e) {}
