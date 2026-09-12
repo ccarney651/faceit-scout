@@ -201,6 +201,39 @@ button:disabled{opacity:.45;cursor:default}
   .slot .pn{font-style:normal;color:var(--muted);font-size:12px}
   .slot .sc{text-align:right}
 </style></head><body>
+<div id="capturepaused" style="position:fixed;inset:0;z-index:999999;background:var(--bg);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div style="max-width:520px">
+    <span class="prodname" style="justify-content:center;margin-bottom:10px"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">Capture</span></span>
+    <h1 style="font-size:26px;margin:0 0 10px">Manual capture is closed</h1>
+    <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 20px">Scouting is now automated. Head back to the league site to browse what's been captured.</p>
+    <a class="btn primary" href="../" style="display:inline-block;text-decoration:none">Back to owdb →</a>
+  </div>
+</div>
+<script>
+// ---- capture lock ----
+// Manual capture is being retired in favour of the automated replay bot. The
+// overlay above is STATIC MARKUP; this script only ever REMOVES it - same
+// design as docs/capture/scrim.html's lock, and for the same reason: a syntax
+// error, a CSP block, localStorage disabled, an exception - any of it leaves
+// the page locked, which is the safe failure. A gate that added the overlay
+// instead would fail open.
+//
+// It is a soft gate, not a security boundary - nothing behind it is secret.
+// Unlock once per browser with ?unlock=capturebeta (it persists), re-lock
+// with ?lock=1. No localhost exemption, deliberately - see scrim.html's note.
+(function(){
+  try{
+    var KEY='owdb_capture_unlock', TOKEN='capturebeta';
+    var q=new URLSearchParams(location.search);
+    if(q.get('lock')) localStorage.removeItem(KEY);
+    else if(q.get('unlock')) localStorage.setItem(KEY, q.get('unlock'));
+    if(localStorage.getItem(KEY)===TOKEN){
+      var el=document.getElementById('capturepaused');
+      if(el) el.remove();
+    }
+  }catch(e){ /* stay locked */ }
+})();
+</script>
 <header>
   <div class="hrow">
     <div>
