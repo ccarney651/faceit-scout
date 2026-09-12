@@ -138,6 +138,7 @@ function feedRows(feed, attempts, opts) {
     divisions: (opts && opts.divisions) || null,
     teams: (opts && opts.teams) || null,
     wipeDate: feed.code_wipe_date,
+    regionWipeDates: RunJS.REGION_WIPE_OVERRIDES,
     done: RunJS.attemptedKeys(attempts),
   });
 }

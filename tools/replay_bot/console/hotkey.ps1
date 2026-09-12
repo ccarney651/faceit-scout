@@ -1,21 +1,27 @@
 # tools/replay_bot/console/hotkey.ps1
-# A global pause/resume key for the console's supervised loop (§14.3b) -
-# fires even while Overwatch is focused, because that is where you are when you
-# want to use it.
+# Global pause/resume and stop keys for a running loop (§14.3b) - fire even
+# while Overwatch is focused, because that is where you are when you want to
+# use them.
 #
 #   powershell -ExecutionPolicy Bypass -File console/hotkey.ps1
 #   powershell -ExecutionPolicy Bypass -File console/hotkey.ps1 -Modifiers Ctrl+Shift -Key F9
+#   powershell -ExecutionPolicy Bypass -File console/hotkey.ps1 -StopModifiers Ctrl+Shift -StopKey F10
 #
-# Default Ctrl+Alt+P. Toggles state/loop_pause.flag by creating or deleting it -
-# the same file run.js's --code-stack loop checks between maps (never mid-map),
-# and the same file the console's Pause/Resume buttons write. Whichever last
-# touched it wins; there is no separate "who paused it" state, on purpose - one
-# flag, one meaning, three ways to flip it.
+# Default Ctrl+Alt+P for pause/resume, Ctrl+Alt+S for stop. Pause TOGGLES
+# state/loop_pause.flag by creating or deleting it - the same file run.js's
+# --code-stack loop checks between maps (never mid-map), and the same file the
+# console's Pause/Resume buttons write. Whichever last touched it wins; there
+# is no separate "who paused it" state, on purpose - one flag, one meaning,
+# multiple ways to flip it. Stop only ever CREATES state/loop_stop.flag - it
+# is not a toggle, because "resume a stopped run" is not a thing (run.js
+# clears its own stop flag at the start of the next run); pressing it again
+# while already stopping is a harmless no-op re-confirmation beep.
 #
 # A short beep on each press is the only feedback, because the point is not
-# having to look at a screen: low pitch for paused, high for resumed.
+# having to look at a screen: low pitch for paused, high for resumed, a
+# longer low tone for stop.
 #
-# THIS WINDOW MUST STAY OPEN - it is the thing listening for the key. Ctrl-C
+# THIS WINDOW MUST STAY OPEN - it is the thing listening for the keys. Ctrl-C
 # here (or closing the window) stops LISTENING; it does not touch a loop
 # already running, which keeps going unpaused until it hits its own end.
 
@@ -23,7 +29,11 @@ param(
   [ValidateSet('Ctrl+Alt', 'Ctrl+Shift', 'Alt+Shift', 'Ctrl+Alt+Shift')]
   [string]$Modifiers = 'Ctrl+Alt',
   [string]$Key = 'P',
-  [string]$Flag = (Join-Path $PSScriptRoot '..\state\loop_pause.flag')
+  [ValidateSet('Ctrl+Alt', 'Ctrl+Shift', 'Alt+Shift', 'Ctrl+Alt+Shift')]
+  [string]$StopModifiers = 'Ctrl+Alt',
+  [string]$StopKey = 'S',
+  [string]$Flag = (Join-Path $PSScriptRoot '..\state\loop_pause.flag'),
+  [string]$StopFlag = (Join-Path $PSScriptRoot '..\state\loop_stop.flag')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,9 +49,17 @@ $MOD = @{
 }
 $modFlags = [uint32]($MOD[$Modifiers] -bor 0x4000)
 $vk = [uint32][System.Windows.Forms.Keys]::$Key
+$stopModFlags = [uint32]($MOD[$StopModifiers] -bor 0x4000)
+$stopVk = [uint32][System.Windows.Forms.Keys]::$StopKey
+
+if ($modFlags -eq $stopModFlags -and $vk -eq $stopVk) {
+  throw "pause ($Modifiers+$Key) and stop ($StopModifiers+$StopKey) cannot be the same combo"
+}
 
 $dir = Split-Path $Flag -Parent
 if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+$stopDir = Split-Path $StopFlag -Parent
+if (-not (Test-Path $stopDir)) { New-Item -ItemType Directory -Path $stopDir -Force | Out-Null }
 
 # RegisterHotKey needs a window handle, and WM_HOTKEY only reaches WndProc - a
 # console window has neither, so this is a hidden Form subclassed in C#. Same
@@ -56,13 +74,15 @@ public class HotkeyForm : Form {
   [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
   [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd, int id);
   const int WM_HOTKEY = 0x0312;
-  const int HOTKEY_ID = 0x4F57;   // arbitrary, just needs to be ours
-  string flagPath;
-  uint mods, vk;
-  bool registered;
+  const int HOTKEY_ID_PAUSE = 0x4F57;   // arbitrary, just needs to be ours
+  const int HOTKEY_ID_STOP = 0x4F58;
+  string flagPath, stopFlagPath;
+  uint mods, vk, stopMods, stopVk;
+  bool pauseRegistered, stopRegistered;
 
-  public HotkeyForm(uint mods, uint vk, string flag) {
+  public HotkeyForm(uint mods, uint vk, string flag, uint stopMods, uint stopVk, string stopFlag) {
     this.mods = mods; this.vk = vk; this.flagPath = flag;
+    this.stopMods = stopMods; this.stopVk = stopVk; this.stopFlagPath = stopFlag;
     this.ShowInTaskbar = false;
     this.WindowState = FormWindowState.Minimized;
     this.Opacity = 0;
@@ -71,15 +91,19 @@ public class HotkeyForm : Form {
   protected override void OnLoad(EventArgs e) {
     base.OnLoad(e);
     this.Hide();
-    registered = RegisterHotKey(this.Handle, HOTKEY_ID, mods, vk);
-    if (!registered) {
-      Console.WriteLine("ERR could not register the hotkey - already taken by another app?");
-      this.Close();
+    pauseRegistered = RegisterHotKey(this.Handle, HOTKEY_ID_PAUSE, mods, vk);
+    if (!pauseRegistered) {
+      Console.WriteLine("ERR could not register the pause hotkey - already taken by another app?");
     }
+    stopRegistered = RegisterHotKey(this.Handle, HOTKEY_ID_STOP, stopMods, stopVk);
+    if (!stopRegistered) {
+      Console.WriteLine("ERR could not register the stop hotkey - already taken by another app?");
+    }
+    if (!pauseRegistered && !stopRegistered) this.Close();
   }
 
   protected override void WndProc(ref Message m) {
-    if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID) {
+    if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID_PAUSE) {
       try {
         if (System.IO.File.Exists(flagPath)) {
           System.IO.File.Delete(flagPath);
@@ -93,23 +117,38 @@ public class HotkeyForm : Form {
       } catch (Exception ex) {
         Console.WriteLine("ERR " + ex.Message);
       }
+    } else if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID_STOP) {
+      try {
+        // Create-only, never a toggle: "resume a stopped run" is not a thing.
+        // run.js clears its own stop flag at the start of the next run, so
+        // there is nothing for this key to undo - pressing it again while
+        // already stopping is just a re-confirmation beep.
+        bool already = System.IO.File.Exists(stopFlagPath);
+        if (!already) System.IO.File.WriteAllText(stopFlagPath, DateTime.UtcNow.ToString("o"));
+        Console.WriteLine((already ? "already stopping" : "STOPPING") + "  " + DateTime.Now.ToString("HH:mm:ss"));
+        Console.Beep(220, 400);
+      } catch (Exception ex) {
+        Console.WriteLine("ERR " + ex.Message);
+      }
     }
     base.WndProc(ref m);
   }
 
   protected override void OnFormClosing(FormClosingEventArgs e) {
-    if (registered) UnregisterHotKey(this.Handle, HOTKEY_ID);
+    if (pauseRegistered) UnregisterHotKey(this.Handle, HOTKEY_ID_PAUSE);
+    if (stopRegistered) UnregisterHotKey(this.Handle, HOTKEY_ID_STOP);
     base.OnFormClosing(e);
   }
 }
 '@
 Add-Type -TypeDefinition $sig -ReferencedAssemblies System.Windows.Forms, System.Drawing
 
-$form = New-Object HotkeyForm($modFlags, $vk, $Flag)
+$form = New-Object HotkeyForm($modFlags, $vk, $Flag, $stopModFlags, $stopVk, $StopFlag)
 if ($form.IsDisposed) { exit 1 }
 
-Write-Output "listening for $Modifiers+$Key"
-Write-Output "toggles: $Flag"
-Write-Output "(present = paused; this window must stay open)"
+Write-Output "listening for $Modifiers+$Key (pause/resume) and $StopModifiers+$StopKey (stop)"
+Write-Output "pause toggles: $Flag (present = paused)"
+Write-Output "stop creates:  $StopFlag (one-shot, stops after the current map)"
+Write-Output "(this window must stay open)"
 
 [System.Windows.Forms.Application]::Run($form)

@@ -226,6 +226,18 @@ function attemptedKeys(state) {
   return Object.keys(state || {}).filter((k) => isDoneEntry(state[k]));
 }
 
+// Hand-maintained, dated record of a region's wipe landing stricter than the
+// feed's one global code_wipe_date - see queue.js's regionWipeDates docs for
+// why this can't just be baked into queue.js itself. Same spirit as
+// owdb/db.py's _SEED_WIPES: this is observed fact about one specific patch,
+// added when a region's post-patch-day codes turn out to be dead on arrival.
+//
+// 2026-09-08: confirmed by every NA code from that day failing with "timed
+// out ... waiting for the replay to load" (the exact symptom of importing an
+// already-invalidated code) - NA's server restart landed mid-day, not evening
+// like the global code_wipe_date (2026-09-07) assumes.
+const REGION_WIPE_OVERRIDES = { NA: '2026-09-08' };
+
 // Is this feed new enough to spend codes against?
 //
 // THE FEED GOES STALE AND STILL LOOKS FINE. A local data.json built before the
@@ -329,6 +341,7 @@ async function main() {
       teams: args.teams,
       newestFirst: args.newestFirst,
       wipeDate: feed.code_wipe_date,
+      regionWipeDates: REGION_WIPE_OVERRIDES,
       done: attemptedKeys(state),
     });
     console.log(`feed has ${(feed.codes || []).length} codes, wipe ${feed.code_wipe_date}; ` +
@@ -687,7 +700,10 @@ async function main() {
     (looping ? ` (${mapsRun} cycled)` : '') + (stopRequested ? ' - stopped' : ''));
 }
 
-module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness, isDoneEntry, FAIL_RETRY_CAP };
+module.exports = {
+  parseArgs, synthesise, attemptedKeys, feedFreshness, isDoneEntry, FAIL_RETRY_CAP,
+  REGION_WIPE_OVERRIDES,
+};
 
 // Only when run as a command. Requiring this file - which the tests do - must
 // never start driving the client.

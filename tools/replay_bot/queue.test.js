@@ -133,3 +133,52 @@ test('no filters means the whole live queue, as before', () => {
   const codes = [code({ code: 'A', division: 'NA Expert' }), code({ code: 'B' })];
   assert.strictEqual(Q.pending(codes, { wipeDate: '2026-08-18' }).length, 2);
 });
+
+// A patch's regional server restarts do not all land at the same real moment,
+// so one region can need a stricter cutoff than the global code_wipe_date -
+// see 2026-09-08, where NA's restart invalidated every NA game that whole day
+// while the global date (dated day-early per owdb/db.py's convention) still
+// treats that day as alive by default.
+test('regionWipeDates is opt-in - omitting it leaves an unrelated wipeDate scenario untouched', () => {
+  const codes = [code({ code: 'A', division: 'NA Expert', finished_at: '2026-09-08T02:33:20Z' })];
+  const got = Q.pending(codes, { wipeDate: '2026-08-18' });
+  assert.deepStrictEqual(got.map((c) => c.code), ['A'], 'no override passed, so only the global (much earlier) wipeDate applies');
+});
+
+test('a region override drops that region\'s games on its own wipe day, stricter than the global date', () => {
+  const codes = [
+    code({ code: 'DEAD-NA', division: 'NA Expert', finished_at: '2026-09-08T02:33:20Z' }),
+    code({ code: 'ALIVE-EMEA', division: 'EMEA Master', finished_at: '2026-09-08T02:33:20Z' }),
+  ];
+  const got = Q.pending(codes, {
+    wipeDate: '2026-09-07', regionWipeDates: { NA: '2026-09-08' },
+  }).map((c) => c.code);
+  assert.deepStrictEqual(got, ['ALIVE-EMEA']);
+});
+
+test('a region override never makes a code MORE alive than the global date allows', () => {
+  // Finished after the (looser) override but on-or-before the (stricter)
+  // global date - must still be dead, or a looser override would wrongly
+  // resurrect codes the global wipe already killed.
+  const codes = [code({ code: 'A', division: 'NA Expert', finished_at: '2026-08-10T00:00:00Z' })];
+  const got = Q.pending(codes, {
+    wipeDate: '2026-08-18', regionWipeDates: { NA: '2026-08-01' },
+  });
+  assert.deepStrictEqual(got, [], 'the later (stricter) of the two dates always wins');
+});
+
+test('isDead answers the same question pending() uses internally, for reuse outside a full queue build', () => {
+  const naCode = code({ division: 'NA Expert', finished_at: '2026-09-08T02:33:20Z' });
+  const emeaCode = code({ division: 'EMEA Master', finished_at: '2026-09-08T02:33:20Z' });
+  const overrides = { NA: '2026-09-08' };
+  assert.strictEqual(Q.isDead(naCode, '2026-09-07', overrides), true);
+  assert.strictEqual(Q.isDead(emeaCode, '2026-09-07', overrides), false);
+  assert.strictEqual(Q.isDead(naCode, '2026-09-07', undefined), false, 'no overrides given - falls back to the global date alone');
+});
+
+test('regionOf reads the region as the division\'s first word', () => {
+  assert.strictEqual(Q.regionOf('NA Master'), 'NA');
+  assert.strictEqual(Q.regionOf('EMEA Intermediate'), 'EMEA');
+  assert.strictEqual(Q.regionOf(''), '');
+  assert.strictEqual(Q.regionOf(undefined), '');
+});
