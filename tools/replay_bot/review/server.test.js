@@ -27,6 +27,33 @@ test('heroList includes a session\'s custom heroes', () => {
   assert.strictEqual(list[0].name, 'D.Mon');
 });
 
+test('categorizeFailure maps known error text to a stable category, unknown text to other', () => {
+  assert.strictEqual(SV.categorizeFailure('one press moved 0px - the forward key is not working').id, 'seek-stuck');
+  assert.strictEqual(SV.categorizeFailure('events viewer would not open - K did not open the panel').id, 'events-viewer');
+  assert.strictEqual(SV.categorizeFailure('could not foreground Overwatch').id, 'focus');
+  assert.strictEqual(SV.categorizeFailure('timed out after 90s waiting for the replay to load').id, 'load-timeout');
+  assert.strictEqual(SV.categorizeFailure('the ESC menu will not close').id, 'stuck-menu');
+  assert.strictEqual(SV.categorizeFailure('something nobody has seen before').id, 'other');
+  assert.strictEqual(SV.categorizeFailure(undefined).id, 'other');
+});
+
+test('failureList keeps only failed attempts, joined against the feed, oldest first', () => {
+  const attempts = {
+    'm1:1': { code: 'AAA111', started_at: '2026-09-12T02:00:00Z', status: 'failed', error: 'could not foreground Overwatch' },
+    'm1:2': { code: 'BBB222', started_at: '2026-09-12T01:00:00Z', status: 'failed', error: 'timed out after 90s waiting for the replay to load' },
+    'm1:3': { code: 'CCC333', started_at: '2026-09-12T03:00:00Z', status: 'captured', samples: 5, missed: 0 },
+  };
+  const feedCodes = [
+    { code: 'AAA111', match_id: 'm1', game_no: 1, map: 'Nepal', division: 'EMEA Master', team_a: 'Wasp', team_b: 'NewGens' },
+  ];
+  const out = SV.failureList(attempts, feedCodes);
+  assert.strictEqual(out.length, 2);
+  assert.deepStrictEqual(out.map((f) => f.code), ['BBB222', 'AAA111']);
+  assert.strictEqual(out[1].category, 'focus');
+  assert.strictEqual(out[1].map, 'Nepal');
+  assert.strictEqual(out[0].map, null, 'a code missing from the feed still gets a row, just no map context');
+});
+
 const ROUNDS = () => ([{
   round_no: 1, from_t: 0, to_t: 300,
   a: [
@@ -109,6 +136,31 @@ test('uploadWith sends the worker headers and returns its reply', async () => {
   assert.deepStrictEqual(r, { ok: true, status: 200, body: { action: 'created', maps: 3 } });
 });
 
+// --- currentReviewPath ---------------------------------------------------
+
+test('currentReviewPath finds the newest review when no session is pinned', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbrev-path-'));
+  fs.writeFileSync(path.join(dir, 'old.review.json'), '{}');
+  const newer = path.join(dir, 'new.review.json');
+  fs.writeFileSync(newer, '{}');
+  fs.utimesSync(newer, new Date(), new Date(Date.now() + 60000));
+  assert.strictEqual(SV.currentReviewPath({ outDir: dir, session: null }), newer);
+});
+
+test('currentReviewPath returns null when nothing exists yet', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbrev-path-empty-'));
+  assert.strictEqual(SV.currentReviewPath({ outDir: dir, session: null }), null);
+});
+
+test('currentReviewPath honours an explicit pinned session', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbrev-path-pin-'));
+  fs.writeFileSync(path.join(dir, 'a.review.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'b.review.json'), '{}');
+  assert.strictEqual(
+    SV.currentReviewPath({ outDir: dir, session: 'a' }),
+    path.join(dir, 'a.review.json'));
+});
+
 // --- the handler over a temp session -----------------------------------
 
 function tmpSession() {
@@ -134,8 +186,9 @@ function tmpSession() {
   const pagePath = path.join(dir, 'page.html');
   fs.writeFileSync(pagePath, '<!doctype html><title>x</title>');
   return {
-    dir,
-    ctx: { reviewPath, feedPath, refsPath, iconsPath, stateDir: path.join(dir, 'state'), pagePath,
+    dir, reviewPath,
+    ctx: { outDir: dir, session: null, feedPath, refsPath, iconsPath,
+      stateDir: path.join(dir, 'state'), pagePath,
       fetch: async () => ({ ok: true, status: 200, json: async () => ({ action: 'created', maps: 1 }) }) },
   };
 }
@@ -148,7 +201,13 @@ function once(ctx, method, urlPath, body, headers) {
       const port = srv.address().port;
       const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, headers: headers || {} }, (res) => {
         let buf = []; res.on('data', (d) => buf.push(d));
-        res.on('end', () => { srv.close(); resolve({ status: res.statusCode, buf: Buffer.concat(buf), headers: res.headers }); });
+        res.on('end', () => {
+          srv.close();
+          const raw = Buffer.concat(buf);
+          let body;
+          try { body = JSON.parse(raw); } catch (e) { body = undefined; }
+          resolve({ status: res.statusCode, buf: raw, body, headers: res.headers });
+        });
       });
       if (body != null) req.end(typeof body === 'string' ? body : JSON.stringify(body));
       else req.end();
@@ -190,6 +249,30 @@ test('GET /crops/<name> serves a crop and refuses a traversal', async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('GET /failures reads state/attempts.json beside the session and categorises it', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.mkdirSync(ctx.stateDir, { recursive: true });
+  fs.writeFileSync(path.join(ctx.stateDir, 'attempts.json'), JSON.stringify({
+    'm1:1': { code: 'AAA111', started_at: '2026-09-12T02:00:00Z', status: 'failed', error: 'could not foreground Overwatch' },
+    'm1:2': { code: 'CCC333', started_at: '2026-09-12T03:00:00Z', status: 'captured', samples: 5, missed: 0 },
+  }));
+  const r = await once(ctx, 'GET', '/failures');
+  assert.strictEqual(r.status, 200);
+  const j = JSON.parse(r.buf);
+  assert.strictEqual(j.failures.length, 1);
+  assert.strictEqual(j.failures[0].code, 'AAA111');
+  assert.strictEqual(j.failures[0].category, 'focus');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('GET /failures returns an empty list when there is no attempts.json yet', async () => {
+  const { dir, ctx } = tmpSession();
+  const r = await once(ctx, 'GET', '/failures');
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(JSON.parse(r.buf).failures, []);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('GET /hero-list merges refs, feed roles and session customs', async () => {
   const { dir, ctx } = tmpSession();
   const r = await once(ctx, 'GET', '/hero-list');
@@ -199,11 +282,11 @@ test('GET /hero-list merges refs, feed roles and session customs', async () => {
 });
 
 test('POST /upload refuses while a map is unreviewed, then accepts', async () => {
-  const { dir, ctx } = tmpSession();
+  const { dir, ctx, reviewPath } = tmpSession();
   const blocked = await once(ctx, 'POST', '/upload');
   assert.strictEqual(blocked.status, 409);
 
-  const review = JSON.parse(fs.readFileSync(ctx.reviewPath));
+  const review = JSON.parse(fs.readFileSync(reviewPath));
   review.maps[0].status = 'reviewed';
   await once(ctx, 'POST', '/save', review);
 
@@ -214,12 +297,12 @@ test('POST /upload refuses while a map is unreviewed, then accepts', async () =>
 });
 
 test('POST /finalize writes the contribution beside the artifact', async () => {
-  const { dir, ctx } = tmpSession();
+  const { dir, ctx, reviewPath } = tmpSession();
   const r = await once(ctx, 'POST', '/finalize');
   assert.strictEqual(r.status, 200);
   const j = JSON.parse(r.buf);
   assert.strictEqual(j.maps, 1);
-  const contrib = JSON.parse(fs.readFileSync(ctx.reviewPath.replace('.review.json', '.json')));
+  const contrib = JSON.parse(fs.readFileSync(reviewPath.replace('.review.json', '.json')));
   assert.strictEqual(contrib.contributor, 'replay-bot');
   fs.rmSync(dir, { recursive: true, force: true });
 });

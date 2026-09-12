@@ -95,6 +95,46 @@ function applyCorrections(rounds, corrections) {
   return out;
 }
 
+// Failure messages are free text (thrown from wherever the loop broke), so
+// categorising them is substring matching against the handful of distinct
+// failure modes run.js actually raises - not a general classifier. Order
+// matters only in that each message should match exactly one rule; add new
+// rules above the fallback as run.js grows new failure text.
+const FAILURE_RULES = [
+  [/forward key is not working/, 'seek-stuck', 'seek key unresponsive'],
+  [/events viewer would not open/, 'events-viewer', "events viewer wouldn't open"],
+  [/could not foreground Overwatch/, 'focus', 'client focus lost'],
+  [/timed out.*waiting for the replay to load/, 'load-timeout', 'replay load timeout'],
+  [/ESC menu will not close/, 'stuck-menu', 'stuck menu (ESC)'],
+];
+function categorizeFailure(msg) {
+  const m = String(msg || '');
+  for (const [re, id, label] of FAILURE_RULES) if (re.test(m)) return { id, label };
+  return { id: 'other', label: 'other' };
+}
+
+// state/attempts.json's failed entries, joined against the feed for map/team
+// context and tagged with a category - what the review page's failures panel
+// filters on. Sorted oldest first, same order the run attempted them in.
+function failureList(attempts, feedCodes) {
+  const byCode = new Map((feedCodes || []).map((c) => [c.code, c]));
+  const out = [];
+  for (const v of Object.values(attempts || {})) {
+    if (v.status !== 'failed') continue;
+    const cat = categorizeFailure(v.error);
+    const fc = byCode.get(v.code) || {};
+    out.push({
+      code: v.code, started_at: v.started_at || null, error: v.error || null,
+      category: cat.id, category_label: cat.label,
+      match_id: fc.match_id || null, game_no: fc.game_no != null ? fc.game_no : null,
+      map: fc.map || null, division: fc.division || null,
+      team_a: fc.team_a || null, team_b: fc.team_b || null,
+    });
+  }
+  out.sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)));
+  return out;
+}
+
 // The reviewed artifact -> a format-1 contribution. `codeOf` looks a map's guid
 // up in the feed when the artifact did not carry one (older sessions).
 function finalize(review, feed) {
@@ -185,8 +225,8 @@ function readBody(req) {
   });
 }
 
-// `ctx` is everything the handler touches: { reviewPath, feedPath, refsPath,
-// iconsPath, stateDir, pagePath, fetch }. Tests pass their own.
+// `ctx` is everything the handler touches: { outDir, session, feedPath,
+// refsPath, iconsPath, stateDir, pagePath, fetch }. Tests pass their own.
 async function handle(req, res, ctx) {
   const u = new URL(req.url, 'http://localhost');
   const p = u.pathname;
@@ -199,8 +239,14 @@ async function handle(req, res, ctx) {
     }
 
     if (req.method === 'GET' && p === '/review.json') {
-      const r = readJson(ctx.reviewPath, null);
+      const r = readJson(currentReviewPath(ctx), null);
       return r ? sendJson(res, 200, r) : sendJson(res, 404, { error: 'no review artifact' });
+    }
+
+    if (req.method === 'GET' && p === '/failures') {
+      const attempts = readJson(path.join(ctx.stateDir, 'attempts.json'), {});
+      const feed = readJson(ctx.feedPath, {});
+      return sendJson(res, 200, { failures: failureList(attempts, feed.codes) });
     }
 
     if (req.method === 'GET' && p === '/hero-list') {
@@ -209,14 +255,15 @@ async function handle(req, res, ctx) {
         readJson(ctx.refsPath, { refs: [] }),
         feed.hero_roles || {},
         readJson(ctx.iconsPath, {}),
-        collectCustomHeroes(readJson(ctx.reviewPath, { maps: [] })));
+        collectCustomHeroes(readJson(currentReviewPath(ctx), { maps: [] })));
       return sendJson(res, 200, { heroes: list });
     }
 
     if (req.method === 'GET' && p.startsWith('/crops/')) {
+      const rp = currentReviewPath(ctx);
+      if (!rp) return send(res, 404, 'text/plain', 'no such crop');
       const rel = decodeURIComponent(p.slice('/crops/'.length));
-      const cropsRoot = path.join(path.dirname(ctx.reviewPath),
-        path.basename(ctx.reviewPath).replace(/\.review\.json$/, ''), 'crops');
+      const cropsRoot = path.join(path.dirname(rp), path.basename(rp).replace(/\.review\.json$/, ''), 'crops');
       const abs = path.resolve(cropsRoot, rel);
       if ((abs !== cropsRoot && !abs.startsWith(cropsRoot + path.sep)) || !fs.existsSync(abs)) {
         return send(res, 404, 'text/plain', 'no such crop');
@@ -225,23 +272,27 @@ async function handle(req, res, ctx) {
     }
 
     if (req.method === 'POST' && p === '/save') {
+      const rp = currentReviewPath(ctx);
+      if (!rp) return sendJson(res, 404, { error: 'no review artifact' });
       const body = JSON.parse(await readBody(req));
-      fs.writeFileSync(ctx.reviewPath, JSON.stringify(body, null, 2) + '\n');
+      fs.writeFileSync(rp, JSON.stringify(body, null, 2) + '\n');
       return sendJson(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && p === '/finalize') {
-      const review = readJson(ctx.reviewPath, null);
+      const rp = currentReviewPath(ctx);
+      const review = readJson(rp, null);
       if (!review) return sendJson(res, 404, { error: 'no review artifact' });
       const contribution = finalize(review, readJson(ctx.feedPath, {}));
-      const outPath = ctx.reviewPath.replace(/\.review\.json$/, '.json');
+      const outPath = rp.replace(/\.review\.json$/, '.json');
       fs.writeFileSync(outPath, JSON.stringify(contribution, null, 2) + '\n');
       const obs = contribution.maps.reduce((n, m) => n + m.observations.length, 0);
       return sendJson(res, 200, { ok: true, maps: contribution.maps.length, observations: obs, wrote: outPath });
     }
 
     if (req.method === 'POST' && p === '/upload') {
-      const review = readJson(ctx.reviewPath, null);
+      const rp = currentReviewPath(ctx);
+      const review = readJson(rp, null);
       if (!review) return sendJson(res, 404, { error: 'no review artifact' });
       const unreviewed = (review.maps || []).filter((m) => m.status === 'unreviewed');
       if (unreviewed.length) {
@@ -286,22 +337,21 @@ function parseArgs(argv) {
   };
 }
 
-function resolveReviewPath(session) {
-  if (!session) return newestReview(OUT);
+function resolveReviewPathIn(outDir, session) {
+  if (!session) return newestReview(outDir);
   if (fs.existsSync(session)) return session;
-  const named = path.join(OUT, session.endsWith('.review.json') ? session : session + '.review.json');
+  const named = path.join(outDir, session.endsWith('.review.json') ? session : session + '.review.json');
   return fs.existsSync(named) ? named : null;
+}
+
+function currentReviewPath(ctx) {
+  return resolveReviewPathIn(ctx.outDir, ctx.session);
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const reviewPath = resolveReviewPath(args.session);
-  if (!reviewPath) {
-    console.error('no review artifact found in ' + OUT + ' - run a capture first, or pass a path');
-    process.exit(1);
-  }
   const ctx = {
-    reviewPath,
+    outDir: OUT, session: args.session,
     feedPath: FEED, refsPath: REFS, iconsPath: ICONS,
     stateDir: STATE, pagePath: PAGE,
     fetch: (...a) => fetch(...a),
@@ -310,7 +360,8 @@ function main() {
   server.listen(args.port, '127.0.0.1', () => {
     const port = server.address().port;
     const link = `http://localhost:${port}/`;
-    console.log(`review: ${path.basename(reviewPath)}`);
+    const rp = currentReviewPath(ctx);
+    console.log(rp ? `review: ${path.basename(rp)}` : 'no review artifact yet - waiting for a run');
     console.log(`open ${link}`);
     if (args.open) {
       const cmd = process.platform === 'win32' ? 'start ""'
@@ -322,7 +373,8 @@ function main() {
 
 module.exports = {
   newestReview, heroList, applyCorrections, finalize, uploadToken, uploadWith,
-  collectCustomHeroes, parseArgs, resolveReviewPath, handle,
+  collectCustomHeroes, parseArgs, currentReviewPath, resolveReviewPathIn, handle,
+  categorizeFailure, failureList,
 };
 
 if (require.main === module) main();
