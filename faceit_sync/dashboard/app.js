@@ -37,6 +37,40 @@ function applyTheme(){
   const mc=document.querySelector('meta[name="theme-color"]');
   if(mc){ const bg=getComputedStyle(h).getPropertyValue('--bg').trim(); if(bg) mc.content=bg; }
 }
+// ---------- Discord login (optional) ----------
+// Same session the capture tool (docs/capture/) sets: localStorage.owdb_session,
+// shared across owdb.io pages by same-origin storage. This widget only reads it
+// for display — only the upload Worker holds the secret to mint or verify one.
+const UPLOAD_ENDPOINT='https://upload.owdb.io';
+function sessionPayload(){
+  const t=readPref('owdb_session'); if(!t) return null;
+  try{ const j=decodeURIComponent(escape(atob(t.split('.')[0].replace(/-/g,'+').replace(/_/g,'/'))));
+    const p=JSON.parse(j); return (p.exp && Date.now()<p.exp)?p:null; }catch(e){ return null; }
+}
+function renderAcct(){
+  const a=document.getElementById('acct'); if(!a) return;
+  const p=sessionPayload();
+  if(p){
+    a.innerHTML=`<span class="faint">logged in as <b style="color:var(--muted)">${esc(''+p.n)}</b> · <a href="#" id="dlogout">log out</a></span>`;
+    document.getElementById('dlogout').onclick=e=>{ e.preventDefault(); rememberPref('owdb_session',null); renderAcct(); };
+  } else {
+    a.innerHTML=`<button id="dlogin" class="btn" type="button">Log in with Discord</button>`;
+    document.getElementById('dlogin').onclick=()=>{ location.href=UPLOAD_ENDPOINT+'/auth/login?redirect='+encodeURIComponent(location.href.split('#')[0]); };
+  }
+}
+// The callback bounces back as `<page>#session=<token>` (or `#login_error=...`),
+// clobbering whatever tab hash was there — same trade-off the capture tool makes.
+// Must run before hashDispatch() so that fragment never reaches the tab router.
+function initAcct(){
+  const h=new URLSearchParams(location.hash.slice(1));
+  const err=h.get('login_error');
+  if(h.get('session')) rememberPref('owdb_session', h.get('session'));
+  if(h.get('session')||err) history.replaceState(null,'',location.pathname+location.search);
+  if(err==='notconfigured'){
+    const a=document.getElementById('acct');
+    if(a){ a.innerHTML='<span class="faint">Discord login isn\'t set up yet.</span>'; setTimeout(renderAcct,4000); }
+  } else renderAcct();
+}
 function initTheme(){
   const pal=document.getElementById('palette');
   if(pal) pal.onchange=()=>{ rememberPref(PAL_KEY,pal.value); applyTheme(); };
@@ -3447,6 +3481,7 @@ function init(){
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
   updateWipeNote();
   document.getElementById('heroScout').onclick=()=>{ if(!SCOUT_TEAM) SCOUT_TEAM=(D().team_names||[])[0]||null; show('scout'); };
+  initAcct();               // strips any #session=/#login_error= fragment first
   hashDispatch();
 }
 window.addEventListener('hashchange',hashDispatch);
