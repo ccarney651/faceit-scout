@@ -130,6 +130,82 @@ test('a round that lost most of its planned samples is flagged sparse-round', ()
   assert.ok(got[0].flags.includes('sparse-round'), '1 of 4 planned landed');
 });
 
+// --- segmentSlot: run-length stable stretches, for real mid-round swaps ---
+
+test('a stable slot (no swap) is one segment starting at its first post-grace read', () => {
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(50, comp, comp), sample(150, comp, comp), sample(250, comp, comp)],
+    ROUNDS, { heroRoles: ROLES });
+  const segs = got[0].a[0].segments;
+  assert.strictEqual(segs.length, 1);
+  assert.strictEqual(segs[0].guid, 'tank');
+  assert.strictEqual(segs[0].from_t, 50);
+});
+
+test('a lone misread does not start a new segment - absorbed into the one running', () => {
+  const good = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const bad = [['WIDOW', 0.61], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(50, good, good), sample(150, bad, good), sample(250, good, good)],
+    ROUNDS, { heroRoles: ROLES });
+  const segs = got[0].a[0].segments;
+  assert.strictEqual(segs.length, 1, 'the lone WIDOW read never confirms');
+  assert.strictEqual(segs[0].guid, 'tank');
+});
+
+test('two consecutive reads on a new hero confirm a real segment, at its real time', () => {
+  const early = [['DVA', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const late = [['DMON', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, early, early), sample(150, early, early), sample(250, late, late), sample(290, late, late)],
+    ROUNDS, { heroRoles: ROLES });
+  const segs = got[0].a[0].segments;
+  assert.strictEqual(segs.length, 2);
+  assert.deepStrictEqual([segs[0].guid, segs[0].from_t], ['DVA', 50]);
+  assert.deepStrictEqual([segs[1].guid, segs[1].from_t], ['DMON', 250], 'the real swap time, not a guessed midpoint');
+});
+
+test('a flicker back and forth produces one segment per confirmed run, in order', () => {
+  const a2 = [['A', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const b2 = [['B', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, a2, a2), sample(100, b2, b2), sample(150, b2, b2),
+     sample(200, a2, a2), sample(250, a2, a2)],
+    ROUNDS, { heroRoles: ROLES });
+  const segs = got[0].a[0].segments;
+  assert.deepStrictEqual(segs.map((s) => s.guid), ['A', 'B', 'A']);
+  assert.deepStrictEqual(segs.map((s) => s.from_t), [50, 100, 200]);
+});
+
+test('reads inside the first 10s of a round do not seed or extend a segment', () => {
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(3, comp, comp), sample(7, comp, comp), sample(50, comp, comp)],
+    ROUNDS, { heroRoles: ROLES });
+  const segs = got[0].a[0].segments;
+  assert.strictEqual(segs.length, 1);
+  assert.strictEqual(segs[0].from_t, 50, 'the grace-window reads at 3s/7s are dropped, not used as the start');
+});
+
+test('a slot with only pre-grace reads has no segments at all', () => {
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds([sample(3, comp, comp), sample(7, comp, comp)], ROUNDS, { heroRoles: ROLES });
+  assert.deepStrictEqual(got[0].a[0].segments, []);
+});
+
+test('a slot that never read at all has no segments', () => {
+  const withHole = [['', 0], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds([sample(100, withHole, withHole)], ROUNDS, { heroRoles: ROLES });
+  assert.deepStrictEqual(got[0].a[0].segments, []);
+});
+
+test('an unsampled round emits empty slots with segments: []', () => {
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds([sample(100, comp, comp)], ROUNDS, { heroRoles: ROLES });
+  assert.deepStrictEqual(got[1].a[0].segments, [], 'round 2 got zero samples');
+});
+
 test('resolve is pure: it does not mutate the samples it is given', () => {
   const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const samples = [sample(100, comp, comp)];

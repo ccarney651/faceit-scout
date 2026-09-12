@@ -39,6 +39,18 @@
   // expected - and its comp is thin evidence.
   var SPARSE_RATIO = 0.5;
 
+  // How many consecutive samples must agree on a new guid before segmentSlot
+  // treats it as a real mid-round hero swap rather than a lone misread. A run
+  // shorter than this is absorbed into the segment already running.
+  var SEGMENT_MIN_RUN = 2;
+
+  // Seconds into a round segmentSlot ignores before segmenting - the same
+  // pre-render/spawn window timeline.js's ASSEMBLE_STARTS_BY_S already
+  // excludes at the map level (ASSEMBLE_STARTS_BY_S = 10 there), applied here
+  // per round. A round's first segment therefore never starts before this;
+  // that stretch goes uncredited to any hero rather than guessed.
+  var ASSEMBLE_GRACE_S = 10;
+
   // The samples whose time falls inside a round's [from_t, to_t].
   function samplesIn(samples, round) {
     return samples.filter(function (s) {
@@ -63,12 +75,57 @@
     return best;
   }
 
+  // Run-length encode one slot's raw guid sequence into stable stretches, so
+  // a real mid-round hero swap can be timed and reported separately from a
+  // slot that never changed. `cells` and `times` are parallel arrays (the
+  // slot's per-sample reads and their sample times); a read with no guid is
+  // dropped rather than treated as evidence either way, and so is any read
+  // inside the round's first ASSEMBLE_GRACE_S seconds.
+  //
+  // Returns [{guid, name, from_t, reads}], oldest first, [] if nothing
+  // survives the filtering above.
+  function segmentSlot(cells, times, roundFromT) {
+    var graceT = roundFromT + ASSEMBLE_GRACE_S;
+    var pts = [];
+    for (var i = 0; i < cells.length; i++) {
+      var c = cells[i];
+      var guid = c && c.guid;
+      if (!guid || times[i] < graceT) continue;
+      pts.push({ guid: guid, name: c.name || null, t: times[i],
+        score: (typeof c.score === 'number') ? c.score : null });
+    }
+    if (!pts.length) return [];
+
+    var segments = [];
+    var curGuid = pts[0].guid, curName = pts[0].name, curFrom = pts[0].t, curReads = [pts[0].score];
+    var runGuid = null, runStart = -1, runReads = [];
+
+    for (var j = 1; j < pts.length; j++) {
+      var p = pts[j];
+      if (p.guid === curGuid) {
+        curReads.push(p.score);
+        runGuid = null; runStart = -1; runReads = [];
+      } else if (p.guid === runGuid) {
+        runReads.push(p.score);
+        if (j - runStart + 1 >= SEGMENT_MIN_RUN) {
+          segments.push({ guid: curGuid, name: curName, from_t: curFrom, reads: curReads });
+          curGuid = p.guid; curName = p.name; curFrom = pts[runStart].t; curReads = runReads;
+          runGuid = null; runStart = -1; runReads = [];
+        }
+      } else {
+        runGuid = p.guid; runStart = j; runReads = [p.score];
+      }
+    }
+    segments.push({ guid: curGuid, name: curName, from_t: curFrom, reads: curReads });
+    return segments;
+  }
+
   // One slot, resolved across a round's frames.
   //
   // `cells` is the slot's per-sample reads for this round, in sample order -
   // each a {name, guid, score}. `roleKnown` says whether the feed has a role
   // for the winning hero. `player` is {id, conf} from attribution, or null.
-  function resolveSlot(cells, roleKnown, player) {
+  function resolveSlot(cells, times, roundFromT, roleKnown, player) {
     var guids = cells.map(function (c) { return (c && c.guid) || null; });
     var v = Vote.slot(guids);
     var winner = v.name;                       // guids were passed, so name IS the guid
@@ -97,6 +154,7 @@
       reads: scores,
       contested: v.contested,
       alt_guid: v.contested ? runnerUp(guids, winner) : null,
+      segments: segmentSlot(cells, times, roundFromT),
       player_id: player ? player.id : null,
       player_conf: player ? player.conf : null,
       flags: flags,
@@ -107,7 +165,7 @@
   function emptySlot(player) {
     return {
       guid: null, name: null, support: 0, reads: [], contested: false,
-      alt_guid: null,
+      alt_guid: null, segments: [],
       player_id: player ? player.id : null,
       player_conf: player ? player.conf : null,
       flags: [],
@@ -136,6 +194,7 @@
 
       SIDES.forEach(function (side) {
         var attr = attribution && attribution[side];
+        var times = mine.map(function (s) { return s.t; });
         for (var slot = 0; slot < 5; slot++) {
           var player = attr
             ? { id: attr.ids ? (attr.ids[slot] === undefined ? null : attr.ids[slot]) : null,
@@ -146,7 +205,7 @@
             continue;
           }
           var cells = mine.map(function (s) { return s[side] && s[side][slot]; });
-          out[side].push(resolveSlot(cells, roleKnown, player));
+          out[side].push(resolveSlot(cells, times, round.from_t, roleKnown, player));
         }
       });
 
