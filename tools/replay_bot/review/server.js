@@ -84,6 +84,7 @@ function applyCorrections(rounds, corrections) {
       slot.name = c.now_name || c.now_guid || null;
       slot.contested = false;
       slot.alt_guid = null;
+      slot.segments = null;
       slot.flags = (slot.flags || []).filter((f) => f === 'attribution-abstained');
     } else if (c.kind === 'player') {
       slot.player_id = c.now_id || null;

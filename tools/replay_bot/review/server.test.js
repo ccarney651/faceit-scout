@@ -48,6 +48,7 @@ test('applyCorrections replaces a hero and clears its flags, leaving the artifac
   ]);
   assert.strictEqual(out[0].a[1].guid, 'g-ashe');
   assert.strictEqual(out[0].a[1].contested, false);
+  assert.strictEqual(out[0].a[1].segments, null, 'a correction asserts one hero for the whole round');
   assert.deepStrictEqual(out[0].a[1].flags, []);
   assert.strictEqual(JSON.stringify(rounds), snap, 'the input rounds are not mutated');
 });
