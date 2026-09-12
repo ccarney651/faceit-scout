@@ -345,7 +345,7 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-match]');
   if(t&&t.dataset.match&&!e.target.closest('[data-scout]')&&!e.target.closest('.rc')&&!e.target.closest('a')){ e.preventDefault(); openMatch(t.dataset.match); } });
 // Overwatch replay code — click to jump into the capture tool with this code
 // pre-loaded (the tool copies it, so pasting into OW2 → Watch → Replays still works).
-function rcChip(code){ return `<code class="rc" data-rc="${esc(code)}" title="Open this replay in the capture tool — the code is copied for Overwatch">${esc(code)}</code>`; }
+function rcChip(code){ return `<code class="rc">${esc(code)}</code>`; }
 // Evidence-row codes cell: exactly one backing game -> the code chip inline,
 // no click needed (the common thin-sample case, and the explicit ask —
 // "bring me straight to code"). More than one -> a small click-to-open link.
@@ -381,14 +381,6 @@ function openCodesPopover(anchor, rows){
 document.addEventListener('click', e=>{
   const t=e.target.closest('.codeslink'); if(!t) return;
   openCodesPopover(t, JSON.parse(t.dataset.codes));
-});
-document.addEventListener('click',e=>{
-  const rc=e.target.closest('.rc'); if(!rc||!rc.dataset.rc) return;
-  // Jump into the capture tool with this code pre-loaded (it auto-copies the
-  // code for pasting into Overwatch). A code chip can sit inside a match-history
-  // <a> row — stop that anchor's default from also firing.
-  e.preventDefault();
-  location.href=captureCodeUrl(rc.dataset.rc);
 });
 
 /* ---------- shared match card (used by Matches tab and Scout page) ---------- */
@@ -522,10 +514,7 @@ function matchCard(m, opts={}){
     });
     c.appendChild(score);
     const sc=scoutedCount(m, CAPTURED);
-    const live=matchLiveTodo(m, CAPTURED, CODE_WIPE);
-    if(sc.total) c.appendChild(el(`<p class="note mscouted"${live.length?' style="display:flex;align-items:center;gap:8px"':''}>`+
-      `🎥 ${sc.done}/${sc.total} scouted`+
-      (live.length?` <a class="btn" href="${captureCodeUrl(live[live.length-1].demo_code)}" title="Open this match's newest unscouted replay in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:11.5px;margin-left:auto;white-space:nowrap">Scout →</a>`:'')+`</p>`));
+    if(sc.total) c.appendChild(el(`<p class="note mscouted">🎥 ${sc.done}/${sc.total} scouted</p>`));
   }
   // Whole-card click opens the detail page, except a team name (click-to-scout)
   // or a replay-code chip (click-to-copy) or a Scout button (deep-link) inside a
@@ -612,19 +601,6 @@ function renderMatchDetail(m){
     `<div class="tags">${m.walkover?tag('walkover','bad'):(m.forfeit?tag('forfeit','bad'):'')} `+
     `${m.playoff?tag('playoff','playoff'):''} `+
     `${m.finished_at?tag(dshort(m.finished_at)):''} ${tag('R'+m.round+' · G'+m.group)}</div></div>`));
-  // Scout push: the live replay codes in THIS match that nobody has captured yet.
-  // The detail page doubles as a capture queue — the one place where the specific
-  // game, teams and map are already in front of the scout. Nothing renders when
-  // every code is captured (or wiped and uncapturable).
-  const todo=matchLiveTodo(m, CAPTURED, CODE_WIPE);
-  if(todo.length){
-    const sc=scoutedCount(m, CAPTURED);
-    const maps=[...new Set(todo.map(g=>g.map))].join(', ');
-    wrap.appendChild(el(`<div class="scoutcta">`+
-      `<span class="sct"><b>${sc.done}/${sc.total} scouted</b> — `+
-      `${esc(maps)} still open to capture — replay codes stop working at the next patch. About a minute per map in the capture tool.</span>`+
-      `<a class="btn" href="${captureCodeUrl(todo[todo.length-1].demo_code)}" title="Open this match's newest unscouted replay in the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12px;white-space:nowrap">Scout ${esc(todo[todo.length-1].demo_code)} →</a></div>`));
-  }
   const games=m.games.filter(g=>g.map);
   if(!games.length){ wrap.appendChild(el(`<p class="note" style="padding:0 16px 16px">No maps played.</p>`)); return wrap; }
   const panel=el(`<div></div>`);
@@ -790,20 +766,11 @@ const regionOf=(name)=>['EMEA','NA'].find(r=>String(name||'').toUpperCase().repl
 // tools/build_capture_data.py emits — a bare tier merges both regions there.
 const currentDivisionLabel=()=>{ const c=String((D().summary||{}).championship||''), t=tierOf(c), r=regionOf(c);
   return (r&&t)?r+' '+t:''; };
-const captureUrl=(team)=>{ const d=currentDivisionLabel();
-  return 'capture/?team='+encodeURIComponent(team)+(d?'&division='+encodeURIComponent(d):''); };
-// Same division deep-link, no team filter — for generic "go capture" entry
-// points (nav badge, hero CTA, wipe line) that aren't about one team.
-const captureDivisionUrl=()=>{ const d=currentDivisionLabel();
-  return 'capture/'+(d?'?division='+encodeURIComponent(d):''); };
-// Deep-link into the capture tool by replay code alone. A code is unique across
-// the whole feed (unlike a match id, which is only unique within its division),
-// so the capture page can locate it without a team/division hint.
-const captureCodeUrl=(code)=>'capture/?code='+encodeURIComponent(code);
-// Compact capture icon for team-name links: one click into the capture tool,
-// pre-filtered to this team. The name itself still opens the Scout page.
-const capBtn=(team)=>`<a class="capbtn" href="${captureUrl(team)}" title="Capture ${esc(team)} →" aria-label="Capture ${esc(team)}">`+
-  `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.6" fill="currentColor"/></svg></a>`;
+// Capture is operator-only now (2026-09-12) - this used to be a compact
+// capture icon appended after every team-name link, one click into the
+// (now-gated) capture tool pre-filtered to that team. Disabled at the source
+// rather than at each of its ~10 call sites.
+const capBtn=()=>'';
 const nextPow2=(n)=>{let k=1;while(k<n)k*=2;return k;};
 // Standard bracket seed order so 1 & 2 can only meet in the final:
 // seeds(4)=[1,4,2,3]; seeds(8)=[1,8,4,5,2,7,3,6].
@@ -1289,74 +1256,6 @@ function renderOverview(){
   tiles.forEach(([v,l,sub])=>g.appendChild(el(`<div class="card tile"><div class="n">${v}</div><div class="l">${l}</div><div class="sub">${sub}</div></div>`)));
   wrap.appendChild(g);
 
-  // Capture funnel — teams in this view nobody has scouted yet. Aggressive by
-  // design: their comp/bans/hero-pool panels are blank until someone captures a
-  // game, so the callout names them and hands over a concrete one-minute task.
-  // Only teams with a live replay actually available are listed — a team that
-  // never played, or whose only codes were wiped before capture, has nothing a
-  // scout could run.
-  const capturable=capturableTeams(MATCHES_ALL, CAPTURED, CODE_WIPE);
-  const cap=zeroCaptureTeams(tn, ocs).filter(n=>capturable.has(n));
-  const capCount=tn.filter(n=>capturable.has(n)).length;
-  if(cap.length){
-    const zcd=el(`<div class="card mt20 funnel"></div>`);
-    zcd.appendChild(el(`<p class="eyebrow">Capture funnel · ${cap.length} of ${capCount} teams here have zero captures</p>`));
-    zcd.appendChild(el(`<p class="note" style="margin:0 0 6px">These teams have live replays waiting right now but no captured comps yet — their scouting panels stay blank until a scout runs one. About a minute per map, and a capture outlives the next code wipe.</p>`));
-    const zrow=el(`<div class="crowgrid" style="margin-bottom:10px"></div>`);
-    cap.slice(0,8).forEach(n=>zrow.appendChild(el(`<div class="crow"><span class="chip tlink" data-scout="${esc(n)}" title="Scout ${esc(n)}">${esc(n)}${capBtn(n)}</span></div>`)));
-    if(cap.length>8) zrow.appendChild(el(`<div class="crow"><span class="note" style="margin:0">…and ${cap.length-8} more.</span></div>`));
-    zcd.appendChild(zrow);
-    // Point at a live code involving one of these teams when one exists; the
-    // funnel then hands over an exact replay instead of a generic call to action.
-    const zt=viewQueue().find(r=>cap.includes(r.f1)||cap.includes(r.f2));
-    zcd.appendChild(el(zt
-      ? `<a class="btn" href="${captureCodeUrl(zt.code)}" title="Open a live replay of ${esc(zt.f1)} vs ${esc(zt.f2)} on ${esc(zt.map)} in the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12.5px;white-space:nowrap">Scout a zero-capture team's live replay →</a>`
-      : `<a class="btn" href="capture/" title="Open the capture tool" style="text-decoration:none;padding:4px 12px;font-size:12.5px;white-space:nowrap">Open the capture tool →</a>`));
-    wrap.appendChild(zcd);
-  }
-
-  // Most wanted — the live replay codes no one has captured yet, newest first.
-  // A concrete one-minute task for a cold visitor, with the leaderboard below as
-  // proof it's a real community effort. Hidden when nothing is scoutable.
-  const qq=viewQueue();
-  if(qq.length){
-    const mw=el(`<div class="card mt20"></div>`);
-    mw.appendChild(el(`<p class="eyebrow">Most wanted · ${qq.length} live replay code${qq.length===1?'':'s'} waiting</p>`));
-    mw.appendChild(el(`<p class="note" style="margin:0 0 6px">Each code stops working at the next patch${CODE_WIPE?` (last wipe: <b>${esc(CODE_WIPE)}</b>)`:''}, so a capture is a one-time window — about a minute per map in the capture tool.</p>`));
-    qq.slice(0,5).forEach(r=>{
-      const row=el(`<div class="crow"></div>`);
-      row.appendChild(el(`<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(r.f1)}</b> <span class="faint">vs</span> <b>${esc(r.f2)}</b> <span class="faint">· ${esc(r.map)} · ${dshort(r.when)}</span>${r.div?` <span class="faint">· ${esc(r.div)}</span>`:''}</span>`));
-      row.appendChild(el(`<span class="rec"><a class="btn" href="${captureCodeUrl(r.code)}" title="Open this replay in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:12px;white-space:nowrap">Scout ${esc(r.code)} →</a></span>`));
-      mw.appendChild(row);
-    });
-    if(qq.length>5) mw.appendChild(el(`<p class="note" style="margin-top:6px">…and ${qq.length-5} more. <a href="capture/" style="color:var(--accent);font-weight:600;text-decoration:none">Open the capture tool →</a></p>`));
-    wrap.appendChild(mw);
-  }
-
-  // Capture recommendations — the strategic sibling of "Most wanted". That card
-  // lists fresh codes; this one says which MAPS are under-covered relative to
-  // how much they're played, so a scout works the maps that most need data.
-  // Playtime is an estimate (games × typical mode length); a map is listed
-  // until at least half its league play is captured and it still has a live
-  // code left to capture. Finished playoff games count as league play here too
-  // (the same union the queue uses) — a live playoff code is the freshest
-  // capture target on the site.
-  const recs=mapCoverage(MATCHES_ALL, CAPTURED, CODE_WIPE);
-  if(recs.length){
-    const rc=el(`<div class="card mt20"></div>`);
-    rc.appendChild(el(`<p class="eyebrow">Capture recommendations · ${recs.length} map${recs.length===1?'':'s'} under-covered</p>`));
-    rc.appendChild(el(`<p class="note" style="margin:0 0 6px">Coverage of each map's league play. Playtime is an <b>estimate</b> (games × typical game length for the mode). The more a map is played, the more captures it needs to read reliably — capture until at least half its play is covered.</p>`));
-    recs.slice(0,8).forEach(r=>{
-      const row=el(`<div class="crow"></div>`);
-      row.appendChild(el(`<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(r.map)}</b> <span class="faint">${esc(r.mode||'')}</span> <span class="faint">· ${r.captured}/${r.played} captured (${r.pct}%) · ~${nf(r.unseenMin)} min unseen</span></span>`));
-      row.appendChild(el(`<span style="flex:none"><span class="track" style="display:inline-block;width:110px;height:7px;vertical-align:middle"><span class="fill" style="display:block;width:${Math.min(100,r.pct)}%;background:${r.pct>=50?'var(--good)':'var(--mid)'}"></span></span></span>`));
-      row.appendChild(el(`<span class="rec"><a class="btn" href="${captureCodeUrl(r.liveCode)}" title="Open a live replay on ${esc(r.map)} in the capture tool" style="text-decoration:none;padding:3px 10px;font-size:12px;white-space:nowrap">Scout →</a></span>`));
-      rc.appendChild(row);
-    });
-    if(recs.length>8) rc.appendChild(el(`<p class="note" style="margin-top:6px">…and ${recs.length-8} more map${recs.length-8===1?'':'s'} under-covered.</p>`));
-    wrap.appendChild(rc);
-  }
-
   wrap.appendChild(el(sectionH('Standings')));
   wrap.appendChild(table(
     [{k:'name',label:'Team',html:r=>teamLink(r.name)},{k:'matches',label:'Matches',num:true},
@@ -1414,9 +1313,6 @@ function renderOverview(){
       <div class="pinfo">
         <span class="pname">${esc(me.name)}</span>
         <span class="pstat">Rank ${meIdx+1} of ${contribs.length} scouts · <b>${nf(me.maps)}</b> maps contributed${pct>0?` · ${pct}% of captured maps`:''}</span>
-      </div>
-      <div class="pcta">
-        <a class="btn" href="capture/">Capture another →</a>
       </div>
     </div>`));
     wrap.appendChild(ci);
@@ -1776,7 +1672,6 @@ function renderScoutBody(t){
         row.appendChild(chip);
       });
       if(todo.length>8) row.appendChild(el(`<span class="faint">+${todo.length-8} more</span>`));
-      row.appendChild(el(`<a class="btn" href="${captureUrl(t.team)}" style="text-decoration:none;padding:4px 10px;font-size:12px;margin-left:auto;white-space:nowrap">Capture →</a>`));
       cov.appendChild(row);
     } else {
       cov.appendChild(el(`<p class="note" style="margin:0">${esc((cst||{}).text||'')}</p>`));
@@ -1802,8 +1697,7 @@ function renderScoutBody(t){
     const ns=el(`<div class="card mt10" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"></div>`);
     ns.appendChild(el(`<div><p class="eyebrow" style="margin:0 0 2px">Not scouted yet</p>`+
       `<span class="note">No captured comps for ${esc(t.team)} <b>(0 of ${t.games} maps played)</b>. Everything below is FACEIT draft data only.</span></div>`));
-    const cb=el(`<a class="btn" href="${captureUrl(t.team)}" style="text-decoration:none;white-space:nowrap">Capture ${esc(t.team)} →</a>`);
-    ns.appendChild(cb); w.appendChild(ns);
+    w.appendChild(ns);
   }
 
   // Scouting tells: a scannable TL;DR of the team's strongest, data-backed
@@ -2528,7 +2422,7 @@ function renderPlayer(){
   } else {
     wrap.appendChild(el(sectionH('Hero pool',
       `<span class="note">no captured games for this player yet</span>`)));
-    wrap.appendChild(el(`<p class="note">Hero pools come from captured replays. <a href="${captureDivisionUrl()}" style="color:var(--accent)">Capture a map</a> and this fills in.</p>`));
+    wrap.appendChild(el(`<p class="note">Hero pools come from captured replays.</p>`));
   }
 
   // 7. Recent maps. The pure layer returns every game; the view decides how many fit.
@@ -3428,9 +3322,6 @@ function updateHeader(){
         +` · ${(D().upcoming||[]).length} fixture${(D().upcoming||[]).length===1?'':'s'} scheduled`
       : `${s.matches} matches · ${s.played_games} maps · ${dshort(s.date_from)} → ${dshort(s.date_to)}`)
     +(DATA.built_at?` · built ${dshort(DATA.built_at)}`:'');
-  const ncl=document.getElementById('navcapcount'); const capLink=document.getElementById('navcapturelink');
-  if(ncl){ const nq=viewQueue().length; ncl.textContent=nq?'· '+nq+' left':''; }
-  if(capLink) capLink.href=captureDivisionUrl();
   // On-demand refresh: the page is static, so the button asks the upload worker
   // to start a rebuild - which pulls new FACEIT matches, re-merges every
   // contribution and republishes. ~2 minutes, then reload.
@@ -3523,8 +3414,7 @@ function updateWipeNote(){
     return;
   }
   el.style.display='block';
-  el.innerHTML=`<span style="color:var(--mid)">Replay codes wiped <b>${esc(CODE_WIPE)}</b> — ${q.length} live replay code${q.length===1?'':'s'} still need a capture before the next patch.</span> `+
-    `<a href="${captureDivisionUrl()}" style="color:var(--accent);font-weight:700;text-decoration:none">Pick one →</a>`;
+  el.innerHTML=`<span style="color:var(--mid)">Replay codes wiped <b>${esc(CODE_WIPE)}</b> — ${q.length} live replay code${q.length===1?'':'s'} still need a capture before the next patch.</span>`;
 }
 function init(){
   recomputeDivision();
@@ -3537,7 +3427,6 @@ function init(){
   TABS.forEach(t=>{const b=el(`<button data-id="${t.id}">${esc(t.label)}</button>`);b.onclick=()=>show(t.id);nav.appendChild(b);});
   updateWipeNote();
   document.getElementById('heroScout').onclick=()=>{ if(!SCOUT_TEAM) SCOUT_TEAM=(D().team_names||[])[0]||null; show('scout'); };
-  document.getElementById('heroCapture').onclick=()=>{ location.href=captureDivisionUrl(); };
   hashDispatch();
 }
 window.addEventListener('hashchange',hashDispatch);
