@@ -15,7 +15,7 @@
 // which page is running it, so stopCapture takes the teardown from
 // ctx.onStop: index.html passes releaseClaim, scrim.html passes null.
 //
-// ctx = {doc, video, onStop} - only those three. REF_W/REF_H/PAD/LF/TF (the
+// ctx = {doc, video, onStop} - only those three. REF_W/REF_H/PAD/LF/TF/RF (the
 // reference-template geometry, loaded from refs.json) and boxes/
 // selectedCode (calibration + UI state) are deliberately NOT part of ctx:
 // they're page-level globals each page declares identically before its
@@ -185,7 +185,7 @@
     }
 
     function cellGrayPadded(frame, cell) {
-      var fx = cell.x + cell.w * LF, fy = cell.y, fw = cell.w * (1 - LF), fh = cell.h * TF;
+      var fx = cell.x + cell.w * LF, fy = cell.y, fw = cell.w * (1 - LF - RF), fh = cell.h * TF;
       wctx.drawImage(frame, fx, fy, fw, fh, 0, 0, work.width, work.height);
       var d = wctx.getImageData(0, 0, work.width, work.height).data;
       var g = new Float32Array(work.width * work.height);

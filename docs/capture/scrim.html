@@ -462,7 +462,7 @@ const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
 // throws on the top-level OWDBSession reference before any test runs.
 let LEAGUE_DATA=null, CODE_INDEX=OWDBSession.buildCodeIndex({});
 const PAD=2;
-let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45;
+let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, RF=0.06;
 let HERO_ICON={};
 let LOCAL_REFS=[], CUSTOM_HEROES={};
 
@@ -505,7 +505,7 @@ if(!HAS_CAPTURE){
 // ---------- load refs (esc/css/scl/ico/evp/b64bytes/bytesToB64/isTyping/toast/uiModal/uiConfirm now in engine/util.js) ----------
 async function loadRefs(){
   try{ const rj=await (await fetch('refs.json',{cache:'no-store'})).json();
-    REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction;
+    REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction; RF=rj.right_fraction||0;
     REFS=rj.refs.map(r=>{const px=b64bytes(r.d);let m=0;for(let i=0;i<px.length;i++)m+=px[i];m/=px.length;
       const c=new Float32Array(px.length);let ss=0;for(let i=0;i<px.length;i++){c[i]=px[i]-m;ss+=c[i]*c[i];}
       return {n:r.n,g:r.g,v:r.v,c,norm:Math.sqrt(ss)||1};});

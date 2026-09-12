@@ -63,9 +63,9 @@
 // free variables through the destructure each page already does for
 // engine/frames.js and engine/calibration.js.
 //
-// REF_W/REF_H/PAD/LF/TF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON are
+// REF_W/REF_H/PAD/LF/TF/RF/boxes/REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON are
 // deliberately NOT part of ctx, for the same reason engine/frames.js gives
-// for REF_W/REF_H/PAD/LF/TF/boxes: they're page-level globals shared with
+// for REF_W/REF_H/PAD/LF/TF/RF/boxes: they're page-level globals shared with
 // frames.js, calibration.js and each page's own code (loadFeeds/loadRefs
 // seed REFS/LOCAL_REFS/CUSTOM_HEROES/HERO_ICON before this module's
 // functions are ever called), so they're resolved as free variables at call
@@ -137,10 +137,11 @@
       const rc=ctx.doc.getElementById('refcount'); if(rc) rc.textContent=LOCAL_REFS.length+' learned'; return true; }
 
     // The 64x36 grayscale icon crop for slot i on a side — the SAME icon region the
-    // matcher reads (right 1-LF width, top TF height of the cell), so a learned ref
-    // lines up with future reads.
+    // matcher reads (right 1-LF-RF width, top TF height of the cell — RF clears
+    // the HUD's card gap-seam, see face_subrect in owdb/match.py), so a learned
+    // ref lines up with future reads.
     function learnCrop(side,i){ const b=boxes[side]; const cell={x:b.x+i*b.w/5,y:b.y,w:b.w/5,h:b.h};
-      const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF), fh=cell.h*TF;
+      const fx=cell.x+cell.w*LF, fy=cell.y, fw=cell.w*(1-LF-RF), fh=cell.h*TF;
       const cv=ctx.doc.createElement('canvas'); cv.width=REF_W; cv.height=REF_H;
       const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
       cx.drawImage(grabFrame(), fx,fy,fw,fh, 0,0,REF_W,REF_H);
@@ -163,7 +164,7 @@
       return bestMatch(gp, side); }
 
     function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
-      const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF,
+      const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF, right_fraction:RF,
         refs:LOCAL_REFS.map(r=>({n:r.n, g:r.g, v:r.v, d:r.d})), heroes:CUSTOM_HEROES};
       const blob=new Blob([JSON.stringify(payload)],{type:'application/json'}); const a=ctx.doc.createElement('a');
       a.href=URL.createObjectURL(blob); a.download='owdb-learned-refs.json'; a.click(); }

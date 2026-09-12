@@ -420,7 +420,7 @@ const {normName, simScore, affinity,
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
        toast, uiModal, uiConfirm} = OWDBUtil;
 const PAD=2;
-let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
+let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, RF=0.06, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
 let HERO_ICON={};   // {heroSlug: colored portrait data-URI} — optional, from sibling hero_icons.json
 let feedError=null;   // set when data.json fails to load — surfaced in feedmeta instead of a silent "0 codes"
 let LOCAL_REFS=[], CUSTOM_HEROES={};   // operator-learned hero refs + heroes not in refs.json (persisted in IndexedDB)
@@ -452,7 +452,7 @@ function ocrProgress(frac){ const b=document.getElementById('ocrbar'); if(!b) re
 // ---------- load feeds ----------
 async function loadFeeds(){
   try{ const rj=await (await fetch('refs.json',{cache:'no-store'})).json();
-    REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction;
+    REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction; RF=rj.right_fraction||0;
     REFS=rj.refs.map(r=>{const px=b64bytes(r.d);let m=0;for(let i=0;i<px.length;i++)m+=px[i];m/=px.length;
       const c=new Float32Array(px.length);let ss=0;for(let i=0;i<px.length;i++){c[i]=px[i]-m;ss+=c[i]*c[i];}
       return {n:r.n,g:r.g,v:r.v,c,norm:Math.sqrt(ss)||1};});

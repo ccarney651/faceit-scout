@@ -32,7 +32,13 @@
     // Mirrors refs.json. The page defaults these and then overwrites them from
     // the refs library, so they are recorded from the live page, not the
     // literals in index.html.
-    ref: { REF_W: 64, REF_H: 36, LF: 0.42, TF: 0.45, PAD: 2 },
+    //
+    // RF is refs.json's right_fraction (owdb/match.py's CELL_RIGHT_TRIM_FRACTION):
+    // face_subrect trims this off the right of every cell too, clearing the
+    // HUD's card gap-seam. Added 2026-09-12 - refs.json got a matching rebuild
+    // in the training pipeline (commit 4b2ad24) but this file didn't, so every
+    // live crop was ~6% wider than the ref it was scored against.
+    ref: { REF_W: 64, REF_H: 36, LF: 0.42, TF: 0.45, RF: 0.06, PAD: 2 },
 
     // The replay scrubber, measured on the same rig and frame. y0..y1 are the
     // bar's core rows, found by scanning for the band of steady mid luminance
@@ -176,7 +182,7 @@
       out.push({
         x: b.x + i * cw + cw * FROZEN.ref.LF,
         y: b.y,
-        w: cw * (1 - FROZEN.ref.LF),
+        w: cw * (1 - FROZEN.ref.LF - FROZEN.ref.RF),
         h: b.h * FROZEN.ref.TF,
       });
     }

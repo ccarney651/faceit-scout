@@ -23,7 +23,7 @@ test('a cell skips the ult-charge number and keeps the portrait', () => {
   const b = C.FROZEN.boxes.a;
   const cw = b.w / 5;
   near(c.x, b.x + cw * C.FROZEN.ref.LF, 'left inset drops the ult %');
-  near(c.w, cw * (1 - C.FROZEN.ref.LF), 'width is the remainder');
+  near(c.w, cw * (1 - C.FROZEN.ref.LF - C.FROZEN.ref.RF), 'width drops the right gap-seam too');
 });
 
 test('a cell keeps the top of the row, not the name or health pips', () => {
