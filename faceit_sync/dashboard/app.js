@@ -784,7 +784,7 @@ function aggregate(matches,team){
 // into a 32-slot bracket, so the top 8 draw byes automatically — no special case.
 const PLAYOFF_QUALIFIERS={Master:8,Expert:16,Advanced:24,Open:32};
 const tierOf=(name)=>['Master','Expert','Advanced','Open'].find(t=>(name||'').includes(t))||null;
-const regionOf=(name)=>['EMEA','NA'].find(r=>String(name||'').toUpperCase().replace(/-/g,' ').split(/\s+/).includes(r))||null;
+const regionOf=(name)=>['EMEA','NA','SA','OCE'].find(r=>String(name||'').toUpperCase().replace(/-/g,' ').split(/\s+/).includes(r))||null;
 // Deep-link into the browser capture tool, pre-filtered to a team (+ its division).
 // The division must be REGION-QUALIFIED ("EMEA Master") to match the labels
 // tools/build_capture_data.py emits — a bare tier merges both regions there.
