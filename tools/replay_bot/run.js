@@ -39,7 +39,11 @@
 //   - a code is written to the attempt log BEFORE it is opened, never after,
 //     because a crash between opening and finishing must not look like a code
 //     that was never tried;
-//   - a failed map is a loss to report, not a retry to queue;
+//   - a failed map is automatically eligible again on the next run (a timeout
+//     or a missed keypress is usually per-attempt, not per-code) - until it has
+//     failed FAIL_RETRY_CAP times, at which point it stops re-entering the
+//     queue on its own and the review page's Failures panel flags it as
+//     needing a manual retry or a manual scout instead;
 //   - the run stops after two consecutive failures rather than working its way
 //     through the night burning codes on a client that is stuck in a menu.
 //
@@ -200,8 +204,26 @@ function countPlanned(plan, rounds) {
   return out;
 }
 
+// A failed code is retried automatically, but not forever - a code with a
+// genuine per-code problem (a corrupted replay, a client-side data issue)
+// would otherwise burn a run slot every single night. After this many
+// failures it stops re-entering the queue on its own; the Failures panel's
+// "needs manual attention" state and its Retry action both key off the same
+// cap, via isDoneEntry below, so there is exactly one place this number lives.
+const FAIL_RETRY_CAP = 3;
+
+// Whether one state/attempts.json entry counts as "done" (excluded from the
+// pending queue). Only a 'failed' entry under the retry cap is NOT done - it
+// stays eligible so the next run picks it up again. Everything else (captured,
+// captured-with-misses, an 'opened' orphan from a crash, or a failed entry
+// that has hit the cap) is done, same as before this existed.
+function isDoneEntry(v) {
+  if (v && v.status === 'failed' && (v.fail_count || 1) < FAIL_RETRY_CAP) return false;
+  return true;
+}
+
 function attemptedKeys(state) {
-  return Object.keys(state || {});
+  return Object.keys(state || {}).filter((k) => isDoneEntry(state[k]));
 }
 
 // Is this feed new enough to spend codes against?
@@ -455,10 +477,15 @@ async function main() {
     if (!looping) {
       // Written before the import, never after. A crash mid-map must not leave
       // a code looking untried, because trying it again cannot work.
+      // fail_count carries over from a prior attempt at this same code - a
+      // retry that fails again must still count toward FAIL_RETRY_CAP, not
+      // restart from zero every time.
+      const priorFailCount = (state[key] && state[key].fail_count) || 0;
       state[key] = {
         code: code.code,
         started_at: new Date().toISOString(),
         status: 'opened',
+        fail_count: priorFailCount,
       };
       writeJson(STATE, state);
     }
@@ -623,6 +650,7 @@ async function main() {
       if (!looping) {
         state[key].status = 'failed';
         state[key].error = e.message;
+        state[key].fail_count = (state[key].fail_count || 0) + 1;
         writeJson(STATE, state);
       }
       console.log(`FAILED: ${e.message}`);
@@ -659,7 +687,7 @@ async function main() {
     (looping ? ` (${mapsRun} cycled)` : '') + (stopRequested ? ' - stopped' : ''));
 }
 
-module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness };
+module.exports = { parseArgs, synthesise, attemptedKeys, feedFreshness, isDoneEntry, FAIL_RETRY_CAP };
 
 // Only when run as a command. Requiring this file - which the tests do - must
 // never start driving the client.

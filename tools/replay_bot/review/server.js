@@ -19,6 +19,7 @@ const crypto = require('crypto');
 
 const Emit = require('../emit.js');
 const RunJS = require('../run.js');
+const Q = require('../queue.js');
 
 const RBOT = path.join(__dirname, '..');
 const OUT = path.join(RBOT, 'out');
@@ -115,6 +116,32 @@ function categorizeFailure(msg) {
   return { id: 'other', label: 'other' };
 }
 
+// The feed's divisions list, plus every unique team name across its codes -
+// what the Run tab's Divisions/Teams controls populate themselves from.
+// Same read the review server already does for /hero-list; just a different
+// projection of docs/capture/data.json.
+function filterOptions(feed) {
+  const divisions = Array.isArray(feed && feed.divisions) ? feed.divisions.slice().sort() : [];
+  const teams = [...new Set(((feed && feed.codes) || [])
+    .flatMap((c) => [c.team_a, c.team_b])
+    .filter(Boolean))].sort();
+  return { divisions, teams };
+}
+
+// The feed's still-unscouted backlog - the same queue.js filter run.js itself
+// applies, so "what the Run tab shows" and "what a run will actually work
+// through" can never disagree. `done` comes from state/attempts.json via
+// run.js's own attemptedKeys(), so a code mid-retry-cap correctly still shows
+// as pending here too.
+function feedRows(feed, attempts, opts) {
+  return Q.pending(feed.codes || [], {
+    divisions: (opts && opts.divisions) || null,
+    teams: (opts && opts.teams) || null,
+    wipeDate: feed.code_wipe_date,
+    done: RunJS.attemptedKeys(attempts),
+  });
+}
+
 // state/attempts.json's failed entries, joined against the feed for map/team
 // context and tagged with a category - what the review page's failures panel
 // filters on. Sorted oldest first, same order the run attempted them in.
@@ -208,13 +235,15 @@ function attemptsTally(attempts) {
 function failureList(attempts, feedCodes) {
   const byCode = new Map((feedCodes || []).map((c) => [c.code, c]));
   const out = [];
-  for (const v of Object.values(attempts || {})) {
+  for (const [key, v] of Object.entries(attempts || {})) {
     if (v.status !== 'failed') continue;
     const cat = categorizeFailure(v.error);
     const fc = byCode.get(v.code) || {};
+    const failCount = v.fail_count || 1;
     out.push({
-      code: v.code, started_at: v.started_at || null, error: v.error || null,
+      key, code: v.code, started_at: v.started_at || null, error: v.error || null,
       category: cat.id, category_label: cat.label,
+      fail_count: failCount, needs_manual: failCount >= RunJS.FAIL_RETRY_CAP,
       match_id: fc.match_id || null, game_no: fc.game_no != null ? fc.game_no : null,
       map: fc.map || null, division: fc.division || null,
       team_a: fc.team_a || null, team_b: fc.team_b || null,
@@ -336,6 +365,37 @@ async function handle(req, res, ctx) {
       const attempts = readJson(path.join(ctx.stateDir, 'attempts.json'), {});
       const feed = readJson(ctx.feedPath, {});
       return sendJson(res, 200, { failures: failureList(attempts, feed.codes) });
+    }
+
+    if (req.method === 'POST' && p === '/failures/retry') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const key = body.key || (body.match_id != null && body.game_no != null
+        ? `${body.match_id}:${body.game_no}` : null);
+      if (!key) return sendJson(res, 400, { error: 'match_id and game_no (or key) required' });
+      const attemptsPath = path.join(ctx.stateDir, 'attempts.json');
+      const attempts = readJson(attemptsPath, {});
+      if (!(key in attempts)) return sendJson(res, 404, { error: 'no such attempt' });
+      delete attempts[key];
+      fs.mkdirSync(ctx.stateDir, { recursive: true });
+      fs.writeFileSync(attemptsPath, JSON.stringify(attempts, null, 2) + '\n');
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'GET' && p === '/filters') {
+      const feed = readJson(ctx.feedPath, {});
+      return sendJson(res, 200, filterOptions(feed));
+    }
+
+    if (req.method === 'GET' && p === '/feed') {
+      const feed = readJson(ctx.feedPath, {});
+      const attempts = readJson(path.join(ctx.stateDir, 'attempts.json'), {});
+      const divisions = u.searchParams.get('divisions');
+      const teams = u.searchParams.get('teams');
+      const rows = feedRows(feed, attempts, {
+        divisions: divisions ? divisions.split(',').map((s) => s.trim()).filter(Boolean) : null,
+        teams: teams ? teams.split(',').map((s) => s.trim()).filter(Boolean) : null,
+      });
+      return sendJson(res, 200, { total: (feed.codes || []).length, pending: rows.length, codes: rows });
     }
 
     if (req.method === 'GET' && p === '/hero-list') {
@@ -522,7 +582,7 @@ function main() {
 module.exports = {
   newestReview, heroList, applyCorrections, finalize, uploadToken, uploadWith,
   collectCustomHeroes, parseArgs, currentReviewPath, resolveReviewPathIn, handle,
-  categorizeFailure, failureList, attemptsTally, buildRunArgs,
+  categorizeFailure, failureList, attemptsTally, buildRunArgs, filterOptions, feedRows,
 };
 
 if (require.main === module) main();

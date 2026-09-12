@@ -156,9 +156,13 @@ jobs:
           # docs/s<n>/ as frozen exports — see
           # specs/2026-08-10-season10-cutover-design.md.
           faceit-sync --db faceit.sqlite3 export --season "$SEASON" --format html --out docs/index.html
-          # Codes + rosters feed for the browser capture app (docs/capture/). It
-          # CONSUMES this instead of crawling FACEIT; refs.json is curator-committed.
-          python tools/build_capture_data.py || echo "capture feed: skipped"
+          # Codes + rosters feed for the browser capture app (docs/capture/) AND
+          # for the local replay-bot, which reads this same file. NOT tolerated
+          # like the steps above: a failure here used to be swallowed while
+          # docs/index.html still published with the new matches, so the site
+          # would show games as needing capture that the feed silently never
+          # got - the two must go stale together, never drift apart.
+          python tools/build_capture_data.py
 
       - name: Publish downloadable DB snapshot
         run: |

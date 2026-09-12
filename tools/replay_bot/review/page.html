@@ -98,8 +98,23 @@
   .runrow input[type=text], .runrow input[type=number] {
     background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
     border-radius: 6px; padding: 5px 8px; font: inherit; width: 120px; }
+  .runrow select {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font: inherit; }
+  .runrow select[multiple] { width: 160px; }
   #runLog { background: #0b0d10; border: 1px solid var(--line); border-radius: 8px; padding: 10px;
     height: 320px; overflow-y: auto; white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; }
+  #feedPanel { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  #feedPanel .maphead { padding: 10px 14px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 12px; align-items: baseline; background: var(--panel); }
+  #feedTable { width: 100%; max-height: 360px; overflow-y: auto; display: block; }
+  #feedTable table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  #feedTable th { text-align: left; position: sticky; top: 0; background: var(--panel); padding: 6px 10px;
+    border-bottom: 1px solid var(--line); color: var(--dim); font-weight: 600; }
+  #feedTable td { padding: 5px 10px; border-bottom: 1px solid var(--line); }
+  #feedTable .code { font-family: ui-monospace, monospace; color: var(--accent); }
+  .needsmanual { color: var(--bad); font-weight: 600; }
+  .failrow button.retry { margin-left: auto; }
 </style>
 </head>
 <body>
@@ -126,9 +141,16 @@
     <label><input type="checkbox" id="owReady"> Overwatch is open on the Replay History tab</label>
   </div>
   <div class="runrow">
-    <label>Divisions <input type="text" id="fDivisions" placeholder="e.g. EMEA Master"></label>
-    <label>Teams <input type="text" id="fTeams" placeholder="e.g. Wasp,Crabs"></label>
-    <label>Limit <input type="number" id="fLimit" placeholder="e.g. 5"></label>
+    <label>Divisions <select id="fDivisions" multiple size="6"></select></label>
+    <label>Teams <input type="text" id="fTeams" list="fTeamsList" placeholder="e.g. Wasp,Crabs"></label>
+    <datalist id="fTeamsList"></datalist>
+    <label>Limit <select id="fLimit">
+      <option value="">All</option>
+      <option value="5">5</option>
+      <option value="10">10</option>
+      <option value="20">20</option>
+      <option value="50">50</option>
+    </select></label>
   </div>
   <div class="runrow">
     <button id="goBtn" class="primary" disabled>Go</button>
@@ -136,6 +158,15 @@
     <span id="runNote" class="note"></span>
   </div>
   <div id="runLog"></div>
+  <div id="feedPanel">
+    <div class="maphead">
+      <b>Backlog</b>
+      <span id="feedSummary" class="summary"></span>
+    </div>
+    <div id="feedTable"><table><thead><tr>
+      <th>code</th><th>division</th><th>teams</th><th>map</th><th>finished</th>
+    </tr></thead><tbody id="feedBody"></tbody></table></div>
+  </div>
 </section>
 <div id="reviewView">
 <div id="flagFilters" class="chips" style="padding:8px 16px; border-bottom:1px solid var(--line)"></div>
@@ -283,6 +314,23 @@ function renderFailures() {
       .filter(Boolean).join(' · ');
     if (ctx) row.appendChild(el('span', 'summary', ctx));
     row.appendChild(el('span', 'err', f.error || ''));
+    if (f.needs_manual) {
+      row.appendChild(el('span', 'needsmanual',
+        'needs manual attention (failed ' + f.fail_count + '×) - scout it by hand, or retry:'));
+    }
+    const retry = el('button', 'retry', f.needs_manual ? 'Retry anyway' : 'Retry now');
+    retry.title = f.needs_manual
+      ? 'forces this code back into the queue despite hitting the retry cap'
+      : 'this code is already back in the queue automatically - use this to jump the line';
+    retry.onclick = async () => {
+      retry.disabled = true;
+      const r = await fetch('/failures/retry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: f.key }),
+      });
+      if (r.ok) { loadFailures(); } else { retry.disabled = false; }
+    };
+    row.appendChild(retry);
     list.appendChild(row);
   });
 }
@@ -662,6 +710,7 @@ load();
     };
     logSource.addEventListener('done', () => {
       logSource.close(); logSource = null;
+      loadFeed();
       refreshStatus().then((s) => { if (s && s.hasReview) { load(); loadFailures(); showTab('review'); } });
     });
     logSource.onerror = () => { if (logSource) { logSource.close(); logSource = null; } };
@@ -686,19 +735,78 @@ load();
   }
   $('#owReady').onchange = refreshStatus;
 
+  // Divisions is a real multi-select; Teams stays free-text (comma-separated,
+  // substring-matched against either side - see queue.js) with a datalist for
+  // autocomplete, since a 170+-team list is worse as a select than as typing
+  // with suggestions.
+  function selectedDivisions() {
+    return [...$('#fDivisions').selectedOptions].map((o) => o.value);
+  }
+  function currentTeams() {
+    return $('#fTeams').value ? $('#fTeams').value.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  }
+
+  async function loadFilters() {
+    let f;
+    try { f = await (await fetch('/filters')).json(); } catch (e) { return; }
+    const sel = $('#fDivisions');
+    const had = new Set(selectedDivisions());
+    sel.textContent = '';
+    (f.divisions || []).forEach((d) => {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d; opt.selected = had.has(d);
+      sel.appendChild(opt);
+    });
+    const dl = $('#fTeamsList');
+    dl.textContent = '';
+    (f.teams || []).forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      dl.appendChild(opt);
+    });
+  }
+
+  async function loadFeed() {
+    const params = new URLSearchParams();
+    const divs = selectedDivisions();
+    const teams = currentTeams();
+    if (divs.length) params.set('divisions', divs.join(','));
+    if (teams.length) params.set('teams', teams.join(','));
+    let f;
+    try { f = await (await fetch('/feed?' + params.toString())).json(); } catch (e) { return; }
+    $('#feedSummary').textContent = f.pending + ' of ' + f.total + ' codes still unscouted' +
+      (divs.length || teams.length ? ' (filtered)' : '');
+    const body = $('#feedBody'); body.textContent = '';
+    (f.codes || []).forEach((c) => {
+      const tr = document.createElement('tr');
+      const cell = (cls, txt) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt || ''; return td; };
+      tr.appendChild(cell('code', c.code));
+      tr.appendChild(cell(null, c.division));
+      tr.appendChild(cell(null, [c.team_a, c.team_b].filter(Boolean).join(' vs ')));
+      tr.appendChild(cell(null, c.map));
+      tr.appendChild(cell(null, (c.finished_at || '').slice(0, 10)));
+      body.appendChild(tr);
+    });
+  }
+
+  $('#fDivisions').onchange = loadFeed;
+  $('#fTeams').onchange = loadFeed;
+
   $('#refreshFeed').onclick = async () => {
     $('#refreshFeed').disabled = true;
     try {
       const r = await (await fetch('/refresh-feed', { method: 'POST' })).json();
       $('#feedStatus').textContent = 'feed refresh: ' + r.state;
       if (r.state === 'pending') setTimeout(refreshStatus, 2000);
-    } finally { $('#refreshFeed').disabled = false; refreshStatus(); }
+    } finally { $('#refreshFeed').disabled = false; refreshStatus(); loadFilters(); loadFeed(); }
   };
 
   $('#goBtn').onclick = async () => {
     const body = { confirmed: true };
-    if ($('#fDivisions').value) body.divisions = $('#fDivisions').value;
-    if ($('#fTeams').value) body.teams = $('#fTeams').value;
+    const divs = selectedDivisions();
+    const teams = currentTeams();
+    if (divs.length) body.divisions = divs.join(',');
+    if (teams.length) body.teams = teams.join(',');
     if ($('#fLimit').value) body.limit = Number($('#fLimit').value);
     $('#runLog').textContent = '';
     const r = await fetch('/go', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -717,6 +825,8 @@ load();
     if (s && s.running) openLog();
   });
   setInterval(refreshStatus, 5000);
+  loadFilters();
+  loadFeed();
 })();
 </script>
 </body>

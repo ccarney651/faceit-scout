@@ -54,6 +54,53 @@ test('failureList keeps only failed attempts, joined against the feed, oldest fi
   assert.strictEqual(out[0].map, null, 'a code missing from the feed still gets a row, just no map context');
 });
 
+test('failureList flags needs_manual once fail_count reaches the retry cap', () => {
+  const attempts = {
+    'm1:1': { key: 'm1:1', code: 'AAA111', started_at: '2026-09-12T02:00:00Z', status: 'failed', error: 'x', fail_count: 1 },
+    'm1:2': { key: 'm1:2', code: 'BBB222', started_at: '2026-09-12T02:00:00Z', status: 'failed', error: 'x', fail_count: 3 },
+  };
+  const out = SV.failureList(attempts, []);
+  const a = out.find((f) => f.code === 'AAA111');
+  const b = out.find((f) => f.code === 'BBB222');
+  assert.strictEqual(a.needs_manual, false);
+  assert.strictEqual(b.needs_manual, true);
+  assert.strictEqual(a.key, 'm1:1');
+});
+
+test('filterOptions returns the feed\'s divisions and every unique team name, sorted', () => {
+  const feed = {
+    divisions: ['NA Master', 'EMEA Master'],
+    codes: [
+      { team_a: 'Wasp', team_b: 'NewGens' },
+      { team_a: 'Crabs', team_b: 'Wasp' },
+    ],
+  };
+  const opts = SV.filterOptions(feed);
+  assert.deepStrictEqual(opts.divisions, ['EMEA Master', 'NA Master']);
+  assert.deepStrictEqual(opts.teams, ['Crabs', 'NewGens', 'Wasp']);
+});
+
+test('filterOptions tolerates a missing/empty feed', () => {
+  assert.deepStrictEqual(SV.filterOptions({}), { divisions: [], teams: [] });
+});
+
+test('feedRows is the same pending-filter run.js itself applies, keyed off attemptedKeys', () => {
+  const feed = {
+    code_wipe_date: '2026-09-07',
+    codes: [
+      { code: 'A', match_id: 'm1', game_no: 1, division: 'EMEA Master', team_a: 'Wasp', team_b: 'NewGens', finished_at: '2026-09-09T00:00:00Z' },
+      { code: 'B', match_id: 'm1', game_no: 2, division: 'EMEA Master', team_a: 'Wasp', team_b: 'NewGens', finished_at: '2026-09-09T00:00:00Z' },
+    ],
+  };
+  // m1:1 captured (excluded); m1:2 failed once, under the cap (still pending).
+  const attempts = {
+    'm1:1': { status: 'captured' },
+    'm1:2': { status: 'failed', fail_count: 1 },
+  };
+  const rows = SV.feedRows(feed, attempts, {});
+  assert.deepStrictEqual(rows.map((r) => r.code), ['B']);
+});
+
 const ROUNDS = () => ([{
   round_no: 1, from_t: 0, to_t: 300,
   a: [
@@ -286,6 +333,57 @@ test('GET /failures returns an empty list when there is no attempts.json yet', a
   const r = await once(ctx, 'GET', '/failures');
   assert.strictEqual(r.status, 200);
   assert.deepStrictEqual(JSON.parse(r.buf).failures, []);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('GET /filters serves divisions/teams from the feed', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.writeFileSync(ctx.feedPath, JSON.stringify({
+    divisions: ['EMEA Master'], codes: [{ team_a: 'Wasp', team_b: 'NewGens' }],
+  }));
+  const r = await once(ctx, 'GET', '/filters');
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(r.body, { divisions: ['EMEA Master'], teams: ['NewGens', 'Wasp'] });
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('GET /feed returns the pending backlog, filterable by divisions/teams', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.writeFileSync(ctx.feedPath, JSON.stringify({
+    code_wipe_date: '2026-09-07',
+    codes: [
+      { code: 'A', match_id: 'm1', game_no: 1, division: 'EMEA Master', team_a: 'Wasp', team_b: 'NewGens', finished_at: '2026-09-09T00:00:00Z' },
+      { code: 'B', match_id: 'm2', game_no: 1, division: 'NA Master', team_a: 'Crabs', team_b: 'Lucky Charm', finished_at: '2026-09-09T00:00:00Z' },
+    ],
+  }));
+  const all = await once(ctx, 'GET', '/feed');
+  assert.strictEqual(all.status, 200);
+  assert.strictEqual(all.body.total, 2);
+  assert.strictEqual(all.body.pending, 2);
+  const filtered = await once(ctx, 'GET', '/feed?divisions=' + encodeURIComponent('EMEA Master'));
+  assert.deepStrictEqual(filtered.body.codes.map((c) => c.code), ['A']);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('POST /failures/retry deletes the attempt so the code is pending again', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.mkdirSync(ctx.stateDir, { recursive: true });
+  const attemptsPath = path.join(ctx.stateDir, 'attempts.json');
+  fs.writeFileSync(attemptsPath, JSON.stringify({
+    'm1:1': { code: 'AAA111', status: 'failed', fail_count: 3 },
+  }));
+  const r = await once(ctx, 'POST', '/failures/retry', { match_id: 'm1', game_no: 1 });
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(attemptsPath)), {});
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('POST /failures/retry 404s on an unknown key', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.mkdirSync(ctx.stateDir, { recursive: true });
+  fs.writeFileSync(path.join(ctx.stateDir, 'attempts.json'), '{}');
+  const r = await once(ctx, 'POST', '/failures/retry', { key: 'nope:1' });
+  assert.strictEqual(r.status, 404);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
