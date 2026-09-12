@@ -130,6 +130,25 @@ test('a round that lost most of its planned samples is flagged sparse-round', ()
   assert.ok(got[0].flags.includes('sparse-round'), '1 of 4 planned landed');
 });
 
+// A real swap confirmed by two runs of SEGMENT_MIN_RUN+ frames each: support
+// dips below SUPPORT_MIN because neither hero has a frame majority, but this
+// is exactly what a genuine mid-round swap looks like, not noise - segments
+// already caught it, so low-support would be a redundant, misleading flag.
+test('a low-support slot with a confirmed multi-segment swap is not flagged low-support', () => {
+  const early = [['X', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const late = [['Y', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(20, early, early), sample(30, early, early),
+     sample(40, late, late), sample(50, late, late), sample(60, late, late)],
+    ROUNDS, { heroRoles: ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.segments.length, 2, 'both runs confirmed (>= SEGMENT_MIN_RUN each)');
+  assert.ok(slot.support < 0.67, 'support: ' + slot.support);
+  assert.strictEqual(slot.contested, false, 'not an even split - Y has a real majority');
+  assert.ok(!slot.flags.includes('low-support'), 'a confirmed swap is not noise');
+});
+
 // --- segmentSlot: run-length stable stretches, for real mid-round swaps ---
 
 test('a stable slot (no swap) is one segment starting at its first post-grace read', () => {

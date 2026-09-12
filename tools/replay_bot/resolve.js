@@ -136,12 +136,18 @@
     var name = null;
     cells.forEach(function (c) { if (c && c.guid === winner && c.name) name = c.name; });
 
+    var segments = segmentSlot(cells, times, roundFromT);
+
     var flags = [];
     if (winner === null) {
       flags.push('no-read');
     } else {
+      // A confirmed multi-segment slot (segments.length > 1) is a real
+      // mid-round swap the segment builder already tracked, not noise - low
+      // support there is what a genuine swap looks like, so only flag it for
+      // a slot that never resolved into more than one stable segment.
       if (v.contested) flags.push('contested');
-      else if (v.support < SUPPORT_MIN) flags.push('low-support');
+      else if (v.support < SUPPORT_MIN && segments.length <= 1) flags.push('low-support');
       if (winnerScores.length && Math.max.apply(null, winnerScores) < LOW_SCORE) flags.push('low-score');
       if (String(winner).indexOf('custom:') === 0 || !roleKnown(winner)) flags.push('unknown-hero');
     }
@@ -154,7 +160,7 @@
       reads: scores,
       contested: v.contested,
       alt_guid: v.contested ? runnerUp(guids, winner) : null,
-      segments: segmentSlot(cells, times, roundFromT),
+      segments: segments,
       player_id: player ? player.id : null,
       player_conf: player ? player.conf : null,
       flags: flags,
