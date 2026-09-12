@@ -340,6 +340,58 @@ def test_player_pools_from_slot_pairs() -> None:
     assert all(h["hero"] != "MEI" for p in pools["Alpha"] for h in p["heroes"])
 
 
+def test_player_pools_splits_a_swapped_round_by_segment_duration() -> None:
+    """A mid-round swap (two observations sharing one round_no, different
+    heroes) must split that round's credit proportionally to how long each
+    hero's segment measured - not credit both a full round (the bug the old
+    round-key-set dedup had) and not drop either (the bug voting-to-one-
+    winner had before segmentation existed)."""
+    import pytest
+    from owdb.contribute import MapKey, player_pools
+    maps = {MapKey("m1", 1): {
+        "side_a_team": "Alpha", "side_b_team": "Bravo",
+        "observations": [
+            {"side": "a", "ts": 0, "round_no": 1, "sub_map": None,
+             "heroes": ["dva"], "pairs": [["dva", "p1"]]},
+            {"side": "a", "ts": 180000, "round_no": 1, "sub_map": None,
+             "heroes": ["dmon"], "pairs": [["dmon", "p1"]]},
+            {"side": "a", "ts": 240000, "round_no": 1, "sub_map": None,
+             "heroes": ["dmon"], "pairs": [["dmon", "p1"]]},
+        ],
+    }}
+    pools = player_pools(maps, {"p1": "Javi44"}, {"dva": "D.Va", "dmon": "D.Mon"})
+    heroes = {h["hero"]: h for h in pools["Alpha"][0]["heroes"]}
+    # segment durations: DVA 0->180000ms (180s), D.Mon 180000->240000ms (60s,
+    # closed out by the round's own last observed ts, not a next round)
+    assert heroes["D.Va"]["rounds"] == pytest.approx(0.75, abs=0.01)
+    assert heroes["D.Mon"]["rounds"] == pytest.approx(0.25, abs=0.01)
+    assert pools["Alpha"][0]["rounds"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_primary_hero_per_game_weights_by_duration_not_round_count() -> None:
+    """A player who spent most of a swapped round on the second hero should be
+    attributed to that hero, not whichever hero merely appeared in more
+    distinct rounds."""
+    from owdb.contribute import MapKey, rank_player_heroes
+    maps = {MapKey("m1", 1): {
+        "observations": [
+            {"side": "a", "ts": 0, "round_no": 1, "sub_map": None,
+             "pairs": [["dva", "p1"]]},
+            {"side": "a", "ts": 10000, "round_no": 1, "sub_map": None,
+             "pairs": [["dmon", "p1"]]},
+            {"side": "a", "ts": 290000, "round_no": 1, "sub_map": None,
+             "pairs": [["dmon", "p1"]]},
+        ],
+    }}
+    stats = {("m1", 1, "p1"): {"elims": 5, "deaths": 4, "damage": 2000,
+                               "healing": 0, "mitigation": 800, "captured": True}}
+    ranks = rank_player_heroes(maps, stats, {"dva": "tank", "dmon": "tank"})
+    # D.Mon held the slot 10s -> 290s (280s) vs D.Va's 0s -> 10s (10s), so the
+    # whole game's stat line attributes to D.Mon.
+    assert ("p1", "dmon") in ranks
+    assert ranks[("p1", "dmon")]["games"] == 1
+
+
 def test_observations_without_pairs_are_simply_absent() -> None:
     """Captures made before OCR attribution have no pairs; they must not crash
     or fabricate players."""

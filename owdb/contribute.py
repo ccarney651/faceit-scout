@@ -799,25 +799,84 @@ _STAT_WEIGHTS: dict[str, dict[str, float]] = {
 _STAT_FIELDS = ("elims", "deaths", "damage", "healing", "mitigation")
 
 
+def _segment_weights(
+    observations: Iterable[Mapping[str, Any]],
+) -> dict[tuple[str, int, str], dict[str, float]]:
+    """One map's observations -> (side, round_no, player_id) -> {hero_guid:
+    weight}, weights for one key summing to 1.0.
+
+    A player who holds one hero for a round (every human contribution, and
+    the overwhelming majority of replay-bot rounds) gets {guid: 1.0} -
+    unconditional, no duration math - identical to the old round-presence-
+    is-one-round-of-credit rule.
+
+    A player replay-bot's segmentation caught swapping heroes mid-round (2+
+    distinct-guid observations sharing one round_no) splits that 1.0
+    proportionally to how long each stretch measured, closing the final
+    stretch out at the ROUND's own latest observed timestamp (the max ts of
+    ANY observation sharing that side+round_no, not just this player's own)
+    - so no cross-round bookkeeping is needed, and total > 0 is guaranteed
+    whenever there are 2+ distinct timestamps in the round.
+    """
+    by_key: dict[tuple[str, int, str], list[tuple[int, str]]] = {}
+    round_end: dict[tuple[str, int], int] = {}
+    for o in observations:
+        rno = o.get("round_no")
+        if rno is None:
+            continue
+        side = str(o.get("side"))
+        ts = int(o.get("ts") or 0)
+        rk = (side, rno)
+        round_end[rk] = max(round_end.get(rk, ts), ts)
+        for pair in o.get("pairs") or []:
+            if not pair or len(pair) != 2 or not pair[1]:
+                continue
+            guid, pid = str(pair[0]), str(pair[1])
+            by_key.setdefault((side, rno, pid), []).append((ts, guid))
+
+    out: dict[tuple[str, int, str], dict[str, float]] = {}
+    for (side, rno, pid), pts in by_key.items():
+        pts.sort()
+        segs: list[tuple[int, str]] = []
+        for ts, guid in pts:
+            if segs and segs[-1][1] == guid:
+                continue
+            segs.append((ts, guid))
+        if len(segs) == 1:
+            out[(side, rno, pid)] = {segs[0][1]: 1.0}
+            continue
+        end = round_end[(side, rno)]
+        weights: dict[str, float] = {}
+        total = 0.0
+        for i, (ts, guid) in enumerate(segs):
+            seg_end = segs[i + 1][0] if i + 1 < len(segs) else end
+            dur = max(0, seg_end - ts)
+            weights[guid] = weights.get(guid, 0.0) + dur
+            total += dur
+        if total > 0:
+            out[(side, rno, pid)] = {g: w / total for g, w in weights.items()}
+        else:
+            out[(side, rno, pid)] = {g: 1.0 / len(weights) for g in weights}
+    return out
+
+
 def _primary_hero_per_game(
     maps: Mapping[Any, Mapping[str, Any]]
 ) -> dict[tuple[str, int, str], str]:
     """(match_id, game_no, player_id) -> the hero that player spent the most
-    captured rounds on that game, so a whole-game stat line can be attributed to
-    a single hero."""
-    rounds: dict[tuple[str, int, str], dict[str, set[str]]] = {}
+    weighted duration on that game (a mid-round swap splits credit between
+    both heroes proportional to how long each stretch measured, rather than
+    crediting either a full round), so a whole-game stat line can be
+    attributed to a single hero."""
+    acc: dict[tuple[str, int, str], dict[str, float]] = {}
     for key, m in maps.items():
-        for o in m.get("observations", []):
-            side = str(o.get("side"))
-            rk = f"{side}:{o.get('round_no') or 0}:{o.get('sub_map') or ''}"
-            for pair in o.get("pairs", []):
-                if not pair or len(pair) != 2 or not pair[1]:
-                    continue
-                guid, pid = str(pair[0]), str(pair[1])
-                rounds.setdefault((key.match_id, key.game_no, pid), {}) \
-                      .setdefault(guid, set()).add(rk)
-    return {k: max(hs.items(), key=lambda kv: (len(kv[1]), kv[0]))[0]
-            for k, hs in rounds.items()}
+        weights = _segment_weights(m.get("observations", []))
+        for (_side, _rno, pid), hero_w in weights.items():
+            slot = acc.setdefault((key.match_id, key.game_no, pid), {})
+            for guid, w in hero_w.items():
+                slot[guid] = slot.get(guid, 0.0) + w
+    return {k: max(hs.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            for k, hs in acc.items()}
 
 
 def rank_player_heroes(
@@ -902,32 +961,33 @@ def player_pools(
     ranks: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Per team, each attributed player's hero pool in ROUNDS (same unit as the
-    team pool). Only observations that carry (hero, player) pairs contribute;
-    captures made before OCR attribution simply do not appear."""
-    agg: dict[str, dict[str, dict[str, set[str]]]] = {}   # team->player->hero->rounds
-    seen_rounds: dict[tuple[str, str], set[str]] = {}     # (team, player) -> rounds
+    team pool). A mid-round swap splits its 1.0 round of credit between both
+    heroes proportional to how long each stretch measured, instead of
+    crediting both a full round. Only observations that carry (hero, player)
+    pairs contribute; captures made before OCR attribution simply do not
+    appear."""
+    agg: dict[str, dict[str, dict[str, float]]] = {}
+    seen: dict[tuple[str, str], float] = {}
     for key, m in maps.items():
-        for o in m.get("observations", []):
-            side = str(o.get("side"))
+        weights = _segment_weights(m.get("observations", []))
+        for (side, _rno, pid), hero_w in weights.items():
             team = m.get(f"side_{side}_team")
             if not team:
                 continue
-            rk = f"{key.match_id}:{key.game_no}:{side}:{o.get('round_no') or 0}:{o.get('sub_map') or ''}"
-            for pair in o.get("pairs", []):
-                if not pair or len(pair) != 2 or not pair[1]:
-                    continue
-                guid, pid = str(pair[0]), str(pair[1])
-                agg.setdefault(team, {}).setdefault(pid, {}).setdefault(guid, set()).add(rk)
-                seen_rounds.setdefault((team, pid), set()).add(rk)
+            for guid, w in hero_w.items():
+                agg.setdefault(team, {}).setdefault(pid, {}).setdefault(guid, 0.0)
+                agg[team][pid][guid] += w
+                seen[(team, pid)] = seen.get((team, pid), 0.0) + w
     out: dict[str, list[dict[str, Any]]] = {}
     for team, players in agg.items():
         rows = []
         for pid, heroes in players.items():
-            total = len(seen_rounds[(team, pid)])
+            total = seen[(team, pid)]
             hrows: list[dict[str, Any]] = []
-            for g, rs in heroes.items():
-                d: dict[str, Any] = {"hero": hero_names.get(g, g), "rounds": len(rs),
-                                     "share": round(len(rs) / total, 3) if total else 0.0}
+            for g, w in heroes.items():
+                rounds = round(w, 2)
+                d: dict[str, Any] = {"hero": hero_names.get(g, g), "rounds": rounds,
+                                     "share": round(w / total, 3) if total else 0.0}
                 ri = (ranks or {}).get((pid, g))
                 if ri:
                     d["stats"] = ri["avg"]
@@ -937,13 +997,13 @@ def player_pools(
                         d["low_data"] = ri.get("low_data", False)
                         d["comp"] = ri.get("comp")
                 hrows.append(d)
-            hrows.sort(key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))
+            hrows.sort(key=lambda h: (-float(h["rounds"]), str(h["hero"])))
             rows.append({
                 "player": player_names.get(pid, pid),
-                "rounds": total,
+                "rounds": round(total, 2),
                 "heroes": hrows[:8],
             })
-        rows.sort(key=lambda r: (-int(str(r["rounds"])), str(r["player"])))
+        rows.sort(key=lambda r: (-float(r["rounds"]), str(r["player"])))
         out[team] = rows
     return out
 
