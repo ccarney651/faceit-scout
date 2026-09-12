@@ -305,6 +305,10 @@ test('POST /upload refuses while a map is unreviewed, then accepts', async () =>
   const review = JSON.parse(fs.readFileSync(reviewPath));
   review.maps[0].status = 'reviewed';
   await once(ctx, 'POST', '/save', review);
+  const fakePrune = path.join(dir, 'fake-prune.js');
+  fs.writeFileSync(fakePrune, `console.log('pruned');`);
+  ctx.spawn = (execPath, args, opts) => require('child_process').spawn(execPath, [fakePrune], opts);
+  ctx.repoDir = dir;
 
   const r = await once(ctx, 'POST', '/upload');
   assert.strictEqual(r.status, 200);
@@ -446,6 +450,21 @@ test('GET /status reports feed freshness, attempt tally, and idle run state', as
   assert.deepStrictEqual(r.body.attempts, { done: 1, failed: 1, total: 2 });
   assert.strictEqual(r.body.running, false);
   assert.strictEqual(r.body.hasReview, true);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a successful upload also runs prune_frames.js and reports its output', async () => {
+  const { ctx, dir, reviewPath } = tmpSession();
+  const review = JSON.parse(fs.readFileSync(reviewPath));
+  review.maps[0].status = 'reviewed';
+  fs.writeFileSync(reviewPath, JSON.stringify(review));
+  const fakePrune = path.join(dir, 'fake-prune.js');
+  fs.writeFileSync(fakePrune, `console.log('fake prune ran');`);
+  ctx.spawn = (execPath, args, opts) => require('child_process').spawn(execPath, [fakePrune], opts);
+  ctx.repoDir = dir;
+  const r = await once(ctx, 'POST', '/upload', {});
+  assert.strictEqual(r.status, 200);
+  assert.match(r.body.prune, /fake prune ran/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

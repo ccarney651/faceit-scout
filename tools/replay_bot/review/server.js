@@ -148,6 +148,19 @@ function startRun(ctx, body) {
   return run;
 }
 
+const PRUNE_PATH = path.join(RBOT, 'prune_frames.js');
+
+function runPrune(ctx, session) {
+  return new Promise((resolve) => {
+    const child = ctx.spawn(process.execPath, [PRUNE_PATH, session], { cwd: ctx.repoDir });
+    let out = '';
+    child.stdout.on('data', (b) => { out += b.toString(); });
+    child.stderr.on('data', (b) => { out += b.toString(); });
+    child.on('exit', () => resolve(out.trim()));
+    child.on('error', (e) => resolve('prune failed to start: ' + e.message));
+  });
+}
+
 const REFRESH_ENDPOINT = 'https://upload.owdb.io/refresh';
 const REFRESH_WAIT_MS = 130000; // ~2min the worker takes, plus margin
 
@@ -376,6 +389,9 @@ async function handle(req, res, ctx) {
       }
       const contribution = finalize(review, readJson(ctx.feedPath, {}));
       const result = await uploadWith(ctx.fetch, contribution, uploadToken(ctx.stateDir));
+      if (result.ok) {
+        result.prune = await runPrune(ctx, path.basename(rp, '.review.json'));
+      }
       return sendJson(res, result.ok ? 200 : 502, result);
     }
 
