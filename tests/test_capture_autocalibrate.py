@@ -31,7 +31,7 @@ ENGINE_CALIBRATION = Path(__file__).resolve().parents[1] / "docs" / "capture" / 
 ENGINE_REFS = Path(__file__).resolve().parents[1] / "docs" / "capture" / "engine" / "refs.js"
 
 _STUBS = r"""
-const PAD=2, REF_W=64, REF_H=36, LF=0.42, TF=0.45;
+const PAD=2, REF_W=64, REF_H=36, LF=0.42, TF=0.45, RF=0.06;
 const REFS=[
   {n:'Ana',  g:'g1', v:'a', c:new Float32Array(REF_W*REF_H), norm:1},
   {n:'Genji',g:'g2', v:'b', c:new Float32Array(REF_W*REF_H), norm:1},
