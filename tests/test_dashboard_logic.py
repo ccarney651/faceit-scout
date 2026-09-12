@@ -658,6 +658,55 @@ def test_scout_queue_without_a_wipe_treats_every_code_as_live(tmp_path) -> None:
     assert len(got) == 4
 
 
+# --- region-aware wipe dates -------------------------------------------------
+# A patch's regional server restarts don't all land at the same real moment,
+# so one region can need a stricter cutoff than the global wipe date - see
+# tools/replay_bot/queue.js's twin of this fact. regionWipeDates is opt-in on
+# every function that takes it: a caller (like the tests above) that omits it
+# must see exactly the old, region-blind behaviour.
+
+def test_scout_queue_region_wipe_dates_is_opt_in(tmp_path) -> None:
+    # b is 'NA Master'; m3 (2026-08-01) is alive under the global wipe alone,
+    # same as test_scout_queue_collects_live_uncaptured_codes_newest_first.
+    got = _run(
+        f"return scoutQueue({_DIVS2}, new Set(), '2026-07-28').map(r=>r.code);", tmp_path)
+    assert "DDD444" in got
+
+
+def test_scout_queue_region_override_drops_that_region_on_its_own_wipe_day(tmp_path) -> None:
+    # Same fixture, but NA's own override (2026-08-01, on par with m3's date)
+    # now makes m3 dead, while EMEA's m1/m2 games are untouched.
+    got = _run(
+        f"return scoutQueue({_DIVS2}, new Set(), '2026-07-28', "
+        f"{{NA:'2026-08-01'}}).map(r=>r.code);", tmp_path)
+    assert got == ["AAA111", "BBB222"]
+
+
+def test_effective_wipe_never_loosens_the_global_date(tmp_path) -> None:
+    # An NA override earlier than the global date must not resurrect a code
+    # the global wipe already killed.
+    got = _run(
+        f"return codeDeadFor('2026-08-10', '2026-08-18', 'NA', {{NA:'2026-08-01'}});",
+        tmp_path)
+    assert got is True
+
+
+def test_effective_wipe_applies_a_stricter_region_override(tmp_path) -> None:
+    got = _run(
+        f"return [codeDeadFor('2026-09-08','2026-09-07','NA',{{NA:'2026-09-08'}}),"
+        f"codeDeadFor('2026-09-08','2026-09-07','EMEA',{{NA:'2026-09-08'}})];",
+        tmp_path)
+    assert got == [True, False]
+
+
+def test_region_of_name_reads_the_first_matching_region_word(tmp_path) -> None:
+    got = _run(
+        "return [regionOfName('NA Master'), regionOfName('EMEA Intermediate'),"
+        "regionOfName('SA Master'), regionOfName('OCE Master'), regionOfName('')];",
+        tmp_path)
+    assert got == ["NA", "EMEA", "SA", "OCE", None]
+
+
 # --- zero-capture teams (Overview capture-funnel callout) -------------------
 # A team counts as "scouted" once any captured game exists for it; the funnel
 # callout must list exactly the teams in the view with none.

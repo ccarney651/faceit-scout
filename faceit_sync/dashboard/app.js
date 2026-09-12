@@ -123,8 +123,14 @@ const SEATS=DATA.seat_order||['Tank','Hitscan','Flex DPS','Main Support','Flex S
 const CAPTURED=new Set(DATA.owdb_captured||[]);
 // OW wipes invalidate replay codes each patch: a game finished on or before this
 // date can never be replayed, so it is only "scoutable" if already captured.
+// Region-aware via codeDeadFor/regionOfName/REGION_WIPE_OVERRIDES (pure.js) -
+// every call site here renders within the currently-active division/view, so
+// its region is always regionOfName() of the current championship name.
+// regionOfName (not this file's own narrower regionOf, which only checks
+// EMEA/NA - a pre-existing gap, not something this fix touches) so SA/OCE
+// don't silently fail to apply a future region override.
 const CODE_WIPE=DATA.code_wipe||null;
-const codeDead=(when)=>!!(CODE_WIPE&&when&&String(when).slice(0,10)<=CODE_WIPE);
+const codeDead=(when)=>codeDeadFor(when, CODE_WIPE, regionOfName((D().summary||{}).championship), REGION_WIPE_OVERRIDES);
 // Queue of still-scoutable games for the ACTIVE division/view (see scoutQueue
 // above), cached per view id — matches don't change mid-session, and every
 // consumer (nav badge, Most wanted, wipe line, funnel) wants the same number,
@@ -135,7 +141,7 @@ function viewQueue(){
   const v=viewOf(CURRENT_VIEW);
   if(_queueCache[v.id]) return _queueCache[v.id];
   const divs={}; v.divisions.forEach(cid=>divs[cid]=DIVS[cid]);
-  return (_queueCache[v.id]=scoutQueue(divs, CAPTURED, CODE_WIPE));
+  return (_queueCache[v.id]=scoutQueue(divs, CAPTURED, CODE_WIPE, REGION_WIPE_OVERRIDES));
 }
 // Capture sections append the sample's REAL date range to their subtitle. The
 // old label read "captures since <wipe date>", which claimed the comps were
@@ -3400,12 +3406,26 @@ function setDivision(id){
 // Wipe-urgency line under the hero: replay codes die at each patch, so the live
 // queue is a countdown, not a static number. Hidden when there's nothing left to
 // scout or the feed has no wipe date on record.
+// Capture is operator-only (2026-09-12): "N live codes still need a capture"
+// is a to-do only the operator can act on, so it's hidden from everyone else.
+// The main dashboard never had a session concept before this - it shares
+// localStorage with docs/capture/ (same origin), so the same owdb_session
+// token that page's Discord login writes is readable here too.
+function isAdminSession(){
+  try{
+    const t=localStorage.getItem('owdb_session'); if(!t) return false;
+    const body=t.split('.')[0].replace(/-/g,'+').replace(/_/g,'/');
+    const p=JSON.parse(decodeURIComponent(escape(atob(body))));
+    return !!(p&&p.admin&&p.exp&&Date.now()<p.exp);
+  }catch(e){ return false; }
+}
 function updateWipeNote(){
   const el=document.getElementById('wipenote'); if(!el) return;
   const q=viewQueue();
-  if(!CODE_WIPE || !q.length){
-    // Nothing to capture. Rather than leave the slot empty - which reads as a
-    // broken site rather than a finished season - say where the season stands.
+  if(!CODE_WIPE || !q.length || !isAdminSession()){
+    // Nothing to capture, or nothing this viewer can act on. Rather than leave
+    // the slot empty - which reads as a broken site rather than a finished
+    // season - say where the season stands.
     const note=seasonNote(DATA.season, q.length, DATA.next_season_start,
                           new Date().toISOString().slice(0,10), SEASON_FINISHED);
     if(!note){ el.style.display='none'; return; }

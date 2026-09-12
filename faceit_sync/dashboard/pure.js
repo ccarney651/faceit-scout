@@ -487,15 +487,54 @@ function scoutedCount(m, capturedIds){
   return {done, total:played.length};
 }
 
+// A patch's server restart does not land in every region at the same real
+// moment, but the feed carries ONE global wipe date - dated to whichever
+// region's patch landed EARLIEST, so that region's same-day post-patch games
+// stay queueable (see owdb/db.py's _SEED_WIPES day-early-dating comments). A
+// region whose own restart landed LATER in its own calendar day needs a
+// stricter date on top of that, or its wipe-day games look alive when they
+// are not.
+//
+// `regionWipeDates` is an explicit, optional opt-in (never applied unless a
+// caller passes it) so a test exercising an unrelated wipe scenario is never
+// silently affected by a later patch's facts - same discipline as
+// tools/replay_bot/queue.js's regionWipeDates, whose regionWipeDates fact
+// (run.js's REGION_WIPE_OVERRIDES) this data duplicates: this dashboard and
+// the replay bot are separate codebases with no shared import.
+//
+// 2026-09-08: confirmed by every NA replay-bot code from that day failing to
+// load (already invalidated) - NA's restart landed mid-day, not evening like
+// the global wipe date assumes.
+const REGION_WIPE_OVERRIDES={NA:'2026-09-08'};
+const DASH_REGIONS=['EMEA','NA','SA','OCE'];
+function regionOfName(name){
+  const up=String(name||'').toUpperCase().replace(/-/g,' ').split(/\s+/);
+  return DASH_REGIONS.find(r=>up.includes(r))||null;
+}
+// The later (stricter) of the global wipe date and a region's own override,
+// if any - never looser than the global date. `regionWipeDates` defaults to
+// nothing, not REGION_WIPE_OVERRIDES - callers opt in explicitly.
+function effectiveWipe(wipe, region, regionWipeDates){
+  const override=region&&regionWipeDates&&regionWipeDates[region];
+  if(!override) return wipe;
+  return (!wipe||override>wipe)?override:wipe;
+}
+function codeDeadFor(when, wipe, region, regionWipeDates){
+  const w=effectiveWipe(wipe, region, regionWipeDates);
+  return !!(w&&when&&String(when).slice(0,10)<=w);
+}
+
 // League-wide capture queue: every played game that (a) has a replay code, (b)
 // no one has captured yet, and (c) can still be scouted — a code is dead only
 // once a patch wiped it AND the game was never captured. Newest first. This one
 // list powers the nav badge, the Overview "Most wanted" card and the wipe line,
 // so it must agree with what the capture tool's feed can actually offer.
-function scoutQueue(divs, captured, wipe){
+function scoutQueue(divs, captured, wipe, regionWipeDates){
   const out=[];
   for(const cid in divs){
     const d=divs[cid];
+    const champ=(d.summary&&d.summary.championship)||cid;
+    const region=regionOfName(champ);
     // Finished matches + the playoff bracket both feed the queue — a live playoff
     // code is the freshest, highest-value capture target on the site.
     const lists=[[d.matches||[], ''],[d.playoffs||[], ' · playoffs']];
@@ -503,9 +542,9 @@ function scoutQueue(divs, captured, wipe){
       if(!g.demo_code||!g.map) return;
       const key=m.id+':'+g.game_no;
       if(captured.has(key)) return;
-      if(wipe && m.finished_at && String(m.finished_at).slice(0,10)<=wipe) return;
+      if(codeDeadFor(m.finished_at, wipe, region, regionWipeDates)) return;
       out.push({mid:m.id, gno:g.game_no, code:g.demo_code, map:g.map, f1:m.f1, f2:m.f2,
-        when:m.finished_at||'', div:((d.summary&&d.summary.championship)||cid)+label});
+        when:m.finished_at||'', div:champ+label});
     })));
   }
   return out.sort((a,b)=>String(b.when).localeCompare(String(a.when)));
