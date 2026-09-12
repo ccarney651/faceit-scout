@@ -117,6 +117,42 @@ function categorizeFailure(msg) {
 // state/attempts.json's failed entries, joined against the feed for map/team
 // context and tagged with a category - what the review page's failures panel
 // filters on. Sorted oldest first, same order the run attempted them in.
+const REFRESH_ENDPOINT = 'https://upload.owdb.io/refresh';
+const REFRESH_WAIT_MS = 130000; // ~2min the worker takes, plus margin
+
+async function startRefresh(ctx) {
+  const feed = readJson(ctx.feedPath, {});
+  if (RunJS.feedFreshness(feed, Date.now()).fresh) {
+    ctx.refresh = { state: 'fresh', at: Date.now() };
+    return ctx.refresh;
+  }
+  let res;
+  try {
+    res = await ctx.fetch(REFRESH_ENDPOINT, { method: 'POST' });
+  } catch (e) {
+    ctx.refresh = { state: 'failed', error: String(e && e.message || e) };
+    return ctx.refresh;
+  }
+  if (!res.ok) {
+    ctx.refresh = { state: 'failed', error: 'refresh endpoint returned ' + res.status };
+    return ctx.refresh;
+  }
+  ctx.refresh = { state: 'pending', startedAt: Date.now() };
+  ctx.setTimeout(async () => {
+    try {
+      await ctx.exec('git', ['fetch', 'origin'], { cwd: ctx.repoDir });
+      await ctx.exec('git', ['checkout', 'origin/main', '--', 'docs/capture/data.json'], { cwd: ctx.repoDir });
+      const nowFeed = readJson(ctx.feedPath, {});
+      ctx.refresh = RunJS.feedFreshness(nowFeed, Date.now()).fresh
+        ? { state: 'done', at: Date.now() }
+        : { state: 'stale', error: 'still not built today after refresh' };
+    } catch (e) {
+      ctx.refresh = { state: 'failed', error: String(e && e.message || e) };
+    }
+  }, REFRESH_WAIT_MS);
+  return ctx.refresh;
+}
+
 function attemptsTally(attempts) {
   let done = 0, failed = 0;
   Object.values(attempts || {}).forEach((v) => {
@@ -312,6 +348,14 @@ async function handle(req, res, ctx) {
       return sendJson(res, result.ok ? 200 : 502, result);
     }
 
+    if (req.method === 'POST' && p === '/refresh-feed') {
+      if (ctx.refresh && ctx.refresh.state === 'pending') {
+        return sendJson(res, 409, { error: 'a refresh is already pending' });
+      }
+      const r = await startRefresh(ctx);
+      return sendJson(res, 200, r);
+    }
+
     if (req.method === 'GET' && p === '/status') {
       const feed = readJson(ctx.feedPath, {});
       const attempts = readJson(path.join(ctx.stateDir, 'attempts.json'), {});
@@ -377,6 +421,11 @@ function main() {
     feedPath: FEED, refsPath: REFS, iconsPath: ICONS,
     stateDir: STATE, pagePath: PAGE,
     fetch: (...a) => fetch(...a),
+    setTimeout,
+    exec: (cmd, args, opts) => new Promise((resolve, reject) => {
+      require('child_process').execFile(cmd, args, opts, (err) => err ? reject(err) : resolve());
+    }),
+    repoDir: REPO,
   };
   const server = http.createServer((req, res) => handle(req, res, ctx));
   server.listen(args.port, '127.0.0.1', () => {

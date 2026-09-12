@@ -312,6 +312,55 @@ test('POST /upload refuses while a map is unreviewed, then accepts', async () =>
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('refresh-feed skips the network call when the feed is already fresh today', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.writeFileSync(ctx.feedPath, JSON.stringify({ built_at: new Date().toISOString(), codes: [] }));
+  let fetched = false;
+  ctx.fetch = async () => { fetched = true; return { ok: true, status: 200 }; };
+  const r = await once(ctx, 'POST', '/refresh-feed', {});
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.body.state, 'fresh');
+  assert.strictEqual(fetched, false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('refresh-feed posts to the worker, then runs git checkout after the wait and re-checks freshness', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.writeFileSync(ctx.feedPath, JSON.stringify({ built_at: '2020-01-01T00:00:00Z', codes: [] }));
+  const calls = [];
+  ctx.fetch = async (url, opts) => { calls.push(['fetch', url, opts.method]); return { ok: true, status: 200 }; };
+  ctx.setTimeout = (fn) => { fn(); return 0; }; // fire immediately for the test
+  // Simulate the checkout actually landing a fresh feed by the time the
+  // delayed step runs.
+  ctx.exec = async (cmd, args) => {
+    calls.push(['exec', cmd, args.join(' ')]);
+    if (args.join(' ').indexOf('checkout') !== -1) {
+      fs.writeFileSync(ctx.feedPath, JSON.stringify({ built_at: new Date().toISOString(), codes: [] }));
+    }
+  };
+  const r = await once(ctx, 'POST', '/refresh-feed', {});
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.body.state, 'pending');
+  assert.strictEqual(calls[0][0], 'fetch');
+  assert.strictEqual(calls[0][1], 'https://upload.owdb.io/refresh');
+  assert.strictEqual(calls[1][0], 'exec');
+  assert.strictEqual(calls[1][2], 'fetch origin');
+  assert.strictEqual(calls[2][2], 'checkout origin/main -- docs/capture/data.json');
+  // The setTimeout callback ran synchronously (test double), so ctx.refresh
+  // should already reflect the outcome.
+  assert.strictEqual(ctx.refresh.state, 'done');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('refresh-feed reports failed when the worker call errors', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.writeFileSync(ctx.feedPath, JSON.stringify({ built_at: '2020-01-01T00:00:00Z', codes: [] }));
+  ctx.fetch = async () => ({ ok: false, status: 429 });
+  const r = await once(ctx, 'POST', '/refresh-feed', {});
+  assert.strictEqual(r.body.state, 'failed');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('GET /status reports feed freshness, attempt tally, and idle run state', async () => {
   const { dir, ctx } = tmpSession();
   fs.mkdirSync(ctx.stateDir, { recursive: true });
