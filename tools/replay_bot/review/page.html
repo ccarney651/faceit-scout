@@ -69,6 +69,13 @@
   .note { font-size: 13px; color: var(--dim); }
   .note.ok { color: var(--ok); } .note.bad { color: var(--bad); }
   #banner { padding: 10px 16px; font-size: 13px; }
+  header label.hdrtoggle { display: flex; align-items: center; gap: 5px; cursor: pointer;
+    font-size: 13px; color: var(--dim); }
+  .segments { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .segrow { display: flex; align-items: center; gap: 4px; font-size: 11.5px; }
+  .segrow img { width: 14px; height: 14px; border-radius: 2px; }
+  .segtime { color: var(--dim); margin-left: auto; }
+  .slot.swapped { border-color: #6cc6e0; background: #16303a; }
 </style>
 </head>
 <body>
@@ -76,6 +83,7 @@
   <h1>replay-bot review</h1>
   <span id="sessionname" class="summary"></span>
   <span class="sp"></span>
+  <label class="hdrtoggle"><input type="checkbox" id="onlyIssues" checked> only slots needing review</label>
   <span id="savenote" class="note"></span>
   <button id="save">Save</button>
   <button id="finalize">Finalize</button>
@@ -93,6 +101,7 @@ let DATA = null;
 let HEROES = [];
 let HERO_BY_GUID = {};
 let dirty = false;
+let onlyIssues = true;
 
 async function load() {
   try {
@@ -138,6 +147,50 @@ function setCorrection(m, c) {
   dirty = true; markDirty();
 }
 function markDirty() { $('#savenote').textContent = 'unsaved'; $('#savenote').className = 'note bad'; }
+
+function mmss(t) {
+  t = Math.max(0, Math.round(Number(t) || 0));
+  const m = Math.floor(t / 60), s = t % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+// Flags as Finalize will actually ship them - mirrors review/server.js's
+// applyCorrections so "needs review" matches what a correction resolves.
+function effectiveFlags(base, s) {
+  let flags = (base.flags || []).slice();
+  if (s.corrected) flags = flags.filter((f) => f === 'attribution-abstained');
+  if (s.player_corrected) flags = flags.filter((f) => f !== 'attribution-abstained');
+  return flags;
+}
+
+// resolve.js's segmentSlot() stretches, or null once a hero correction has
+// collapsed the slot to one assertion for the whole round (emit.js's
+// slotSegments() treats a corrected slot the same way).
+function effectiveSegments(base, s) {
+  if (s.corrected) return null;
+  return Array.isArray(base.segments) ? base.segments : null;
+}
+
+// A slot is worth an operator's eyes if it carries a flag, or if it holds a
+// real mid-round hero swap (2+ segments) - a swap ships an extra observation
+// whether or not anything else about the slot was flagged.
+function slotNeedsReview(base, s) {
+  const flags = effectiveFlags(base, s);
+  const segs = effectiveSegments(base, s);
+  return flags.length > 0 || (segs && segs.length > 1);
+}
+function sideNeedsReview(m, r, side) {
+  for (let i = 0; i < 5; i++) {
+    const base = (r[side] || [])[i] || {};
+    const s = effSlot(m, r.round_no, side, i);
+    if (slotNeedsReview(base, s)) return true;
+  }
+  return false;
+}
+function roundNeedsReview(m, r) {
+  if ((r.flags || []).length) return true;
+  return sideNeedsReview(m, r, 'a') || sideNeedsReview(m, r, 'b');
+}
 
 function render() {
   const host = $('#maps'); host.textContent = '';
@@ -187,17 +240,36 @@ function renderMap(m, mi) {
 }
 
 function renderRound(m, mi, r, flagged) {
-  const wrap = el('div', 'round');
+  const roundClean = onlyIssues && !roundNeedsReview(m, r);
+  const wrap = el('div', 'round' + (roundClean ? ' clean' : ''));
   const h = el('h3', null, 'Round ' + r.round_no);
   (r.flags || []).forEach((fl) => h.appendChild(el('span', 'rflag', ' ' + fl)));
   wrap.appendChild(h);
+  if (roundClean) {
+    wrap.appendChild(el('div', 'summary', '✓ nothing needs review'));
+    return wrap;
+  }
   ['a', 'b'].forEach((side) => {
     const sd = el('div', 'side');
     sd.appendChild(el('div', 'team', side === 'a' ? (m.side_a_team || 'Side A') : (m.side_b_team || 'Side B')));
+    // A round-level flag (round-unsampled, sparse-round) is a reason to look at
+    // everything in it even if no single slot is flagged - only collapse a side
+    // when the round itself is clean too.
+    const sideClean = onlyIssues && !(r.flags || []).length && !sideNeedsReview(m, r, side);
+    if (sideClean) {
+      sd.appendChild(el('div', 'summary', '✓ 5/5 clean'));
+      wrap.appendChild(sd);
+      return;
+    }
     const cropRel = ((m.frames || {})[r.round_no] || {})[side];
     if (cropRel) { const im = el('img', 'strip'); im.src = '/' + cropRel; im.loading = 'lazy'; sd.appendChild(im); }
     const slots = el('div', 'slots');
-    for (let i = 0; i < 5; i++) slots.appendChild(renderSlot(m, mi, r.round_no, side, i, flagged));
+    for (let i = 0; i < 5; i++) {
+      const base = (r[side] || [])[i] || {};
+      const s = effSlot(m, r.round_no, side, i);
+      if (onlyIssues && !slotNeedsReview(base, s)) continue;
+      slots.appendChild(renderSlot(m, mi, r.round_no, side, i, flagged));
+    }
     sd.appendChild(slots);
     wrap.appendChild(sd);
   });
@@ -207,17 +279,40 @@ function renderRound(m, mi, r, flagged) {
 function renderSlot(m, mi, round_no, side, i, flagged) {
   const s = effSlot(m, round_no, side, i);
   const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
-  const flags = base.flags || [];
-  const cell = el('div', 'slot' + (flags.length && !s.corrected ? ' flagged' : ''));
-  if (flags.length) flagged.push({ label: 'R' + round_no + ' ' + side + (i + 1), node: cell });
+  const flags = effectiveFlags(base, s);
+  const segs = effectiveSegments(base, s);
+  const swapped = !!(segs && segs.length > 1);
+  const cell = el('div', 'slot' + (flags.length ? ' flagged' : '') + (swapped ? ' swapped' : ''));
+  if (flags.length || swapped) {
+    flagged.push({
+      label: 'R' + round_no + ' ' + side + (i + 1) + (swapped && !flags.length ? ' (swap)' : ''),
+      node: cell,
+    });
+  }
 
   const hero = el('div', 'hero' + (s.guid ? '' : ' none'));
   const h = HERO_BY_GUID[s.guid];
   if (h && h.icon) { const im = el('img'); im.src = h.icon; hero.appendChild(im); }
-  hero.appendChild(el('span', null, (h && h.name) || s.name || (s.guid ? s.guid : 'no read') + (s.corrected ? '' : '')));
+  hero.appendChild(el('span', null, (h && h.name) || s.name || (s.guid ? s.guid : 'no read')));
   if (s.corrected) hero.appendChild(el('span', 'tag sw', 'fixed'));
   hero.onclick = () => openHeroEdit(cell, m, mi, round_no, side, i);
   cell.appendChild(hero);
+
+  // A confirmed mid-round swap - segmentSlot()'s stretches, in order, each with
+  // the real time it started. This is what emit.fromRounds() actually ships,
+  // replacing the old vote-based "also X" guess.
+  if (swapped) {
+    const segBox = el('div', 'segments');
+    segs.forEach((seg) => {
+      const row = el('div', 'segrow');
+      const sh = HERO_BY_GUID[seg.guid];
+      if (sh && sh.icon) { const im = el('img'); im.src = sh.icon; row.appendChild(im); }
+      row.appendChild(el('span', null, (sh && sh.name) || seg.name || seg.guid));
+      row.appendChild(el('span', 'segtime', mmss(seg.from_t)));
+      segBox.appendChild(row);
+    });
+    cell.appendChild(segBox);
+  }
 
   const roster = (m.roster || {})[side] || [];
   const pid = s.player_id;
@@ -227,10 +322,6 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
   if (flags.length) {
     const tags = el('div', 'tags');
     flags.forEach((f) => tags.appendChild(el('span', 'tag', f)));
-    if (base.contested && base.alt_guid) {
-      const alt = HERO_BY_GUID[base.alt_guid];
-      tags.appendChild(el('span', 'tag sw', 'also ' + ((alt && alt.name) || base.alt_guid)));
-    }
     cell.appendChild(tags);
   }
 
@@ -303,6 +394,7 @@ async function save() {
   else { $('#savenote').textContent = 'save failed'; $('#savenote').className = 'note bad'; }
 }
 
+$('#onlyIssues').onchange = (e) => { onlyIssues = e.target.checked; render(); };
 $('#save').onclick = save;
 $('#finalize').onclick = async () => {
   if (dirty) await save();
