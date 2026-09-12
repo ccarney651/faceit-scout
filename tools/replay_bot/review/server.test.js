@@ -312,6 +312,76 @@ test('POST /upload refuses while a map is unreviewed, then accepts', async () =>
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+function fakeRunScript(dir, { exitCode = 0, lines = ['starting', 'map 1 done'] } = {}) {
+  const p = path.join(dir, 'fake-run.js');
+  fs.writeFileSync(p, `
+    const lines = ${JSON.stringify(lines)};
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i >= lines.length) { clearInterval(timer); process.exit(${exitCode}); return; }
+      console.log(lines[i++]);
+    }, 5);
+  `);
+  return p;
+}
+
+test('POST /go refuses without confirmation', async () => {
+  const { dir, ctx } = tmpSession();
+  const r = await once(ctx, 'POST', '/go', {});
+  assert.strictEqual(r.status, 400);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('POST /go spawns run.js and streams its output; POST /stop writes the flag', async () => {
+  const { ctx, dir } = tmpSession();
+  const fake = fakeRunScript(dir, { lines: ['line one', 'line two'] });
+  ctx.spawn = (execPath, args, opts) => require('child_process').spawn(execPath, [fake], opts);
+  ctx.repoDir = dir;
+  fs.mkdirSync(ctx.stateDir, { recursive: true });
+
+  const goRes = await once(ctx, 'POST', '/go', { confirmed: true });
+  assert.strictEqual(goRes.status, 200);
+
+  // Give the fake process a moment to emit and exit.
+  await new Promise((r) => setTimeout(r, 100));
+
+  const status = await once(ctx, 'GET', '/status');
+  assert.strictEqual(status.body.running, false); // fake script exits fast
+  assert.ok(status.body.exitInfo);
+  assert.strictEqual(status.body.exitInfo.code, 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('POST /go refuses a second run while one is active', async () => {
+  const { ctx, dir } = tmpSession();
+  const fake = fakeRunScript(dir, { lines: ['a', 'b', 'c', 'd', 'e', 'f'] });
+  ctx.spawn = (execPath, args, opts) => require('child_process').spawn(execPath, [fake], opts);
+  ctx.repoDir = dir;
+  await once(ctx, 'POST', '/go', { confirmed: true });
+  const second = await once(ctx, 'POST', '/go', { confirmed: true });
+  assert.strictEqual(second.status, 409);
+  if (ctx.run && ctx.run.proc) ctx.run.proc.kill(); // cleanup, avoid a hanging test process
+});
+
+test('POST /stop writes state/loop_stop.flag', async () => {
+  const { ctx, dir } = tmpSession();
+  const fake = fakeRunScript(dir, { lines: ['a', 'b', 'c', 'd', 'e', 'f'] });
+  ctx.spawn = (execPath, args, opts) => require('child_process').spawn(execPath, [fake], opts);
+  ctx.repoDir = dir;
+  await once(ctx, 'POST', '/go', { confirmed: true });
+  const stopRes = await once(ctx, 'POST', '/stop');
+  assert.strictEqual(stopRes.status, 200);
+  assert.ok(fs.existsSync(path.join(ctx.stateDir, 'loop_stop.flag')));
+  if (ctx.run && ctx.run.proc) ctx.run.proc.kill();
+});
+
+test('buildRunArgs translates division/team/limit into run.js flags', () => {
+  assert.deepStrictEqual(SV.buildRunArgs({}), []);
+  assert.deepStrictEqual(
+    SV.buildRunArgs({ divisions: 'EMEA Master', teams: 'Wasp,Crabs', limit: 5 }),
+    ['--divisions', 'EMEA Master', '--teams', 'Wasp,Crabs', '--limit', '5']);
+});
+
 test('refresh-feed skips the network call when the feed is already fresh today', async () => {
   const { dir, ctx } = tmpSession();
   fs.writeFileSync(ctx.feedPath, JSON.stringify({ built_at: new Date().toISOString(), codes: [] }));

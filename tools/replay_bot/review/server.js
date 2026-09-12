@@ -28,6 +28,7 @@ const FEED = path.join(REPO, 'docs', 'capture', 'data.json');
 const REFS = path.join(REPO, 'docs', 'capture', 'refs.json');
 const ICONS = path.join(REPO, 'docs', 'capture', 'hero_icons.json');
 const PAGE = path.join(__dirname, 'page.html');
+const RUNJS_PATH = path.join(RBOT, 'run.js');
 const ENDPOINT = 'https://upload.owdb.io';
 const CONTRIBUTOR = 'replay-bot';
 
@@ -117,6 +118,36 @@ function categorizeFailure(msg) {
 // state/attempts.json's failed entries, joined against the feed for map/team
 // context and tagged with a category - what the review page's failures panel
 // filters on. Sorted oldest first, same order the run attempted them in.
+function buildRunArgs(body) {
+  const args = [];
+  if (body && body.divisions) args.push('--divisions', String(body.divisions));
+  if (body && body.teams) args.push('--teams', String(body.teams));
+  if (body && body.limit) args.push('--limit', String(body.limit));
+  return args;
+}
+
+function startRun(ctx, body) {
+  const args = buildRunArgs(body);
+  try { fs.unlinkSync(path.join(ctx.stateDir, 'loop_stop.flag')); } catch (e) { /* fine */ }
+  const proc = ctx.spawn(process.execPath, [RUNJS_PATH].concat(args), { cwd: ctx.repoDir });
+  const run = { proc, log: [], subscribers: [], startedAt: Date.now(), exitInfo: null };
+  const onData = (buf) => {
+    const line = buf.toString();
+    run.log.push(line);
+    if (run.log.length > 5000) run.log.shift();
+    run.subscribers.forEach((r) => r.write('data: ' + JSON.stringify(line) + '\n\n'));
+  };
+  proc.stdout.on('data', onData);
+  proc.stderr.on('data', onData);
+  proc.on('exit', (code, signal) => {
+    run.exitInfo = { code, signal, at: Date.now() };
+    run.subscribers.forEach((r) => r.end());
+    run.subscribers = [];
+  });
+  ctx.run = run;
+  return run;
+}
+
 const REFRESH_ENDPOINT = 'https://upload.owdb.io/refresh';
 const REFRESH_WAIT_MS = 130000; // ~2min the worker takes, plus margin
 
@@ -348,6 +379,35 @@ async function handle(req, res, ctx) {
       return sendJson(res, result.ok ? 200 : 502, result);
     }
 
+    if (req.method === 'POST' && p === '/go') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      if (!body.confirmed) return sendJson(res, 400, { error: 'confirm Overwatch is on the Replay History tab first' });
+      if (ctx.run && !ctx.run.exitInfo) return sendJson(res, 409, { error: 'a run is already active' });
+      fs.mkdirSync(ctx.stateDir, { recursive: true });
+      startRun(ctx, body);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && p === '/stop') {
+      if (!ctx.run || ctx.run.exitInfo) return sendJson(res, 404, { error: 'no run active' });
+      fs.mkdirSync(ctx.stateDir, { recursive: true });
+      fs.writeFileSync(path.join(ctx.stateDir, 'loop_stop.flag'), '');
+      return sendJson(res, 200, { ok: true, note: 'stopping after the current map' });
+    }
+
+    if (req.method === 'GET' && p === '/run-log') {
+      if (!ctx.run) return sendJson(res, 404, { error: 'no run started yet' });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+      ctx.run.log.forEach((line) => res.write('data: ' + JSON.stringify(line) + '\n\n'));
+      if (ctx.run.exitInfo) {
+        res.write('event: done\ndata: ' + JSON.stringify(ctx.run.exitInfo) + '\n\n');
+        return res.end();
+      }
+      ctx.run.subscribers.push(res);
+      req.on('close', () => { ctx.run.subscribers = ctx.run.subscribers.filter((r) => r !== res); });
+      return;
+    }
+
     if (req.method === 'POST' && p === '/refresh-feed') {
       if (ctx.refresh && ctx.refresh.state === 'pending') {
         return sendJson(res, 409, { error: 'a refresh is already pending' });
@@ -426,6 +486,7 @@ function main() {
       require('child_process').execFile(cmd, args, opts, (err) => err ? reject(err) : resolve());
     }),
     repoDir: REPO,
+    spawn: require('child_process').spawn,
   };
   const server = http.createServer((req, res) => handle(req, res, ctx));
   server.listen(args.port, '127.0.0.1', () => {
@@ -445,7 +506,7 @@ function main() {
 module.exports = {
   newestReview, heroList, applyCorrections, finalize, uploadToken, uploadWith,
   collectCustomHeroes, parseArgs, currentReviewPath, resolveReviewPathIn, handle,
-  categorizeFailure, failureList, attemptsTally,
+  categorizeFailure, failureList, attemptsTally, buildRunArgs,
 };
 
 if (require.main === module) main();
