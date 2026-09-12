@@ -207,16 +207,57 @@ test('an unsampled round-side ships no observation at all', () => {
   assert.deepStrictEqual(got.map((o) => o.side), ['b'], 'only side b had a comp');
 });
 
-test('a slot still contested after review ships a second observation with the runner-up', () => {
+test('contested/alt_guid alone (no segments) ships only one observation - segments drive emission now', () => {
   const a = COMP('a');
-  a[0] = slot('DVA', { contested: true, alt_guid: 'DMON' });
+  a[0] = slot('DVA', { contested: true, alt_guid: 'DMON' });   // no `segments` set
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  assert.strictEqual(got.filter((o) => o.side === 'a').length, 1,
+    'contested/alt_guid still exist on the slot for the review UI, but fromRounds only reads segments');
+});
+
+test('a segmented slot ships one observation per confirmed swap, at its real time', () => {
+  const rest = (p) => ({ segments: [{ guid: p, name: p, from_t: 0, reads: [] }] });
+  const a = [
+    slot('DVA', { segments: [{ guid: 'DVA', name: 'DVA', from_t: 0, reads: [] },
+                              { guid: 'DMON', name: 'DMON', from_t: 180, reads: [] }] }),
+    slot('d1a', rest('d1a')), slot('d2a', rest('d2a')),
+    slot('s1a', rest('s1a')), slot('s2a', rest('s2a')),
+  ];
   const got = EM.fromRounds([round(1, a, COMP('b'))]);
   const aSide = got.filter((o) => o.side === 'a');
-  assert.strictEqual(aSide.length, 2, 'primary + swap');
+  assert.strictEqual(aSide.length, 2, 'one observation per segment boundary');
+  assert.strictEqual(aSide[0].ts, 0);
   assert.strictEqual(aSide[0].heroes[0], 'DVA');
+  assert.strictEqual(aSide[1].ts, 180000);
   assert.strictEqual(aSide[1].heroes[0], 'DMON');
-  assert.ok(aSide[1].ts > aSide[0].ts, 'the swap observation is later in the round');
-  assert.strictEqual(got.filter((o) => o.side === 'b').length, 1, 'side b was not contested');
+  assert.strictEqual(aSide[0].heroes[1], 'd1a', 'an unswapped slot repeats its hero at every boundary');
+  assert.strictEqual(aSide[1].heroes[1], 'd1a');
+});
+
+test("a fresh segment's own from_t is used for the round's first observation, not round.from_t", () => {
+  const seg = (guid) => [{ guid: guid, name: guid, from_t: 12, reads: [] }];
+  const a = ['ta', 'd1a', 'd2a', 's1a', 's2a'].map((g) => slot(g, { segments: seg(g) }));
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  const aSide = got.filter((o) => o.side === 'a');
+  assert.strictEqual(aSide.length, 1);
+  assert.strictEqual(aSide[0].ts, 12000, 'the assemble-grace-adjusted start, not round.from_t (0)');
+});
+
+test('a human hero correction (segments cleared) ships one observation at round.from_t, same as before segmentation existed', () => {
+  const a = COMP('a');
+  a[0] = slot('ASHE', { segments: null });   // review/server.js's applyCorrections clears segments on a hero fix
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  const aSide = got.filter((o) => o.side === 'a');
+  assert.strictEqual(aSide.length, 1);
+  assert.strictEqual(aSide[0].ts, 0);
+  assert.strictEqual(aSide[0].heroes[0], 'ASHE');
+});
+
+test('a slot with segments: [] (machine found nothing trustworthy) contributes to no observation', () => {
+  const a = COMP('a');
+  a[0] = slot('SOMETHING', { segments: [] });
+  const got = EM.fromRounds([round(1, a, COMP('b'))]);
+  assert.strictEqual(got[0].heroes.length, 4, 'slot 0 dropped out even though it has a guid');
 });
 
 test('mapRecordFromRounds renames the feed fields and uses the per-round observations', () => {

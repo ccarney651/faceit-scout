@@ -104,53 +104,63 @@
   }
 
   // The same record from resolve.js's per-round output, after the operator has
-  // reviewed it. See specs/2026-09-10-replay-bot-autonomous-scouting-design.md §5.
+  // reviewed it. See specs/2026-09-10-replay-bot-autonomous-scouting-design.md §5
+  // and specs/2026-09-12-replay-bot-segment-observations-design.md.
   //
-  // One observation per round per side - the confirmed comp - which is the shape
-  // a human contributor produces and the frequency owdb's opening-comp and
-  // hero-pool derivations assume. A slot the operator left unresolved (null
-  // guid) drops out of that round's comp rather than shipping a hole; a slot
-  // still marked `contested` after review ships a SECOND observation for that
-  // round with the runner-up swapped in, at the round's midpoint, so a real
-  // mid-round hero swap is not flattened to one hero.
+  // One observation per DISTINCT segment-start time across a round-side's 5
+  // slots - not one per round. A round where nothing swapped has exactly one
+  // segment per slot, all starting together, so it still ships exactly one
+  // observation (the common case, unchanged in shape). A round with a real
+  // mid-round swap ships one extra observation at the swap's own timestamp,
+  // with only the slot(s) that actually swapped changing between them.
+  //
+  // A slot's `segments` is `Array.isArray` when resolve.js computed it
+  // (segmentSlot() - real segments, or `[]` if nothing survived the
+  // assemble-grace/no-read filtering). When it is `undefined`/`null` - a
+  // human hero correction (review/server.js's applyCorrections) or an older
+  // pre-segmentation artifact - a slot with a guid is treated as one segment
+  // spanning the whole round, at the round's own from_t: a correction is an
+  // assertion about the whole round, not a machine read subject to
+  // pre-render noise, so it does not get the assemble-grace treatment.
+  function slotSegments(s, round) {
+    if (!s) return [];
+    if (Array.isArray(s.segments)) return s.segments;
+    if (!s.guid) return [];
+    return [{ guid: s.guid, name: s.name, from_t: round.from_t, reads: [] }];
+  }
+
   function fromRounds(rounds) {
     var out = [];
     (rounds || []).forEach(function (round) {
       SIDES.forEach(function (side) {
         var slots = round[side] || [];
+        var slotSegs = slots.map(function (s) { return slotSegments(s, round); });
 
-        var heroes = [];
-        var pairs = [];
-        var hasContest = false;
-        slots.forEach(function (s) {
-          if (!s || !s.guid) return;
-          heroes.push(s.guid);
-          pairs.push([s.guid, (s.player_id === undefined || s.player_id === null) ? null : s.player_id]);
-          if (s.contested && s.alt_guid) hasContest = true;
+        var boundarySet = {};
+        slotSegs.forEach(function (segs) {
+          segs.forEach(function (seg) { boundarySet[seg.from_t] = true; });
         });
-        if (!heroes.length) return;   // an unsampled/empty round-side ships nothing
+        var boundaries = Object.keys(boundarySet).map(Number).sort(function (a, b) { return a - b; });
 
-        out.push({
-          side: side, ts: Math.round(round.from_t * 1000), sub_map: null,
-          round_no: round.round_no, phase: null, heroes: heroes, pairs: pairs,
-        });
-
-        if (hasContest) {
-          var altHeroes = [];
-          var altPairs = [];
-          slots.forEach(function (s) {
-            if (!s || !s.guid) return;
-            var g = (s.contested && s.alt_guid) ? s.alt_guid : s.guid;
-            altHeroes.push(g);
-            altPairs.push([g, (s.player_id === undefined || s.player_id === null) ? null : s.player_id]);
+        boundaries.forEach(function (t) {
+          var heroes = [];
+          var pairs = [];
+          slotSegs.forEach(function (segs, slotIdx) {
+            var active = null;
+            for (var k = 0; k < segs.length; k++) {
+              if (segs[k].from_t <= t) active = segs[k]; else break;
+            }
+            if (!active) return;
+            var s = slots[slotIdx];
+            heroes.push(active.guid);
+            pairs.push([active.guid, (s.player_id === undefined || s.player_id === null) ? null : s.player_id]);
           });
+          if (!heroes.length) return;
           out.push({
-            side: side,
-            ts: Math.round((round.from_t + (round.to_t - round.from_t) / 2) * 1000),
-            sub_map: null, round_no: round.round_no, phase: null,
-            heroes: altHeroes, pairs: altPairs,
+            side: side, ts: Math.round(t * 1000), sub_map: null,
+            round_no: round.round_no, phase: null, heroes: heroes, pairs: pairs,
           });
-        }
+        });
       });
     });
     return out;
@@ -184,6 +194,7 @@
     observations: observations,
     mapRecord: mapRecord,
     fromRounds: fromRounds,
+    slotSegments: slotSegments,
     mapRecordFromRounds: mapRecordFromRounds,
     file: file,
   };
