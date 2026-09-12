@@ -81,6 +81,25 @@
   .galitem { flex: 0 0 auto; text-align: center; }
   .galitem .strip { width: 170px; max-width: 170px; margin-bottom: 2px; }
   .galtime { font-size: 10.5px; color: var(--dim); }
+  #failures { background: var(--panel); border: 1px solid var(--bad); border-radius: 10px; margin-bottom: 20px; }
+  #failures .maphead { border-bottom-color: var(--bad); }
+  #failChips { padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
+  .failrow { padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 12px;
+    align-items: baseline; font-size: 12.5px; flex-wrap: wrap; }
+  .failrow:last-child { border-bottom: 0; }
+  .failrow .code { font-family: ui-monospace, monospace; color: var(--accent); }
+  .failrow .cat { padding: 1px 7px; border-radius: 10px; background: var(--flagbg); color: var(--flag); font-size: 11px; white-space: nowrap; }
+  .failrow .err { color: var(--dim); flex: 1 1 260px; }
+  #tabbar { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  #tabbar button.on { border-color: var(--accent); color: var(--accent); }
+  #runView { max-width: 700px; margin: 0 auto; padding: 16px; }
+  .runrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .runrow label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .runrow input[type=text], .runrow input[type=number] {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font: inherit; width: 120px; }
+  #runLog { background: #0b0d10; border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+    height: 320px; overflow-y: auto; white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; }
 </style>
 </head>
 <body>
@@ -94,8 +113,45 @@
   <button id="finalize">Finalize</button>
   <button id="upload" class="primary" disabled>Upload</button>
 </header>
+<div id="tabbar">
+  <button id="tabRun" class="tabbtn">Run</button>
+  <button id="tabReview" class="tabbtn">Review</button>
+</div>
+<section id="runView" hidden>
+  <div class="runrow">
+    <span id="feedStatus" class="summary"></span>
+    <button id="refreshFeed">Refresh feed</button>
+  </div>
+  <div class="runrow">
+    <label><input type="checkbox" id="owReady"> Overwatch is open on the Replay History tab</label>
+  </div>
+  <div class="runrow">
+    <label>Divisions <input type="text" id="fDivisions" placeholder="e.g. EMEA Master"></label>
+    <label>Teams <input type="text" id="fTeams" placeholder="e.g. Wasp,Crabs"></label>
+    <label>Limit <input type="number" id="fLimit" placeholder="e.g. 5"></label>
+  </div>
+  <div class="runrow">
+    <button id="goBtn" class="primary" disabled>Go</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <span id="runNote" class="note"></span>
+  </div>
+  <div id="runLog"></div>
+</section>
+<div id="reviewView">
+<div id="flagFilters" class="chips" style="padding:8px 16px; border-bottom:1px solid var(--line)"></div>
 <div id="banner" class="note"></div>
-<main id="maps"></main>
+<main>
+<section id="failures" style="display:none">
+  <div class="maphead">
+    <b>Failures</b>
+    <span id="failSummary" class="summary"></span>
+  </div>
+  <div id="failChips"></div>
+  <div id="failList"></div>
+</section>
+<div id="maps"></div>
+</main>
+</div>
 
 <script>
 const $ = (s, r = document) => r.querySelector(s);
@@ -107,6 +163,24 @@ let HEROES = [];
 let HERO_BY_GUID = {};
 let dirty = false;
 let onlyIssues = true;
+
+// The flag vocabulary resolve.js actually produces (round-level: unsampled/
+// sparse; slot-level: everything else), plus the synthetic 'swap' category for
+// a confirmed mid-round hero change (segments.length > 1), which drives the
+// same "needs review" gating as a real flag but isn't one. Labels here are the
+// only place these strings are made human-readable - keep in sync with
+// resolve.js's flags.push(...) call sites.
+const FLAG_LABELS = {
+  'no-read': 'no read', 'contested': 'contested', 'low-support': 'low support',
+  'low-score': 'low confidence', 'unknown-hero': 'unknown hero',
+  'attribution-abstained': 'attribution abstained',
+  'round-unsampled': 'round unsampled', 'sparse-round': 'sparse round',
+  'swap': 'hero swap',
+};
+// Which flag types currently count toward "needs review". null until the
+// first load populates it with every type actually present, all on by
+// default - so filtering starts as a no-op and only narrows from there.
+let activeFlagTypes = null;
 // TEMP: player attribution UI hidden while hero-capture accuracy is the
 // priority - attribution and orientation detection still run in run.js
 // unchanged (they share one OCR pass), only its display here is off. Flip
@@ -121,14 +195,103 @@ async function load() {
   HEROES = hl.heroes || [];
   HERO_BY_GUID = Object.fromEntries(HEROES.map((h) => [h.guid, h]));
   $('#sessionname').textContent = DATA.session + ' · ' + (DATA.maps || []).length + ' maps';
+  activeFlagTypes = new Set(Object.keys(flagTypeCounts()));
   render();
+  loadFailures();
+}
+
+// Every flag type present across the whole session right now, with how many
+// slots/rounds carry it - effective (post-correction) so a fixed slot's old
+// flag stops counting the moment it's corrected, same as the rest of the page.
+function flagTypeCounts() {
+  const counts = {};
+  const bump = (k) => { counts[k] = (counts[k] || 0) + 1; };
+  (DATA.maps || []).forEach((m) => (m.rounds || []).forEach((r) => {
+    (r.flags || []).forEach(bump);
+    ['a', 'b'].forEach((side) => (r[side] || []).forEach((base, i) => {
+      const s = effSlot(m, r.round_no, side, i);
+      effectiveFlags(base, s).forEach(bump);
+      const segs = effectiveSegments(base, s);
+      if (segs && segs.length > 1) bump('swap');
+    }));
+  }));
+  return counts;
+}
+
+function renderFlagFilters() {
+  const bar = $('#flagFilters');
+  const counts = flagTypeCounts();
+  const types = Object.keys(counts);
+  bar.style.display = types.length ? '' : 'none';
+  bar.textContent = '';
+  types.sort((a, b) => counts[b] - counts[a]).forEach((t) => {
+    const chip = el('span', 'chip' + (activeFlagTypes.has(t) ? ' on' : ''),
+      (FLAG_LABELS[t] || t) + ' (' + counts[t] + ')');
+    chip.title = activeFlagTypes.has(t)
+      ? 'counts toward "needs review" - click to stop counting it'
+      : 'hidden from "needs review" - click to count it again';
+    chip.onclick = () => {
+      if (activeFlagTypes.has(t)) activeFlagTypes.delete(t); else activeFlagTypes.add(t);
+      render();
+    };
+    bar.appendChild(chip);
+  });
+}
+
+// Codes run.js never got a map for at all - state/attempts.json's failed
+// entries, categorised server-side by error text. These never appear in
+// review.json (a failure throws before RO.mapEntry runs), so this is the
+// only place in the page that shows them.
+let FAILURES = [];
+let activeFailCats = null; // null until loaded, then a Set of categories shown
+
+async function loadFailures() {
+  try {
+    const r = await (await fetch('/failures')).json();
+    FAILURES = r.failures || [];
+  } catch (e) { FAILURES = []; }
+  activeFailCats = new Set(FAILURES.map((f) => f.category));
+  renderFailures();
+}
+
+function renderFailures() {
+  const box = $('#failures');
+  if (!FAILURES.length) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  const counts = {};
+  const labelOf = {};
+  FAILURES.forEach((f) => { counts[f.category] = (counts[f.category] || 0) + 1; labelOf[f.category] = f.category_label; });
+  $('#failSummary').textContent = FAILURES.length + ' failed code' + (FAILURES.length === 1 ? '' : 's');
+
+  const chips = $('#failChips'); chips.textContent = '';
+  Object.keys(counts).sort((a, b) => counts[b] - counts[a]).forEach((cat) => {
+    const chip = el('span', 'chip' + (activeFailCats.has(cat) ? ' on' : ''),
+      labelOf[cat] + ' (' + counts[cat] + ')');
+    chip.onclick = () => {
+      if (activeFailCats.has(cat)) activeFailCats.delete(cat); else activeFailCats.add(cat);
+      renderFailures();
+    };
+    chips.appendChild(chip);
+  });
+
+  const list = $('#failList'); list.textContent = '';
+  FAILURES.filter((f) => activeFailCats.has(f.category)).forEach((f) => {
+    const row = el('div', 'failrow');
+    row.appendChild(el('span', 'code', f.code));
+    row.appendChild(el('span', 'cat', f.category_label));
+    const ctx = [f.division, f.map, (f.team_a && f.team_b) ? f.team_a + ' vs ' + f.team_b : null]
+      .filter(Boolean).join(' · ');
+    if (ctx) row.appendChild(el('span', 'summary', ctx));
+    row.appendChild(el('span', 'err', f.error || ''));
+    list.appendChild(row);
+  });
 }
 
 function mapFlagCount(m) {
   let n = 0;
   for (const r of m.rounds || []) {
-    n += (r.flags || []).length;
-    for (const s of (r.a || []).concat(r.b || [])) n += (s.flags || []).length;
+    n += (r.flags || []).filter(flagTypeActive).length;
+    for (const s of (r.a || []).concat(r.b || [])) n += (s.flags || []).filter(flagTypeActive).length;
   }
   return n;
 }
@@ -184,10 +347,15 @@ function effectiveSegments(base, s) {
 // A slot is worth an operator's eyes if it carries a flag, or if it holds a
 // real mid-round hero swap (2+ segments) - a swap ships an extra observation
 // whether or not anything else about the slot was flagged.
+// null activeFlagTypes (before the first load populates it) means "every
+// type counts", so this degrades to the pre-filter behaviour rather than
+// hiding everything for one render.
+const flagTypeActive = (t) => !activeFlagTypes || activeFlagTypes.has(t);
+
 function slotNeedsReview(base, s) {
-  const flags = effectiveFlags(base, s);
+  const flags = effectiveFlags(base, s).filter(flagTypeActive);
   const segs = effectiveSegments(base, s);
-  return flags.length > 0 || (segs && segs.length > 1);
+  return flags.length > 0 || (segs && segs.length > 1 && flagTypeActive('swap'));
 }
 function sideNeedsReview(m, r, side) {
   for (let i = 0; i < 5; i++) {
@@ -197,12 +365,16 @@ function sideNeedsReview(m, r, side) {
   }
   return false;
 }
+function roundFlagsActive(r) {
+  return (r.flags || []).some(flagTypeActive);
+}
 function roundNeedsReview(m, r) {
-  if ((r.flags || []).length) return true;
+  if (roundFlagsActive(r)) return true;
   return sideNeedsReview(m, r, 'a') || sideNeedsReview(m, r, 'b');
 }
 
 function render() {
+  renderFlagFilters();
   const host = $('#maps'); host.textContent = '';
   (DATA.maps || []).forEach((m, mi) => host.appendChild(renderMap(m, mi)));
   refreshFooter();
@@ -266,7 +438,7 @@ function renderRound(m, mi, r, flagged) {
     // A round-level flag (round-unsampled, sparse-round) is a reason to look at
     // everything in it even if no single slot is flagged - only collapse a side
     // when the round itself is clean too.
-    const sideClean = onlyIssues && !(r.flags || []).length && !sideNeedsReview(m, r, side);
+    const sideClean = onlyIssues && !roundFlagsActive(r) && !sideNeedsReview(m, r, side);
     if (sideClean) {
       sd.appendChild(el('div', 'summary', '✓ 5/5 clean'));
       wrap.appendChild(sd);
@@ -453,6 +625,99 @@ $('#upload').onclick = async () => {
 window.onbeforeunload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
 
 load();
+</script>
+
+<script>
+// --- the Run tab -----------------------------------------------------
+// Self-contained: this is the only script block that touches #runView /
+// #tabbar. Duplicates the ~4-line landing.js decision (this file has no
+// module system, so a require() here would need a build step it isn't
+// worth adding for four lines) - keep the two in sync if that logic changes.
+(function () {
+  const $ = (s) => document.querySelector(s);
+  function landingView(status) {
+    if (status && status.running) return 'run';
+    if (status && status.hasReview) return 'review';
+    return 'run';
+  }
+
+  function showTab(tab) {
+    $('#runView').hidden = tab !== 'run';
+    $('#reviewView').hidden = tab !== 'review';
+    $('#tabRun').className = 'tabbtn' + (tab === 'run' ? ' on' : '');
+    $('#tabReview').className = 'tabbtn' + (tab === 'review' ? ' on' : '');
+  }
+  $('#tabRun').onclick = () => showTab('run');
+  $('#tabReview').onclick = () => showTab('review');
+
+  let logSource = null;
+  function openLog() {
+    if (logSource) return;
+    logSource = new EventSource('/run-log');
+    logSource.onmessage = (e) => {
+      const pane = $('#runLog');
+      const atBottom = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 4;
+      pane.textContent += JSON.parse(e.data);
+      if (atBottom) pane.scrollTop = pane.scrollHeight;
+    };
+    logSource.addEventListener('done', () => {
+      logSource.close(); logSource = null;
+      refreshStatus().then((s) => { if (s && s.hasReview) { load(); loadFailures(); showTab('review'); } });
+    });
+    logSource.onerror = () => { if (logSource) { logSource.close(); logSource = null; } };
+  }
+
+  let lastStatus = null;
+  async function refreshStatus() {
+    let s;
+    try { s = await (await fetch('/status')).json(); } catch (e) { return null; }
+    lastStatus = s;
+    $('#feedStatus').textContent = s.feed.fresh
+      ? 'feed: fresh (built ' + (s.feed.built || '?') + ')'
+      : 'feed: stale (built ' + (s.feed.built || 'never') + ') - refresh before a run';
+    $('#goBtn').disabled = !($('#owReady').checked && s.feed.fresh && !s.running);
+    $('#stopBtn').disabled = !s.running;
+    if (s.running) { $('#runNote').textContent = 'running…'; openLog(); }
+    else if (s.exitInfo) $('#runNote').textContent = 'last run exited ' + s.exitInfo.code;
+    if (s.refresh && s.refresh.state === 'pending') {
+      setTimeout(refreshStatus, 2000);
+    }
+    return s;
+  }
+  $('#owReady').onchange = refreshStatus;
+
+  $('#refreshFeed').onclick = async () => {
+    $('#refreshFeed').disabled = true;
+    try {
+      const r = await (await fetch('/refresh-feed', { method: 'POST' })).json();
+      $('#feedStatus').textContent = 'feed refresh: ' + r.state;
+      if (r.state === 'pending') setTimeout(refreshStatus, 2000);
+    } finally { $('#refreshFeed').disabled = false; refreshStatus(); }
+  };
+
+  $('#goBtn').onclick = async () => {
+    const body = { confirmed: true };
+    if ($('#fDivisions').value) body.divisions = $('#fDivisions').value;
+    if ($('#fTeams').value) body.teams = $('#fTeams').value;
+    if ($('#fLimit').value) body.limit = Number($('#fLimit').value);
+    $('#runLog').textContent = '';
+    const r = await fetch('/go', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    $('#runNote').textContent = r.ok ? 'started' : ('refused: ' + (j.error || r.status));
+    if (r.ok) { openLog(); refreshStatus(); }
+  };
+  $('#stopBtn').onclick = async () => {
+    const r = await fetch('/stop', { method: 'POST' });
+    const j = await r.json();
+    $('#runNote').textContent = r.ok ? (j.note || 'stopping…') : ('error: ' + (j.error || r.status));
+  };
+
+  refreshStatus().then((s) => {
+    showTab(landingView(s || {}));
+    if (s && s.running) openLog();
+  });
+  setInterval(refreshStatus, 5000);
+})();
 </script>
 </body>
 </html>
