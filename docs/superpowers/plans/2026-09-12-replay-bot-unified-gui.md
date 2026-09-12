@@ -53,7 +53,7 @@ the server needs to notice the *new* file without a restart.
   field off `ctx`.
 - Consumes: existing `newestReview(dir)` (unchanged).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tools/replay_bot/review/server.test.js` (near the other pure-helper
 tests, before the `tmpSession()` section):
@@ -126,13 +126,13 @@ alongside `ctx` instead, e.g. `tmpSession()` callers currently do
 `const { ctx, reviewPath } = tmpSession();` and replace `ctx.reviewPath`
 with `reviewPath` in those two assertions.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: FAIL — `SV.currentReviewPath is not a function`, plus failures in
 any test still referencing the old `ctx.reviewPath` fixture shape.
 
-- [ ] **Step 3: Implement `currentReviewPath` and rewire the handlers**
+- [x] **Step 3: Implement `currentReviewPath` and rewire the handlers**
 
 In `tools/replay_bot/review/server.js`, replace the existing
 `resolveReviewPath` function (around line 335-340) with:
@@ -260,13 +260,13 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: PASS, all tests including the pre-existing ones (they now go
 through `tmpSession()`'s updated fixture).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/replay_bot/review/server.js tools/replay_bot/review/server.test.js
@@ -293,7 +293,7 @@ git commit -m "replay-bot review server: resolve the review path dynamically per
   (`running: false`, `exitInfo: null`, `refresh: { state: 'idle' }`) so the
   endpoint is usable standalone.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `server.test.js`:
 
@@ -335,13 +335,13 @@ test('GET /status reports feed freshness, attempt tally, and idle run state', as
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: FAIL — `SV.attemptsTally is not a function`, and a 404 from the
 unhandled `/status` route.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add near `failureList` in `server.js`:
 
@@ -376,12 +376,12 @@ Add the route inside `handle()`, before the final `return send(res, 404, ...)`:
 
 Add `attemptsTally` to `module.exports`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/replay_bot/review/server.js tools/replay_bot/review/server.test.js
@@ -412,7 +412,7 @@ which fires a `repository_dispatch` and returns `200 {started:true}` or a
 waits a fixed delay (matching the dashboard's own "~2 minutes, then reload"
 copy) and then re-checks freshness itself.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```javascript
 test('refresh-feed skips the network call when the feed is already fresh today', async () => {
@@ -464,12 +464,12 @@ test('refresh-feed reports failed when the worker call errors', async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: FAIL — `/refresh-feed` unhandled (404), `ctx.refresh` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```javascript
 const REFRESH_ENDPOINT = 'https://upload.owdb.io/refresh';
@@ -541,12 +541,12 @@ Add `attemptsTally`... already exported in Task 2; add nothing new to
 route in tests, matching how `uploadWith` is both exported and used
 internally).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/replay_bot/review/server.js tools/replay_bot/review/server.test.js
@@ -598,7 +598,7 @@ B's integration test (a fake `run.js`-shaped child script exercising the
 actual flag file end to end through the server) and by the manual
 end-to-end check in Task 4's final step. Go straight to implementation.
 
-- [ ] **Step 1: Implement the stop flag in `run.js`**
+- [x] **Step 1: Implement the stop flag in `run.js`**
 
 In `run.js`, immediately after the existing `PAUSE_FLAG` declaration
 (around line 386):
@@ -633,14 +633,14 @@ pause flag:
   }
 ```
 
-- [ ] **Step 2: Run the existing suite to confirm nothing broke**
+- [x] **Step 2: Run the existing suite to confirm nothing broke**
 
 Run: `cd tools/replay_bot && node --test run.test.js`
 Expected: PASS (this change is additive to a code path the existing tests
 don't drive end-to-end, since `main()` isn't called from tests per the
 file's own bottom-of-file guard).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/replay_bot/run.js
@@ -649,7 +649,7 @@ git commit -m "replay-bot: add a file-based stop flag alongside the pause flag"
 
 ### Part B — `POST /go`, `POST /stop`, `GET /run-log`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 For this part, spawn a small **fake run.js** rather than the real one (the
 real one drives a live Overwatch client and can't run in a test). Create it
@@ -729,12 +729,12 @@ test('buildRunArgs translates division/team/limit into run.js flags', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: FAIL — `/go`, `/stop` unhandled (404), `SV.buildRunArgs` missing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add near the top of `server.js`, alongside the other module-level path
 constants:
@@ -820,19 +820,19 @@ Routes, before the final 404:
 Add `ctx.spawn: require('child_process').spawn,` to `main()`'s `ctx`
 construction. Add `buildRunArgs` to `module.exports`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/replay_bot/review/server.js tools/replay_bot/review/server.test.js
 git commit -m "replay-bot review server: add POST /go, POST /stop, GET /run-log"
 ```
 
-- [ ] **Step 6: Manual verification against the real `run.js`**
+- [x] **Step 6: Manual verification against the real `run.js`**
 
 This is the one piece this plan cannot unit-test honestly (per the design
 doc's own testing section — child-process lifecycle against the real
@@ -857,7 +857,7 @@ exits after finishing its current map rather than being force-killed.
 - Produces: `result.prune` (string) added to a successful `/upload`
   response body only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 test('a successful upload also runs prune_frames.js and reports its output', async () => {
@@ -875,12 +875,12 @@ test('a successful upload also runs prune_frames.js and reports its output', asy
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: FAIL — `r.body.prune` is `undefined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add near `startRun`:
 
@@ -919,12 +919,12 @@ Update the `/upload` handler's success branch:
     }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd tools/replay_bot/review && node --test server.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/replay_bot/review/server.js tools/replay_bot/review/server.test.js
@@ -950,7 +950,7 @@ git commit -m "replay-bot review server: prune frames after a successful upload"
   `/go`, `/stop`, `/run-log`), plus the existing Review-view endpoints
   unchanged.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // tools/replay_bot/review/landing.test.js
@@ -971,12 +971,12 @@ test('lands on Review when a run just finished and there is something to review'
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd tools/replay_bot/review && node --test landing.test.js`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```javascript
 // tools/replay_bot/review/landing.js
@@ -994,19 +994,19 @@ function landingView(status) {
 module.exports = { landingView };
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd tools/replay_bot/review && node --test landing.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/replay_bot/review/landing.js tools/replay_bot/review/landing.test.js
 git commit -m "replay-bot review page: extract landing-tab decision as a pure function"
 ```
 
-- [ ] **Step 6: Add the Run tab to `page.html`**
+- [x] **Step 6: Add the Run tab to `page.html`**
 
 Read the existing `page.html` first to match its current tab/section
 pattern and styling before adding to it (it's a single dependency-free HTML
@@ -1042,7 +1042,7 @@ Keep this addition self-contained (its own `<script>` block or a clearly
 delimited section of the existing one) so it doesn't tangle with the
 existing Review-view JS.
 
-- [ ] **Step 7: Manual verification**
+- [x] **Step 7: Manual verification**
 
 Start the server (`node tools/replay_bot/review/server.js --open`),
 confirm: the Run tab renders, `Refresh feed` reports a state without
@@ -1052,7 +1052,7 @@ available — `Go` at least reaches the "feed not fresh" or "confirm
 Overwatch" refusal paths correctly, and the log pane receives streamed
 text without a page reload.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add tools/replay_bot/review/page.html
