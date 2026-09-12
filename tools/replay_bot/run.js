@@ -99,6 +99,17 @@ function parseArgs(argv) {
     divisions: flag('--divisions') ? flag('--divisions').split(',').map((d) => d.trim()).filter(Boolean) : null,
     teams: flag('--teams') ? flag('--teams').split(',').map((t) => t.trim()).filter(Boolean) : null,
     newestFirst: argv.includes('--newest'),
+    // An exact ISO instant, for when the wipe date's deliberate day-early
+    // dating (see owdb/db.py _SEED_WIPES) is costing more than "one failed
+    // capture attempt each" - a patch that lands late in the day leaves every
+    // game finished earlier that same day looking alive to the day-granularity
+    // wipeDate filter, and a slow news day can cluster dozens of them right at
+    // the front of an oldest-first queue, which is exactly what trips the
+    // two-consecutive-failure abort before a real code is ever reached. This
+    // is a second, precise filter on top of wipeDate, not a replacement for
+    // it - queue.js's own semantics (and the tests/consumers that share them)
+    // are untouched.
+    after: flag('--after'),
     // Skips the timed-playback measurement when the operator already knows what
     // the client is set to. Wrong here means every sample lands somewhere else,
     // so it is a flag and not a default.
@@ -269,6 +280,12 @@ async function main() {
     });
     console.log(`feed has ${(feed.codes || []).length} codes, wipe ${feed.code_wipe_date}; ` +
       `${queue.length} pending after dropping wiped and already-attempted`);
+
+    if (args.after) {
+      const before = queue.length;
+      queue = queue.filter((c) => c.finished_at > args.after);
+      console.log(`--after ${args.after}: dropped ${before - queue.length} finished at or before it`);
+    }
   }
 
   if (args.limit && !looping) queue = queue.slice(0, args.limit);

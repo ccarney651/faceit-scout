@@ -32,6 +32,16 @@ test('no --code-stack means codeStack is null', () => {
   assert.strictEqual(RUN.parseArgs([]).codeStack, null);
 });
 
+// --after is a precise instant, for when a patch's deliberate day-early wipe
+// date (owdb/db.py _SEED_WIPES) leaves a cluster of same-day pre-patch games
+// looking alive - see queue.js's day-granularity `pending()` filter, which
+// this does not replace.
+test('--after is read, and absent by default', () => {
+  assert.strictEqual(RUN.parseArgs(['--after', '2026-09-08T18:00:00Z']).after,
+    '2026-09-08T18:00:00Z');
+  assert.strictEqual(RUN.parseArgs([]).after, null);
+});
+
 // Ad-hoc codes are for testing the loop on replays that are not league games.
 // Inventing a map name for them would send a fiction downstream, where nothing
 // could tell it from a real reading.
