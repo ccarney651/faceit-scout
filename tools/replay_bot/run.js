@@ -138,26 +138,54 @@ function parseArgs(argv) {
     // presses, for an A/B against the drag or as an escape hatch if a client
     // update breaks it.
     noDrag: argv.includes('--no-drag'),
+    // Two failures in a row stops the run by default - a client stuck in a
+    // menu would otherwise burn the rest of the queue for nothing. Raising
+    // this is for a supervised catch-up pass where a few of the failures seen
+    // so far are known to be per-code (timeouts, panel misreads), not the
+    // client being stuck, so working through more of the queue before giving
+    // up is worth more than the tight default.
+    failStreakCap: Number(flag('--fail-streak-cap')) || 2,
   };
 }
 
 // Bare codes to queue entries, for testing the loop on replays that are not
 // league games. Every field the feed would supply is left null rather than
 // invented - a made-up map name would travel downstream and be believed.
-function synthesise(codes) {
-  return codes.map((code, i) => ({
-    code: code.toUpperCase(),
-    match_id: 'adhoc',
-    game_no: i + 1,
-    map: null,
-    map_guid: null,
-    map_category: null,
-    team_a: null,
-    team_b: null,
-    t1: null,
-    t2: null,
-    finished_at: new Date().toISOString(),
-  }));
+//
+// UNLESS THE CODE IS ALREADY A REAL ONE. --codes and --code-stack exist to
+// stress the capture mechanics on a small reusable set (codestack.js), and
+// that set is routinely real league codes - the console's overnight-loop
+// rehearsal draws from docs/capture/data.json same as a real run would. A
+// code that matches one in `feed.codes` gets ITS real match_id/game_no/map/
+// teams instead of an invented 'adhoc' one, so attribute.js has a real lineup
+// to work with rather than abstaining every slot.
+//
+// 2026-09-11: a console-loop pass on 20 codes that were all real FACEIT
+// matches came back with zero player attribution on every map, because this
+// synthesised 'adhoc' unconditionally - the fix looks the code up first and
+// only falls back to nulls when it truly is not in any feed.
+function synthesise(codes, feed) {
+  const byCode = {};
+  ((feed && feed.codes) || []).forEach((c) => {
+    byCode[String(c.code || '').toUpperCase()] = c;
+  });
+  return codes.map((code, i) => {
+    const up = code.toUpperCase();
+    const known = byCode[up];
+    return {
+      code: up,
+      match_id: known ? known.match_id : 'adhoc',
+      game_no: known ? known.game_no : i + 1,
+      map: (known && known.map) || null,
+      map_guid: (known && known.map_guid) || null,
+      map_category: (known && known.map_category) || null,
+      team_a: (known && known.team_a) || null,
+      team_b: (known && known.team_b) || null,
+      t1: (known && known.t1) || null,
+      t2: (known && known.t2) || null,
+      finished_at: (known && known.finished_at) || new Date().toISOString(),
+    };
+  });
 }
 
 // How many planned sample times fell in each round, keyed by round_no. resolve.js
@@ -238,12 +266,15 @@ async function main() {
       `${loadSettleMs()}, esc-wait ${escWaitMs()}, seek ${args.noDrag ? 'keys' : 'drag'}`);
   }
 
-  // Attribution wants the feed's lineups/hero_roles even on an ad-hoc run, so
-  // it is read once here rather than staying scoped to the queue-building
-  // branch below. An ad-hoc code has no lineup entry regardless (synthesise()
-  // invents match_id 'adhoc'), so attribute.js just abstains every slot for
-  // those - {} is a safe default, not a fallback that hides a real feed.
-  let feed = {};
+  // Attribution wants the feed's lineups/hero_roles even on an ad-hoc or
+  // code-stack run, so it is read once here rather than staying scoped to the
+  // queue-building branch below - and synthesise() below uses it too, to
+  // recover real match data for a code that happens to already be in the
+  // feed. rawFeed (not `feed`) carries whether the file genuinely could not be
+  // read, so the primary branch below can still throw on a missing feed
+  // rather than silently treating it as empty.
+  const rawFeed = readJson(FEED, null);
+  let feed = rawFeed || {};
 
   // --code-stack cycles a codestack.js file forever rather than working a
   // finite queue once - "leave it on overnight" without a real league code
@@ -257,11 +288,11 @@ async function main() {
     console.log(`code-stack: ${preview.length} code${preview.length === 1 ? '' : 's'} ` +
       `(${preview.join(', ') || 'empty'}) - cycling until stopped`);
   } else if (args.codes) {
-    queue = synthesise(args.codes);
+    queue = synthesise(args.codes, feed);
     console.log(`ad-hoc queue: ${queue.length} code${queue.length === 1 ? '' : 's'}`);
   } else {
-    feed = readJson(FEED, null);
-    if (!feed) throw new Error('no feed at ' + FEED);
+    if (!rawFeed) throw new Error('no feed at ' + FEED);
+    feed = rawFeed;
 
     const fresh = feedFreshness(feed, Date.now());
     console.log(`feed built ${fresh.built}, wipe ${fresh.wipeDate}`);
@@ -353,6 +384,8 @@ async function main() {
   // mid-map: a map in progress always finishes, so the client is never left
   // wherever a seek or a menu happened to be.
   const PAUSE_FLAG = path.join(__dirname, 'state', 'loop_pause.flag');
+  const STOP_FLAG = path.join(__dirname, 'state', 'loop_stop.flag');
+  try { fs.unlinkSync(STOP_FLAG); } catch (e) { /* fine if it wasn't there */ }
   let stopRequested = false;
   let sigints = 0;
   process.on('SIGINT', () => {
@@ -367,10 +400,18 @@ async function main() {
   });
 
   async function checkpoint() {
+    if (fs.existsSync(STOP_FLAG)) {
+      stopRequested = true;
+      console.log('\nstop requested (state/loop_stop.flag) - stopping after this map');
+      return;
+    }
     if (fs.existsSync(PAUSE_FLAG)) {
       console.log('paused - waiting for state/loop_pause.flag to clear ' +
         '(console Resume, or the hotkey)');
-      while (!stopRequested && fs.existsSync(PAUSE_FLAG)) await wait(TIMING.poll.ms);
+      while (!stopRequested && fs.existsSync(PAUSE_FLAG)) {
+        if (fs.existsSync(STOP_FLAG)) { stopRequested = true; break; }
+        await wait(TIMING.poll.ms);
+      }
       if (!stopRequested) console.log('resumed');
     }
     // A slider edited while paused (or between any two maps) takes effect from
@@ -395,7 +436,7 @@ async function main() {
     if (looping) {
       const pulled = CodeStack.rotate(args.codeStack);
       if (!pulled) { console.log('the code stack is empty - stopping'); break; }
-      code = synthesise([pulled])[0];
+      code = synthesise([pulled], feed)[0];
     } else {
       if (queueIndex >= queue.length) break;
       code = queue[queueIndex++];
@@ -593,9 +634,9 @@ async function main() {
       // next map's success does not sweep up what it kept.
       if (io.forgetTransient) await io.forgetTransient();
 
-      if (consecutiveFailures >= 2) {
-        console.log('two failures in a row - stopping rather than spending more codes ' +
-          'against a client that is not where the chunks expect it');
+      if (consecutiveFailures >= args.failStreakCap) {
+        console.log(`${consecutiveFailures} failures in a row - stopping rather than spending ` +
+          'more codes against a client that is not where the chunks expect it');
         break;
       }
     }
