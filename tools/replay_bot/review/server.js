@@ -18,6 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const Emit = require('../emit.js');
+const RunJS = require('../run.js');
 
 const RBOT = path.join(__dirname, '..');
 const OUT = path.join(RBOT, 'out');
@@ -116,6 +117,14 @@ function categorizeFailure(msg) {
 // state/attempts.json's failed entries, joined against the feed for map/team
 // context and tagged with a category - what the review page's failures panel
 // filters on. Sorted oldest first, same order the run attempted them in.
+function attemptsTally(attempts) {
+  let done = 0, failed = 0;
+  Object.values(attempts || {}).forEach((v) => {
+    if (v && v.status === 'failed') failed += 1; else done += 1;
+  });
+  return { done, failed, total: done + failed };
+}
+
 function failureList(attempts, feedCodes) {
   const byCode = new Map((feedCodes || []).map((c) => [c.code, c]));
   const out = [];
@@ -303,6 +312,19 @@ async function handle(req, res, ctx) {
       return sendJson(res, result.ok ? 200 : 502, result);
     }
 
+    if (req.method === 'GET' && p === '/status') {
+      const feed = readJson(ctx.feedPath, {});
+      const attempts = readJson(path.join(ctx.stateDir, 'attempts.json'), {});
+      return sendJson(res, 200, {
+        feed: RunJS.feedFreshness(feed, Date.now()),
+        attempts: attemptsTally(attempts),
+        running: !!(ctx.run && !ctx.run.exitInfo),
+        exitInfo: (ctx.run && ctx.run.exitInfo) || null,
+        hasReview: !!currentReviewPath(ctx),
+        refresh: ctx.refresh || { state: 'idle' },
+      });
+    }
+
     return send(res, 404, 'text/plain', 'not found');
   } catch (e) {
     return sendJson(res, 500, { error: String(e && e.message || e) });
@@ -374,7 +396,7 @@ function main() {
 module.exports = {
   newestReview, heroList, applyCorrections, finalize, uploadToken, uploadWith,
   collectCustomHeroes, parseArgs, currentReviewPath, resolveReviewPathIn, handle,
-  categorizeFailure, failureList,
+  categorizeFailure, failureList, attemptsTally,
 };
 
 if (require.main === module) main();

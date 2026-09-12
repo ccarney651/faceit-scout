@@ -136,6 +136,22 @@ test('uploadWith sends the worker headers and returns its reply', async () => {
   assert.deepStrictEqual(r, { ok: true, status: 200, body: { action: 'created', maps: 3 } });
 });
 
+// --- attemptsTally --------------------------------------------------------
+
+test('attemptsTally counts failed vs everything else', () => {
+  const tally = SV.attemptsTally({
+    'm1:1': { status: 'failed' },
+    'm1:2': { status: 'captured' },
+    'm1:3': { status: 'failed' },
+  });
+  assert.deepStrictEqual(tally, { done: 1, failed: 2, total: 3 });
+});
+
+test('attemptsTally handles an empty or missing attempts object', () => {
+  assert.deepStrictEqual(SV.attemptsTally({}), { done: 0, failed: 0, total: 0 });
+  assert.deepStrictEqual(SV.attemptsTally(undefined), { done: 0, failed: 0, total: 0 });
+});
+
 // --- currentReviewPath ---------------------------------------------------
 
 test('currentReviewPath finds the newest review when no session is pinned', () => {
@@ -293,6 +309,24 @@ test('POST /upload refuses while a map is unreviewed, then accepts', async () =>
   const r = await once(ctx, 'POST', '/upload');
   assert.strictEqual(r.status, 200);
   assert.strictEqual(JSON.parse(r.buf).body.action, 'created');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('GET /status reports feed freshness, attempt tally, and idle run state', async () => {
+  const { dir, ctx } = tmpSession();
+  fs.mkdirSync(ctx.stateDir, { recursive: true });
+  fs.writeFileSync(path.join(ctx.stateDir, 'attempts.json'), JSON.stringify({
+    'm1:1': { status: 'captured' }, 'm1:2': { status: 'failed' },
+  }));
+  fs.writeFileSync(ctx.feedPath, JSON.stringify({
+    built_at: new Date().toISOString(), codes: [], hero_roles: {},
+  }));
+  const r = await once(ctx, 'GET', '/status');
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.body.feed.fresh, true);
+  assert.deepStrictEqual(r.body.attempts, { done: 1, failed: 1, total: 2 });
+  assert.strictEqual(r.body.running, false);
+  assert.strictEqual(r.body.hasReview, true);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
