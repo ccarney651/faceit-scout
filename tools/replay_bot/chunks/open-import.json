@@ -41,10 +41,12 @@
       "button": "left",
       "x": 1340,
       "y": 833,
-      "waitMs": 1626,
+      "waitMs": 2500,
       "holdMs": 126
     }
   ],
   "repaired_at": "2026-09-09T01:45:00.000Z",
-  "repair_note": "the Ctrl+V was recorded as a bare V, before record_input.ps1 watched modifiers; restored as the paste it was"
+  "repair_note": "the Ctrl+V was recorded as a bare V, before record_input.ps1 watched modifiers; restored as the paste it was",
+  "tuned_at": "2026-09-11T04:58:00.000Z",
+  "tuning_note": "this last click is VIEW REPLAY, and two live runs clicked it before the button had drawn (the import completed but never opened). Raised from the recorded 1626ms so the wait floors at ~1s even at the documented 2.5x chunk-speed ceiling (run.js/timing.js) - 2500/2.5=1000ms, 2500/2=1250ms at the 2x default, 2500ms unscaled at 1x."
 }

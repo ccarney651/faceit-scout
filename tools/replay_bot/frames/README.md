@@ -61,7 +61,7 @@ exactly why the annotated copy exists.
 
 | Frame | Notes |
 |---|---|
-| `2026-09-08-busan-2560x1440.png` | The bootstrap frame. Geometry is good, but it is a **workshop lobby**, not a league replay — placeholder entity names, and an unrepresentative hero spread. Fine for validating crop geometry; poor for judging matcher confidence. |
+| `2026-09-08-busan-2560x1440.png` | The bootstrap frame. Geometry is good, but it is a **workshop lobby**, not a league replay — placeholder entity names, and an unrepresentative hero spread. Fine for validating crop geometry; poor for judging matcher confidence. **Exempt from `prune_frames.js` by name.** |
 
 A league replay frame is still wanted, so matcher scores can be measured against
 the heroes and name plates the bot will really meet.
@@ -82,11 +82,25 @@ what was on screen when it broke - converted to `.png` since those are staying
 for good; everything else from a failed map is discarded rather than kept
 forever, because a run that loops (retrying a check that never resolves) used
 to leave as many scratch frames as it took retries. Retention is not tidiness,
-it is the recovery path: **a replay code imports once**, so a map read badly
-cannot be re-captured on that account, but a better matcher can re-read its
-frames offline for nothing. That is why the guards refuse loudly rather than
+it is the recovery path: **a replay code cannot be re-imported while it sits in
+the account's 10-import ring**, so a map read badly cannot be re-captured on
+that account right away, but a better matcher can re-read its frames offline for
+nothing. That is why the guards refuse loudly rather than
 carrying on: only a broken *grab* is unrecoverable, and a kept scratch frame is
 how that gets told apart from a bad read.
+
+`prune_frames.js` is the clean-up side of that policy, and it is **per-session,
+not all-or-nothing**. `frames/` is flat and run-shared, so a file cannot be
+mapped back to a review's per-slot flags; what it *can* be attributed to is the
+session that wrote it, by mtime against the session's window (local midnight of
+its date to the review's own mtime plus slack). When the newest review has
+**any** flagged slot, the prune keeps only that session's **sample** frames
+(`cap-t<seconds>-<n>.png` - the frames a better matcher would actually re-read)
+and deletes everything else: older sessions whose reviews no longer exist in
+`out/`, and the seek/settle/probe/panel/media scratch no re-read needs. When
+every map is clean, nothing needs re-reading and the whole directory goes. A
+30-day-mtime backstop runs regardless, so a review that never gets acted on
+still drains itself eventually.
 
 They are gitignored like everything else here. `contact_sheet.js` renders the
 ten crops of any of them, which is how a geometry problem gets looked at rather

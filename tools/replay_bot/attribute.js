@@ -110,6 +110,14 @@
         // way round and the caller must relabel side_a/side_b; null = unproven,
         // treated as direct but flagged so the operator eyeballs it.
         orientation: orient === null ? null : (swapped ? 'swapped' : 'direct'),
+        // The raw OCR strings, screen-side keyed (not relabelled by swap) - so a
+        // slot that abstained can be told apart from "OCR read garbage" (the
+        // usual assumption) vs "OCR read the name fine and assign() still
+        // would not commit to it" (2026-09-11: reproduced the latter - PROXY
+        // and EDEN both OCR'd clean on a map where they still abstained).
+        // review_out.js writes attribution straight into review.json, which is
+        // never uploaded, so this costs nothing and is already computed.
+        reads: reads,
       };
     }
 

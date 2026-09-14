@@ -123,6 +123,7 @@
   <span id="sessionname" class="summary"></span>
   <span class="sp"></span>
   <label class="hdrtoggle"><input type="checkbox" id="onlyIssues" checked> only slots needing review</label>
+  <label class="hdrtoggle"><input type="checkbox" id="hideReviewed"> hide reviewed maps</label>
   <span id="savenote" class="note"></span>
   <button id="save">Save</button>
   <button id="finalize">Finalize</button>
@@ -194,6 +195,7 @@ let HEROES = [];
 let HERO_BY_GUID = {};
 let dirty = false;
 let onlyIssues = true;
+let hideReviewed = false;
 
 // The flag vocabulary resolve.js actually produces (round-level: unsampled/
 // sparse; slot-level: everything else), plus the synthetic 'swap' category for
@@ -212,11 +214,12 @@ const FLAG_LABELS = {
 // first load populates it with every type actually present, all on by
 // default - so filtering starts as a no-op and only narrows from there.
 let activeFlagTypes = null;
-// TEMP: player attribution UI hidden while hero-capture accuracy is the
-// priority - attribution and orientation detection still run in run.js
-// unchanged (they share one OCR pass), only its display here is off. Flip
-// this back to true to restore the player line and roster chips.
-const SHOW_ATTRIBUTION = false;
+// Player attribution display, re-enabled 2026-09-12: hero-capture accuracy
+// work is done for now, and hiding this let real attribution gaps (down to
+// 0/20 on some maps) go unreviewed and unnoticed. Attribution and orientation
+// detection always ran in run.js regardless of this flag (they share one OCR
+// pass) - this only ever controlled whether the review page showed it.
+const SHOW_ATTRIBUTION = true;
 
 async function load() {
   try {
@@ -424,7 +427,10 @@ function roundNeedsReview(m, r) {
 function render() {
   renderFlagFilters();
   const host = $('#maps'); host.textContent = '';
-  (DATA.maps || []).forEach((m, mi) => host.appendChild(renderMap(m, mi)));
+  (DATA.maps || [])
+    .map((m, mi) => [m, mi])
+    .filter(([m]) => !(hideReviewed && m.status === 'reviewed'))
+    .forEach(([m, mi]) => host.appendChild(renderMap(m, mi)));
   refreshFooter();
 }
 
@@ -648,6 +654,7 @@ async function save() {
 }
 
 $('#onlyIssues').onchange = (e) => { onlyIssues = e.target.checked; render(); };
+$('#hideReviewed').onchange = (e) => { hideReviewed = e.target.checked; render(); };
 $('#save').onclick = save;
 $('#finalize').onclick = async () => {
   if (dirty) await save();

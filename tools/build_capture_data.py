@@ -43,6 +43,18 @@ REGIONS = ("EMEA", "NA", "SA", "OCE")
 # Single source of truth for the league-wide replay-code wipe: owdb.db's
 # LATEST_KNOWN_WIPE (never duplicate it here — bump it in _SEED_WIPES instead).
 CODE_WIPE_DATE = LATEST_KNOWN_WIPE
+
+# A patch's server restart does not land in every region at the same real
+# moment, but the feed carries ONE global code_wipe_date — dated to whichever
+# region's patch landed EARLIEST, so that region's same-day post-patch games
+# stay queueable. A region whose own restart landed LATER in its own calendar
+# day needs a stricter, region-specific date on top, or its wipe-day games
+# ship looking alive when the replay server refuses them.
+#
+# The bot applies the same dates in tools/replay_bot/run.js
+# REGION_WIPE_OVERRIDES (queue.js effectiveWipeDate); a test pins the two
+# copies together so a fact recorded in one cannot drift from the other.
+REGION_WIPE_OVERRIDES = {"NA": "2026-09-08"}
 # Skill tiers, strongest first, likewise kept in sync with
 # faceit_sync.export.TIERS (a test pins the two together). Intermediate is
 # Season 10's new division, between Advanced and Open.
@@ -100,6 +112,13 @@ def main() -> None:
         # neither region (a one-off cup) is dropped, not mislabelled.
         div = _division(r["champ"])
         if not div:
+            continue
+        # The global wipe is already applied in SQL above. A region whose own
+        # restart landed later needs its stricter date enforced too, or its
+        # wipe-day codes ship dead but looking alive.
+        region = _region(r["champ"])
+        override = REGION_WIPE_OVERRIDES.get(region)
+        if override and r["finished_at"][:10] <= override:
             continue
         seen_divs.add(div)
         codes.append({

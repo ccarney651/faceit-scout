@@ -352,12 +352,11 @@
       log('  ' + (sg.play ? 'PLAY ' : sg.tooShort ? 'setup' : 'BREAK') +
         '  ' + mmss(sg.from) + ' - ' + mmss(sg.to));
     });
-    var per = T.samplesFor(segs);
-    var plan = T.plan(segs, per, { stepS: o.stepS });
+    var plan = T.planGrid(segs, { stepS: o.stepS });
     log('');
-    log(per + ' samples per round -> ' + plan.length + ' grabs: ' +
+    log('every ' + o.stepS + 's inside play -> ' + plan.length + ' grabs: ' +
       plan.map(mmss).join(', '));
-    return { segments: segs, per: per, plan: plan };
+    return { segments: segs, per: plan.length, plan: plan };
   }
 
   // Match the ten HUD cells of one frame. `matcher` is a makeMatcher() result
@@ -372,9 +371,51 @@
     return out;
   }
 
+  // Should this sample's frame be kept? Read-before-keep: a frame earns its
+  // keep by differing from the previous one, because storage is bounded by
+  // distinct comp states, not by how often we visit. A keep fires when ANY of:
+  //
+  //  - any slot's guid changed since the previous sample - the hero set moved;
+  //  - any slot reads below LOW_SCORE - this frame is not confidently identical
+  //    to the last one, and may be the transition evidence;
+  //  - the previous sample disagreed with the one before it - a swap or
+  //    transition is in progress and needs every frame it can get.
+  //
+  // The first sample of a round is always kept: it is the round's baseline
+  // comp, and review_out.js derives its portrait strips from it.
+  function shouldKeep(read, prev, prevPrev, firstOfRound) {
+    if (firstOfRound || !prev) return true;
+    var sides = ['a', 'b'];
+    for (var s = 0; s < sides.length; s++) {
+      var side = sides[s];
+      for (var i = 0; i < read[side].length; i++) {
+        var r = read[side][i];
+        var p = prev[side] && prev[side][i];
+        if (r && p && r.guid && p.guid && r.guid !== p.guid) return true;
+        if (r && r.score !== undefined && r.score < LOW_SCORE) return true;
+      }
+    }
+    if (!prevPrev) return false;
+    for (var s2 = 0; s2 < sides.length; s2++) {
+      var side2 = sides[s2];
+      for (var i2 = 0; i2 < prev[side2].length; i2++) {
+        var pr = prev[side2][i2];
+        var pp = prevPrev[side2] && prevPrev[side2][i2];
+        if (pr && pp && pr.guid && pp.guid && pr.guid !== pp.guid) return true;
+      }
+    }
+    return false;
+  }
+
   // 5. Drive to one sample time and read the HUD there. `drv` is expected to be
   //    already configured for sampling (its settle is the fixed quiesce, not the
-  //    two-frame one). opts: { matcher, stepS, mmss?, log? }.
+  //    two-frame one). opts: { matcher, stepS, prev?, prevPrev?, firstOfRound?,
+  //    mmss?, log? }.
+  //
+  //    READ BEFORE KEEP: the read comes first, and keepAs fires only on change
+  //    (see shouldKeep), so an unchanged round stores one frame a round and a
+  //    swap stores one frame per distinct state. Without `prev` (a one-off
+  //    console sample, or the first visit of a map) the frame is always kept.
   //
   //    Returns { t, at, a, b, framePath, worst } on success, or
   //    { t, at, missed: true, reason } when the seek could not be corrected or
@@ -402,17 +443,29 @@
       log(mmss(t).padStart(6) + '  NOT LOADED - dropped');
       return { t: t, at: at, missed: true, reason: 'still loading' };
     }
-    var framePath = io.keepAs ? await io.keepAs('t' + t, ready.path) : ready.path;
+
+    var framePath = ready.path;
     var read = await readHud(io, o.matcher, framePath);
 
     // ONE SECOND LOOK IF IT LOOKS WRONG. A frame caught mid-transition scores
-    // badly, and that is cheaper to detect than to prevent.
+    // badly, and that is cheaper to detect than to prevent. The retry runs
+    // BEFORE the keep decision, so a read that recovers is compared on the
+    // retry's values and the retry's frame is what a change would keep.
     if (worstOf(read) < LOW_SCORE) {
-      var retry = await readHud(io, o.matcher, await io.grabTo('t' + t + '-again'));
+      var retryPath = await io.grabTo('t' + t + '-again');
+      var retry = await readHud(io, o.matcher, retryPath);
       if (worstOf(retry) > worstOf(read)) {
         log('        (first read was mid-transition, took a second look)');
         read = retry;
+        framePath = retryPath;
       }
+    }
+
+    if (shouldKeep(read, o.prev, o.prevPrev, o.firstOfRound)) {
+      framePath = io.keepAs ? await io.keepAs('t' + t, framePath) : framePath;
+    } else {
+      log(mmss(t).padStart(6) + '  unchanged - not kept');
+      framePath = null;
     }
     return { t: t, at: at, a: read.a, b: read.b, framePath: framePath, worst: worstOf(read) };
   }
@@ -437,6 +490,7 @@
     deriveDuration: deriveDuration,
     readStructure: readStructure,
     readHud: readHud,
+    shouldKeep: shouldKeep,
     sampleAt: sampleAt,
   };
 

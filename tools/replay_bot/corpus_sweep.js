@@ -13,6 +13,16 @@
 //
 //   node tools/replay_bot/corpus_sweep.js              every frame, one line each
 //   node tools/replay_bot/corpus_sweep.js --labelled   only the frames corpus.js names
+//   node tools/replay_bot/corpus_sweep.js --retention  + change-detection kept-count
+//
+// --retention re-runs the sample frames under the retention rule (phases.js
+// shouldKeep): the real matcher reads every HUD-bearing frame in filename
+// order, and the sweep reports how many of them change-detection would KEEP
+// versus how many it would drop as unchanged. A map where the detector flips
+// every sample shows up here as kept-everything - the exact shape of a session
+// that would waste storage - before it costs a live run. Frames without a HUD
+// (loading screens, menus, breaks) reset the baseline, like a round boundary
+// does in capture.js.
 //
 // Frames are gitignored (see frames/README.md), so this says nothing useful on
 // a checkout that has not run the bot.
@@ -26,6 +36,50 @@ const S = require('./screen.js');
 const Corpus = require('./corpus.js');
 
 const esc = require('./screens/esc-menu.json');
+
+// The retention report shares the per-frame walk but reads each HUD-bearing
+// frame with the real matcher and applies phases.shouldKeep across the
+// sequence, so a kept count is a property of the set, not of one frame.
+async function retentionReport(files) {
+  const P = require('./phases.js');
+  const io = { loadImage: (p) => canvas.loadImage(p) };
+  const matcher = P.makeMatcher();
+  let prev = null, prevPrev = null;
+  let kept = 0, readable = 0;
+  const rows = [];
+
+  for (const f of files) {
+    const filePath = path.join(Corpus.DIR, f);
+    const img = await canvas.loadImage(filePath);
+    if (!calib.check({ w: img.width, h: img.height }).ok) continue;
+    if (!calib.hudPresent(Crop.hudTint(img, calib))) {
+      // Not a sample - a loading screen, menu or break. Reset the baseline
+      // like a round boundary does, so consecutive frames from different
+      // maps are never compared against each other.
+      prev = null; prevPrev = null;
+      continue;
+    }
+    const read = await P.readHud(io, matcher, filePath);
+    if (!read.a.length && !read.b.length) {
+      prev = null; prevPrev = null;
+      continue;
+    }
+    readable++;
+    const keep = P.shouldKeep(read, prev, prevPrev, false);
+    if (keep) kept++;
+    rows.push([f, keep ? 'keep' : 'drop', P.worstOf(read).toFixed(2)].join('\t'));
+    prevPrev = prev;
+    prev = read;
+  }
+
+  console.log('');
+  console.log('change-detection over ' + readable + ' readable HUD frames would keep ' +
+    kept + ' (' + (readable ? (100 * kept / readable).toFixed(0) : 0) + '% - ' +
+    (kept === readable ? 'everything changed: the detector is flipping, or these are distinct maps' :
+      kept === 0 ? 'nothing kept: not even a baseline' :
+      'kept ' + kept + ' of ' + readable) + ')');
+  rows.forEach((r) => console.log('  ' + r));
+}
 
 async function readingsFor(file) {
   const img = await canvas.loadImage(path.join(Corpus.DIR, file));
@@ -90,6 +144,10 @@ async function main() {
     process.exitCode = 1;
   } else {
     console.log('every labelled frame read correctly');
+  }
+
+  if (process.argv.includes('--retention')) {
+    await retentionReport(files);
   }
 }
 

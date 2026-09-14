@@ -31,10 +31,12 @@
 // IT OWNS THE MACHINE while it runs. Keys and clicks only land in a foreground
 // client, so this is an overnight job on a rig nobody is using.
 //
-// ONE SHOT PER CODE, and that shapes everything here. A code already imported
-// cannot be imported again cleanly - the client warns and demands a manual
-// scroll-and-select, which ends an unattended run - and imports cannot be
-// deleted. So:
+// ONE ATTEMPT PER RING-WINDOW, and that shapes everything here. The client
+// keeps only its 10 most-recent imports; a code still in that list cannot be
+// imported again cleanly - the client warns and demands a manual
+// scroll-and-select, which ends an unattended run. The list is a ring, so ten
+// newer imports evict the oldest and a rolled-off code re-imports cleanly.
+// Within a window, then:
 //
 //   - a code is written to the attempt log BEFORE it is opened, never after,
 //     because a crash between opening and finishing must not look like a code
@@ -313,7 +315,7 @@ async function main() {
   // --code-stack cycles a codestack.js file forever rather than working a
   // finite queue once - "leave it on overnight" without a real league code
   // going in. It never touches the attempt ledger: those codes are meant to be
-  // re-imported, and the ledger's whole point is "never again".
+  // re-imported, and the ledger tracks only the current ring window anyway.
   const looping = !!args.codeStack;
   let queue = [];
 
@@ -332,9 +334,8 @@ async function main() {
     console.log(`feed built ${fresh.built}, wipe ${fresh.wipeDate}`);
     if (!fresh.fresh && !args.staleOk) {
       throw new Error(`the feed was built ${fresh.built}, not today. Codes die at ` +
-        'every patch and each one can only be imported once, so a stale feed ' +
-        'spends the whole queue on codes that cannot work. Let CI rebuild it, ' +
-        'or pass --stale-ok if you are certain.');
+        'every patch, so a stale feed spends the whole queue on codes that ' +
+        'cannot work. Let CI rebuild it, or pass --stale-ok if you are certain.');
     }
     queue = Q.pending(feed.codes || [], {
       divisions: args.divisions,
@@ -387,9 +388,10 @@ async function main() {
   // The time-skip interval is a per-SESSION thing, and both halves of handling
   // it matter.
   //
-  // Setting it: a recorded chunk walks the replay's options and sets 60s, which
-  // cuts a map's seek presses to a third. It runs once, inside the first
-  // replay, because the setting then holds for the rest of the session.
+  // Setting it: a recorded chunk walks the replay's options and sets 45s - the
+  // sampling grid, since a target off that grid is not reachable by keypresses.
+  // It runs once, inside the first replay, because the setting then holds for
+  // the rest of the session.
   //
   // Trusting it: never. Replay viewer options are a known Blizzard bug - they
   // apply while the client runs and revert at the next start - so the first
@@ -484,12 +486,13 @@ async function main() {
     // Keyed per GAME, matching queue.key: a match has several maps and each is
     // its own replay, so keying on match_id alone would skip every map after
     // the first. Skipped entirely when looping - a code-stack code is meant to
-    // be imported again, and the attempt ledger's whole point is "never again".
+    // be imported again, and the ledger tracks only the current ring window.
     const key = `${code.match_id}:${code.game_no}`;
 
     if (!looping) {
       // Written before the import, never after. A crash mid-map must not leave
-      // a code looking untried, because trying it again cannot work.
+      // a code looking untried, because trying it again within the same ring
+      // window cannot work.
       // fail_count carries over from a prior attempt at this same code - a
       // retry that fails again must still count toward FAIL_RETRY_CAP, not
       // restart from zero every time.
@@ -575,20 +578,40 @@ async function main() {
       }
       first = false;
 
-      // Resolved once per map, off the frame the first sample already read -
-      // never per sample (specs/2026-09-10-replay-bot-player-attribution-design.md
-      // §2). Attribution is additive: a captured map with hero comps but no
-      // names is still real scouting value, and this is a one-shot code, so a
-      // failure here degrades to no attribution rather than failing the map
-      // (§6 of that design) - unlike everything else in this loop, which
-      // refuses loudly.
+      // Resolved once per map, off the frames the sample sweep already read -
+      // never per sample (§2 of the player-attribution design). The FIRST
+      // sample's frame is the usual source, but a round-intro or transition
+      // frame can land with its name rows still missing (2026-09-14: the Nepal
+      // first frame OCR'd as kill-feed text while every later frame read the
+      // roster perfectly). So fall forward through the first few kept samples
+      // and keep whichever resolves the most slots - assignment is additive,
+      // and a bad name read abstains rather than guesses (assign.js's floor),
+      // so the most-assigned result is the one to trust. Attribution is still
+      // one-shot per map, and a total failure degrades to no names rather than
+      // failing the map (§6 of that design) - unlike everything else in this
+      // loop, which refuses loudly.
       let attribution = null;
       if (got.samples.length) {
         try {
-          const firstSample = got.samples[0];
-          const frame = await io.loadImage(firstSample.framePath);
-          attribution = await attributor.attributeMap(
-            frame, { a: firstSample.a, b: firstSample.b }, feed, code);
+          let assignedCount = -1;
+          const candidates = got.samples.slice(0, 4).filter((s) => s.framePath);
+          for (let i = 0; i < candidates.length; i++) {
+            const cand = candidates[i];
+            const frame = await io.loadImage(cand.framePath);
+            const attempt = await attributor.attributeMap(
+              frame, { a: cand.a, b: cand.b }, feed, code);
+            const assigned = (attempt.a.conf || []).concat(attempt.b.conf || [])
+              .filter(Boolean).length;
+            if (!attribution || assigned > assignedCount) {
+              attribution = attempt;
+              assignedCount = assigned;
+              if (i > 0) {
+                console.log(`attribution: first sample's names were not readable, ` +
+                  `using sample at ${cand.t}s (${assigned}/10 slots)`);
+              }
+            }
+            if (assigned >= 8) break;
+          }
         } catch (e) {
           console.log(`attribution failed, map keeps its hero reads without ` +
             `player names: ${e.message}`);

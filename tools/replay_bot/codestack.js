@@ -2,12 +2,12 @@
 // A small rotating stack of replay codes, so a code can be re-imported without
 // spending a fresh one from the live league pool.
 //
-// WHY THE ROTATION WORKS. A league code can only be imported once - the client
-// keeps a ring of its 10 most-recent imports and refuses a re-import while a
-// code is still in it. Pulling from the TOP and pushing to the BOTTOM means a
-// code that comes back around has had (stack size - 1) other imports happen
-// since, so with ~20 codes it has been evicted from a 10-slot ring twice over
-// and re-imports cleanly. See ARCHITECTURE.md §14.3b.
+// WHY THE ROTATION WORKS. A league code cannot be re-imported while it sits in
+// the client's ring of its 10 most-recent imports - it warns and demands a
+// manual scroll-and-select. Pulling from the TOP and pushing to the BOTTOM
+// means a code that comes back around has had (stack size - 1) other imports
+// happen since, so with ~20 codes it has been evicted from a 10-slot ring twice
+// over and re-imports cleanly. See ARCHITECTURE.md §14.3b.
 //
 // Used by console/server.js (the manual `import` phase, and to feed run.js's
 // `--code-stack` loop mode) and by run.js itself when looping.

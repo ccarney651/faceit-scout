@@ -39,11 +39,6 @@
   // expected - and its comp is thin evidence.
   var SPARSE_RATIO = 0.5;
 
-  // How many consecutive samples must agree on a new guid before segmentSlot
-  // treats it as a real mid-round hero swap rather than a lone misread. A run
-  // shorter than this is absorbed into the segment already running.
-  var SEGMENT_MIN_RUN = 2;
-
   // Seconds into a round segmentSlot ignores before segmenting - the same
   // pre-render/spawn window timeline.js's ASSEMBLE_STARTS_BY_S already
   // excludes at the map level (ASSEMBLE_STARTS_BY_S = 10 there), applied here
@@ -82,6 +77,24 @@
   // dropped rather than treated as evidence either way, and so is any read
   // inside the round's first ASSEMBLE_GRACE_S seconds.
   //
+  // A new guid only becomes its own segment on a SECOND consecutive read of
+  // it - a swap needs to be seen twice (on the 30s grid, roughly a minute) to
+  // be counted. A single differing read is absorbed back into the run it
+  // interrupted (its score still lands in that segment's `reads` array, and
+  // the raw vote still sees the differing guid - so nothing is lost, it just
+  // is not a swap). This was the operator's rule after the 2026-09-14 live
+  // session: Goose never left Moira, yet a single misread at t620 read Brig
+  // and review_out.js built a swap gallery off it.
+  //
+  // This re-adds the confirmation barrier that was removed on 2026-09-12, and
+  // with it that decision's known cost: a fast multi-hop swap (a player seen
+  // on three different heroes across three samples, one read each) never
+  // repeats a guid, so its hops collapse back into the preceding segment
+  // instead of one segment per hero. That is the trade the operator accepted
+  // here; a genuine multi-hop is still surfaced by the raw vote as
+  // `contested`/`low-support` with `alt_guid`, so it is not invisible, it
+  // just has no timed segment of its own.
+  //
   // Returns [{guid, name, from_t, reads}], oldest first, [] if nothing
   // survives the filtering above.
   function segmentSlot(cells, times, roundFromT) {
@@ -98,24 +111,32 @@
 
     var segments = [];
     var curGuid = pts[0].guid, curName = pts[0].name, curFrom = pts[0].t, curReads = [pts[0].score];
-    var runGuid = null, runStart = -1, runReads = [];
+    var pendGuid = null, pendName = null, pendT = 0, pendReads = [];
 
     for (var j = 1; j < pts.length; j++) {
       var p = pts[j];
-      if (p.guid === curGuid) {
+      if (pendGuid !== null && p.guid === pendGuid) {
+        // second consecutive read of the candidate: a real swap, confirmed
+        segments.push({ guid: curGuid, name: curName, from_t: curFrom, reads: curReads });
+        curGuid = pendGuid; curName = pendName; curFrom = pendT;
+        curReads = pendReads.concat(p.score);
+        pendGuid = null; pendReads = [];
+      } else if (pendGuid !== null && p.guid === curGuid) {
+        // reverted to the hero the pending read interrupted: it was noise
+        curReads = curReads.concat(pendReads, p.score);
+        pendGuid = null; pendReads = [];
+      } else if (pendGuid !== null) {
+        // a third hero while one is pending: absorb and re-pend
+        curReads = curReads.concat(pendReads);
+        pendGuid = p.guid; pendName = p.name; pendT = p.t; pendReads = [p.score];
+      } else if (p.guid === curGuid) {
         curReads.push(p.score);
-        runGuid = null; runStart = -1; runReads = [];
-      } else if (p.guid === runGuid) {
-        runReads.push(p.score);
-        if (j - runStart + 1 >= SEGMENT_MIN_RUN) {
-          segments.push({ guid: curGuid, name: curName, from_t: curFrom, reads: curReads });
-          curGuid = p.guid; curName = p.name; curFrom = pts[runStart].t; curReads = runReads;
-          runGuid = null; runStart = -1; runReads = [];
-        }
       } else {
-        runGuid = p.guid; runStart = j; runReads = [p.score];
+        pendGuid = p.guid; pendName = p.name; pendT = p.t; pendReads = [p.score];
       }
     }
+
+    if (pendGuid !== null) curReads = curReads.concat(pendReads);
     segments.push({ guid: curGuid, name: curName, from_t: curFrom, reads: curReads });
     return segments;
   }
@@ -142,10 +163,16 @@
     if (winner === null) {
       flags.push('no-read');
     } else {
-      // A confirmed multi-segment slot (segments.length > 1) is a real
-      // mid-round swap the segment builder already tracked, not noise - low
-      // support there is what a genuine swap looks like, so only flag it for
-      // a slot that never resolved into more than one stable segment.
+      // A multi-segment slot (segments.length > 1) is a mid-round swap the
+      // segment builder already tracked, not noise - low support there is
+      // what a genuine swap looks like, so only flag it for a slot that
+      // never resolved into more than one segment. Since segmentSlot() now
+      // confirms a new segment on a single differing read, this also means a
+      // slot with even one stray misread outside the grace window no longer
+      // reads as low-support (its lone bad sample becomes its own segment
+      // instead) - only a round where every post-grace sample shares one
+      // guid, and the *raw* vote (which is not grace-filtered) still disagrees
+      // enough to miss SUPPORT_MIN, still reaches this branch.
       if (v.contested) flags.push('contested');
       else if (v.support < SUPPORT_MIN && segments.length <= 1) flags.push('low-support');
       if (winnerScores.length && Math.max.apply(null, winnerScores) < LOW_SCORE) flags.push('low-score');

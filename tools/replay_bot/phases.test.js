@@ -1,6 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const canvas = require('@napi-rs/canvas');
 const P = require('./phases.js');
+const Corpus = require('./corpus.js');
+
+const skip = Corpus.absent() || false;
 
 // The composite phases - openEventsViewer, calibrateBar, ensurePanelOpen - are
 // exercised end to end by capture.offline.test.js against recorded frames (the
@@ -65,4 +69,142 @@ test('sampleAt keeps a seek that lands within half a step', async () => {
   await assert.rejects(
     P.sampleAt({ io, drv }, 100, { stepS: 20, mmss: (x) => String(x), log: () => {} }),
     /stop here/, 'got past the miss gate to the frame grab');
+});
+
+// ---- change-detection retention (shouldKeep) ------------------------------
+//
+// Storage is bounded by distinct comp states, not by how often we visit: a
+// sample earns its keep by differing from the previous one. These are the four
+// ways a frame can earn it, plus the one way it cannot.
+
+const GUID_A = ['noki', 'vilp', 'jopez', 'lamb', 'karhu'];
+const GUID_B = ['noki', 'vilp', 'SWAP', 'lamb', 'karhu'];
+
+function readOf(guids, score) {
+  const s = (score === undefined) ? 0.9 : score;
+  const side = (gs) => gs.map((g) => ({ name: g, guid: g, score: s }));
+  return { a: side(guids), b: side(guids) };
+}
+
+test('shouldKeep: the first sample of a round is always kept', () => {
+  const r = readOf(GUID_A);
+  assert.strictEqual(P.shouldKeep(r, r, r, true), true);
+});
+
+test('shouldKeep: a sample with no predecessor is always kept', () => {
+  const r = readOf(GUID_A);
+  assert.strictEqual(P.shouldKeep(r, null, null, false), true);
+});
+
+test('shouldKeep: a moved hero guid is a change', () => {
+  assert.strictEqual(P.shouldKeep(readOf(GUID_B), readOf(GUID_A), readOf(GUID_A), false), true);
+});
+
+test('shouldKeep: a read below LOW_SCORE is not confidently identical', () => {
+  const low = readOf(GUID_A, P.LOW_SCORE - 0.1);
+  assert.strictEqual(P.shouldKeep(low, readOf(GUID_A), readOf(GUID_A), false), true);
+});
+
+test('shouldKeep: a previous sample that disagreed with the one before it keeps', () => {
+  // prev differs from prevPrev -> a swap is in progress, keep every frame.
+  assert.strictEqual(P.shouldKeep(readOf(GUID_A), readOf(GUID_B), readOf(GUID_A), false), true);
+});
+
+test('shouldKeep: an identical, confident, settled read is not kept', () => {
+  const r = readOf(GUID_A);
+  assert.strictEqual(P.shouldKeep(r, r, r, false), false);
+  // and with no prevPrev at all (the second sample of a round)
+  assert.strictEqual(P.shouldKeep(r, r, null, false), false);
+});
+
+// ---- sampleAt: read-before-keep wiring ------------------------------------
+
+// A matcher that serves one read per readHud call. readHud asks for side 'a'
+// (five slots) then side 'b' (five slots) - ten match calls per read - so each
+// queue entry is consumed exactly once and its per-slot results come out in
+// order.
+function queuedMatcher(reads) {
+  let calls = 0;
+  return {
+    match: (crop, side) => {
+      const r = reads[Math.floor(calls / 10)];
+      const slot = calls % 5;
+      calls++;
+      return r[side][slot];
+    },
+  };
+}
+
+// sampleAt needs a real, HUD-present frame to read. The corpus frame is only
+// there to satisfy readyFrame/readHud; the reads come from the stub matcher, so
+// these tests are about the keep decision, not the OCR.
+function ctxWith(framePath, reads) {
+  const kept = [];
+  const grabs = [];
+  const io = {
+    lastFrame: () => framePath,
+    loadImage: (p) => canvas.loadImage(p),
+    grabTo: async (tag) => { grabs.push(tag); return framePath; },
+    keepAs: async (tag, src) => { kept.push({ tag, src }); return src; },
+  };
+  return { ctx: { io, drv: { seekTo: async (t) => t } }, matcher: queuedMatcher(reads), kept, grabs };
+}
+
+test('sampleAt: an unchanged, confident read keeps no frame and returns null', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const read = readOf(GUID_A);
+  const t = ctxWith(frame, [read]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: () => {},
+    prev: read, prevPrev: read, firstOfRound: false,
+  });
+  assert.strictEqual(s.framePath, null, 'nothing changed, nothing stored');
+  assert.strictEqual(t.kept.length, 0, 'keepAs was never called');
+});
+
+test('sampleAt: the first sample of a round is kept even when unchanged', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const read = readOf(GUID_A);
+  const t = ctxWith(frame, [read]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: () => {},
+    prev: read, prevPrev: read, firstOfRound: true,
+  });
+  assert.strictEqual(s.framePath, frame, 'the round baseline frame is kept');
+  assert.strictEqual(t.kept.length, 1);
+  assert.strictEqual(t.kept[0].tag, 't60');
+});
+
+test('sampleAt: the retry runs before the keep decision, and a recovered same comp is dropped', { skip }, async () => {
+  // First read is mid-transition (low score), the second look recovers to the
+  // SAME comp as the previous sample. If the decision used the first read the
+  // low score would have kept it; using the retry it is correctly not stored.
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const low = readOf(GUID_A, P.LOW_SCORE - 0.2);
+  const recovered = readOf(GUID_A, 0.9);
+  const logs = [];
+  const t = ctxWith(frame, [low, recovered]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: (l) => logs.push(l),
+    prev: readOf(GUID_A), prevPrev: readOf(GUID_A), firstOfRound: false,
+  });
+  assert.strictEqual(t.grabs.length, 1, 'the one-second look fired');
+  assert.strictEqual(s.worst, 0.9, 'the recovered read is the one reported');
+  assert.strictEqual(s.framePath, null, 'recovered to the same comp -> not stored');
+  assert.ok(logs.some((l) => /second look/.test(l)));
+});
+
+test('sampleAt: the retry frame is what a change keeps', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const low = readOf(GUID_A, P.LOW_SCORE - 0.2);
+  const swap = readOf(GUID_B, 0.9);
+  const t = ctxWith(frame, [low, swap]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: () => {},
+    prev: readOf(GUID_A), prevPrev: readOf(GUID_A), firstOfRound: false,
+  });
+  assert.strictEqual(s.framePath, frame, 'kept, on the retry');
+  assert.strictEqual(t.kept.length, 1);
+  assert.strictEqual(t.kept[0].src, frame, 'keepAs was handed the retry frame');
+  assert.strictEqual(s.a[2].guid, 'SWAP', 'the retry read is the one returned');
 });

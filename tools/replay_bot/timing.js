@@ -100,8 +100,13 @@
     // own settle watches the play area (y 200-1100); the portrait band above it
     // (y ~95-205) finishes drawing a little later. Every sample after the first
     // on the 2026-09-10 ten-map run came back mid-transition without this.
-    // (run.js --sample-quiesce overrides it for a run.)
-    sample: { quiesceMs: 500 },
+    // (run.js --sample-quiesce overrides it for a run.) 2026-09-12: bumped
+    // 500->700 - reviewing a ~270-map unattended run found later codes in the
+    // run landing samples mid-transition again, not just the first sample.
+    // Not root-caused to a specific mechanism (client/system slowdown deep
+    // into a long run vs. something else); this is the cheap first fix, worth
+    // re-measuring with probe_limits.js if it doesn't hold.
+    sample: { quiesceMs: 700 },
 
     // The generic post-seek wait before a one-frame grab (capture.js quiesce).
     // THIS WAS ZERO, AND ZERO WAS RIGHT UNTIL GRABBING GOT FAST: a PowerShell

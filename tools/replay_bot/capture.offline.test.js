@@ -9,6 +9,7 @@ const assert = require('node:assert');
 const canvas = require('@napi-rs/canvas');
 const C = require('./capture.js');
 const F = require('./fakeio.js');
+const P = require('./phases.js');
 const Corpus = require('./corpus.js');
 
 const skip = Corpus.absent() || false;
@@ -86,4 +87,81 @@ test('a panel the options menu left alone is not touched', { skip }, async () =>
   await assert.rejects(run(io, { afterViewer: async () => {} }),
     /the forward key is not working/);
   assert.deepStrictEqual(io.keys, ['N', 'B', 'X'], 'no K on a panel that stayed open');
+});
+
+// CHANGE-DETECTION RETENTION, run against recorded frames. captureMap's full
+// pipeline cannot be driven offline - the bar calibration needs a knob that
+// moves, and one frame cannot move - so this drives the per-visit code that
+// DID change (phases.sampleAt) across a whole map's worth of visits, mirroring
+// captureMap's bookkeeping exactly: prev/prevPrev baseline, reset and first-of-
+// round flag at round boundaries, and only a kept frame hitting keepAs. The
+// frame on screen is the corpus HUD; the reads come from a stub matcher, so the
+// assertion is about the RETENTION POLICY (stored count = distinct comp states,
+// not visit count), not the OCR.
+const GUID_A = ['noki', 'vilp', 'jopez', 'lamb', 'karhu'];
+const GUID_B = ['noki', 'vilp', 'SWAP', 'lamb', 'karhu'];
+function readOf(guids) {
+  const side = (gs) => gs.map((g) => ({ name: g, guid: g, score: 0.9 }));
+  return { a: side(guids), b: side(guids) };
+}
+
+// visits: [{ t, read, firstOfRound }] - one per 30s-grid point of a map.
+async function runVisits(frame, visits) {
+  const io = F.make({ screen: frame });
+  const reads = visits.map((v) => v.read);
+  let calls = 0;
+  const matcher = {
+    match: (crop, side) => {
+      const r = reads[Math.floor(calls / 10)];
+      const slot = calls % 5;
+      calls++;
+      return r[side][slot];
+    },
+  };
+  let prev = null, prevPrev = null;
+  for (const v of visits) {
+    const s = await P.sampleAt({ io, drv: { seekTo: async () => v.t } }, v.t, {
+      matcher, stepS: 30, mmss: (x) => String(x), log: () => {},
+      prev, prevPrev, firstOfRound: v.firstOfRound,
+    });
+    assert.ok(!s.missed, 'visit t=' + v.t + ' landed');
+    prevPrev = prev;
+    prev = { a: s.a, b: s.b };
+  }
+  return io.kept;
+}
+
+test('a stable round stores one frame, not one per grid point', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const A = readOf(GUID_A);
+  const kept = await runVisits(frame, [
+    { t: 60, read: A, firstOfRound: true },
+    { t: 90, read: A, firstOfRound: false },
+    { t: 120, read: A, firstOfRound: false },
+    { t: 150, read: A, firstOfRound: true },
+    { t: 180, read: A, firstOfRound: false },
+    { t: 210, read: A, firstOfRound: false },
+  ]);
+  assert.strictEqual(kept.length, 2, 'one kept frame per round, six visits');
+  assert.deepStrictEqual(kept.map((k) => k.tag), ['t60', 't150']);
+});
+
+test('a mid-round swap stores one frame per distinct comp state', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const A = readOf(GUID_A);
+  const B = readOf(GUID_B);
+  const kept = await runVisits(frame, [
+    { t: 60, read: A, firstOfRound: true },
+    { t: 90, read: A, firstOfRound: false },
+    { t: 120, read: B, firstOfRound: false },   // the swap
+    { t: 150, read: B, firstOfRound: false },
+    { t: 180, read: B, firstOfRound: true },
+    { t: 210, read: B, firstOfRound: false },
+  ]);
+  // Round 1: baseline A (t60), the swap frame B (t120), and the frame after it
+  // (t150) - the previous sample just disagreed with the one before it, a
+  // transition in progress that keeps every frame it can get. Round 2: its own
+  // baseline (t180). t90 and t210 are confident repeats and drop.
+  assert.strictEqual(kept.length, 4, 'distinct states plus the transition frames');
+  assert.deepStrictEqual(kept.map((k) => k.tag), ['t60', 't120', 't150', 't180']);
 });

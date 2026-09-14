@@ -31,9 +31,14 @@ test('a unanimous round resolves every slot with full support and no flags', () 
   assert.deepStrictEqual(slot.flags, []);
 });
 
-// One frame misreads a slot; the frames around it outvote it. The winner is
-// right, but the disagreement is worth surfacing.
-test('a lone misread is outvoted but leaves the slot flagged low-support', () => {
+// One frame misreads a slot; the frames around it outvote it for `guid`/
+// `support` (those are unaffected by segmentation). With 2-in-a-row
+// confirmation restored (2026-09-14, the operator's rule - a swap must be
+// seen twice to be counted), the lone WIDOW read is absorbed back into the
+// tank run instead of becoming its own segment, so the slot is single-segment
+// again and support below SUPPORT_MIN reaches the low-support branch - which
+// is the point: a slot whose reads do not agree is exactly a reason to look.
+test('a lone misread is outvoted for guid/support, absorbed into one segment, and flagged low-support', () => {
   const good = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const bad = [['WIDOW', 0.61], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const got = R.rounds(
@@ -43,8 +48,10 @@ test('a lone misread is outvoted but leaves the slot flagged low-support', () =>
   const slot = got[0].a[0];
   assert.strictEqual(slot.guid, 'tank', 'two of three frames win');
   assert.ok(slot.support < 0.67 + 1e-9 && slot.support > 0.6, 'support ~0.67: ' + slot.support);
-  assert.ok(slot.flags.includes('low-support'));
-  assert.deepStrictEqual(slot.reads.slice().sort(), [0.61, 0.95, 0.95].sort());
+  assert.strictEqual(slot.segments.length, 1, 'the lone WIDOW read is absorbed, not a segment');
+  assert.strictEqual(slot.segments[0].guid, 'tank');
+  assert.ok(slot.flags.includes('low-support'), 'a single-segment slot that disagreed is a reason to look');
+  assert.deepStrictEqual(slot.reads.slice().sort(), [0.61, 0.95, 0.95].sort(), 'the misread score is not dropped');
 });
 
 // A genuine mid-round hero swap: half the frames one hero, half another. Must
@@ -130,11 +137,11 @@ test('a round that lost most of its planned samples is flagged sparse-round', ()
   assert.ok(got[0].flags.includes('sparse-round'), '1 of 4 planned landed');
 });
 
-// A real swap confirmed by two runs of SEGMENT_MIN_RUN+ frames each: support
-// dips below SUPPORT_MIN because neither hero has a frame majority, but this
-// is exactly what a genuine mid-round swap looks like, not noise - segments
-// already caught it, so low-support would be a redundant, misleading flag.
-test('a low-support slot with a confirmed multi-segment swap is not flagged low-support', () => {
+// A real swap across two multi-frame runs: support dips below SUPPORT_MIN
+// because neither hero has a frame majority, but this is exactly what a
+// genuine mid-round swap looks like, not noise - segments already caught it,
+// so low-support would be a redundant, misleading flag.
+test('a low-support slot with a multi-segment swap is not flagged low-support', () => {
   const early = [['X', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const late = [['Y', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const got = R.rounds(
@@ -143,10 +150,10 @@ test('a low-support slot with a confirmed multi-segment swap is not flagged low-
     ROUNDS, { heroRoles: ROLES });
 
   const slot = got[0].a[0];
-  assert.strictEqual(slot.segments.length, 2, 'both runs confirmed (>= SEGMENT_MIN_RUN each)');
+  assert.strictEqual(slot.segments.length, 2);
   assert.ok(slot.support < 0.67, 'support: ' + slot.support);
   assert.strictEqual(slot.contested, false, 'not an even split - Y has a real majority');
-  assert.ok(!slot.flags.includes('low-support'), 'a confirmed swap is not noise');
+  assert.ok(!slot.flags.includes('low-support'), 'a multi-segment slot is not noise');
 });
 
 // --- segmentSlot: run-length stable stretches, for real mid-round swaps ---
@@ -162,22 +169,24 @@ test('a stable slot (no swap) is one segment starting at its first post-grace re
   assert.strictEqual(segs[0].from_t, 50);
 });
 
-test('a lone misread does not start a new segment - absorbed into the one running', () => {
+test('a lone misread is absorbed, not counted as a swap', () => {
   const good = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const bad = [['WIDOW', 0.61], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const got = R.rounds(
     [sample(50, good, good), sample(150, bad, good), sample(250, good, good)],
     ROUNDS, { heroRoles: ROLES });
   const segs = got[0].a[0].segments;
-  assert.strictEqual(segs.length, 1, 'the lone WIDOW read never confirms');
+  assert.strictEqual(segs.length, 1, 'one run, the misread folded into it');
   assert.strictEqual(segs[0].guid, 'tank');
+  assert.strictEqual(segs[0].from_t, 50);
+  assert.deepStrictEqual(segs[0].reads.slice().sort(), [0.61, 0.95, 0.95].sort());
 });
 
-test('two consecutive reads on a new hero confirm a real segment, at its real time', () => {
+test('a swap confirmed by a second read becomes its own segment at its real time', () => {
   const early = [['DVA', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const late = [['DMON', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const got = R.rounds(
-    [sample(50, early, early), sample(150, early, early), sample(250, late, late), sample(290, late, late)],
+    [sample(50, early, early), sample(250, late, late), sample(290, late, late)],
     ROUNDS, { heroRoles: ROLES });
   const segs = got[0].a[0].segments;
   assert.strictEqual(segs.length, 2);
@@ -185,7 +194,40 @@ test('two consecutive reads on a new hero confirm a real segment, at its real ti
   assert.deepStrictEqual([segs[1].guid, segs[1].from_t], ['DMON', 250], 'the real swap time, not a guessed midpoint');
 });
 
-test('a flicker back and forth produces one segment per confirmed run, in order', () => {
+test('a single differing read, never repeated, is absorbed - not a segment', () => {
+  const early = [['DVA', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const late = [['DMON', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, early, early), sample(250, late, late)],
+    ROUNDS, { heroRoles: ROLES });
+  const segs = got[0].a[0].segments;
+  assert.strictEqual(segs.length, 1, 'DMON never repeated, so no swap happened');
+  assert.strictEqual(segs[0].guid, 'DVA');
+  assert.deepStrictEqual(segs[0].reads.slice().sort(), [0.95, 0.95].sort());
+});
+
+// The trade the operator accepted when restoring the confirmation barrier
+// (2026-09-14): a fast multi-hop swap where each hero is seen exactly once
+// never repeats a guid, so its hops collapse back into the first segment
+// instead of one segment per hero. The raw vote still surfaces it -
+// contested with the runner-up as alt_guid - so it is not invisible, just
+// without a timed segment of its own.
+test('a three-way swap with one read each collapses to one segment, but stays contested', () => {
+  const soj = [['SOJOURN', 0.6], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const ashe = [['ASHE', 0.85], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const tracer = [['TRACER', 0.89], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, soj, soj), sample(150, ashe, ashe), sample(250, tracer, tracer)],
+    ROUNDS, { heroRoles: ROLES });
+  const slot = got[0].a[0];
+  const segs = slot.segments;
+  assert.strictEqual(segs.length, 1, 'no guid ever repeated, so no confirmed segment');
+  assert.strictEqual(segs[0].guid, 'SOJOURN', 'collapses onto the first-read hero');
+  assert.strictEqual(slot.contested, true, 'the raw vote still says the slot split');
+  assert.ok(slot.flags.includes('contested'));
+});
+
+test('a flicker back and forth produces one segment per run, in order', () => {
   const a2 = [['A', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const b2 = [['B', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const got = R.rounds(

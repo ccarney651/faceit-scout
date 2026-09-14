@@ -41,72 +41,87 @@ test('a run at the minimum length still counts', () => {
   assert.strictEqual(got.filter((s) => s.play).length, 2);
 });
 
-// Sampling plan. Points sit inside the segment, never on its edges, because a
-// round's first and last instants are setup and aftermath - portraits there are
-// unreliable or absent.
-test('three samples land inside a segment, not on its edges', () => {
-  const got = T.plan([{ play: true, from: 0, to: 100 }], 3);
-  assert.deepStrictEqual(got, [25, 50, 75]);
+// Sampling plan. Points sit on the skip grid the client's forward key can
+// actually reach, strictly inside each play segment - a round's first and last
+// instants are setup and aftermath, where portraits are unreliable or absent.
+
+test('grid points sit strictly inside a segment, on the skip grid', () => {
+  const got = T.planGrid([{ play: true, from: 50, to: 160 }], { stepS: 30 });
+  assert.deepStrictEqual(got, [60, 90, 120, 150]);
+  got.forEach((t) => assert.strictEqual(t % 30, 0, `${t} is off the 30s grid`));
 });
 
-test('five samples spread evenly for a map with no rounds', () => {
-  const got = T.plan([{ play: true, from: 0, to: 60 }], 5);
-  assert.deepStrictEqual(got, [10, 20, 30, 40, 50]);
+// 45 is a selectable skip interval (the slider goes 5-60s), so the grid must
+// plan on it too: points strictly inside the segment, every 45s.
+test('the 45s grid plans points strictly inside a segment', () => {
+  const got = T.planGrid([{ play: true, from: 50, to: 160 }], { stepS: 45 });
+  assert.deepStrictEqual(got, [90, 135]);
+  got.forEach((t) => assert.strictEqual(t % 45, 0, `${t} is off the 45s grid`));
+  got.forEach((t) => assert.ok(t > 50 && t < 160, `${t} escaped the segment`));
+});
+
+// The first sample is the first reachable point after the round's start, not a
+// fixed offset into the round: a round starting at 0:52 on a 30s grid is first
+// sampled at 1:00, eight seconds in.
+test('the first sample is the first reachable grid point after the round start', () => {
+  const got = T.planGrid([{ play: true, from: 52, to: 406 }], { stepS: 30 });
+  assert.strictEqual(got[0], 60);
+  assert.strictEqual(got.length, 12, '60..390 at +30');
+});
+
+// A round ending exactly on a grid point must not be sampled at that instant -
+// it is the boundary where the portraits are going away.
+test('a segment ending on the grid is never sampled on its closing edge', () => {
+  const got = T.planGrid([{ play: true, from: 40, to: 120 }], { stepS: 30 });
+  assert.deepStrictEqual(got, [60, 90]);
+  assert.ok(got.every((t) => t < 120), 'nothing on the closing edge');
 });
 
 test('every play segment is sampled, and breaks are never sampled', () => {
   const segs = [
-    { play: true, from: 0, to: 100 },
+    { play: true, from: 5, to: 100 },
     { play: false, from: 100, to: 200 },
     { play: true, from: 200, to: 300 },
   ];
-  const got = T.plan(segs, 3);
+  const got = T.planGrid(segs, { stepS: 30 });
   assert.strictEqual(got.length, 6, 'three per play segment, none for the break');
-  assert.ok(got.every((t) => t <= 100 || t >= 200), 'nothing inside the break');
+  assert.ok(got.every((t) => t < 100 || t >= 200), 'nothing inside the break');
 });
 
-// Seeking is done by jumping to the start and pressing REPLAY FORWARD (X),
-// which moves in fixed 20s steps. Snapping the plan to that grid makes every
-// seek an exact number of keypresses - no scrubber dragging, and no drift from
-// accumulated approximate seeks.
-test('samples snap to the 20s grid the forward key actually moves in', () => {
-  const got = T.plan([{ play: true, from: 0, to: 400 }], 3, { stepS: 20 });
-  assert.deepStrictEqual(got, [100, 200, 300]);
-  got.forEach((t) => assert.strictEqual(t % 20, 0, `${t} is not on the grid`));
-});
-
-// Unsnapped thirds of 0-50 are 12.5/25/37.5 - not one of them on the grid, so
-// this fails loudly if snapping is absent rather than passing by luck.
-test('samples off the grid are pulled onto it', () => {
-  const got = T.plan([{ play: true, from: 0, to: 50 }], 3, { stepS: 20 });
-  got.forEach((t) => assert.strictEqual(t % 20, 0, `${t} is not on the 20s grid`));
-  got.forEach((t) => assert.ok(t >= 0 && t <= 50, `${t} escaped 0-50`));
-});
-
-// 100-115 contains exactly one grid point, 100. Thirds would be 103.75/107.5/
-// 111.25, none of them reachable by keypress.
-test('a segment shorter than one step collapses to the grid points it contains', () => {
-  const got = T.plan([{ play: true, from: 100, to: 115 }], 3, { stepS: 20 });
-  assert.ok(got.length >= 1, 'a short segment must not vanish');
-  got.forEach((t) => assert.strictEqual(t % 20, 0, `${t} is not reachable`));
-  got.forEach((t) => assert.ok(t >= 100 && t <= 115, `${t} escaped 100-115`));
-});
-
-// Thirds of 0-45 are 11.25/22.5/33.75, which snap to 20/20/40 - a duplicate.
-// Two seeks to the same instant is a wasted 800ms grab of an identical frame.
-test('snapping never produces the same instant twice', () => {
-  const got = T.plan([{ play: true, from: 0, to: 45 }], 3, { stepS: 20 });
+// Two play segments closer together than a step can both land on the same grid
+// point; the second grab would be of an identical frame, so it is dropped.
+test('a grid point shared by two segments is planned once', () => {
+  const segs = [
+    { play: true, from: 5, to: 65 },
+    { play: true, from: 60, to: 120 },
+  ];
+  const got = T.planGrid(segs, { stepS: 30 });
+  assert.deepStrictEqual(got, [30, 60, 90]);
   assert.strictEqual(new Set(got).size, got.length, 'duplicate seeks waste a grab');
 });
 
-test('without a step, samples stay exactly where they fall', () => {
-  const got = T.plan([{ play: true, from: 0, to: 50 }], 3);
-  assert.deepStrictEqual(got, [12.5, 25, 37.5]);
+// 100-115 contains no reachable point on a 30s grid, so the nearest reachable
+// instant to the segment's middle is taken instead - sampling somewhere beats
+// not sampling the round at all.
+test('a segment too short for the grid falls back to its nearest reachable middle', () => {
+  const got = T.planGrid([{ play: true, from: 100, to: 115 }], { stepS: 30 });
+  assert.strictEqual(got.length, 1, 'a short segment must not vanish');
+  assert.strictEqual(got[0] % 30, 0, `${got[0]} is not reachable`);
+});
+
+// The grid must equal the client's skip interval, or a seek cannot land on it.
+// Anything else is refused, not rounded into looking reachable.
+test('a step that is not a skip interval is refused', () => {
+  assert.throws(() => T.planGrid([{ play: true, from: 0, to: 100 }], { stepS: 7 }),
+    /5\/10\/20\/30\/45\/60/);
+  assert.throws(() => T.planGrid([{ play: true, from: 0, to: 100 }], {}),
+    /5\/10\/20\/30\/45\/60/);
 });
 
 // The real measurement from the rig: a 17:42 Control replay whose bar showed
-// two blue runs. This is the shape the sampler must produce for it.
-test('the measured Control replay yields nine samples across three rounds', () => {
+// two blue runs. This is the shape the sampler must produce for it - every
+// 30s inside play.
+test('the measured Control replay is sampled every 30s inside its three rounds', () => {
   const segs = [
     { play: true, from: 4, to: 406 },
     { play: false, from: 406, to: 526 },
@@ -114,9 +129,10 @@ test('the measured Control replay yields nine samples across three rounds', () =
     { play: false, from: 744, to: 805 },
     { play: true, from: 805, to: 1062 },
   ];
-  const got = T.plan(segs, 3);
-  assert.strictEqual(got.length, 9);
-  assert.ok(got.every((t) => t > 0 && t < 1062));
+  const got = T.planGrid(segs, { stepS: 30 });
+  assert.strictEqual(got.length, 29, '13 + 7 + 9 grid points');
+  got.forEach((t) => assert.strictEqual(t % 30, 0, `${t} is off the grid`));
+  got.forEach((t) => assert.ok(t > 0 && t < 1062, `${t} escaped the map`));
 });
 
 // --- setup blips are not rounds -------------------------------------------
@@ -142,16 +158,18 @@ test('a real round is left alone', () => {
   assert.strictEqual(got[0].tooShort, undefined);
 });
 
-test('dropping the blip changes how many samples the map gets', () => {
+test('dropping the setup blip removes its reachable grid points', () => {
   const raw = [
     { from: 0, to: 10, play: false },
     { from: 10, to: 17, play: true },
     { from: 17, to: 49, play: false },
     { from: 49, to: 299, play: true },
   ];
-  assert.strictEqual(T.samplesFor(raw), 3, 'two play segments looks like rounds');
-  assert.strictEqual(T.samplesFor(T.dropShortPlay(raw, 30)), 5,
-    'one real segment gets the denser single-segment sampling');
+  const rawPlan = T.planGrid(raw, { stepS: 30 });
+  const dropped = T.planGrid(T.dropShortPlay(raw, 30), { stepS: 30 });
+  assert.ok(dropped.length < rawPlan.length,
+    'the setup stretch is no longer worth a sample');
+  assert.ok(!dropped.includes(0), 'sampling the first instant of a map reads no HUD at all');
 });
 
 test('the plan no longer reaches for 0:00', () => {
@@ -160,7 +178,7 @@ test('the plan no longer reaches for 0:00', () => {
     { from: 21, to: 53, play: false },
     { from: 53, to: 555, play: true },
   ], 30);
-  const plan = T.plan(segs, T.samplesFor(segs), { stepS: 60 });
+  const plan = T.planGrid(segs, { stepS: 60 });
   assert.ok(!plan.includes(0), 'sampling the first instant of a map reads no HUD at all');
 });
 

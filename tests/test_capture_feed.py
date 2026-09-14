@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sqlite3
 import sys
 from datetime import date, timedelta
@@ -92,12 +93,26 @@ def _fixture_db(path: Path, wipe: str) -> None:
     con.close()
 
 
+def _after_wipe(mod: Any) -> date:
+    """One day after the LATEST known wipe date (global or any region override).
+
+    The global date is deliberately the EARLIEST region's patch, so a fixture
+    game dated global+1 lands exactly on the NA override day and the builder
+    would drop it. Place every fixture game past all of them instead.
+    """
+    latest = date.fromisoformat(mod.CODE_WIPE_DATE)
+    for override in mod.REGION_WIPE_OVERRIDES.values():
+        ov = date.fromisoformat(override)
+        if ov > latest:
+            latest = ov
+    return latest + timedelta(days=1)
+
+
 def _build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    # One day AFTER the wipe, so every fixture game passes the post-wipe filter.
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
-    _fixture_db(db, after.isoformat())
+    # Past every wipe date, so every fixture game passes the post-wipe filter.
+    _fixture_db(db, _after_wipe(mod).isoformat())
     mod.main()
     return json.loads(out.read_text(encoding="utf-8"))
 
@@ -171,7 +186,7 @@ def test_team_rosters_cover_every_team_not_just_coded_matches(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     # A team whose only match predates the wipe and carries no code: invisible
@@ -228,7 +243,7 @@ def test_a_lineup_is_the_five_who_played_that_game_not_the_match_squad(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     # Game 2 of the same match, with one damage player substituted out.
@@ -276,7 +291,7 @@ def test_a_missing_faceit_role_is_null_not_invented(
     a role there would put a real player in the wrong candidate group."""
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     con = sqlite3.connect(db)
@@ -300,7 +315,7 @@ def test_team_rosters_accumulate_a_squad_across_matches(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     con = sqlite3.connect(db)
@@ -359,7 +374,7 @@ def test_team_rosters_cover_only_the_active_season(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     # Season 10 arrives. Charlie plays; the S9-only teams never come back.
@@ -397,7 +412,7 @@ def test_seeding_next_season_does_not_empty_the_roster_pool(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     # The next season is seeded: a championship and a fixture, nobody has played.
@@ -427,7 +442,7 @@ def test_a_sub_seen_only_last_season_is_dropped_but_their_team_survives(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     con = sqlite3.connect(db)
@@ -465,7 +480,7 @@ def test_a_season_less_championship_is_left_out_of_team_rosters(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     con = sqlite3.connect(db)
@@ -495,7 +510,7 @@ def test_rosters_are_unscoped_when_no_championship_names_a_season(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     con = sqlite3.connect(db)
@@ -548,7 +563,7 @@ def test_team_roster_players_are_emitted_in_a_stable_order(
     """
     db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
     mod = _load_tool(monkeypatch, db, out)
-    after = date.fromisoformat(mod.CODE_WIPE_DATE) + timedelta(days=1)
+    after = _after_wipe(mod)
     _fixture_db(db, after.isoformat())
 
     # Inserted in the opposite order to the one they must come out in, so the
@@ -564,3 +579,75 @@ def test_team_roster_players_are_emitted_in_a_stable_order(
     players = json.loads(out.read_text(encoding="utf-8"))["team_rosters"]["t1"]["players"]
     ids = [p["id"] for p in players]
     assert ids == sorted(ids), f"team roster order is not stable: {ids}"
+
+
+def test_region_override_keeps_that_region_s_wipe_day_codes_dead(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The feed's ONE global code_wipe_date is the EARLIEST region's patch, so a
+    region whose restart landed later in its own day has wipe-day codes that
+    pass the global filter but are still dead. Those must not ship.
+
+    The fixture dates the NA override day as global+1 (which is what the real
+    dates are: global 2026-09-07, NA 2026-09-08). An NA code finished that day
+    is dropped; an EMEA code finished the same day survives, proving the filter
+    is region-scoped rather than a stricter global one.
+    """
+    db, out = tmp_path / "faceit.sqlite3", tmp_path / "data.json"
+    mod = _load_tool(monkeypatch, db, out)
+    _fixture_db(db, _after_wipe(mod).isoformat())
+
+    assert "NA" in mod.REGION_WIPE_OVERRIDES, "the test below hardcodes NA's date"
+    na_override_day = date.fromisoformat(mod.REGION_WIPE_OVERRIDES["NA"])
+    assert na_override_day == _after_wipe(mod) - timedelta(days=1), (
+        "fixture assumption: the NA override is exactly one day after the global "
+        "date, so an EMEA code finished the same day is post-global and survives"
+    )
+
+    con = sqlite3.connect(db)
+    # NA code finished exactly on NA's own restart day: dead, must not ship.
+    con.execute("INSERT INTO championships VALUES('c-na2',"
+                "'S9 NA Expert Central - Regular Season')")
+    con.execute("INSERT INTO matches VALUES('mt-na2','c-na2',"
+                f"'{na_override_day}T20:00:00Z','t1','t2')")
+    con.execute("INSERT INTO games VALUES('mt-na2',1,'m1','Control','NAWIPE')")
+    # EMEA code finished the same calendar day: NA's later restart is not EMEA's,
+    # and the global filter already admitted it, so it must survive.
+    con.execute("INSERT INTO championships VALUES('c-em2',"
+                "'S9 EMEA Master Central - Regular Season')")
+    con.execute("INSERT INTO matches VALUES('mt-em2','c-em2',"
+                f"'{na_override_day}T20:00:00Z','t1','t2')")
+    con.execute("INSERT INTO games VALUES('mt-em2',1,'m1','Control','EMWIPE')")
+    con.commit()
+    con.close()
+
+    mod.main()
+    codes = [c["code"] for c in json.loads(out.read_text(encoding="utf-8"))["codes"]]
+    assert "NAWIPE" not in codes, "an NA wipe-day code shipped as live"
+    assert "EMWIPE" in codes, "an EMEA code the same day was dropped by NA's override"
+
+
+def test_region_wipe_overrides_match_the_bot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """build_capture_data.py and run.js each carry the region override dates,
+    in two languages. If they drift, one side ships a code the other calls dead
+    - the feed lists it live, the bot's queue skips it, and the browser capture
+    app trusts the feed, so the two are only safe pinned together.
+    """
+    db = tmp_path / "feed.sqlite3"
+    _fixture_db(db, "2026-07-28")
+    mod = _load_tool(monkeypatch, db, tmp_path / "out.json")
+
+    run_js = (Path(__file__).resolve().parents[1]
+              / "tools" / "replay_bot" / "run.js").read_text(encoding="utf-8")
+    m = re.search(r"const REGION_WIPE_OVERRIDES = \{([^}]*)\}", run_js)
+    assert m, "REGION_WIPE_OVERRIDES not found in run.js"
+    entries = dict(
+        part.strip().replace(" ", "").split(":")
+        for part in m.group(1).split(",") if part.strip())
+    bot_overrides = {k.strip("'\""): v.strip("'\"") for k, v in entries.items()}
+    assert mod.REGION_WIPE_OVERRIDES == bot_overrides, (
+        f"feed and bot disagree on region wipes: "
+        f"feed {mod.REGION_WIPE_OVERRIDES}, bot {bot_overrides}"
+    )

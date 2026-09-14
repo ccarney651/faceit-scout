@@ -17,6 +17,53 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-14
+
+### Changed
+
+- **The replay bot samples on a 45s grid now, not 30s.** `INTERVALS` in
+  `timeline.js` gained `45`, and the `set-interval` chunk was re-recorded to
+  take the Options menu to 45s. `planGrid` refuses any step not in `INTERVALS`
+  (a target off the client's skip-interval grid is unreachable by keypresses),
+  so `--step 45` is the only valid cadence until `INTERVALS` changes again. A
+  full season still runs faster than the 30s version (~3.0h vs ~3.8h for the
+  same ~130-map gameday), keeping the grid dense enough to see mid-round swaps.
+
+### Fixed
+
+- **The capture feed was shipping NA's wipe-day codes as live.** FACEIT's NA
+  restart landed mid-day on 2026-09-08, so NA games finished that day are dead
+  under the stricter NA wipe date that `run.js` already applied — but
+  `build_capture_data.py` only knew the global `2026-09-07` wipe, so
+  `docs/capture/data.json` carried 124 NA Expert/Advanced/Intermediate codes
+  the bot would correctly refuse at runtime. `REGION_WIPE_OVERRIDES` in
+  `build_capture_data.py` now mirrors `run.js`'s per-region dates, the feed
+  dropped those 124 codes (0 live codes lost), and a new test pins the Python
+  and JS override tables together so they cannot drift again.
+
+## 2026-09-12
+
+### Fixed
+
+- **The 2026-09-08 patch's code wipe is registered and live.** `owdb/db.py`'s
+  `_SEED_WIPES` gained the `2026-09-07` entry (dated a day early, deliberately,
+  same reasoning as the `2026-08-18` entry — see `AGENTS.md`) back on
+  2026-09-08, but the commit sat on a local feature branch and never reached
+  `main`, so the live site kept showing the stale `2026-08-18` wipe date for
+  four days. Cherry-picked the isolated commit onto `main` directly; every
+  code from a game on or before 2026-09-07 now correctly reads as wiped.
+- **`resolve.js`'s `segmentSlot()` no longer requires two consecutive matching
+  reads to confirm a mid-round hero swap.** A fast multi-hop swap (three
+  different heroes, one read each, no repeats) previously never reached the
+  old confirmation threshold and collapsed onto whichever hero was read
+  first — losing the intermediate hero entirely. A single differing read now
+  starts its own segment. Trade-off: a lone misread that used to be absorbed
+  into the running segment (and flagged `low-support`) now becomes its own
+  segment too, so that specific noise case no longer gets flagged either.
+- **`timing.js`'s `sample.quiesceMs` (the wait after a seek settles, before a
+  sample's HUD is read) raised 500ms → 700ms.** Reviewing a ~270-map
+  unattended run found screenshots on later codes landing mid-UI-transition.
+
 ## 2026-09-11
 
 ### Added
@@ -41,8 +88,8 @@ Entries before 2026-08-11 were reconstructed from git history.
 - **`codestack.js`** — the rotating code-stack load/save/rotate, shared by the
   console (the manual `import` phase and the loop) and by `run.js`'s new
   `--code-stack <file>` mode. Codes cycled this way never touch
-  `state/attempts.json`; that ledger means "never again", which is backwards
-  for a stack of codes meant to be reused.
+  `state/attempts.json`; that ledger tracks the account's current 10-import
+  ring, which is the wrong semantics for a stack of codes meant to be reused.
 
 ## 2026-09-10
 
@@ -223,11 +270,13 @@ Entries before 2026-08-11 were reconstructed from git history.
   replay history tab. The code is **pasted** - a recorded `Ctrl+V` becomes the
   placeholder and playback sets the clipboard to that map's code.
 
-- **A league code can only be imported once per account, which the run loop has
-  to respect.** Importing one already in the list warns and demands a manual
-  scroll-and-select, ending an unattended run. So the account starts clean,
-  every code gets exactly one attempt, and a failed map is a loss to report
-  rather than a retry to queue.
+- **A league code is only import-once per ring-window, which the run loop has
+  to respect.** The client keeps its 10 most-recent imports; importing one still
+  in that list warns and demands a manual scroll-and-select, ending an
+  unattended run. Ten newer imports evict the oldest, so a rolled-off code
+  re-imports cleanly. The account starts clean, each code gets one attempt per
+  run, and a failed map is retried automatically up to `FAIL_RETRY_CAP` rather
+  than being reported as an immediate loss.
 
 - **The playhead is read off the scrubber, so a seek can be checked rather than
   trusted** - `crop.playheadX`, with `probe_seek.js` to measure how many

@@ -78,64 +78,60 @@
     });
   }
 
-  // Timestamps to grab, in order. `n` points per play segment, evenly spaced
-  // strictly inside it: i/(n+1) for i in 1..n.
+  // Timestamps to grab, in order, on a fixed time grid.
   //
-  // With `stepS`, points are snapped to that grid. Seeking is done by jumping
-  // to the start and pressing REPLAY FORWARD, which moves in fixed 20s steps,
-  // so an unsnapped target is simply not reachable - asking for 1:42 would mean
-  // dragging the scrubber to a pixel, which is both imprecise and mouse work.
-  // On the grid, every seek is an exact number of keypresses from a known
-  // origin, so errors cannot accumulate across a map.
+  // Seeking is done by jumping to the start and pressing REPLAY FORWARD, which
+  // moves in fixed `stepS` steps, so a target that is not a multiple of `stepS`
+  // is simply not reachable - asking for 1:42 would mean dragging the scrubber
+  // to a pixel, which is both imprecise and mouse work. On the grid, every seek
+  // is an exact number of keypresses from a known origin, so errors cannot
+  // accumulate across a map. `stepS` must therefore be one of the client's own
+  // skip intervals (INTERVALS); anything else is refused, not rounded into
+  // looking fine.
   //
-  // Snapping can collide (two thirds of a short round rounding to the same
-  // step), and duplicates are dropped rather than spending an 800ms grab on a
-  // frame already captured.
-  function plan(segs, n, opts) {
+  // Inside each play segment the plan is the reachable grid: the first point
+  // from `ceil(from/step)*step` onward, then every `+step` while strictly
+  // before `to` - a round is never sampled on its closing edge, where the
+  // portraits are gone and the read would be setup or aftermath. A segment
+  // shorter than one interval (no reachable point inside it) falls back to the
+  // nearest reachable instant to its middle and accepts being marginally
+  // outside - the alternative is not sampling the segment at all.
+  //
+  // Two segments can share a grid point (a break shorter than the step), and
+  // duplicates are dropped rather than spending an 800ms grab on a frame
+  // already captured.
+  function planGrid(segs, opts) {
     var step = opts && opts.stepS;
+    if (!step || step <= 0 || INTERVALS.indexOf(step) === -1) {
+      throw new Error(
+        'planGrid needs a skip interval the client can be set to (' +
+        INTERVALS.join('/') + 's); a target off that grid is unreachable by ' +
+        'keypresses (got ' + step + ')'
+      );
+    }
     var out = [];
 
     segs.forEach(function (s) {
       if (!s.play) return;
-      var span = s.to - s.from;
-      var pts = [];
-      for (var i = 1; i <= n; i++) pts.push(s.from + span * (i / (n + 1)));
 
-      if (!step) {
-        out = out.concat(pts);
+      var lo = Math.ceil(s.from / step) * step;
+      var hi = Math.floor(s.to / step) * step;
+      if (hi >= s.to) hi -= step; // never sample the closing edge of a round
+
+      if (lo > hi) {
+        // A segment too short to contain any grid point at all. Fixed-step
+        // seeking cannot land inside it, so take the nearest reachable
+        // instant to its middle and accept being marginally outside - the
+        // alternative is not sampling the segment at all.
+        out.push(Math.round(((s.from + s.to) / 2) / step) * step);
         return;
       }
 
-      // The reachable points inside this segment.
-      var lo = Math.ceil(s.from / step) * step;
-      var hi = Math.floor(s.to / step) * step;
-
-      var snapped = pts.map(function (t) {
-        var g = Math.round(t / step) * step;
-        if (lo > hi) {
-          // A segment too short to contain any grid point at all. Fixed-step
-          // seeking cannot land inside it, so take the nearest reachable
-          // instant to its middle and accept being marginally outside - the
-          // alternative is not sampling the segment at all.
-          return Math.round(((s.from + s.to) / 2) / step) * step;
-        }
-        return Math.min(hi, Math.max(lo, g));
-      });
-
-      out = out.concat(snapped.filter(function (t, i) {
-        return snapped.indexOf(t) === i;
-      }));
+      for (var t = lo; t <= hi; t += step) out.push(t);
     });
 
     // Dedupe across the whole plan, preserving order.
     return out.filter(function (t, i) { return out.indexOf(t) === i; });
-  }
-
-  // How many samples a map of this kind deserves. Maps with rounds get fewer
-  // per segment because they have several segments; a map with one continuous
-  // segment needs more within it to see the same amount of the match.
-  function samplesFor(segs) {
-    return segs.filter(function (s) { return s.play; }).length > 1 ? 3 : 5;
   }
 
   // Playhead position to seconds, and back.
@@ -163,7 +159,7 @@
   // because the setting is one of these, not an arbitrary number - and a
   // measurement that lands nowhere near any of them means something else is
   // wrong and should be refused rather than rounded into looking fine.
-  var INTERVALS = [5, 10, 20, 30, 60];
+  var INTERVALS = [5, 10, 20, 30, 45, 60];
 
   // What one press of REPLAY FORWARD is worth in seconds, from how far it moved
   // the knob and how fast the knob moves during playback.
@@ -245,8 +241,7 @@
     stepAt: stepAt,
     xForSeconds: xForSeconds,
     segments: segments,
-    plan: plan,
-    samplesFor: samplesFor,
+    planGrid: planGrid,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;

@@ -50,7 +50,7 @@ const WANTED = [
     name: 'set-interval',
     needsCode: false,
     from: 'inside a replay, with the controls already up (press N then K first)',
-    does: 'options -> time skip interval -> 60s -> back to the replay. The bot ' +
+    does: 'options -> time skip interval -> 45s -> back to the replay. The bot ' +
       'presses N and K itself before playing this, so record it from that ' +
       'state. Played once per session: the setting holds until the client ' +
       'restarts and then silently reverts, which is why it is measured too',

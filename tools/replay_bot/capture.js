@@ -345,20 +345,56 @@
 
       // 5. Drive to each sample and read the HUD. The driver is in sampling mode
       //    now - its settle is the fixed quiesce, not the two-frame one.
+      //
+      //    CHANGE DETECTION: samples store a read whether or not a frame was
+      //    kept, but keepAs fires only when the read differs from the previous
+      //    one (see phases.shouldKeep), so an unchanged round stores one frame
+      //    and a swap stores one per distinct state. The first sample of each
+      //    round is always kept - review_out.js derives its portrait strips from
+      //    it - and the comparison baseline resets there, so a cross-round read
+      //    never looks like a contested in-progress swap.
       var samples = [];
       var missed = [];
+      var prevRead = null;
+      var prevPrevRead = null;
+      var roundSeen = {};
       sampling = true;
+
+      function roundIndexOf(t) {
+        for (var j = 0; j < segs.length; j++) {
+          var sg = segs[j];
+          if (sg.play && t >= sg.from && t < sg.to) return j;
+        }
+        // A short-segment fallback point can land marginally outside its
+        // segment; attach it to the play segment it was sampled for.
+        var best = -1, bestD = Infinity;
+        for (var j = 0; j < segs.length; j++) {
+          var sg = segs[j];
+          if (!sg.play) continue;
+          var d = Math.abs(t - (sg.from + sg.to) / 2);
+          if (d < bestD) { bestD = d; best = j; }
+        }
+        return best;
+      }
+
       for (var i = 0; i < plan.length; i++) {
         var t = plan[i];
         var started = Date.now();
+        var si = roundIndexOf(t);
+        var isFirst = si === -1 || !roundSeen[si];
+        if (isFirst) { prevRead = null; prevPrevRead = null; }
         var s = await P.sampleAt(ctx, t, {
           matcher: M, stepS: stepS, mmss: mmss, log: log,
+          prev: prevRead, prevPrev: prevPrevRead, firstOfRound: isFirst,
         });
         if (s.missed) {
           missed.push({ t: s.t, at: s.at, reason: s.reason === 'seek' ? undefined : s.reason });
           continue;
         }
+        roundSeen[si] = true;
         samples.push({ t: s.t, at: s.at, a: s.a, b: s.b, framePath: s.framePath });
+        prevPrevRead = prevRead;
+        prevRead = { a: s.a, b: s.b };
         log(mmss(t).padStart(6) + '  (' + ((Date.now() - started) / 1000).toFixed(1) + 's)');
         ['a', 'b'].forEach(function (side) {
           log('        ' + side + ': ' + s[side].map(function (r) {
