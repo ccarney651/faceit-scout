@@ -19,6 +19,14 @@ settings
 			}
 			Competitive Rules: Off
 			Game Mode Start: Immediately
+			Capture Speed Modifier: 500%
+		}
+	}
+	heroes
+	{
+		General
+		{
+			Movement Speed: 200%
 		}
 	}
 }
@@ -29,6 +37,7 @@ variables {
         1: shown
         2: slot
         3: SEQ
+        4: targets
 }
 
 rule ("refs trainer: force the round live") {
@@ -36,8 +45,8 @@ rule ("refs trainer: force the round live") {
         Ongoing - Global;
     }
     actions {
-        "The spectator HUD portrait strip only renders once the match is in\nprogress. Blow straight past \"assemble your heroes\" and the setup phase by\nzeroing their timers -- otherwise the bots exist but show no portrait."
-        While(True);
+        "true again later (e.g. a Control round transition), which could keep\nre-arming the very state that blocks a save. Once in progress, this rule\nhas done its job and gets out of the way for good."
+        While(Not(Is Game In Progress));
             If(Or(Is In Setup, Is Assembling Heroes));
                 Set Match Time(0);
             End;
@@ -51,24 +60,27 @@ rule ("refs trainer: march the roster") {
         Ongoing - Global;
     }
     actions {
-        Set Global Variable(SEQ, Array(Array(Hero(Ana), Hero(Anran), Hero(Ashe), Hero(Baptiste), Hero(Bastion)), Array(Hero(Brigitte), Hero(Cassidy), Hero(D.Mon), Hero(Domina), Hero(Doomfist)), Array(Hero(D.Va), Hero(Echo), Hero(Emre), Hero(Freja), Hero(Genji)), Array(Hero(Hanzo), Hero(Hazard), Hero(Illari), Hero(Jetpack Cat), Hero(Junker Queen)), Array(Hero(Junkrat), Hero(Juno), Hero(Kiriko), Hero(Lifeweaver), Hero(Lúcio)), Array(Hero(Mauga), Hero(Mei), Hero(Mercy), Hero(Mizuki), Hero(Moira)), Array(Hero(Orisa), Hero(Pharah), Hero(Ramattra), Hero(Reaper), Hero(Reinhardt)), Array(Hero(Roadhog), Hero(Shion), Hero(Sierra), Hero(Sigma), Hero(Sojourn)), Array(Hero(Soldier: 76), Hero(Sombra), Hero(Symmetra), Hero(Torbjörn), Hero(Tracer)), Array(Hero(Vendetta), Hero(Venture), Hero(Widowmaker), Hero(Winston), Hero(Wrecking Ball)), Array(Hero(Wuyang), Hero(Zarya), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta))));
+        Set Global Variable(SEQ, Array(Array(Hero(Ana), Hero(Anran), Hero(Ashe), Hero(Baptiste)), Array(Hero(Bastion), Hero(Brigitte), Hero(Cassidy), Hero(D.Mon)), Array(Hero(Domina), Hero(Doomfist), Hero(D.Va), Hero(Echo)), Array(Hero(Emre), Hero(Freja), Hero(Genji), Hero(Hanzo)), Array(Hero(Hazard), Hero(Illari), Hero(Jetpack Cat), Hero(Junker Queen)), Array(Hero(Junkrat), Hero(Juno), Hero(Kiriko), Hero(Lifeweaver)), Array(Hero(Lúcio), Hero(Mauga), Hero(Mei), Hero(Mercy)), Array(Hero(Mizuki), Hero(Moira), Hero(Orisa), Hero(Pharah)), Array(Hero(Ramattra), Hero(Reaper), Hero(Reinhardt), Hero(Roadhog)), Array(Hero(Shion), Hero(Sierra), Hero(Sigma), Hero(Sojourn)), Array(Hero(Soldier: 76), Hero(Sombra), Hero(Symmetra), Hero(Torbjörn)), Array(Hero(Tracer), Hero(Vendetta), Hero(Venture), Hero(Widowmaker)), Array(Hero(Winston), Hero(Wrecking Ball), Hero(Wuyang), Hero(Zarya)), Array(Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta), Hero(Zenyatta))));
         Set Global Variable(step, 0);
         Set Global Variable(shown, 999);
         Wait Until(Is Game In Progress, 120);
         Wait(2, Ignore Condition);
-        While(Compare(Global.step, <, 11));
+        "match goes live: let one real round happen first (capture speed and\nmovement speed above make that fast), then press INTERACT (F by\ndefault) to begin the dummy cycle. REFS stays at 999 on the HUD the\nwhole time you're waiting to press it."
+        Wait Until(Is Button Held(Host Player, Button(Interact)), 99999);
+        While(Compare(Global.step, <, 14));
             Destroy All Dummy Bots;
             Wait(0.5, Ignore Condition);
-            For Global Variable(slot, 0, 5, 1);
+            For Global Variable(slot, 0, 4, 1);
                 Create Dummy Bot(Value In Array(Value In Array(Global.SEQ, Global.step), Global.slot), Team 1, Global.slot, Null, Null);
                 Create Dummy Bot(Value In Array(Value In Array(Global.SEQ, Global.step), Global.slot), Team 2, Global.slot, Null, Null);
             End;
             Wait(2.0, Ignore Condition);
             Set Global Variable(shown, Multiply(Global.step, 2));
             Wait(6.0, Ignore Condition);
-            "Dead pass: kill every bot and stop it respawning, so the spectator\nportrait holds its eliminated state (no respawn countdown) through the\nwhole capture window. Fresh bots next step are spawned from scratch."
-            Disable Built-In Game Mode Respawning(All Players(All Teams));
-            Kill(All Players(All Teams), Null);
+            "single step, which is why a player was stuck death-spectating almost\nimmediately into the run. Exclude the host (the operator, who started\nthe match) so only the dummy roster dies here."
+            Set Global Variable(targets, Remove From Array(All Players(All Teams), Host Player));
+            Disable Built-In Game Mode Respawning(Global.targets);
+            Kill(Global.targets, Null);
             Wait(1.0, Ignore Condition);
             Set Global Variable(shown, Add(Multiply(Global.step, 2), 1));
             Wait(6.0, Ignore Condition);
@@ -76,6 +88,9 @@ rule ("refs trainer: march the roster") {
         End;
         Destroy All Dummy Bots;
         Set Global Variable(shown, 999);
+        "makes the \"ends\" half happen on our terms rather than depending on\nhowever the built-in round clock behaves after everything we've done to\nmatch/setup time. No-op in free-for-all modes; Control isn't one."
+        Wait(1, Ignore Condition);
+        Declare Match Draw;
     }
 }
 
@@ -84,7 +99,18 @@ rule ("refs trainer: draw the step counter") {
         Ongoing - Global;
     }
     actions {
-        Create HUD Text(Null, Custom String("REFS {0}", Global.shown), Null, Null, Top, 0, Color(White), Null, Null, Visible To and String, Visible Always);
+        "visible to nobody, not \"everyone\" (its documented default is\ngetAllPlayers()). Passing null here was a pre-existing bug that only\nstayed hidden because this always ran pure-spectator before; it's why\nnothing drew once a real player joined."
+        Create HUD Text(All Players(All Teams), Custom String("REFS {0}", Global.shown), Null, Null, Top, 0, Color(White), Null, Null, Visible To and String, Visible Always);
+    }
+}
+
+rule ("refs trainer: draw match-state debug") {
+    event {
+        Ongoing - Global;
+    }
+    actions {
+        "during a test run -- if prog stays False the whole time bots are\ncycling, or it drops back to True setup/assemble mid-run (e.g. between\nControl rounds), that is the mechanism. Remove once confirmed either way."
+        Create HUD Text(All Players(All Teams), Null, Custom String("prog={0} setup={1} assemble={2}", Is Game In Progress, Is In Setup, Is Assembling Heroes), Null, Top, 1, Null, Color(Yellow), Null, Visible To and String, Visible Always);
     }
 }
 

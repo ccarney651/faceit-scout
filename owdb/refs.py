@@ -810,12 +810,13 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     index_roi: Rect | None = None,
     flip_b: bool = False,
     only: str | None = None,
+    roster_size: int | None = None,
     poll_interval: float = 0.5,
     dry_run: bool = False,
 ) -> int:
     """Learn the whole library unattended, driven by ``refs_trainer.opy``.
 
-    The workshop code cycles 10 dummy bots through the roster and draws a
+    The workshop code cycles dummy bots through the roster and draws a
     ``REFS <n>`` counter. Each roster row is shown twice — bots alive, then
     killed — and the counter encodes which (``n = 2*step``, ``+1`` for the dead
     pass). This loop grabs frames, OCRs that counter, and whenever it sees a new
@@ -823,6 +824,16 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     ``rows[step][slot]`` in that visual state. No per-hero confirmation. Ctrl-C
     to stop early; it ends on its own when the workshop signals done. Returns a
     ``refs verify`` exit code.
+
+    ``roster_size`` is how many heroes ``gen_refs_trainer.py`` packed per SEQ
+    row — NOT necessarily ``profile.team_size``. Since the replay-saving
+    redesign, the workshop fills only ``team_size - 1`` slots with roster dummies
+    (one seat per side is left for the human/AI filler that lets the match save
+    a replay), so ``profile.team_size`` (real on-screen portrait slots, used for
+    cropping) and the roster chunk width baked into SEQ now regularly differ.
+    Chunking ``plan_sequence`` by the wrong width silently relabels every row
+    after the first. Defaults to ``profile.team_size`` for old recordings where
+    the two were the same.
     """
     import time
 
@@ -839,7 +850,8 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     if only:  # must match gen_refs_trainer.py --only exactly, or labels drift
         wanted = {s.strip().lower() for s in only.split(",") if s.strip()}
         names = [n for n in names if n.lower() in wanted]
-    rows = plan_sequence(names, team_size=profile.team_size)
+    chunk = roster_size if roster_size is not None else profile.team_size
+    rows = plan_sequence(names, team_size=chunk)
     if not rows:
         raise CaptureError(
             "no roster hero maps to a workshop Hero constant — nothing to auto-learn")
@@ -854,7 +866,8 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
     total = 2 * len(rows)
     print(f"AUTO-LEARN profile #{pid} "
           f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}') — "
-          f"{len(rows)} steps of {profile.team_size}, alive + dead.")
+          f"{len(rows)} steps of {chunk} roster dummies "
+          f"({profile.team_size} on-screen slots/side), alive + dead.")
     print("  Paste refs_trainer.txt, pick a Control/Push map with unlimited time, "
           "START THE MATCH, and spectate. Ctrl-C to stop.\n")
 
@@ -913,11 +926,15 @@ def run_refs_autolearn(  # pragma: no cover - runtime-only path
             step_written = 0
             for side in (SIDE_LEFT, SIDE_RIGHT):
                 for slot in range(profile.team_size):
+                    # Slots >= chunk are the human/AI filler seat that lets the
+                    # match save a replay (see roster_size above) — never a
+                    # roster dummy, so there is nothing in `rows` to label it with.
+                    if slot >= chunk:
+                        continue
                     # refs_trainer puts the same heroes on both teams; the right
                     # HUD strip may run right-to-left relative to bot slots, so
                     # --flip-b reverses the lookup for side b.
-                    src = (profile.team_size - 1 - slot
-                           if flip_b and side == SIDE_RIGHT else slot)
+                    src = chunk - 1 - slot if flip_b and side == SIDE_RIGHT else slot
                     hero = by_name.get(rows[step][src])
                     if hero is None:
                         continue

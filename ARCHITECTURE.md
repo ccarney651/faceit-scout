@@ -11,9 +11,8 @@ one-line summary, and every paragraph stands on its own — so landing in the
 middle of this document, whether by scrolling or by search, still lands you in
 context.
 
-`README.md`, `FEATURES.md`, and `SPEC.md` remain the long-form references for
-ingest, features, and the capture design respectively. This document sits above
-them and says how everything connects.
+It is the sole how-it-works document. The agent-facing rules and commands live
+in `AGENTS.md`; what is not built yet lives in `PLANS.md`.
 
 ## Contents
 
@@ -32,7 +31,6 @@ them and says how everything connects.
 - [12. Invariants](#12-invariants)
 - [13. Testing map](#13-testing-map)
 - [14. Replay bot](#14-replay-bot)
-- [13. Testing map](#13-testing-map)
 
 ---
 
@@ -157,23 +155,18 @@ and is not in git.
 | `docs/` | **The GitHub Pages web root.** Everything here is published to owdb.io. | live |
 | `docs/capture/` | The browser capture app — the only supported capture path. | live |
 | `data/captures/` | Committed contributor observations, one JSON file per person per season. | live |
-| `tools/` | Build scripts that produce feeds for the capture app, plus the social-preview image generator. | live |
+| `tools/` | Build scripts that produce feeds for the capture app, plus the reference-capture and replay-bot tooling. | live |
 | `tools/scrim_code/` | OverPy source for the in-game Overwatch Workshop scrim helper. | live |
 | `infra/upload-worker/` | The Cloudflare Worker source. Deployed by hand, not by CI. | live |
 | `tests/` | Pytest suite for `faceit_sync`, the dashboard, and the browser capture app. | live |
 | `.github/workflows/update.yml` | The only writer of the live site. | live |
 | `matches.txt` | Seed list of match IDs and championship URLs that ingest starts from. | live |
 | `pyproject.toml` | Packaging, dependencies, the `faceit-sync` and `owdb` entry points, mypy and pytest config. | live |
-| `README.md` | Long-form reference: ingest, the schema, and the data-quality hazards. | reference |
-| `FEATURES.md` | Long-form reference: every feature in both packages. Known to lag the code. | reference |
-| `SPEC.md` | The original `owdb` design reference — design intent, not current state. | reference |
-| `ARCHITECTURE.md` | This document. | reference |
+| `ARCHITECTURE.md` | This document — how everything works. | reference |
 | `CHANGELOG.md` | What changed and when, reconstructed back to the first commit. | reference |
 | `AGENTS.md` | Canonical instructions for coding agents — every agent reads this one. | reference |
-| `CLAUDE.md` | A pointer to `AGENTS.md`. | reference |
-| `specs/` | Design and implementation-plan documents, one pair per feature, plus `specs/BACKLOG.md`. | reference |
+| `PLANS.md` | What is not built yet — the backlog. | reference |
 | `verify_accuracy.py` | Standalone audit script that re-derives dashboard numbers independently. | reference |
-| `Dockerfile`, `docker-compose.yml` | Containerised ingest, for running the sync somewhere other than a desktop. | reference |
 | `*.cmd` (7 files at root) | Double-clickable Windows launchers wrapping the two CLIs, for non-technical contributors. | reference |
 | `.env.example` | The environment variables ingest and the Worker read. | reference |
 | `faceit.sqlite3` | The local ingest database. | local-only |
@@ -399,8 +392,13 @@ does not parse skips `by_region_tier` and lands in the fallback at the end of
 the view build: a plain view labelled with its raw championship name, outside
 the region grouping and outside Combined. A stage the split does not recognise
 is simply treated as a regular-season division. Season 10 introduces one of
-each — an Intermediate tier and a Season Finals stage — and neither classifies
-today; `AGENTS.md` records what that costs and why nothing has changed yet.
+each — an Intermediate tier and a Season Finals stage. `TIERS` gained
+`Intermediate` on 2026-09-05, so a division by that name now classifies and
+lands in its region's switcher. A `… - Season Finals` championship still does
+not: `is_playoff_name` matches only `playoff`/`knockout`, and the stage is also
+cross-tier by design (top 4 Master plus top 2 of each lower division), so it
+has no single region+tier division to attach to. `AGENTS.md` records what that
+costs and why nothing has changed yet.
 
 **Four drill-ins hang off those tabs**, each a non-nav screen reached by hash:
 `#match=<id>`, `#scout=<team>` / `#prep=<team>`, `#compare=<A>|<B>`, and
@@ -575,7 +573,6 @@ injected defaults, exercised only at runtime.
 | `owdb/context.py` | Replay-code context derivation |
 | `owdb/contribute.py` | Export, publish, and the multi-contributor merge |
 | `owdb/firstrun.py` | First-run helpers, retained from the removed native GUI |
-| `SPEC.md` | The original design reference these modules cite by section |
 
 ### How it connects
 
@@ -765,7 +762,7 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 | --- | --- |
 | `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`, `heroes.js`, `replaycode.js`. `names.js`, `session.js`, `opponents.js`, `frames.js`, `heroes.js` and `replaycode.js` have a co-located `*.test.js`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`, `opponents.js`, `heroes.js`, `replaycode.js`, `assign.js`, `banrow.js`, `boardreads.js`, `contribution.js`. Co-located `*.test.js` exist for `assign`, `banrow`, `boardreads`, `calibration`, `contribution`, `names`, `session`, `opponents`, `frames`, `heroes` and `replaycode`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
 | `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |
@@ -1167,7 +1164,7 @@ scrim. Same word, opposite meaning, opposite remedy.
 OCR read, and the score-box read. Side detection has since worked end to end in
 the field (2026-08-19, all ten slots), but one confirmed run is not a track
 record and the badge stays until it has several. The other two are scoped to
-phase 3 of `specs/2026-08-12-scrim-mode-design.md`.
+phase 3 of the scrim-mode plan (`PLANS.md`).
 
 **The scrim workflow lives in the pop-out panel, not on the page.** The page is
 setup — share the screen, calibrate, name the scrim — and pressing *Save scrim*
@@ -1341,6 +1338,13 @@ improvements apply retroactively.
 because the contributing machine cannot be trusted to timestamp its own
 submission. Files git knows nothing about sort last, by name.
 
+**A new upload replaces this file wholesale — it is not appended to.** The
+upload Worker's `PUT` (`infra/upload-worker/worker.js`) sends the whole
+incoming payload as the file's new content, with no merge step against what
+was already there. A contributor with two sessions' worth of maps must upload
+them together, or the second upload silently drops the first session's maps
+from the live site — see AGENTS.md's Gotchas.
+
 ### `owdb_comps.json` — the derived report
 
 Written by `owdb contribute merge` at build time, read by
@@ -1492,17 +1496,22 @@ Fixtures whose matches must stay *alive* derive their dates from
 trick in `tests/test_capture_feed.py`), so a new wipe does not silently flip
 them to dead. Keep new fixtures on that pattern rather than hard-coding a date.
 
-Recorded wipes so far: 2026-07-14, 2026-07-28, 2026-08-11 and 2026-08-18. The
-last one is dated a day early on purpose — the patch landed mid-evening on the
-19th, and `codeDead()` is date-granular, so dating it the 19th would have marked
-that day's post-patch league games dead. The comment on the entry explains why
-the two errors are not equal.
+Recorded wipes so far: 2026-07-14, 2026-07-28, 2026-08-11, 2026-08-18 and
+2026-09-07. The 2026-08-18 entry is dated a day early on purpose — the patch
+landed mid-evening on the 19th, and `codeDead()` is date-granular, so dating it
+the 19th would have marked that day's post-patch league games dead. The comment
+on the entry explains why the two errors are not equal. The 2026-09-07 entry is
+the Season 10 patch (landed 8 September ~19:00 UK), dated a day early for the
+same reason, so games played after the patch stay scoutable.
 
 ### Season cutover
 
 Season 9 finished on 2026-08-17 and is frozen at `docs/s9/`. As of 2026-09-05 the
-cutover is done in code and waits only on the operator: seed room URLs in
-`matches.txt`, a `wrangler deploy`, and the Season 10 code-wipe date.
+cutover is done in code: the seed room URLs are in `matches.txt` (all ten
+divisions, 2026-09-05) and the Season 10 wipe date is registered in
+`_SEED_WIPES`. What remains is the operator's: a `wrangler deploy` so the live
+Worker writes uploads to `data/captures/s10/` rather than `s9/` (harmless while
+no league replay code is live, wrong from the first S10 playday).
 
 **The trigger is S10 having results, not S9 ending** — those are weeks apart, and
 publishing `--season s10` in between would mean an empty site. That is why the
@@ -1518,8 +1527,8 @@ its captured comps for as long as the seeds took to arrive.
 Do not improvise the cutover. The full sequence and the reasoning behind it —
 archive export, bumping the season constants in both the Worker and
 `owdb/contribute.py`, seeding Season 10 into `matches.txt`, flipping the live
-`--season` filter — is in `specs/2026-08-10-season10-cutover-design.md`. A useful
-property noted there: a season boundary is in practice one more wipe entry, so
+`--season` filter — is in `AGENTS.md` (Roadmap) and `PLANS.md`. A useful
+property: a season boundary is in practice one more wipe entry, so
 once Season 10's wipe date is registered the capture tool stops offering Season 9
 codes on its own.
 
@@ -1549,7 +1558,7 @@ The project's vocabulary, defined once.
 | **CORE swap** | A mid-map change to a genuinely different comp. |
 | **Sub-role** | A finer classification than Tank/Damage/Support — see `faceit_sync/subroles.py`. |
 | **Region** | EMEA, NA, SA or OCE — `export.REGIONS`. Parsed from the championship name as a whole word. SA and OCE run Master and Open only. |
-| **Tier** | The division's competitive level. FACEIT's Season 10 ladder is Open, **Intermediate**, Advanced, Expert, Master (Intermediate is new in S10, EMEA/NA only). `export.TIERS` lists only Master, Expert, Advanced, Open, strongest-first — a deliberate gap while Intermediate is out of ingest scope, so an Intermediate championship would not classify. See `AGENTS.md`. |
+| **Tier** | The division's competitive level. FACEIT's Season 10 ladder is Open, **Intermediate**, Advanced, Expert, Master (Intermediate is new in S10, EMEA/NA only). `export.TIERS` lists Master, Expert, Advanced, Intermediate, Open, strongest-first, so an Intermediate championship classifies and lands in its region's switcher. A tier that does not parse degrades to an ungrouped view rather than erroring. |
 | **Division** | A region-and-tier competition, e.g. "EMEA Master Central". |
 | **Season** | A league season, e.g. `s9`. Parsed from the championship name. |
 | **Faction** | FACEIT's name for a side in a match: `faction1` or `faction2`. |
@@ -1609,13 +1618,7 @@ Rules that must not be broken, each with the failure mode it prevents.
     markup and the gate script only ever *removes* it, so a syntax error, a
     blocked script or localStorage being unavailable all leave the page locked.
     A gate that added the overlay instead would open the page on any failure.
-14. **Never commit or publish the trials page.** `faceit-sync trials`
-    (`faceit_sync/trials.py`) writes a private page naming the players you are
-    trialling, which leaks recruiting intent. `/trials.html` is gitignored
-    root-anchored, because `faceit_sync/dashboard/trials.html` is the page's
-    shell and must stay tracked; an unanchored pattern would untrack the shell.
-    The page must never be written under `docs/` (see invariant 10).
-15. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never trust a replay code read through a hand-dragged calibration box.**
     The crop is fractions of that box, and beyond roughly ±2% of strip error the
     read does not fail — it returns a well-formed code belonging to another
     game. The geometry probes in `engine/replaycode.js` now refuse instead, but
@@ -1683,8 +1686,6 @@ unattended, reading hero compositions off the HUD. It exists because capture is
 otherwise bounded by operator time: a code dies at the next patch, and nobody
 can hand-scrub a fortnight of matches before that.
 
-Design: `specs/2026-09-08-replay-bot-design.md`.
-
 ### 14.1 Scope, and why it is so narrow
 
 FACEIT already supplies the map, the code, bans, the scoreboard and both
@@ -1714,6 +1715,8 @@ an operator's: the same matcher, not a lookalike.
 | `segment.js` | Observations to rounds, opening comp and hero pool | yes |
 | `vote.js` | One slot resolved by agreement across frames | yes |
 | `resolve.js` | Per-sample reads to a per-round per-slot result + confidence flags | yes |
+| `attribute.js` | Player attribution: which FACEIT player occupies each HUD slot, abstaining rather than guessing | yes |
+| `nameplate.js` | Name-bar crops and OCR for attribution | no |
 | `emit.js` | Per-side observations in the contribution schema (per-sample, and per-round after review) | yes |
 | `review_out.js` | The session review artifact + per-round portrait crops | no |
 | `review/server.js` | The local review page: render, correct, finalize, upload | no |
@@ -1736,6 +1739,9 @@ an operator's: the same matcher, not a lookalike.
 | `codestack.js` | The rotating code stack (§14.3b): pull the top, push it to the bottom | yes |
 | `console/server.js` | Run one phase at a time against the live client, or the whole loop, watched and pausable (§14.3b) | no |
 | `console/hotkey.ps1` | The global pause/resume hotkey - a separate process the operator starts | no |
+| `capture_map.js` | One map, start to finish, using a calibrated bar instead of a duration | no |
+| `drag.js` | Seeking by dragging the scrubber (`--no-drag` falls back to counted presses) | no |
+| `score.js` | Scoreboard reading (markers → crop → OCR) | no |
 
 `driver.js` and `recorder.js` are the two that automate the client. Everything
 else reads pixels, which is ordinary use.
@@ -1751,16 +1757,20 @@ newest artifact where the operator checks every map against its portrait strip,
 corrects heroes and players (corrections are appended as data and replayed at
 finalize, so the machine's original read stays visible), and then Finalize
 rebuilds the contribution one-observation-per-round via `emit.fromRounds` and
-Upload POSTs it to the worker as `replay-bot`. See
-`specs/2026-09-10-replay-bot-autonomous-scouting-design.md`.
+Upload POSTs it to the worker as `replay-bot`.
 
 Alongside them sit tools whose only job is to look at things rather than do
 them: `contact_sheet.js` renders the ten crops of a frame, `probe_grab.ps1` and
 `probe_input.ps1` established how capture and input work at all, `probe_seek.js`
 measures how many seek presses land, `probe_limits.js` pushes the waits until
 they break, and `probe_chunk.js` does the same for chunk playback. Every number
-in §14.7 came out of one of these. The **console** (§14.3b) is the interactive
-version — one phase at a time, with the timings on sliders.
+in §14.7 came out of one of these. `scrape_codes.js` pulls fresh replay codes
+off owreplays.tv (filtered to competitive role queue and the current patch);
+`sweep.js`, `verify_sheet.js` and `confusion_matrix.js` grade the matcher
+against recorded frames; `prune_frames.js` and `prune_expired_attempts.js` keep
+`frames/` and `state/attempts.json` from growing without bound. The **console**
+(§14.3b) is the interactive version — one phase at a time, with the timings on
+sliders.
 
 ### 14.3a Running it without a client
 
@@ -1886,18 +1896,22 @@ not built today: codes die at every patch, a stale feed lists dead ones while
 looking perfectly healthy, and pointing an unattended run at it would spend the
 entire queue on codes that cannot work.
 
-### 14.5 One shot per code
+### 14.5 One attempt per ring-window
 
 Importing a code the account already holds does not overwrite or no-op — the
 client warns and requires scrolling down to select the existing entry by hand,
-which ends an unattended run. Imports also cannot be deleted individually; the
-list is a ring, and new imports evict the oldest. So:
+which ends an unattended run. But "already holds" is a **ring of the 10
+most-recent imports**: the client keeps no import history beyond that, so a code
+is only non-importable while it is still in the window. Ten newer imports evict
+the oldest, and an evicted code re-imports cleanly. So:
 
 - the account must start with **no league codes imported**;
-- **each code gets exactly one attempt**, which is why the ledger is written
-  before the import and not after — a crash between opening and finishing must
-  not leave a code looking untried;
-- a failed map is a **loss to report**, not a retry to queue.
+- within a window, **each code gets one attempt per run**, which is why the
+  ledger is written before the import and not after — a crash between opening
+  and finishing must not leave a code looking untried;
+- a failed map is **retried automatically on later runs** up to `FAIL_RETRY_CAP`
+  (3) — `isDoneEntry` keeps a `failed` entry under the cap eligible so the next
+  run picks it up again — and is only reported as a loss once the cap is hit.
 
 What makes that survivable is that every frame is kept. A better matcher can
 re-read a map with no client time and no code; only a broken *grab* is
@@ -2155,9 +2169,9 @@ Cells scoring below 0.6 are flagged in the run output rather than quietly
 averaged, and a sample whose first read scores badly is read a second time.
 
 `out/` and `state/` are gitignored. The attempt ledger in particular is
-per-machine: it records which codes *this* client has already imported, and
-since a code imports once, it must never be shared between rigs or resolved by a
-merge.
+per-machine: it records which codes *this* client currently holds in its
+10-import ring, and since the ring is per-account it must never be shared
+between rigs or resolved by a merge.
 
 ### 14.12 Terms of service
 

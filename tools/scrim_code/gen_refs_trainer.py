@@ -3,8 +3,13 @@
     python tools/scrim_code/gen_refs_trainer.py
     cd tools/scrim_code && npx overpy compile -i refs_trainer.opy -o refs_trainer.txt
 
-Then paste ``refs_trainer.txt`` into an empty custom game and run
-``owdb refs learn --auto`` while spectating. See ``README.md`` (Refs trainer).
+Then paste ``refs_trainer.txt`` into an empty custom game. Each team has one
+open slot (bots fill the rest) -- join one as a PLAYER, not a spectator, then
+start the match: Overwatch only saves a replay for matches you played in, so
+this is what lets the run be relearned afterwards from the replay viewer
+rather than only live. Run ``owdb refs learn --auto`` either way -- spectating
+the live match as before, or later against the saved replay. See
+``README.md`` (Refs trainer).
 
 The roster it bakes in must match what ``owdb refs learn --auto`` sees, so both
 call ``owdb.refs_trainer.plan_sequence`` on the same
@@ -48,24 +53,29 @@ def main(argv: list[str] | None = None) -> int:
                     help="seconds each step is held after the bots settle (default 6)")
     ap.add_argument("--settle", type=float, default=2.0,
                     help="seconds to let freshly-spawned bots render (default 2)")
+    ap.add_argument("--team-size", type=int, default=4,
+                    help="bots per team (default 4, one short of a full 5-player "
+                         "side so there's an open slot to join as a player -- "
+                         "spectating never gets you a saved replay to relearn "
+                         "refs from afterwards)")
     args = ap.parse_args(argv)
 
     names = _roster(args.faceit_db, args.db, args.only)
     mappable, unmapped = partition_roster(names)
-    rows = plan_sequence(names)
+    rows = plan_sequence(names, team_size=args.team_size)
     if not rows:
         print("error: no heroes in the roster map to a workshop Hero constant.",
               file=sys.stderr)
         return 2
 
-    src = render_opy(rows, hold=args.hold, settle=args.settle)
+    src = render_opy(rows, team_size=args.team_size, hold=args.hold, settle=args.settle)
     Path(args.out).write_text(src, encoding="utf-8")
 
     # Each step is held twice (bots alive, then killed) plus the destroy/settle/
     # kill-settle gaps (~0.5 + ~1.0).
     est = len(rows) * (2 * args.hold + args.settle + 1.5) + 5
     print(f"wrote {args.out}")
-    print(f"  {len(mappable)} heroes, {len(rows)} steps, ~{est:.0f}s to run")
+    print(f"  {len(mappable)} heroes, {len(rows)} steps of {args.team_size}, ~{est:.0f}s to run")
     if unmapped:
         print(f"  NOT covered (no workshop Hero constant): {', '.join(unmapped)}")
         print("  -> add them to owdb/refs_trainer.py _HERO_ENUM, or learn them "

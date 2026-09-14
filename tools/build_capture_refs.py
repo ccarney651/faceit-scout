@@ -24,6 +24,8 @@ import os
 import sqlite3
 from collections.abc import Callable, Iterable
 
+from owdb.match import CELL_RIGHT_TRIM_FRACTION, ULT_OVERLAY_LEFT_FRACTION, PORTRAIT_TOP_FRACTION
+
 OWDB_DB = "owdb.sqlite3"
 FACEIT_DB = "faceit.sqlite3"
 REF_W, REF_H = 64, 36
@@ -128,7 +130,13 @@ def main() -> None:
     if not refs:
         raise SystemExit(f"no refs for profile {pid} — is owdb.sqlite3 trained?")
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    payload = {"w": REF_W, "h": REF_H, "left_fraction": 0.42, "top_fraction": 0.45, "refs": refs}
+    payload = {
+        "w": REF_W, "h": REF_H,
+        "left_fraction": ULT_OVERLAY_LEFT_FRACTION,
+        "top_fraction": PORTRAIT_TOP_FRACTION,
+        "right_fraction": CELL_RIGHT_TRIM_FRACTION,
+        "refs": refs,
+    }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh)
     a = sum(1 for r in refs if r["v"] == "a")

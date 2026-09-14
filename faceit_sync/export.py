@@ -602,9 +602,8 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
     seasons.
 
     Returns ``{}`` when no division has data — the caller decides what an empty
-    build means. Split out of ``export_html`` so that the dashboard and the local
-    trials page (``faceit_sync.trials``) build their data through ONE code path
-    and cannot drift apart; ``test_trials.py`` pins the two together.
+    build means. Split out of ``export_html`` so the dashboard data payload is
+    built through one code path and cannot drift.
     """
     want_tier: str | None = None
     if only_tier:

@@ -183,6 +183,7 @@ def cmd_refs_learn(args: argparse.Namespace) -> int:
                     index_roi=index_roi,
                     flip_b=args.flip_b,
                     only=args.only,
+                    roster_size=args.roster_size,
                     dry_run=args.dry_run,
                 )
             else:
@@ -1108,6 +1109,13 @@ def build_parser() -> argparse.ArgumentParser:
     rl.add_argument("--only", default=None,
                     help="--auto: comma-separated hero names — MUST match the "
                          "gen_refs_trainer.py --only used to build the workshop code")
+    rl.add_argument("--roster-size", type=int, default=None,
+                    help="--auto: heroes per SEQ row baked into the workshop code — "
+                         "MUST match gen_refs_trainer.py's --team-size (default 4 "
+                         "since the replay-saving redesign, one seat short of the "
+                         "profile's on-screen team_size for a human/AI filler). "
+                         "Defaults to the profile's team_size for older recordings "
+                         "where every slot was a roster dummy.")
     rl.add_argument("--index-roi", default=None,
                     help="--auto: 'x,y,w,h' pixel box around the 'REFS <n>' counter "
                          "(default: a fraction-based guess for HudPosition.TOP)")

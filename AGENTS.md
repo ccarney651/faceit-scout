@@ -17,27 +17,30 @@ packages feed **one website** (`docs/index.html`):
 
 ## Read this first
 
-**`ARCHITECTURE.md` explains every part of the project and how the parts
-connect.** Read it before deep work. Fast paths:
+Three files carry the documentation, and they never overlap:
 
-| You need | Go to |
-| --- | --- |
-| Where anything lives | `ARCHITECTURE.md` §0-2 |
-| Ingest and the three data hazards | `ARCHITECTURE.md` §3 |
-| How `docs/index.html` is built | `ARCHITECTURE.md` §4 |
-| The capture pipeline | `ARCHITECTURE.md` §5-6 |
-| Scrims | `ARCHITECTURE.md` §7 |
-| CI and the Cloudflare Worker | `ARCHITECTURE.md` §8 |
-| File formats crossing a boundary | `ARCHITECTURE.md` §9 |
-| Code wipes and season cutover | `ARCHITECTURE.md` §10 |
-| Project vocabulary | `ARCHITECTURE.md` §11 |
-| **Rules that must not be broken** | **`ARCHITECTURE.md` §12** |
-| Which test guards what | `ARCHITECTURE.md` §13 |
+- **`AGENTS.md`** — this file. The rules, commands, gotchas and conventions an
+  agent must operate by. Injected into every session; keep it lean.
+- **`ARCHITECTURE.md`** — how the built system works and why. Read it before
+  deep work. Fast paths:
 
-Other documentation: `README.md` (ingest and data hazards, long-form),
-`FEATURES.md` (feature-by-feature — known to lag the code), `SPEC.md` (the
-original `owdb` design reference), `CHANGELOG.md` (what changed and when),
-`specs/` (one design and plan document per feature, plus `specs/BACKLOG.md`).
+  | You need | Go to |
+  | --- | --- |
+  | Where anything lives | `ARCHITECTURE.md` §0-2 |
+  | Ingest and the three data hazards | `ARCHITECTURE.md` §3 |
+  | How `docs/index.html` is built | `ARCHITECTURE.md` §4 |
+  | The capture pipeline | `ARCHITECTURE.md` §5-6 |
+  | Scrims | `ARCHITECTURE.md` §7 |
+  | CI and the Cloudflare Worker | `ARCHITECTURE.md` §8 |
+  | File formats crossing a boundary | `ARCHITECTURE.md` §9 |
+  | Code wipes and season cutover | `ARCHITECTURE.md` §10 |
+  | Project vocabulary | `ARCHITECTURE.md` §11 |
+  | Which test guards what | `ARCHITECTURE.md` §12 |
+
+- **`PLANS.md`** — what is *not* built yet: the backlog plus open design
+  decisions.
+
+`CHANGELOG.md` records what changed and when.
 
 ## Commands
 
@@ -60,7 +63,6 @@ faceit-sync export --format html --out docs/index.html          # build the site
 faceit-sync export --format html --out docs/index.html --region na
 faceit-sync resolve-season --season s10          # the season CI would publish today
 owdb ... contribute merge --dir data/captures/s10 --out owdb_comps.json
-faceit-sync trials --out trials.html                 # local trialist comparison (never commit it)
 ```
 
 ### Verifying the dashboard
@@ -78,9 +80,9 @@ bracket-balance checks will not catch. Always:
 
 ## Invariants
 
-These are the same rules as `ARCHITECTURE.md` §12, stated here so they are never
-one file-read away. If the two lists ever disagree, `ARCHITECTURE.md` is
-canonical and this copy is the bug.
+Rules that must not be broken, stated once, here. They are not restated in
+`ARCHITECTURE.md`; fix a disagreement by fixing the code, then updating this
+file.
 
 1. **Never hand-edit `docs/index.html`.** CI regenerates it from
    `faceit_sync/dashboard/head.html` on every run; the edit disappears at the
@@ -112,11 +114,7 @@ canonical and this copy is the bug.
     feature.
 13. **The scrim lock must fail closed.** The overlay is static markup and the
     gate only removes it, so any failure leaves the page locked.
-14. **Never commit or publish the trials page.** `faceit-sync trials` writes a
-    private page naming who you are trialling. `/trials.html` is gitignored
-    (root-anchored: `faceit_sync/dashboard/trials.html` is its shell and *is*
-    tracked), and it must never be written under `docs/`.
-15. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never trust a replay code read through a hand-dragged calibration box.**
     Past ~±2% of strip error the read returns a well-formed *wrong* code, not a
     failure. The probes in `engine/replaycode.js` refuse there now; the
     sensitivity itself remains.
@@ -227,8 +225,7 @@ canonical and this copy is the bug.
   the Worker's copy is not live until someone deploys it. The *reader* no longer
   needs keeping in step by hand — CI merges whichever season directory matches
   the season it is publishing (`faceit-sync resolve-season`). At a cutover,
-  follow `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
-  **start at its §6**, then §7 for what actually shipped.
+  follow `ARCHITECTURE.md` §10 rather than improvising.
 - **The S10 coverage is seeded and measured (2026-09-05).** Ten divisions:
   EMEA and NA Master/Expert/Advanced/**Intermediate**, plus SA Master and OCE
   Master. Open stays out and is the reason the page fits at all. The team counts
@@ -306,12 +303,9 @@ canonical and this copy is the bug.
   segment 404s.
 
 - **The replay bot lives in `tools/replay_bot/` and its facts were all measured,
-  not reasoned.** See `ARCHITECTURE.md` §14 for the full account,
-  `specs/2026-09-08-replay-bot-design.md` for the capture design,
-  `specs/2026-09-10-replay-bot-player-attribution-design.md` for player
-  attribution (`attribute.js`/`nameplate.js`), and
-  `specs/2026-09-10-replay-bot-autonomous-scouting-design.md` for the
-  confidence + review + upload layer (`resolve.js`, `review_out.js`,
+  not reasoned.** See `ARCHITECTURE.md` §14 for the full account (capture
+  design, player attribution in `attribute.js`/`nameplate.js`, and the
+  confidence + review + upload layer in `resolve.js`/`review_out.js`/
   `review/server.js`). Run its tests from inside the directory with
   `node --test` (a repo-root `node --test tools/replay_bot/` does not
   discover them). It needs
@@ -365,13 +359,14 @@ canonical and this copy is the bug.
   sit beside). It refills as people upload, so re-running it later finds more;
   running it twice in one evening will not.
 
-- **A league code can only be imported once, and that shapes everything.**
-  Importing one the account already holds makes the client warn and demand a
-  manual scroll-and-select, which ends an unattended run. Imports cannot be
-  deleted either, though the list is a ring and new ones evict the oldest. So
-  the account starts clean, **every code gets exactly one attempt**, `run.js`
-  logs a code as attempted *before* opening it, and a failed map is a loss to
-  report rather than a retry to queue. Retained frames are what make a bad read
+- **A code is only import-once per ring-window, not forever.** The client keeps
+  only its **10 most-recent imports**; importing a code still in that list warns
+  and demands a manual scroll-and-select, which ends an unattended run. The list
+  is a ring — 10 newer imports evict the oldest — so a code that has rolled off
+  re-imports cleanly. Within a run that still shapes everything: the account
+  starts clean, `run.js` logs a code as attempted *before* opening it, and a
+  failed map is retried automatically across runs up to `FAIL_RETRY_CAP` (3)
+  before it is reported as a loss. Retained frames are what make a bad read
   fixable, and only offline.
 
 - **Never point a run at a stale feed.** A `data.json` built before a patch
@@ -507,6 +502,45 @@ canonical and this copy is the bug.
   to fix it; re-run the bootstrap for side b. Mean match score is not accuracy,
   and fitting numbers to it is how the last calibration went wrong.
 
+- **A contribution upload REPLACES a contributor's whole file — it never
+  merges.** `infra/upload-worker/worker.js`'s `/` handler PUTs the incoming
+  payload verbatim to `data/captures/<season>/<contributor>.json` via GitHub's
+  contents API; there is no read-modify-merge step. Uploading a fresh session
+  drops every earlier map from that same contributor's file that isn't also in
+  the new payload. Confirmed 2026-09-12: a 270-map replay-bot upload silently
+  deleted a previously-live 6-map contribution from two days earlier. Before
+  uploading, build the FULL set the contributor should own — merge in any
+  older reviewed-but-not-yet-superseded local sessions first — rather than
+  uploading whatever the latest capture run happened to produce.
+
+- **`.github/workflows/update.yml`'s cron gate re-derives "is it 9pm London"
+  from the wall clock at the moment the job actually executes, not from which
+  cron expression fired it.** Both daily crons (20:17 and 21:17 UTC, one for
+  each side of the BST/GMT boundary) get delayed by GitHub — sometimes by 2+
+  hours — and if the delay pushes the actual run past the London-21:00 hour
+  the gate is checking for, it skips, silently, reporting `success`. Confirmed
+  2026-09-12: **every single scheduled run from at least 2026-09-06 onward
+  skipped both slots**, so the site's FACEIT database stopped picking up new
+  matches for nearly a week with no failure signal anywhere — surfaced only
+  because a contribution upload started rejecting valid maps as "game does not
+  exist." A manual `repository_dispatch` (the site's "Refresh now" button, or
+  `gh workflow run`) always forces the real fetch regardless of the gate and
+  is the immediate workaround; the gate itself still needs a fix that doesn't
+  depend on execution-time wall-clock (e.g. reading `github.event.schedule` to
+  know which cron actually fired, or widening the accepted hour window).
+
+- **`capture-read-guards` has diverged a long way from `main`.** As of
+  2026-09-12 it is 102 commits ahead / 7 behind `origin/main` — `tools/
+  replay_bot/` does not exist on `main` at all. This does not block
+  contribution uploads (the Worker commits pure JSON data straight to `main`
+  regardless of what branch produced it locally), but it does mean `owdb/db.py`
+  changes, `resolve.js`/`timing.js` fixes, and anything else made on this
+  branch stay purely local until someone deliberately merges. A wipe-date
+  registration (`e1a092a`) sat finished and tested on this branch for 4 days
+  before reaching `main` — cherry-pick a specific fix onto a worktree off
+  `origin/main` when only that one change needs to go live now; don't assume
+  committing here is the same as shipping.
+
 ## Roadmap
 
 ### Season state (2026-09-01)
@@ -537,7 +571,7 @@ so treat anything without an explicit zone as approximate to the hour.
 **Seed collection unblocks on 3 September, not on the 7th.** Bracket generation
 is what creates the S10 match rooms, so the hand-collected seed URLs
 (`matches.txt`) can be gathered four days before the first game. Everything
-`specs/BACKLOG.md` files under "around 7 September" is really "after 2026-09-03
+`PLANS.md` files under "around 7 September" is really "after 2026-09-03
 15:30". Two caveats: only round 1 exists on the day, and a division's bracket
 may lag the announced time — FACEIT says generation is slow and posts a separate
 notice when every division is done. Wait for that notice before concluding a
@@ -571,7 +605,7 @@ ingest assumptions moves. FACEIT promised a per-playday key-dates article the
 day after the season-start post; if precise playday dates ever matter, that
 article — not this table — is the source.
 
-The readiness work is **done** (2026-08-27, `specs/2026-08-27-season10-readiness-plan.md`):
+The readiness work is **done** (2026-08-27):
 Season 9 is frozen at `docs/s9/` behind `docs/archive.html`, SA/OCE are
 supported regions, the page labels the season it rendered and explains a
 finished one, and a pinned season with no data now falls back to the newest
@@ -613,7 +647,7 @@ region's switcher silently).
    still-live code from the 7th and closes the only capture window Season 10's
    first playday has.
 
-Open items: `specs/BACKLOG.md` § "Added 2026-08-27". The Season Finals shape
+Open items: `PLANS.md` § "Added 2026-08-27". The Season Finals shape
 (cross-tier, no division to attach to) is still undecided and still has until
 November.
 
@@ -655,7 +689,7 @@ November.
    invariants 12 and 13. Opening it to the public is a decision, not a cleanup
    task.
 
-   What remains, per `specs/2026-08-12-scrim-mode-design.md`: the rest of
+   What remains, per `PLANS.md`: the rest of
    opponent identification and roster search (2); the stats read plus a workshop
    hero-glyph reference set (3); the viewer's Players tab (4); sync and sharing
    (5); auto map detection (6). See `ARCHITECTURE.md` §7.
@@ -663,12 +697,11 @@ November.
    **Hero bans shipped 2026-08-28**, outside those phases:
    `tools/scrim_code/scrim_owdb.opy` runs a ban phase in setup and draws the
    result as text on the spectator view; `docs/capture/engine/banrow.js` reads
-   it back. Design: `specs/2026-08-27-scrim-hero-bans-design.md`. Its §6.1
-   records two Overwatch behaviours that each cost an in-game test cycle and are
-   invisible from compiled output — `destroyAllHudTexts()` erasing anything
-   created by a condition that never transitions again, and `getAllPlayers()`
-   with `SpecVisibility.NEVER` rendering for nobody at all. Read it before
-   touching workshop HUD code.
+   it back. Its §6.1 notes two Overwatch behaviours that each cost an in-game
+   test cycle and are invisible from compiled output — `destroyAllHudTexts()`
+   erasing anything created by a condition that never transitions again, and
+   `getAllPlayers()` with `SpecVisibility.NEVER` rendering for nobody at all.
+   Read `ARCHITECTURE.md` §7 before touching workshop HUD code.
 
    **The scoreboard read shipped 2026-09-06, and it is measured, not guessed.**
    Three rules, each of which cost a wrong turn to learn:
@@ -706,7 +739,7 @@ November.
    **Auto map detection (6) is now cheaper than it was**: the code reader can
    already tell when the replay on screen is not the one being captured. It was
    deliberately left on-demand rather than polling — see
-   `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would cost
+   `ARCHITECTURE.md` §7 for what polling would cost
    and why it was declined.
 
    **Aspect ratios other than 16:9 are no longer assumed away.** This said the
@@ -775,7 +808,9 @@ audiences if the analytics are strong enough.
   `owdb_app.py`, the PyInstaller specs, `Scout app.cmd`). Do not resurrect it.
 - **`docs/scrims.html` is the single scrims viewer.** The two implementations
   were consolidated on 2026-08-08.
-- **Feature work gets a design document then a plan**, both under `specs/`, named
-  `YYYY-MM-DD-<topic>-design.md` and `-plan.md`.
+- **Feature work gets a design document then a plan** (scoped features only), a
+  `specs/` directory created for the feature, named
+  `YYYY-MM-DD-<topic>-design.md` and `-plan.md`. The backlog lives in `PLANS.md`;
+  an item leaves it when it gets scoped.
 - **Update `CHANGELOG.md`** when a change is visible on owdb.io, changes a data
   contract, or changes an operational procedure.

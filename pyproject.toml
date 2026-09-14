@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "faceit-sync"
 version = "0.1.0"
 description = "Incremental, idempotent ingest of FACEIT League (Overwatch 2) championship data into SQLite."
-readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [

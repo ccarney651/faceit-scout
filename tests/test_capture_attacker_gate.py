@@ -1,6 +1,6 @@
 """The browser capture app's Escort/Hybrid round-3+ attacker gate.
 
-FEATURES.md documents the underlying rule: "Attack/defend is derived for
+The underlying rule: "Attack/defend is derived for
 Escort/Hybrid -- red attacks round 1, teams flip each round -- but from round 3
 the attacker is decided by time bank, not parity." The capture app previously
 kept auto-flipping its own best guess on every round, silently baking a wrong

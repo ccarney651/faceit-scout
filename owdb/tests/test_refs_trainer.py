@@ -143,7 +143,10 @@ def test_render_opy_marks_alive_then_dead_per_step() -> None:
 def test_render_opy_kills_bots_for_the_dead_pass() -> None:
     src = render_opy(plan_sequence(["Ana", "Ashe"], 5))
     assert ".disableRespawn()" in src         # so the kill sticks through the hold
-    assert "kill(getAllPlayers(), null)" in src
+    assert "kill(targets, null)" in src
+    # excludes the host (the real operator) -- killing every player used to
+    # take the operator down with the dummy roster on the first dead pass
+    assert "filter(lambda p: p != hostPlayer())" in src
 
 
 def test_render_opy_rejects_empty_plan() -> None:
