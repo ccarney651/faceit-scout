@@ -35,6 +35,7 @@ test('mapEntry writes one crop per round per side and points at them relatively'
   const frame = blankFrame();
   const got = {
     samples: [{ t: 100, framePath: frame }, { t: 500, framePath: frame }],
+    duration: 612,
   };
   const resolved = [
     { round_no: 1, from_t: 0, to_t: 300, a: [], b: [], flags: [] },
@@ -53,6 +54,7 @@ test('mapEntry writes one crop per round per side and points at them relatively'
   assert.strictEqual(entry.status, 'unreviewed');
   assert.deepStrictEqual(entry.corrections, []);
   assert.strictEqual(entry.side_a_team, 'Wasp');
+  assert.strictEqual(entry.duration_sec, 612, 'the measured length rides the artifact');
 
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -86,6 +88,7 @@ test('a round-side with a real swap gets one crop per sample, not just the openi
 
   // side b never swapped: no extra crops written, keeping the common case cheap.
   assert.strictEqual(entry.frames['1'].b_samples, undefined);
+  assert.strictEqual(entry.duration_sec, null, 'no measurement in got stays null');
 
   fs.rmSync(dir, { recursive: true, force: true });
 });

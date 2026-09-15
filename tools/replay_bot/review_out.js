@@ -116,6 +116,10 @@
       side_a_team_id: code.t1,
       side_b_team_id: code.t2,
       captured_at: new Date().toISOString(),
+      // The map's measured length in seconds, so a reviewed upload keeps the
+      // duration the live contribution carried. null for anything that did not
+      // measure it (no scrubber bar to read).
+      duration_sec: (got && got.duration != null) ? got.duration : null,
       roster: roster,
       rounds: resolved,
       attribution: attribution || null,

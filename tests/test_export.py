@@ -722,6 +722,40 @@ def test_region_filter_resolves_every_region_by_name(db: Database) -> None:
     assert [v["label"] for v in _payload(buf)["views"]] == ["SA Master"]
 
 
+def test_owdb_durations_are_emitted_into_the_payload(
+        db: Database, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Measured per-map lengths from captured contributions must reach the site
+    blob beside captured_games, so the dashboard can use real durations where a
+    capture measured one and fall back to the estimate elsewhere."""
+    _seed_divisions(db, {"em": "S10 EMEA Master Central - Regular Season"})
+    oc = tmp_path / "owdb_comps.json"
+    oc.write_text(json.dumps({
+        "captured_games": ["m-em:1"],
+        "captured_durations": {"m-em:1": 840},
+    }), encoding="utf-8")
+    monkeypatch.setenv("OWDB_COMPS", str(oc))
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    data = _payload(buf)
+    assert data["owdb_captured"] == ["m-em:1"]
+    assert data["owdb_durations"] == {"m-em:1": 840}
+
+
+def test_owdb_durations_are_absent_when_the_merge_has_none(
+        db: Database, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A contribution merge that never measured any game (all browser captures)
+    ships an empty durations map, not a missing key."""
+    _seed_divisions(db, {"em": "S10 EMEA Master Central - Regular Season"})
+    oc = tmp_path / "owdb_comps.json"
+    oc.write_text(json.dumps({"captured_games": ["m-em:1"]}), encoding="utf-8")
+    monkeypatch.setenv("OWDB_COMPS", str(oc))
+
+    buf = io.StringIO()
+    export_html(db, buf, only_season="s10")
+    assert _payload(buf)["owdb_durations"] == {}
+
+
 def test_dashboard_javascript_is_syntactically_valid(tmp_path):
     """The dashboard renders its whole body in JS, so ONE syntax error (e.g. a
     duplicate `const`) yields a completely blank page — which balanced-bracket

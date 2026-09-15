@@ -648,6 +648,15 @@ def merged_payload(
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
     payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)
+    # The measured length in seconds of each captured game, when the capture
+    # carried one (the replay bot reads it off the scrubber bar; a browser
+    # capture does not measure it). The site's playtime estimates use this where
+    # present and fall back to the flat per-mode estimate elsewhere.
+    payload["captured_durations"] = {
+        f"{k.match_id}:{k.game_no}": m["duration_sec"]
+        for k, m in merged.maps.items()
+        if m.get("duration_sec") is not None
+    }
     # Deciding-cycle attacker per captured escort/hybrid game (for the attacking-
     # first panel: FACEIT only knows the round-1 attacker, not round 3's).
     payload["attack_cycles"] = attack_first_cycles(merged.maps)

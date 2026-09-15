@@ -131,6 +131,19 @@ def test_excluded_map_leaves_the_captured_feed() -> None:
     assert payload["maps_excluded"] == 1
 
 
+def test_captured_durations_carries_measured_map_lengths() -> None:
+    """The replay bot measures each map's real length off the scrubber bar. That
+    must reach the payload keyed by the same 'match_id:game_no' as
+    captured_games — and a map without a measurement (a browser capture, or an
+    old artifact) must not appear as a bogus duration."""
+    from owdb.contribute import merged_payload
+    alice = _contrib("alice", [("m1", 1, ["ram"]), ("m1", 2, ["soj"])])
+    alice["maps"][0]["duration_sec"] = 840
+    payload = merged_payload([alice], {}, {"ram": "Ramattra", "soj": "Sojourn"})
+    assert payload["captured_durations"] == {"m1:1": 840}
+    assert "m1:2" not in payload["captured_durations"]
+
+
 def test_overrides_file_is_not_read_as_a_contribution(tmp_path: Path) -> None:
     """overrides.json lives in the same directory; it must be reserved, not
     loaded, warned about and skipped as a malformed contribution."""

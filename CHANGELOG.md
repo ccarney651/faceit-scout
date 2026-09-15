@@ -19,6 +19,19 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-15
 
+### Added
+
+- **Captures now record the map's real length.** The replay bot already
+  measured each map's duration off the scrubber bar but threw it away; that
+  number now rides the whole way to the site — the contribution's map records
+  gain a `duration_sec` field (`null` when nothing measured it, e.g. a browser
+  capture), the review artifact carries it through Finalize, the merged payload
+  exposes it as `captured_durations` (`'match_id:game_no'` → seconds), and the
+  export ships it as `owdb_durations`. `mapCoverage` uses the measured length
+  for captured games and falls back to the flat per-mode estimate everywhere
+  else. FACEIT gives no game duration, so this is the first real number where
+  an estimate used to sit.
+
 ### Changed
 
 - **The review page's Run tab can run the code-stack loop.** A new "Loop every

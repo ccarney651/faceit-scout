@@ -155,6 +155,10 @@ const HERO_SEAT={}; (DATA.heroes||[]).forEach(h=>{ if(h.subrole) HERO_SEAT[h.nam
 const SEATS=DATA.seat_order||['Tank','Hitscan','Flex DPS','Main Support','Flex Support'];
 // Games whose comps have been captured by owdb ("match_id:game_no").
 const CAPTURED=new Set(DATA.owdb_captured||[]);
+// Real measured lengths (seconds) for captured games that measured their own
+// ("match_id:game_no" -> sec) — the replay bot reads the scrubber bar. Where a
+// game is absent here, the flat per-mode estimate stands.
+const DURATIONS=DATA.owdb_durations||{};
 // OW wipes invalidate replay codes each patch: a game finished on or before this
 // date can never be replayed, so it is only "scoutable" if already captured.
 const CODE_WIPE=DATA.code_wipe||null;

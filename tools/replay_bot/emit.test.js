@@ -268,3 +268,29 @@ test('mapRecordFromRounds renames the feed fields and uses the per-round observa
   assert.strictEqual(m.observations.length, 2);
   assert.strictEqual(m.observations[0].sub_map, null);
 });
+
+// --- duration_sec: the measured map length -------------------------------
+
+// capture.js reads the map's real length off the scrubber bar; the bot's
+// duration is a measurement, and the contribution must carry it so the site's
+// playtime numbers use real lengths where they have them.
+test('mapRecord carries the measured duration from opts.durationSec', () => {
+  const s = [obs({ t: 0 })];
+  const m = EM.mapRecord(codeEntry(), s, oneRound(s), { profile: PROFILE, durationSec: 612 });
+  assert.strictEqual(m.duration_sec, 612);
+});
+
+test('mapRecord leaves duration_sec null when nothing measured it', () => {
+  const s = [obs({ t: 0 })];
+  const m = EM.mapRecord(codeEntry(), s, oneRound(s), { profile: PROFILE });
+  assert.strictEqual(m.duration_sec, null);
+});
+
+test('mapRecordFromRounds carries the measured duration, null when absent', () => {
+  const withDur = EM.mapRecordFromRounds(codeEntry(), [round(1, COMP('a'), COMP('b'))],
+    { profile: PROFILE, durationSec: 730 });
+  assert.strictEqual(withDur.duration_sec, 730);
+  const without = EM.mapRecordFromRounds(codeEntry(), [round(1, COMP('a'), COMP('b'))],
+    { profile: PROFILE });
+  assert.strictEqual(without.duration_sec, null);
+});

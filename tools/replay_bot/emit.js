@@ -92,6 +92,12 @@
       bans: [],
       captured_at: (opts && opts.capturedAt) || new Date().toISOString(),
       profile: opts && opts.profile,
+      // The map's real length in seconds, measured off the replay's scrubber
+      // bar by capture.js. Absent when a human capture (or an old artifact)
+      // did not measure it - never estimated here: a null is honestly missing,
+      // the same as the other fields the merge tolerates. The site falls back
+      // to its flat per-mode estimate where this is null.
+      duration_sec: (opts && opts.durationSec) || null,
     };
   }
 

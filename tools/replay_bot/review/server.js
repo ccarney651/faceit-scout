@@ -287,6 +287,7 @@ function finalize(review, feed) {
     return Emit.mapRecordFromRounds(code, rounds, {
       profile: { w: 2560, h: 1440, hud_variant: 'replay-bot' },
       capturedAt: m.captured_at,
+      durationSec: m.duration_sec != null ? m.duration_sec : null,
     });
   });
   return Emit.file(maps, { contributor: CONTRIBUTOR });
