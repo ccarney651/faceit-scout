@@ -364,6 +364,21 @@ function effSlot(m, round_no, side, i) {
   }
   return s;
 }
+// Player ids already claimed by this round+side's OTHER four slots (after
+// corrections) - a player can only be in one slot at once, so once they are
+// confidently matched (or a reviewer manually matches them) elsewhere, they
+// should stop being offered as a candidate for every other slot too. Recomputed
+// per render rather than cached: cheap (5 slots), and always correct after a
+// correction changes effSlot()'s output.
+function claimedElsewhere(m, round_no, side, excludeSlot) {
+  const claimed = new Set();
+  for (let j = 0; j < 5; j++) {
+    if (j === excludeSlot) continue;
+    const pid = effSlot(m, round_no, side, j).player_id;
+    if (pid) claimed.add(pid);
+  }
+  return claimed;
+}
 function setCorrection(m, c) {
   m.corrections = (m.corrections || []).filter(
     (x) => !(x.round_no === c.round_no && x.side === c.side && x.slot === c.slot && x.kind === c.kind));
@@ -586,7 +601,14 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
 
   if (SHOW_ATTRIBUTION && roster.length) {
     const chips = el('div', 'chips');
+    const claimed = claimedElsewhere(m, round_no, side, i);
     roster.forEach((p) => {
+      // Already matched to a sibling slot this round - not offered here, so a
+      // reviewer cannot accidentally double-assign one player to two slots,
+      // and an abstained slot's remaining candidates shrink as its teammates
+      // resolve. Still show THIS slot's own pick (if any) so it stays
+      // toggleable.
+      if (claimed.has(p.id) && p.id !== pid) return;
       const c = el('span', 'chip' + (p.id === pid ? ' on' : ''), p.name);
       c.onclick = () => setCorrection(m, { kind: 'player', round_no, side, slot: i,
         was_id: base.player_id || null, now_id: p.id === pid ? null : p.id }) || render();
