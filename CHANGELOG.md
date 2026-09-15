@@ -21,6 +21,32 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Added
 
+- **Doctrine (support) registered as an operator-added hero.** Revealed and
+  hero-trialled at BlizzCon; FACEIT could not stop it being picked in real
+  games even though it was not meant to be pickable, so it started showing up
+  in replay-bot captures misread as a low-confidence Baptiste. Registered as
+  `custom:doctrine` (`owdb heroes add`), with a red-team portrait reference
+  built directly from a real replay capture (`E8KD69`, side b, 4 rounds — no
+  blue-team sighting yet, tracked as a known one-sided gap in
+  `match.test.js`) since a live client to run the normal `refs learn` flow
+  wasn't available. Also fixed a real gap this surfaced: an operator-added
+  hero's role never reached `hero_roles` in `docs/capture/data.json` (only
+  FACEIT's own `heroes` table was queried), which doesn't just abstain that
+  hero's own slot — `assign.js`'s exact-cover role check mismatches for the
+  hero's WHOLE role group, abstaining every slot in it even when every other
+  read is clean. `tools/build_capture_data.py` now merges in
+  `faceit_sync/subroles.py`'s `SUBROLE` (already the committed source for
+  this per its own docstring) for any hero name FACEIT has no row for.
+- **The review page stops offering an already-claimed player as a candidate
+  for a different slot.** Every slot's correction chips used to list the
+  whole roster unconditionally, so a reviewer could accidentally assign one
+  player to two slots in the same round, and an abstained slot's candidate
+  list never shrank as its teammates resolved (confidently, or by a prior
+  manual correction) even though a player can only occupy one slot. A new
+  `claimedElsewhere()` helper excludes any player already matched to a
+  sibling slot in the same round+side — reading `effSlot()`, so it reflects
+  both an automatic confident match and a manual correction uniformly, no
+  separate code path per trigger.
 - **Captures now record the map's real length.** The replay bot already
   measured each map's duration off the scrubber bar but threw it away; that
   number now rides the whole way to the site — the contribution's map records

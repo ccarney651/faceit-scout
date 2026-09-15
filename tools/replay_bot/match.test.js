@@ -19,8 +19,20 @@ test('the whole shipped library is loaded, both variants', () => {
   const aGuids = new Set(aRefs.map((r) => r.g));
   assert.ok(aGuids.size >= 50, `only ${aGuids.size} heroes have a blue ref`);
   const bGuids = new Set(REFS_JSON.refs.filter((r) => r.v === 'b').map((r) => r.g));
-  assert.deepStrictEqual([...aGuids].sort(), [...bGuids].sort(),
-    'blue and red libraries cover the same heroes');
+  // custom:doctrine (2026-09-15): only a red-side capture exists so far - an
+  // unreleased hero picked during its BlizzCon trial before FACEIT games were
+  // meant to allow it (specs/... none yet, see PLANS.md/CHANGELOG.md). Remove
+  // this exception once a blue-side ref is captured; until then the matcher
+  // is known-weaker for Doctrine on the blue side specifically, not silently.
+  const KNOWN_ONE_SIDED = new Set(['custom:doctrine']);
+  const aCheck = new Set([...aGuids].filter((g) => !KNOWN_ONE_SIDED.has(g)));
+  const bCheck = new Set([...bGuids].filter((g) => !KNOWN_ONE_SIDED.has(g)));
+  assert.deepStrictEqual([...aCheck].sort(), [...bCheck].sort(),
+    'blue and red libraries cover the same heroes (outside KNOWN_ONE_SIDED)');
+  KNOWN_ONE_SIDED.forEach((g) => {
+    assert.ok(bGuids.has(g) && !aGuids.has(g),
+      `${g} is listed as known-one-sided but its actual coverage changed - update or remove the exception`);
+  });
 });
 
 // The strongest end-to-end check available offline: feed a stored reference

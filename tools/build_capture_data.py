@@ -33,7 +33,20 @@ import sqlite3
 from datetime import UTC, datetime
 
 from faceit_sync.models import newest_season, season_of
+from faceit_sync.subroles import FLEX_SUPPORT, HITSCAN, FLEX_DPS, MAIN_SUPPORT, SUBROLE, TANK
 from owdb.db import LATEST_KNOWN_WIPE
+
+# subroles.py's five seats, collapsed to the three roles the game enforces -
+# same collapse docs/capture/engine/heroes.js's ROLE_MAP applies.
+_SEAT_TO_ROLE = {TANK: "Tank", HITSCAN: "Damage", FLEX_DPS: "Damage",
+                 MAIN_SUPPORT: "Support", FLEX_SUPPORT: "Support"}
+
+
+def _custom_hero_guid(name: str) -> str:
+    """Mirrors owdb.db.Database.add_custom_hero's slug rule exactly - the
+    only way to land on the same `custom:...` guid without a DB round trip."""
+    slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    return f"custom:{slug}"
 
 FACEIT_DB = os.environ.get("FACEIT_DB", "faceit.sqlite3")
 OUT = os.environ.get("CAPTURE_OUT", os.path.join("docs", "capture", "data.json"))
@@ -203,6 +216,24 @@ def main() -> None:
         r["guid"]: r["role"]
         for r in con.execute("SELECT guid, role FROM heroes WHERE role IS NOT NULL")
     }
+    # A hero not yet in FACEIT's own roster (a freshly-revealed one picked
+    # before it should have been pickable, e.g. Doctrine's BlizzCon hero
+    # trial, 2026-09-15) has no row in `heroes` at all, so the query above
+    # never sees it - and without a role, assign.js's exact-cover role check
+    # mismatches for that hero's WHOLE role group (not just its own slot: the
+    # pool of real players still expects N supports/tanks/whatever, but the
+    # recognised-hero count comes up one short), abstaining every slot in the
+    # group even when every other read is clean. subroles.py's SUBROLE is the
+    # single committed source that already carries this for exactly this
+    # reason (see faceit_sync/subroles.py's own docstring) - reuse it here
+    # rather than requiring a second registration step. Only steps in for a
+    # name FACEIT genuinely has no row for; a real FACEIT hero always wins
+    # via its own guid above.
+    faceit_names = {r["name"] for r in con.execute("SELECT name FROM heroes")}
+    for name, seat in SUBROLE.items():
+        if name in faceit_names:
+            continue
+        hero_roles.setdefault(_custom_hero_guid(name), _SEAT_TO_ROLE[seat])
 
     # A roster per TEAM, across every match they have played — not just the
     # handful with live replay codes. `rosters` above is keyed by match and only
