@@ -117,6 +117,28 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Fixed
 
+- **The overnight loop stopped after two consecutive failures - the wrong
+  trade for a run nobody is watching.** `run.js --fail-streak-cap`'s default
+  of 2 is right for an attended run (a human sees the stall and fixes it),
+  but it's what killed the 2026-09-15 545-code overnight run early: two
+  back-to-back timeouts turned out to be the client losing its session state
+  (a display sleep/lock), not a stuck client, and it cost the rest of the
+  night's queue. The review page's "Loop every live code" path now always
+  passes `--fail-streak-cap 8` (`review/server.js`'s `buildRunArgs`) - loop
+  mode IS the unattended path, so a looser cap there costs a few wasted
+  attempts against a genuinely stuck client but saves the whole night against
+  a transient one. Not a measured number, just that asymmetry.
+- **A stale review-server process could finalize a contribution with the old
+  code.** Found while double-checking a Finalize: `review/server.js`'s
+  `finalize()` had been fixed to drop `status: 'excluded'` maps (see the
+  exclude entry above), but the already-running server process had loaded
+  the OLD version into memory before that fix shipped - Node does not
+  hot-reload a running process's `require()`'d modules, so the actual
+  contribution it wrote still had all 390 maps, 252 of them the excluded
+  ones. No code change; the fix is operational (restart the server after
+  editing `server.js`, same as any other long-running Node process) but
+  worth a note since nothing else would have caught it short of diffing the
+  contribution against the review artifact's status field by hand.
 - **Hero portraits were matched a few pixels out of alignment, and side b paid
   for it.** `engine/refs.js`'s matcher slid each crop over a ±2px window inside a
   **zero-filled** buffer, so a strip a few pixels off read the black band and

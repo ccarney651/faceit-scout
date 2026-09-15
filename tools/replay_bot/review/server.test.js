@@ -533,7 +533,9 @@ test('buildRunArgs routes a loop run through the code stack into its own out fil
   // Each loop session gets a timestamped console-loop-*.json, distinct from a
   // ledger run's replay-bot-<date>.json.
   assert.match(args[3], /[\\/]console-loop-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/);
-  assert.strictEqual(args.length, 4, 'no limit means exactly the four stack flags');
+  assert.deepStrictEqual(args.slice(4), ['--fail-streak-cap', '8'],
+    'loop mode is the unattended path - it needs a looser streak cap than an attended run, not run.js\'s default of 2');
+  assert.strictEqual(args.length, 6, 'no limit means exactly the six stack+cap flags');
 });
 
 test('buildRunArgs loop mode ignores divisions/teams but passes a limit through', () => {
@@ -541,8 +543,15 @@ test('buildRunArgs loop mode ignores divisions/teams but passes a limit through'
     { loop: true, divisions: 'EMEA Master', teams: 'Wasp,Crabs', limit: 5 },
     { codesFile: '/s/codes.json', outDir: '/o' });
   assert.deepStrictEqual(args.slice(0, 2), ['--code-stack', '/s/codes.json']);
-  assert.deepStrictEqual(args.slice(4), ['--limit', '5']);
-  assert.strictEqual(args.length, 6);
+  assert.deepStrictEqual(args.slice(4, 6), ['--fail-streak-cap', '8']);
+  assert.deepStrictEqual(args.slice(6), ['--limit', '5']);
+  assert.strictEqual(args.length, 8);
+});
+
+test('buildRunArgs loop mode lets an explicit failStreakCap override the looser default', () => {
+  const args = SV.buildRunArgs(
+    { loop: true, failStreakCap: 3 }, { codesFile: '/s/codes.json', outDir: '/o' });
+  assert.deepStrictEqual(args.slice(4), ['--fail-streak-cap', '3']);
 });
 
 test('refresh-feed skips the network call when the feed is already fresh today', async () => {

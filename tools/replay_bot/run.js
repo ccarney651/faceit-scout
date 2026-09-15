@@ -12,6 +12,13 @@
 //                                            instead of a finite queue - what
 //                                            the console (§14.3b) drives to
 //                                            simulate an overnight run
+//   node tools/replay_bot/run.js --code-stack state/console_codes.json --fail-streak-cap 8
+//                                            the review page's "Loop every
+//                                            live code" always passes this -
+//                                            --fail-streak-cap's default (2)
+//                                            is right for an ATTENDED run, too
+//                                            tight for an unwatched overnight
+//                                            one (see the flag's own comment)
 //
 // PAUSING. Between maps (never mid-map - a map in progress always finishes)
 // this checks for state/loop_pause.flag and, if present, waits for it to go

@@ -146,6 +146,20 @@ function feedRows(feed, attempts, opts) {
 // state/attempts.json's failed entries, joined against the feed for map/team
 // context and tagged with a category - what the review page's failures panel
 // filters on. Sorted oldest first, same order the run attempted them in.
+// run.js's own --fail-streak-cap default (2) is right for an attended run - a
+// human sees the stall and fixes it. Loop mode IS the unattended overnight
+// path (nobody there to notice a stopped run and restart it), so stopping
+// after two consecutive failures is the wrong trade there: the 2026-09-15
+// 545-code run's circuit-breaker stop turned out to be exactly this - two
+// back-to-back timeouts from the client losing its session state (a display
+// sleep/lock), not a stuck client, and it cost the rest of the night's queue.
+// A generous cap costs a handful of wasted attempts against a TRULY stuck
+// client; too tight a one costs the whole night against a transient blip -
+// asymmetric enough that looser is the safer default for this path
+// specifically. Not a measured number, just that asymmetry; retune if a real
+// stuck-client run ever burns through it.
+const LOOP_FAIL_STREAK_CAP = 8;
+
 function buildRunArgs(body, opts) {
   const args = [];
   if (body && body.loop) {
@@ -157,6 +171,7 @@ function buildRunArgs(body, opts) {
     const outDir = (opts && opts.outDir) || OUT;
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     args.push('--code-stack', codesFile, '--out', path.join(outDir, 'console-loop-' + ts + '.json'));
+    args.push('--fail-streak-cap', String((body && body.failStreakCap) || LOOP_FAIL_STREAK_CAP));
     if (body && body.limit) args.push('--limit', String(body.limit));
     return args;
   }
