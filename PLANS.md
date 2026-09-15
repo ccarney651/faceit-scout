@@ -117,6 +117,20 @@ listed here it is still open.
 - **P3 — Ref library live-frame validation is ongoing.** Refs that have never
   faced a live frame shrink with every capture; keep `doctor`/`coverage`
   surfacing the gap rather than hiding it.
+- **P2 — The two capture pages still read hero portraits on the old ±2 search.**
+  The replay bot's matcher was widened to ±14 on 2026-09-15 and its reads
+  improved measurably (low-score 24.7% → 2.9%; see `ARCHITECTURE.md` §6), but
+  `docs/capture/index.html` and `docs/capture/scrim.html` still call
+  `bestMatch(cellGrayPadded(frame, cell), side)` — the `radius == null` legacy
+  window. They cannot just pass the radius: `cellGrayPadded()` pads with a
+  **scaled copy** of the crop, so a wider window there changes the candidate's
+  scale rather than its offset, and `calibration.js`'s fast centre-only probe
+  depends on that buffer. Giving them the alignment search means a new
+  edge-clamped cell wrapper in the shared engine (the page-side equivalent of
+  `matchCrop`). Deliberately left alone on the operator's call (2026-09-15)
+  because `tools/verify_capture_browser.js` does **not** exercise the hero read
+  at all, so the change would land on live capture with no automated coverage.
+  Do it only alongside a browser check that actually performs a read.
 
 ## Replay bot
 

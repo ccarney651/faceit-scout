@@ -104,12 +104,80 @@
     var ocrLoadTimeoutMs = ctx.ocrLoadTimeoutMs || 30000;
 
     // ---------- matcher ----------
-    function bestMatch(gp, variant, fast){ const W=REF_W+2*PAD; let best={score:-2,name:'?',guid:null};
-      const offs = fast ? [PAD] : [0,PAD,2*PAD];   // fast = centre only: sensitive to box offset, for the calibrate sweep
-      for(const dy of offs) for(const dx of offs){ const cand=new Float32Array(REF_W*REF_H); let m=0;
-        for(let y=0;y<REF_H;y++){ const s=(y+dy)*W+dx; for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
+    // Offset search radius, in px, for a candidate buffer that carries a REAL
+    // edge-clamped border (matchCrop below).
+    //
+    // The ref library and the live crop can disagree by a few px: the refs are
+    // baked from one capture geometry, while the replay path re-derives the
+    // HUD's own tile pitch per map, so no fixed library can sit exactly where
+    // every frame's crop lands. Measured on retained strips (2026-09-15): a
+    // clean -4px horizontal shift takes Lucio 0.31 -> 0.84 and Bastion 0.42 ->
+    // 0.86, with 0.4-0.5 margins over the runner-up. The damage is not
+    // random - it lands on the HIGH-SPATIAL-FREQUENCY portraits (Lucio,
+    // Bastion, Ana), whose correlation peak is sharp, while smooth ones
+    // (Baptiste, D.Mon, Reinhardt) have a broad peak and never noticed. The
+    // old +/-2px window could not reach -4, so those portraits read
+    // low-but-correct forever and every one of them needed a human review.
+    //
+    // The asymmetry is why side b looked worse than side a across the whole
+    // corpus (mean 0.756 against 0.850): the b-side geometry disagreement
+    // between the baked refs and the replay crop is larger (up to ~4.3px at
+    // slot 0) than side a's (~1.3px). One global offset, filtered by portrait
+    // detail, is the whole effect.
+    //
+    // 14 is measured, not guessed. Over 10455 retained slots (2026-09-15),
+    // widening from the old +/-2 to 6/10/14 took low-score (<0.6) reads from
+    // 24.7% to 9.0%/4.5%/2.9%, and the confident-flip hazard (slots the old
+    // path read >=0.6 that changed hero) stayed flat at 0.5-0.8% throughout -
+    // nearly every flip is the SAME repair signature (Brigitte/Vendetta read
+    // 0.6x, the true hero 0.8-0.98). 6 truncates real peaks: 17.4% of its
+    // winners sit exactly on the +/-6 edge, and 10 still truncates (Winston
+    // 0.857 and Ramattra 0.862 at 10 become 0.917/0.913 at 14). 14 does NOT:
+    // re-searching r14's 344 boundary winners at r20 and r28 leaves 199 of
+    // them clamped at the r20 edge and moves the rest onto physically
+    // impossible offsets ((20,20), (22,27)) - i.e. those crops are not
+    // portraits (a badly calibrated session), so no real peak lies beyond 14.
+    // The cost is bounded: ~55ms/slot, about 4s on an ~88s map, and the bot
+    // is matchCrop's only production caller. Re-run
+    // tools/replay_bot/match_search_sweep.js if this number is ever revisited.
+    var MATCH_SEARCH = ctx.search || 14;
+
+    function bestMatch(gp, variant, fast, pad, radius){
+      if(pad==null) pad=PAD;
+      const W=REF_W+2*pad; let best={score:-2,name:'?',guid:null,dx:0,dy:0};
+      const cand=new Float32Array(REF_W*REF_H);
+      function probe(dx,dy){
+        let m=0;
+        for(let y=0;y<REF_H;y++){ const s=(y+pad+dy)*W+(pad+dx); for(let x=0;x<REF_W;x++){ const v=gp[s+x]; cand[y*REF_W+x]=v; m+=v; } }
         m/=cand.length; let ss=0; for(let i=0;i<cand.length;i++){cand[i]-=m;ss+=cand[i]*cand[i];} const cn=Math.sqrt(ss)||1;
-        for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(s>best.score) best={score:s,name:r.n,guid:r.g}; } }
+        let win=null;
+        for(const r of REFS){ if(r.v!==variant) continue; let dot=0; const rc=r.c; for(let i=0;i<cand.length;i++) dot+=rc[i]*cand[i]; const s=dot/(r.norm*cn); if(!win||s>win.score) win={score:s,name:r.n,guid:r.g}; }
+        if(win && win.score>best.score) best={score:win.score,name:win.name,guid:win.guid,dx:dx,dy:dy};
+      }
+      // Two search shapes, on purpose:
+      //  - radius == null: the legacy three-step window (-PAD, 0, +PAD) over a
+      //    PAD-padded buffer, byte-for-byte the behaviour the two capture pages
+      //    have always had. Their cellGrayPadded buffer pads with a SCALED copy
+      //    of the crop rather than a border, so a wider window there would
+      //    change the candidate's SCALE, not its offset - and the calibrate
+      //    sweep (fast=true) needs the box's own offset to stay visible in the
+      //    score, so fast is centre-only.
+      //  - radius given: a coarse 2px sweep of +/-min(radius, pad) for a buffer
+      //    whose border is real pixels (matchCrop), then a 1px refinement
+      //    around that winner. Coarse-to-fine rather than a full 1px grid
+      //    because the finer grid is quadratic in the radius - the alignment
+      //    correction is worth having on every map, and not worth a second of
+      //    CPU per frame.
+      if(radius==null){
+        const span = fast ? 0 : PAD;
+        for(let dy=-span; dy<=span; dy+=PAD) for(let dx=-span; dx<=span; dx+=PAD) probe(dx,dy);
+      } else {
+        const span = Math.min(radius, pad);
+        for(let dy=-span; dy<=span; dy+=2) for(let dx=-span; dx<=span; dx+=2) probe(dx,dy);
+        const cx=best.dx, cy=best.dy;
+        for(let dy=cy-2; dy<=cy+2; dy++) for(let dx=cx-2; dx<=cx+2; dx++)
+          if(dx>=-span && dx<=span && dy>=-span && dy<=span) probe(dx,dy);
+      }
       return best; }
 
     function heroSlug(n){ return String(n).toLowerCase().replace(/[^a-z0-9]/g,''); }
@@ -158,10 +226,21 @@
     // ---------- review & correct a captured map ----------
     function heroName(g){ if(CUSTOM_HEROES[g]) return CUSTOM_HEROES[g].name; const r=REFS.find(x=>x.g===g); return r?r.n:g; }
 
-    // Re-run the matcher on a stored 64x36 grayscale crop (centre it in the padded buffer).
-    function matchCrop(b64, side){ const px=b64bytes(b64), W=REF_W+2*PAD, gp=new Float32Array(W*(REF_H+2*PAD));
-      for(let y=0;y<REF_H;y++) for(let x=0;x<REF_W;x++) gp[(y+PAD)*W+(x+PAD)]=px[y*REF_W+x];
-      return bestMatch(gp, side); }
+    // Re-run the matcher on a stored 64x36 grayscale crop: centre it in a
+    // buffer padded by MATCH_SEARCH and sweep that window for the best
+    // alignment - see MATCH_SEARCH for why the range is what it is.
+    //
+    // The border REPEATS the edge pixel rather than holding zeros. The old
+    // zero-filled buffer was the second half of the bug: the search's own
+    // extremes read into the black band, so the two window positions that
+    // pointed furthest away were also the two that correlated worst, and the
+    // ±PAD window could never usefully reach even its own limit.
+    function matchCrop(b64, side){ const px=b64bytes(b64), pad=Math.max(PAD, MATCH_SEARCH), W=REF_W+2*pad;
+      const gp=new Float32Array(W*(REF_H+2*pad));
+      for(let y=0;y<REF_H+2*pad;y++){ const sy=y<pad?0:(y>=pad+REF_H?REF_H-1:y-pad);
+        for(let x=0;x<REF_W+2*pad;x++){ const sx=x<pad?0:(x>=pad+REF_W?REF_W-1:x-pad);
+          gp[y*W+x]=px[sy*REF_W+sx]; } }
+      return bestMatch(gp, side, false, pad, MATCH_SEARCH); }
 
     function exportRefs(){ if(!LOCAL_REFS.length && !Object.keys(CUSTOM_HEROES).length){ refMsg('nothing learned to export yet.','warn'); return; }
       const payload={format:'owdb-refs', w:REF_W, h:REF_H, left_fraction:LF, top_fraction:TF, right_fraction:RF,
