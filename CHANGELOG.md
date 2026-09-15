@@ -17,6 +17,26 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-15
+
+### Fixed
+
+- **Hero portraits were matched a few pixels out of alignment, and side b paid
+  for it.** `engine/refs.js`'s matcher slid each crop over a ±2px window inside a
+  **zero-filled** buffer, so a strip a few pixels off read the black band and
+  scored low. The symptom was side-specific and hero-specific — side b averaged
+  0.756 against side a's 0.850, Lucio 0.611, Bastion 0.621 — and the geometry
+  audit found the cause: the reference library's portrait slots sit at pitch 140
+  while the frozen calibration boxes sit at 141.25, leaving side-b offsets up to
+  +4.34px, past what ±2 can reach. `matchCrop()` now uses an **edge-clamped**
+  buffer (the border repeats the nearest pixel) and searches ±14px, a radius
+  chosen over 10,455 retained slots: low-score reads fall 24.7% → 2.9% while the
+  hazard of a wide window — a confident read flipped to a different hero — stays
+  under 1%, and every flip it does make is a repair (a 0.6x Brigitte replaced by
+  the true hero at 0.8–0.96). The two capture pages' live read path keeps the
+  byte-for-byte ±2 window, so this lands on the replay bot's reads and the review
+  page's "Teach recognition" preview.
+
 ## 2026-09-08
 
 ### Added

@@ -636,6 +636,33 @@ project's binding constraint.
 canvas and template-matches hero portraits against reference images the scout
 has learned, held in the browser's own IndexedDB.
 
+**The matcher searches ±14px, not ±2, and that is a measured number.** `refs.js`
+`bestMatch()` compares a crop against the learned references by cosine over
+L2-normalised luma, and it used to slide the crop over a three-position window of
+±`PAD` (±2px) inside a buffer whose border was **zero-filled** — so a strip a few
+pixels out of alignment read the black band, and every affected slot scored low.
+The symptom was side-specific and hero-specific: side b's reads averaged 0.756
+against side a's 0.850 (Lucio 0.611, Bastion 0.621), and the geometry audit
+found why — the profile-7 reference slots sit at pitch 140 while `calib.js`
+`FROZEN` boxes sit at pitch 141.25, leaving side-b slot offsets up to +4.34px,
+further than ±2 can reach. `matchCrop()` now builds an **edge-clamped** buffer
+(the border repeats the nearest pixel rather than zeros) and searches a coarse
+2px sweep of ±`MATCH_SEARCH` refined to 1px. The radius was settled over the
+10,455-slot retained corpus (`tools/replay_bot/match_search_sweep.js`):
+low-score reads (<0.6) fall 24.7% → 9.0% (6px) → 4.5% (10px) → 2.9% (14px), while
+the confident-flip hazard stays flat at 0.5–0.8% — every flip at 10 and 14 is the
+same repair the wider window implies (a mis-read Brigitte replaced by the true
+hero at 0.8–0.96), not a new mistake. 6px **truncates** — 17.4% of its winners
+land on the edge and the Lucio/Bastion means keep climbing past it — and 10px
+still truncates (Winston 0.857, Ramattra 0.862 become 0.917/0.913 at 14). 14px
+does not: re-searching its 344 boundary winners at 20px and 28px moves the rest
+onto physically impossible offsets like `(20,20)` and `(28,12)`, i.e. crops that
+are not a portrait at all, so there is nothing wider to find. Cost is ~55ms a
+slot, about 4s on an ~88s map. The legacy `radius == null` path in `bestMatch`
+keeps the old ±`PAD` window byte-for-byte, and that is what the two pages' live
+read path and `calibration.js`'s fast centre probe still use — only `matchCrop`
+(and so the bot and the post-hoc "Teach recognition" preview) searches wide.
+
 **Player names are read with OCR.** `tesseract.js` is loaded lazily from
 jsDelivr on first use and runs in a worker. It is optional: when it fails to
 load, capture continues without name attribution rather than breaking.
@@ -713,7 +740,7 @@ logic is owned once:
 | `engine/idb.js` | IndexedDB open/read/write; `open(version, stores)` takes its store list from the caller rather than hard-coding one |
 | `engine/frames.js` | Screen share, frame grab, greyscale canvases, HUD name-row location and name crops; `ctx.onStop` is the page-specific teardown hook |
 | `engine/calibration.js` | Box picking, auto-calibrate, calibration preview, overlay drawing; `ctx.boxKeys` scopes which calibration boxes a page owns. Auto-calibrate is a three-stage cascade — HUD structure detection, a team-colour sweep for custom palettes, then the legacy fixed-fraction sweep as a floor — with the hero matcher scoring every proposal |
-| `engine/refs.js` | Hero portrait recognition, learned references, the OCR worker |
+| `engine/refs.js` | Hero portrait recognition (cosine over luma, searching ±`MATCH_SEARCH` on an edge-clamped buffer — the radius and why are measured in §6 above), learned references, the OCR worker |
 | `engine/replaycode.js` | The replay code on the HUD banner: its Crockford Base32 alphabet, where it sits relative to the calibrated portrait strip, and whether a read is a code at all |
 | `engine/boardreads.js` | The scoreboard-row-to-player join and the delta arithmetic. Holds the WHOLE read decision (`evaluateRead`) so `scrim.html` orchestrates and renders but never decides |
 | `engine/heroes.js` | Which role each hero plays, and `byRole()` for grouping a catalogue by it. The ONE copy of the role table — `docs/scrims.html` imports it too, which is that page's only external script |
