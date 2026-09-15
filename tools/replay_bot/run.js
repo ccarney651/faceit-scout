@@ -412,6 +412,19 @@ async function main() {
   await ocrWorker.setParameters({
     tessedit_char_whitelist:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+    // A name crop is always ONE WORD, never a page - tesseract's default PSM
+    // (3, full automatic layout analysis) was built for scanned documents
+    // and regularly fails to even find a text region on a small, oddly-
+    // proportioned single-word crop, returning empty at zero confidence on
+    // an image that reads perfectly by eye. PSM 8 ("treat as a single
+    // word") matches what this crop actually is. Measured 2026-09-15
+    // (tools/replay_bot/nameplate_contrast_sweep.js's corpus, ad hoc PSM
+    // sweep): on 15 known-hard bright-plate sides, confident matches nearly
+    // TRIPLED (11/75 -> 31/75); on 15 already-good sides it also rose
+    // sharply (53/75 -> 65/75). This worker only ever OCRs name crops
+    // (the one recognize() call site below), so there is nothing else this
+    // setting could affect.
+    tessedit_pageseg_mode: '8',
   });
   const attributor = A.make(async (cv) => {
     const { data } = await ocrWorker.recognize(cv.toBuffer('image/png'));

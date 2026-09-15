@@ -106,9 +106,19 @@ listed here it is still open.
   whatever range the crop actually has, and measured BETTER than the old
   formula even on already-good dark-plate crops (84/100 vs 79/100 confident
   matches), not just neutral. `tools/replay_bot/nameplate_contrast_sweep.js`
-  is the harness. Does not fully solve bright-plate OCR (see P3, Capture app
-  section) — some glyphs render as a hollow outline that stays unreadable at
-  any contrast.
+  is the harness. Did not fully solve bright-plate OCR on its own — the next
+  fix (below) turned out to matter far more.
+- `run.js`'s OCR worker switched from tesseract's default page-segmentation
+  mode (PSM 3, full page layout) to PSM 8 ("single word") — 2026-09-15. A
+  name crop is always one word; PSM 3 regularly found no text region at all
+  on it, returning empty at zero confidence on images that read perfectly by
+  eye. The single biggest lever of the three name-OCR fixes: nearly TRIPLED
+  confident matches on known-hard bright-plate crops (11/75 → 31/75 in a
+  sample) and sharply improved already-good crops too (53/75 → 65/75).
+  Together, all three fixes recovered 616 previously-abstained slots across
+  106 maps when `tools/replay_bot/reprocess_attribution.js` re-ran the fixed
+  OCR against already-captured maps; on the active `2026-09-15-full` batch
+  the review queue fell from 99 flagged maps to 27 of 390.
 
 ## Capture app and ref library
 
@@ -147,20 +157,17 @@ listed here it is still open.
   because `tools/verify_capture_browser.js` does **not** exercise the hero read
   at all, so the change would land on live capture with no automated coverage.
   Do it only alongside a browser check that actually performs a read.
-- **P3 — Some bright-plate glyphs stay unreadable even after the contrast
-  fix (2026-09-15).** `applyNameContrast`'s percentile stretch (see Recently
-  shipped, replay bot) raises known-bad bright-plate slots from 5% to 11%
-  landing a confident name match — a real but partial recovery, not a full
-  fix. The remaining ~89% look, by eye, like an OUTLINED/embossed glyph style
-  on this specific plate variant: the letter interior sits close in
-  luminance to the plate and only a thin stroke stands out, so even a fully
-  stretched crop gives tesseract a hollow letter, not a filled one. A
-  stretch-then-morphological-close attempt (dilate then erode, to solidify
-  the outline into a blob) measured WORSE (7%), not better, so that specific
-  idea is ruled out — re-run `nameplate_contrast_sweep.js` before trying a
-  different morphology or an outline-aware OCR pass. Low priority: the
-  fill-ceiling + contrast fixes together already shrank the review queue
-  substantially on the active batch (see CHANGELOG for the current count).
+- **P3 — A residual handful of bright-plate glyphs stay unreadable even
+  after all three name-OCR fixes (2026-09-15: fill ceiling, contrast
+  stretch, PSM 8 — see Recently shipped, replay bot).** What looked at
+  first like a font-rendering problem (a hollow/outlined glyph style on one
+  plate variant) turned out to be mostly a tesseract page-segmentation
+  problem instead — PSM 8 alone recovered most of what the "outline" theory
+  predicted would need morphology to fix. What is left after all three is a
+  much smaller, not-yet-characterised tail; no working theory for it yet.
+  Low priority: 27 of 390 maps on the active batch still need a look, down
+  from 99, and most of the remaining ones are for other reasons entirely
+  (low-score, unknown-hero, genuinely contested rounds), not just this.
 ## Replay bot
 
 The replay bot lives on `tools/replay_bot/` and its full account is in

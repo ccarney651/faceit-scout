@@ -104,6 +104,10 @@ async function main() {
   await worker.setParameters({
     tessedit_char_whitelist:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+    // Matches run.js's worker config - see its comment. A name crop is one
+    // word, and PSM 8 nearly tripled recovery over the default full-page
+    // layout mode.
+    tessedit_pageseg_mode: '8',
   });
 
   let scanned = 0, skippedCorrections = 0, candidateMaps = 0, reprocessedSides = 0,

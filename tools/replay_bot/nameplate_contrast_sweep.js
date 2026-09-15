@@ -172,6 +172,10 @@ async function main() {
   await worker.setParameters({
     tessedit_char_whitelist:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+    // Matches run.js's shipped worker config (2026-09-15: PSM 8, "single
+    // word" - see its comment). Keep this sweep's baseline in step with
+    // production or its numbers stop meaning anything.
+    tessedit_pageseg_mode: '8',
   });
 
   const totals = {};

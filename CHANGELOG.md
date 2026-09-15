@@ -114,19 +114,27 @@ Entries before 2026-08-11 were reconstructed from git history.
   bright ones. Both fixes are shared `docs/capture/engine/frames.js` code, so
   they reach live capture's name OCR too, not just the replay bot's.
 
+  A third bug turned out to be the biggest of the three: the OCR worker used
+  tesseract's default page-segmentation mode (full automatic page layout,
+  built for scanned documents), which regularly failed to even find a text
+  region on a small, single-word crop — returning empty at zero confidence
+  on an image that read perfectly by eye. Every name crop is one word;
+  switching to PSM 8 ("treat as a single word") nearly TRIPLED confident
+  matches on the hardest bright-plate cases (11/75 → 31/75 in a sample) and
+  sharply improved already-good cases too (53/75 → 65/75).
+
   `tools/replay_bot/reprocess_attribution.js` re-ran the fixed OCR against
   every already-captured map with an abstained slot and a roster to try it
   against (skipping any map a human had already corrected), once per fix:
-  **204 previously-null slots recovered across 67 maps**, over the
+  **616 previously-null slots recovered across 106 maps**, over the
   `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined.
   On the active `2026-09-15-full` batch this took the review queue from 99
-  flagged maps down to 39 of 390.
+  flagged maps down to 27 of 390.
 
-  A residual case remains open (PLANS.md P3, Capture app section): some
-  bright-plate glyphs render as a hollow outline even at full contrast and
-  still don't OCR — a font-rendering problem, not a contrast one. A
-  stretch-then-morphological-close attempt measured worse, not better, and
-  was dropped.
+  A residual case remains open (PLANS.md P3, Capture app section): a handful
+  of bright-plate glyphs still don't OCR even with the row found, the
+  contrast fixed and PSM 8 in place. A stretch-then-morphological-close
+  contrast attempt measured worse, not better, and was dropped.
 
 ## 2026-09-14
 

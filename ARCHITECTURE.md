@@ -745,13 +745,25 @@ confident name match rose from 5% to 11% - real but partial, not a full fix
 neutral (84/100 vs 79/100 confident matches), so it replaced the old formula
 everywhere. A stretch-then-morphological-close variant, meant to solidify a
 hollow/outlined glyph into a filled one, measured WORSE (7%) and was
-dropped. `tools/replay_bot/reprocess_attribution.js`, re-run after both
-fixes landed, recovered 204 previously-abstained slots across 67 maps over
-the `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions
-combined - on the active `2026-09-15-full` batch, the review queue fell from
-99 flagged maps to 39 of 390. The remaining bright-plate failures look like
-an outlined/embossed glyph style specific to that plate variant - a
-font-rendering problem the contrast stretch cannot reach, not this bug.
+dropped.
+
+**A third bug turned out to be the biggest: tesseract's default page
+segmentation mode.** `run.js`'s OCR worker never set `tessedit_pageseg_mode`,
+so it ran PSM 3 (full automatic page layout, built for scanned documents) -
+which regularly found no text region at all on a small, single-word crop,
+returning empty at zero confidence on an image that read perfectly by eye.
+Every name crop IS one word; PSM 8 ("treat as a single word") nearly TRIPLED
+confident matches on known-hard bright-plate crops (11/75 -> 31/75 in a
+sample) and sharply improved already-good crops too (53/75 -> 65/75) - the
+single largest lever of the three fixes, and one that had nothing to do with
+plate colour at all.
+
+`tools/replay_bot/reprocess_attribution.js`, re-run after all three fixes
+landed, recovered 616 previously-abstained slots across 106 maps over the
+`2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined -
+on the active `2026-09-15-full` batch, the review queue fell from 99 flagged
+maps to 27 of 390. A residual handful still fails even with the row found,
+the contrast fixed, and PSM 8 in place.
 
 **Names are not how a slot is assigned to a player — role is.** Overwatch
 tournament play is role-locked, and FACEIT records the role each player queued
