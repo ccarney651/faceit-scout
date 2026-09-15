@@ -133,10 +133,28 @@ listed here it is still open.
   Do it only alongside a browser check that actually performs a read.
 - **P2 — `findNameRow`'s dark-plate assumption breaks name OCR on a bright or
   team-colour-tinted plate.** Root-caused 2026-09-15, not yet fixed — full
-  writeup, evidence and a recommended direction in
-  `specs/2026-09-15-nameplate-fill-heuristic-handoff.md`. Shared
+  writeup, evidence and three candidate directions in
+  `specs/2026-09-15-nameplate-fill-heuristic-handoff.md` §5. Shared
   `docs/capture/engine/frames.js` code, so this affects the live capture
   pages' name OCR too, not only the replay bot's `attribution-abstained` rate.
+  A measurement harness now exists,
+  `tools/replay_bot/nameplate_fill_sweep.js` (same style as
+  `match_search_sweep.js`): run against the 3 known-bad crops plus a
+  regression-safety proxy over the whole 390-map run's 780 r1 strips. First
+  pass: a global-median-relative ceiling never recovers the fragmented case
+  (2RNA0B) at any tested margin — ruled out. Both a raised fixed
+  `NAME_FILL_MAX` (~0.85+) and a local-window-relative ceiling (margin
+  ~0.30+) recover all 3 known failures and plateau at an identical, bounded
+  91/780 (11.7%) footprint once past that point (not unbounded). Of those 91,
+  88 were already broken under the shipped 0.42 (40 null, 48 a 1-2px
+  degenerate fragment — the same bug as 2RNA0B, just not yet individually
+  flagged) and only 3 had a plausible row that grew taller at the same y (no
+  evidence of the health-bar-hijack risk the original 0.42 comment warns
+  about, in this corpus). Still missing: the original dark-plate regression
+  corpus (`tools/real_frame_eval/rowfind_parity.py`, `screenshots/*.png`)
+  isn't on this machine (gitignored, no local copy) — re-run it wherever that
+  corpus exists before picking a final constant. Direction choice is still
+  the operator's call.
 
 ## Replay bot
 
