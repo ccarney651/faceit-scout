@@ -93,6 +93,12 @@ listed here it is still open.
 - Per-code retry cap (`FAIL_RETRY_CAP`, review Failures panel + retry) for the
   finite feed/queue path — 2026-09-12.
 - Frames pruned after a successful upload — 2026-09-12.
+- `findNameRow`'s dark-plate assumption (bright/team-colour plates blanked or
+  fragmented the name row) replaced with a local-relative fill ceiling,
+  floored at the old 0.42 so dark plates are unaffected — 2026-09-15. Shared
+  `docs/capture/engine/frames.js`, so live capture's name OCR gets the fix
+  too. `tools/replay_bot/nameplate_fill_sweep.js` is the harness; 3 real
+  fixtures in `docs/capture/engine/fixtures/` back `frames.test.js`.
 
 ## Capture app and ref library
 
@@ -131,31 +137,23 @@ listed here it is still open.
   because `tools/verify_capture_browser.js` does **not** exercise the hero read
   at all, so the change would land on live capture with no automated coverage.
   Do it only alongside a browser check that actually performs a read.
-- **P2 — `findNameRow`'s dark-plate assumption breaks name OCR on a bright or
-  team-colour-tinted plate.** Root-caused 2026-09-15, not yet fixed — full
-  writeup, evidence and three candidate directions in
-  `specs/2026-09-15-nameplate-fill-heuristic-handoff.md` §5. Shared
-  `docs/capture/engine/frames.js` code, so this affects the live capture
-  pages' name OCR too, not only the replay bot's `attribution-abstained` rate.
-  A measurement harness now exists,
-  `tools/replay_bot/nameplate_fill_sweep.js` (same style as
-  `match_search_sweep.js`): run against the 3 known-bad crops plus a
-  regression-safety proxy over the whole 390-map run's 780 r1 strips. First
-  pass: a global-median-relative ceiling never recovers the fragmented case
-  (2RNA0B) at any tested margin — ruled out. Both a raised fixed
-  `NAME_FILL_MAX` (~0.85+) and a local-window-relative ceiling (margin
-  ~0.30+) recover all 3 known failures and plateau at an identical, bounded
-  91/780 (11.7%) footprint once past that point (not unbounded). Of those 91,
-  88 were already broken under the shipped 0.42 (40 null, 48 a 1-2px
-  degenerate fragment — the same bug as 2RNA0B, just not yet individually
-  flagged) and only 3 had a plausible row that grew taller at the same y (no
-  evidence of the health-bar-hijack risk the original 0.42 comment warns
-  about, in this corpus). Still missing: the original dark-plate regression
-  corpus (`tools/real_frame_eval/rowfind_parity.py`, `screenshots/*.png`)
-  isn't on this machine (gitignored, no local copy) — re-run it wherever that
-  corpus exists before picking a final constant. Direction choice is still
-  the operator's call.
-
+- **P2 — `nameCrop`'s contrast stretch still washes out some bright-plate
+  glyphs even after the fill-ceiling fix.** Found 2026-09-15 while applying
+  that fix in hindsight: `nameplate.js`'s `nameCrop()` (and `frames.js`'s
+  `nameCanvas()`, the live-tool twin) boosts contrast with a FIXED formula,
+  `(g-128)*1.5+140`, tuned against a dark plate where background and glyph
+  sit far apart. On a very bright plate both are already near 255, so the
+  fixed boost clips both to white — the row is now found correctly (visible
+  by eye in the crop) but there is almost nothing left for tesseract to read.
+  Confirmed on 2 of the 3 originally-reported crops (`BM1S86`-a, `CENQKX`-a);
+  a quick percentile-based local stretch (2nd/98th percentile of the crop's
+  own luminance) made the glyphs clearly visible by eye but tesseract still
+  mostly failed on them — these two look like an OUTLINED/embossed glyph
+  style specific to this plate variant, not just a contrast problem, so a
+  min-max stretch alone is not a full fix. Not shipped: only spot-checked
+  against 2 crops, no regression sweep against the rest of the corpus the way
+  the fill-ceiling fix got. Needs the same rigor (a harness, a corpus check)
+  before changing shared code again.
 ## Replay bot
 
 The replay bot lives on `tools/replay_bot/` and its full account is in

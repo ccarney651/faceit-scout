@@ -687,25 +687,49 @@ the 90 resolves once the role constraint is applied - against 36 of 90 with two
 (1800 box/resolution variants, all landing on the row) and a parity check that
 runs the shipped JS over real pixels.
 
-**The dark-plate assumption breaks on a bright/colour-tinted name plate.**
-(2026-09-15, unresolved — see
-`specs/2026-09-15-nameplate-fill-heuristic-handoff.md`.) `findNameRow`'s
-per-row `score` is zeroed whenever a row's bright-pixel fill exceeds
-`NAME_FILL_MAX` (0.42), which is what tells real name text apart from a health
-bar on the dark plate the constant was measured against. A team-colour-tinted
-plate (light blue, bright red) can push the *name text's own row* fill above
-that ceiling — reproduced two ways on the 2026-09-15 390-map run: a light-blue
-plate zeroes every text row outright (`findNameRow` returns `null`, five blank
-OCR reads for that side), a red plate zeroes just enough interior rows to
-fragment the run into the wrong (much shorter) one, so `nameCrop` hands
-tesseract a one-pixel sliver of glyph tops instead of the glyphs. Both produce
-`attribution-abstained`, indistinguishable from every other cause without
-reading `m.attribution.reads` off the review artifact (kept exactly for this -
-see its own comment in `attribute.js`). Distinct from, and not fixed by, the
-2026-09-15 `sample.quiesceMs` 700→1300 change (CHANGELOG) — that targets a
-frame caught mid-transition; this is a fully-settled frame the heuristic
-still cannot read. Shared code (`docs/capture/engine/frames.js`), so a fix
-here also reaches the live capture pages' name OCR, not just the bot's.
+**The dark-plate assumption broke on a bright/colour-tinted name plate, fixed
+2026-09-15.** `findNameRow`'s per-row `score` used to be zeroed whenever a
+row's bright-pixel fill exceeded a FIXED `NAME_FILL_MAX` (0.42), which is what
+told real name text apart from a health bar on the dark plate the constant was
+measured against. A team-colour-tinted plate (light blue, bright red) could
+push the *name text's own row* fill above that ceiling — reproduced two ways
+on the 2026-09-15 390-map run: a light-blue plate zeroed every text row
+outright (`findNameRow` returned `null`, five blank OCR reads for that side),
+a red plate zeroed just enough interior rows to fragment the run into the
+wrong (much shorter) one, so `nameCrop` handed tesseract a one-pixel sliver of
+glyph tops instead of the glyphs. Both produced `attribution-abstained`,
+indistinguishable from every other cause without reading `m.attribution.reads`
+off the review artifact (kept exactly for this - see its own comment in
+`attribute.js`). Distinct from, and not fixed by, the 2026-09-15
+`sample.quiesceMs` 700→1300 change (CHANGELOG) — that targets a frame caught
+mid-transition; this was a fully-settled frame the heuristic still could not
+read.
+
+The fix (`tools/replay_bot/nameplate_fill_sweep.js` is the harness that
+measured it, full writeup in
+`specs/2026-09-15-nameplate-fill-heuristic-handoff.md`): judge each row
+against its own LOCAL plate baseline - the mean fill of a gapped window of
+nearby rows, floored at the old 0.42 so a genuinely dark plate behaves exactly
+as before - rather than one flat ceiling for every plate. Same principle as
+the scrim scoreboard's local-contrast fix (`scrim.html`'s `scoreCanvas`): "how
+filled is this row" only means something relative to how filled the plate
+around it already is. Recovers all 3 known-bad crops and touches an identical,
+bounded 91/780 (11.7%) of the 2026-09-15 run's r1 strips whether reached via a
+raised fixed ceiling (~0.85+) or this local one (margin ~0.30+) - of those 91,
+88 were already broken under the old 0.42 (40 null, 48 a 1-2px degenerate
+fragment) and only 3 had a plausible row that grew taller at the same y (no
+health-bar-hijack observed). A first draft with no floor regressed a synthetic
+dark-plate case in `frames.test.js` - a wide, genuinely near-black band made
+the local baseline near 0, so margin-only could compute a ceiling BELOW 0.42
+and re-zero text the original constant always passed; the floor is why that
+can no longer happen. Real fixtures from the 3 known-bad crops, reduced to
+luminance only, back three `frames.test.js` cases directly
+(`docs/capture/engine/fixtures/`). Shared code
+(`docs/capture/engine/frames.js`), so the fix reaches the live capture pages'
+name OCR too, not just the bot's. Still outstanding: the original dark-plate
+regression corpus (`tools/real_frame_eval/rowfind_parity.py`,
+`screenshots/*.png`) is not on this machine (gitignored, no local copy) -
+re-run it wherever that corpus exists as a final check.
 
 **Names are not how a slot is assigned to a player — role is.** Overwatch
 tournament play is role-locked, and FACEIT records the role each player queued

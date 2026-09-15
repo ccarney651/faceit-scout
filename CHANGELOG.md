@@ -94,6 +94,27 @@ Entries before 2026-08-11 were reconstructed from git history.
   byte-for-byte ±2 window, so this lands on the replay bot's reads and the review
   page's "Teach recognition" preview.
 
+- **Name OCR blanked or garbled on a bright or team-coloured name plate.**
+  `findNameRow`'s row-fill check used a fixed ceiling tuned only against dark
+  plates; a light-blue or red team-coloured plate pushed real name text above
+  it, either blanking the whole side's OCR or fragmenting it into a one-pixel
+  sliver — both surfaced as `attribution-abstained` with no way to tell them
+  apart from every other cause without reading the review artifact's raw OCR
+  strings. The ceiling is now judged against each row's own local
+  surroundings (floored at the old fixed value, so a genuinely dark plate is
+  unaffected) — the same fix already shipped for the scrim scoreboard's read.
+  Shared `docs/capture/engine/frames.js`, so this reaches live capture's name
+  OCR too, not just the replay bot's. `tools/replay_bot/reprocess_attribution.js`
+  re-ran the fixed OCR against every already-captured map with an abstained
+  slot and a roster to try it against (skipping any map a human had already
+  corrected): 84 previously-null slots recovered across 31 maps, over the
+  `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined.
+  A residual case remains open: two of the three originally-reported crops
+  now locate the right row but still OCR blank - the plate's own contrast
+  stretch (tuned for a dark plate the same way the fill ceiling was) washes
+  an already-faint bright-plate glyph out further; tracked as a follow-up,
+  not fixed here.
+
 ## 2026-09-14
 
 ### Changed

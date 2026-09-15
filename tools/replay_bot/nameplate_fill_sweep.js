@@ -1,22 +1,29 @@
 // tools/replay_bot/nameplate_fill_sweep.js
-// Measurement harness for the dark-plate fill-ceiling bug documented in
-// specs/2026-09-15-nameplate-fill-heuristic-handoff.md. Compares candidate
-// fixes for findNameRow()'s NAME_FILL_MAX against:
-//   (1) the 3 known-broken bright/team-colour-plate crops from the
-//       2026-09-15 390-map run (does a candidate recover a sane row?)
-//   (2) every other r1 strip crop in that same run, using the SHIPPED
-//       algorithm's own row as a regression-safety baseline (does a
-//       candidate move a row that currently looks fine?)
+// Validation harness for the dark-plate fill-ceiling fix documented in
+// specs/2026-09-15-nameplate-fill-heuristic-handoff.md.
 //
-// This does NOT decide the fix - see the handoff's §5 for the three
-// directions and their tradeoffs. It only gives numbers to decide with.
+// docs/capture/engine/frames.js's findNameRow now judges a row's fill
+// against ITS OWN LOCAL plate baseline (floored at the old fixed 0.42, so a
+// dark plate behaves exactly as before) instead of a flat ceiling. This
+// harness checks that change two ways:
+//   (1) the 3 known-broken bright/team-colour-plate crops from the
+//       2026-09-15 390-map run - does the shipped algorithm now recover a
+//       sane row on all three?
+//   (2) every other r1 strip crop in that same run, comparing the SHIPPED
+//       algorithm against the OLD fixed-0.42 one it replaced, as a
+//       regression-safety proxy (does the new algorithm move a row that the
+//       old one already found fine?).
+//
 // There is no hand-labelled ground truth here beyond the 3 known-bad crops;
-// "baseline" for every other crop means "what the shipped 0.42 constant
-// currently finds", not an independently-verified truth. The original
-// dark-plate regression corpus (tools/real_frame_eval/rowfind_parity.py,
-// screenshots/*.png) is NOT available on this machine (gitignored, no
-// local copy) - re-run that check separately wherever screenshots/ exists
-// before shipping any change.
+// "old" for every other crop means "what the fixed-0.42 constant used to
+// find", not an independently-verified truth. frames.test.js is the
+// synthetic ground-truth check (and already caught one real regression in
+// this fix's first draft - a margin with no floor could compute a ceiling
+// BELOW 0.42 on a wide, genuinely dark band). The original dark-plate
+// regression corpus (tools/real_frame_eval/rowfind_parity.py,
+// screenshots/*.png) is NOT available on this machine (gitignored, no local
+// copy) - re-run that check separately wherever screenshots/ exists before
+// changing either constant again.
 //
 // Usage: node tools/replay_bot/nameplate_fill_sweep.js [session-dir]
 //   default session: out/replay-bot-2026-09-15-full
@@ -43,10 +50,10 @@ const KNOWN_BAD = [
   { file: '2RNA0B-r1-b.png', side: 'b', note: 'red plate, fragmented (reads.b garbage)' },
 ];
 
-// --- candidate row-finders, mirroring frames.js findNameRow's structure ---
-// Kept in step manually with docs/capture/engine/frames.js, the same way
-// tools/real_frame_eval/rowfind_proto.py mirrors it for the dark-plate sweep.
-const NAME_RUN_FRAC = 0.35;
+// The OLD algorithm (fixed 0.42 ceiling, no local baseline), kept here only
+// as the "what did this replace" comparison point - mirrors frames.js's
+// pre-2026-09-15 findNameRow exactly.
+const OLD_FILL_MAX = 0.42, NAME_RUN_FRAC = 0.35;
 
 function profile(rgba, w, h) {
   const lum = new Uint8Array(w * h), hist = new Uint32Array(256);
@@ -103,45 +110,10 @@ function pickRun(score, tr, fill, h) {
   return best ? { y: best[0], h: best[1] - best[0] + 1 } : null;
 }
 
-// A. fixed ceiling at a different constant.
-function findRowFixed(rgba, w, h, ceiling) {
+function findRowOld(rgba, w, h) {
   const { fill, tr } = profile(rgba, w, h);
   const score = new Float64Array(h);
-  for (let y = 0; y < h; y++) score[y] = fill[y] <= ceiling ? tr[y] : 0;
-  return pickRun(score, tr, fill, h);
-}
-
-// B. ceiling relative to the band's own background fill (median across the
-// band, on the theory that most rows are plate-only and text rows are the
-// minority whose fill sits above that baseline by roughly a fixed margin).
-function findRowRelative(rgba, w, h, margin) {
-  const { fill, tr } = profile(rgba, w, h);
-  const sorted = Array.from(fill).sort((a, b) => a - b);
-  const bg = sorted[Math.floor(sorted.length / 2)];
-  const ceiling = Math.min(0.97, bg + margin);
-  const score = new Float64Array(h);
-  for (let y = 0; y < h; y++) score[y] = fill[y] <= ceiling ? tr[y] : 0;
-  return { row: pickRun(score, tr, fill, h), bg, ceiling };
-}
-
-// B2. ceiling relative to a LOCAL background fill per row (mean fill of a
-// +/-8 row window, excluding the +/-2 rows nearest the candidate row itself,
-// so the plate colour right around a name doesn't get diluted by whatever
-// else - portrait bottom, health bar - sits elsewhere in the band). Adapts
-// per-row instead of picking one scalar for the whole band.
-function findRowLocalRelative(rgba, w, h, margin) {
-  const { fill, tr } = profile(rgba, w, h);
-  const score = new Float64Array(h);
-  for (let y = 0; y < h; y++) {
-    let sum = 0, n = 0;
-    for (let k = Math.max(0, y - 8); k <= Math.min(h - 1, y + 8); k++) {
-      if (Math.abs(k - y) <= 2) continue;
-      sum += fill[k]; n++;
-    }
-    const localBg = n ? sum / n : fill[y];
-    const ceiling = Math.min(0.97, localBg + margin);
-    score[y] = fill[y] <= ceiling ? tr[y] : 0;
-  }
+  for (let y = 0; y < h; y++) score[y] = fill[y] <= OLD_FILL_MAX ? tr[y] : 0;
   return pickRun(score, tr, fill, h);
 }
 
@@ -164,130 +136,56 @@ async function band(img, box) {
   return { data: cx.getImageData(0, 0, w, h).data, w, h, y0 };
 }
 
-const FIXED_CANDIDATES = [0.42, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95];
-const RELATIVE_MARGINS = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40];
-
 async function main() {
   console.log(`session: ${SESSION}\n`);
 
-  // --- Part 1: the 3 known-bad crops -------------------------------------
-  console.log('=== KNOWN-BAD CROPS ===');
+  console.log('=== KNOWN-BAD CROPS (does the SHIPPED algorithm now recover them?) ===');
+  let allRecovered = true;
   for (const kb of KNOWN_BAD) {
     const p = path.join(CROPS, kb.file);
     if (!fs.existsSync(p)) { console.log(`  ${kb.file}: MISSING`); continue; }
     const img = await loadImage(p);
     const box = rebase(img);
     const b = await band(img, box);
-    console.log(`\n${kb.file} side=${kb.side}  (${kb.note})`);
-    console.log(`  band: ${b.w}x${b.h}px`);
-
-    const shipped = Frames.findNameRow(b.data, b.w, b.h);
-    console.log(`  shipped (0.42): ${shipped ? `y=${shipped.y} h=${shipped.h}` : 'null'}`);
-
-    console.log('  fixed-ceiling sweep:');
-    for (const c of FIXED_CANDIDATES) {
-      const r = findRowFixed(b.data, b.w, b.h, c);
-      console.log(`    ceiling=${c.toFixed(2)}: ${r ? `y=${r.y} h=${r.h}` : 'null'}`);
-    }
-
-    console.log('  relative-ceiling sweep (bg=median fill, ceiling=bg+margin):');
-    for (const m of RELATIVE_MARGINS) {
-      const { row, bg, ceiling } = findRowRelative(b.data, b.w, b.h, m);
-      console.log(`    margin=${m.toFixed(2)} (bg=${bg.toFixed(3)} ceiling=${ceiling.toFixed(3)}): ${row ? `y=${row.y} h=${row.h}` : 'null'}`);
-    }
-
-    console.log('  local-relative-ceiling sweep (bg=+/-8 row window, ceiling=localBg+margin):');
-    for (const m of RELATIVE_MARGINS) {
-      const row = findRowLocalRelative(b.data, b.w, b.h, m);
-      console.log(`    margin=${m.toFixed(2)}: ${row ? `y=${row.y} h=${row.h}` : 'null'}`);
-    }
+    const oldRow = findRowOld(b.data, b.w, b.h);
+    const newRow = Frames.findNameRow(b.data, b.w, b.h);
+    const sane = newRow && newRow.h >= 10 && newRow.h <= 25;
+    if (!sane) allRecovered = false;
+    console.log(`${kb.file} side=${kb.side}  (${kb.note})`);
+    console.log(`  old (fixed 0.42): ${oldRow ? `y=${oldRow.y} h=${oldRow.h}` : 'null'}`);
+    console.log(`  new (shipped):    ${newRow ? `y=${newRow.y} h=${newRow.h}` : 'null'}  ${sane ? '-> sane row height' : '-> STILL LOOKS BROKEN'}`);
   }
+  console.log(`\n${allRecovered ? 'ALL 3 known-bad crops recovered a sane row.' : 'NOT ALL known-bad crops recovered - investigate before shipping.'}`);
 
-  // --- Part 2: regression-safety proxy over the rest of the run ----------
-  console.log('\n\n=== REGRESSION-SAFETY PROXY (r1 crops, whole session) ===');
-  console.log('baseline = what the SHIPPED 0.42 ceiling currently finds - not independently verified truth.\n');
-
+  console.log('\n=== REGRESSION-SAFETY PROXY (r1 crops, whole session, new vs old) ===');
   const files = walkR1(CROPS);
-  let total = 0, baseNull = 0;
-  const fixedStats = new Map(FIXED_CANDIDATES.map((c) => [c, { changed: 0, nowNull: 0, recoveredFromNull: 0 }]));
-  const relStats = new Map(RELATIVE_MARGINS.map((m) => [m, { changed: 0, nowNull: 0, recoveredFromNull: 0 }]));
-  const localRelStats = new Map(RELATIVE_MARGINS.map((m) => [m, { changed: 0, nowNull: 0, recoveredFromNull: 0 }]));
-
-  const sample85 = [];
-  let degenerateFixed85 = 0, plausibleMoved85 = 0;
-  const moved85 = [];
+  let total = 0, oldNull = 0, newNull = 0, changed = 0, recoveredFromNull = 0, degenerateFixed = 0, plausibleMoved = 0;
+  const moved = [];
   for (const f of files) {
     const img = await loadImage(path.join(CROPS, f));
     const box = rebase(img);
     const b = await band(img, box);
-    const base = Frames.findNameRow(b.data, b.w, b.h);
+    const oldRow = findRowOld(b.data, b.w, b.h);
+    const newRow = Frames.findNameRow(b.data, b.w, b.h);
     total++;
-    if (!base) baseNull++;
-
-    for (const c of FIXED_CANDIDATES) {
-      const r = findRowFixed(b.data, b.w, b.h, c);
-      const s = fixedStats.get(c);
-      const changedRow = (!!r !== !!base) || (r && base && (r.y !== base.y || r.h !== base.h));
-      if (changedRow) s.changed++;
-      if (!r) s.nowNull++;
-      if (!base && r) s.recoveredFromNull++;
-      if (c === 0.85 && changedRow && base) {
-        if (sample85.length < 15) sample85.push({ f, baseY: base.y, baseH: base.h, newY: r ? r.y : null, newH: r ? r.h : null });
-        if (base.h <= 2) degenerateFixed85++;
-        else { plausibleMoved85++; if (moved85.length < 20) moved85.push({ f, base, r }); }
-      }
-    }
-    for (const m of RELATIVE_MARGINS) {
-      const { row: r } = findRowRelative(b.data, b.w, b.h, m);
-      const s = relStats.get(m);
-      const changedRow = (!!r !== !!base) || (r && base && (r.y !== base.y || r.h !== base.h));
-      if (changedRow) s.changed++;
-      if (!r) s.nowNull++;
-      if (!base && r) s.recoveredFromNull++;
-    }
-    for (const m of RELATIVE_MARGINS) {
-      const r = findRowLocalRelative(b.data, b.w, b.h, m);
-      const s = localRelStats.get(m);
-      const changedRow = (!!r !== !!base) || (r && base && (r.y !== base.y || r.h !== base.h));
-      if (changedRow) s.changed++;
-      if (!r) s.nowNull++;
-      if (!base && r) s.recoveredFromNull++;
+    if (!oldRow) oldNull++;
+    if (!newRow) newNull++;
+    const isChanged = (!!oldRow !== !!newRow) || (oldRow && newRow && (oldRow.y !== newRow.y || oldRow.h !== newRow.h));
+    if (isChanged) {
+      changed++;
+      if (!oldRow) recoveredFromNull++;
+      else if (oldRow.h <= 2) degenerateFixed++;
+      else { plausibleMoved++; if (moved.length < 20) moved.push({ f, oldRow, newRow }); }
     }
   }
-
-  console.log(`${total} r1 strips, ${baseNull} currently null under shipped 0.42 (${(100 * baseNull / total).toFixed(1)}%)\n`);
-  console.log('fixed-ceiling candidates (vs shipped-0.42 baseline):');
-  for (const c of FIXED_CANDIDATES) {
-    const s = fixedStats.get(c);
-    console.log(`  ceiling=${c.toFixed(2)}: row differs from baseline on ${s.changed}/${total} (${(100 * s.changed / total).toFixed(1)}%),  still/now null ${s.nowNull},  recovered-from-null ${s.recoveredFromNull}`);
-  }
-  console.log('\nrelative-ceiling candidates (global median bg, vs shipped-0.42 baseline):');
-  for (const m of RELATIVE_MARGINS) {
-    const s = relStats.get(m);
-    console.log(`  margin=${m.toFixed(2)}: row differs from baseline on ${s.changed}/${total} (${(100 * s.changed / total).toFixed(1)}%),  still/now null ${s.nowNull},  recovered-from-null ${s.recoveredFromNull}`);
-  }
-
-  console.log('\nlocal-relative-ceiling candidates (+/-8 row window bg, vs shipped-0.42 baseline):');
-  for (const m of RELATIVE_MARGINS) {
-    const s = localRelStats.get(m);
-    console.log(`  margin=${m.toFixed(2)}: row differs from baseline on ${s.changed}/${total} (${(100 * s.changed / total).toFixed(1)}%),  still/now null ${s.nowNull},  recovered-from-null ${s.recoveredFromNull}`);
-  }
-
-  console.log('\nsample of strips where ceiling=0.85 changed an ALREADY-NON-NULL baseline row');
-  console.log('(the ones worth eyeballing for a health-bar false-positive, per the original');
-  console.log('NAME_FILL_MAX comment\'s "brightest thing in the crop is the health bar" risk):');
-  sample85.forEach((s) => {
-    console.log(`  ${s.f}: base y=${s.baseY} h=${s.baseH}  ->  0.85 y=${s.newY} h=${s.newH}`);
-  });
-  console.log(`\nclassification of ALL non-null strips ceiling=0.85 changed: ${degenerateFixed85} were already degenerate (baseline h<=2px, same fragment bug as 2RNA0B) and got a sane row; ${plausibleMoved85} had a plausible-looking baseline row (h>2px) that MOVED - these are the ones that would need an eyeball check for a health-bar false-positive.`);
-  moved85.forEach((m) => console.log(`  MOVED ${m.f}: base y=${m.base.y} h=${m.base.h}  ->  0.85 y=${m.r.y} h=${m.r.h}`));
-
-  console.log('\nNOTE: "differs from baseline" is not "wrong" - on the 3 known-bad crops above,');
-  console.log('differing from baseline IS the fix working. This count is only useful for the');
-  console.log('MAJORITY of strips that are presumed dark-plate-and-fine today; a candidate that');
-  console.log('recovers the known-bad crops while touching very few of the rest is the shape of');
-  console.log('a good fix. Confirm any real change against tools/real_frame_eval/rowfind_parity.py');
-  console.log('on a machine that still has the screenshots/ corpus before shipping.');
+  console.log(`${total} r1 strips`);
+  console.log(`old (fixed 0.42): ${oldNull} null (${(100 * oldNull / total).toFixed(1)}%)`);
+  console.log(`new (shipped):    ${newNull} null (${(100 * newNull / total).toFixed(1)}%)`);
+  console.log(`\nrow differs from old on ${changed}/${total} (${(100 * changed / total).toFixed(1)}%):`);
+  console.log(`  recovered-from-null: ${recoveredFromNull}`);
+  console.log(`  fixed a degenerate (old h<=2px) fragment: ${degenerateFixed}`);
+  console.log(`  moved a PLAUSIBLE old row (h>2px, worth an eyeball): ${plausibleMoved}`);
+  moved.forEach((m) => console.log(`    MOVED ${m.f}: old y=${m.oldRow.y} h=${m.oldRow.h}  ->  new y=${m.newRow.y} h=${m.newRow.h}`));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

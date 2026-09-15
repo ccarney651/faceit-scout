@@ -64,7 +64,45 @@
   // brighter" or "which is first" test: the bar out-scores a short name on
   // brightness, and the hero portrait sits ABOVE the name, so both of those
   // shortcuts were tried and both picked the wrong band.
-  var NAME_FILL_MAX = 0.42;
+  //
+  // 2026-09-15: that fill test used to be against a FIXED ceiling (0.42),
+  // which assumed the plate under the name is always dark. A light-blue or
+  // saturated-red team-colour plate breaks that assumption exactly the way a
+  // fixed brightness value once broke the scrim scoreboard's read (see
+  // scrim.html's scoreCanvas comment) - the whole row, glyphs and gaps alike,
+  // sits above a flat 0.42 ceiling, so real text gets zeroed out or shredded
+  // into a one-pixel sliver. The fix is the same one that fixed the
+  // scoreboard: judge a row against its OWN LOCAL surroundings, not a value
+  // that only held for the plates it was tuned on. NAME_FILL_MARGIN is how
+  // much fuller a row may be than the plate immediately around it (sampled
+  // from a window of nearby rows, gapped so a text row's own coverage does
+  // not inflate its own baseline) and still count as candidate text.
+  //
+  // specs/2026-09-15-nameplate-fill-heuristic-handoff.md root-caused this;
+  // tools/replay_bot/nameplate_fill_sweep.js is the harness that measured
+  // the replacement - a global-median-relative ceiling never recovered the
+  // fragmented case at any tested margin (ruled out), while both a raised
+  // fixed ceiling and this local one recovered all 3 known-bad crops and
+  // plateaued at an identical, bounded ~11.7% footprint of the 780-strip
+  // 2026-09-15 corpus once the margin/ceiling was generous enough. The local
+  // form is kept because a fixed ceiling is the same kind of number that
+  // already failed once (0.42 itself) and would need retuning again for the
+  // next plate brighter than anything measured so far; a local margin
+  // adapts to a plate's own brightness without a human in the loop.
+  //
+  // NAME_FILL_FLOOR keeps the OLD fixed value as a floor under the new local
+  // one, not a replacement for it: frames.test.js's synthetic dark-plate case
+  // caught a real regression here first - a wide, genuinely near-black band
+  // (this repo has no adversarial-enough real crop for it, only a synthetic
+  // one) makes the local baseline near 0, so a margin alone can compute a
+  // ceiling BELOW 0.42 and re-zero text that the original constant always
+  // passed. `localBg + margin` only ever RAISES the ceiling above the floor,
+  // for a plate brighter than the floor already assumed; it never lowers it.
+  // Re-run frames.test.js, nameplate_fill_sweep.js, and
+  // tools/real_frame_eval/rowfind_parity.py's dark-plate corpus (wherever
+  // screenshots/ is available) before changing any constant below.
+  var NAME_FILL_FLOOR = 0.42;
+  var NAME_FILL_MARGIN = 0.30;
   var NAME_RUN_FRAC = 0.35;   // rows scoring this share of the peak join a run
 
   // findNameRow(rgba, w, h) -> { y, h } | null
@@ -73,9 +111,9 @@
   // Returns the text row's position within that band.
   //
   // Text is a row with many horizontal light/dark transitions that does not
-  // fill the strip; the run of such rows sitting in the quietest surroundings
-  // wins, because the HUD draws the names on a dark plate and nothing else in
-  // the band has empty rows above and below it.
+  // fill much MORE of the strip than the plate around it already does; the
+  // run of such rows sitting in the quietest surroundings wins, because
+  // nothing else in the band has empty rows above and below it.
   function findNameRow(rgba, w, h) {
     if (!w || !h || !rgba || rgba.length < w * h * 4) return null;
     var lum = new Uint8Array(w * h), hist = new Uint32Array(256), i, j, y, x;
@@ -100,7 +138,24 @@
         prev = v;
       }
       fill[y] = on / w; tr[y] = ch / w;
-      score[y] = fill[y] <= NAME_FILL_MAX ? tr[y] : 0;
+    }
+
+    // Each row's own LOCAL plate baseline: mean fill of a window of nearby
+    // rows, gapped around the row itself so a genuine text row's own
+    // coverage cannot inflate the baseline it is being judged against. The
+    // window scales with the band's height the same way the scoreboard's
+    // blur radius scales with its crop - both are standing in for "about the
+    // size of a glyph's neighbourhood," not a fixed pixel count.
+    var WIN = Math.max(6, Math.round(h * 0.2)), GAP = Math.max(2, Math.round(WIN * 0.25));
+    for (y = 0; y < h; y++) {
+      var s = 0, n = 0;
+      for (var k2 = Math.max(0, y - WIN); k2 <= Math.min(h - 1, y + WIN); k2++) {
+        if (Math.abs(k2 - y) <= GAP) continue;
+        s += fill[k2]; n++;
+      }
+      var localBg = n ? s / n : fill[y];
+      var ceiling = Math.min(0.97, Math.max(NAME_FILL_FLOOR, localBg + NAME_FILL_MARGIN));
+      score[y] = fill[y] <= ceiling ? tr[y] : 0;
       if (score[y] > max) max = score[y];
     }
     if (max <= 0) return null;

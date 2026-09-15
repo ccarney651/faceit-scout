@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
 const Frames = require('./frames.js');
 
 // A synthetic five-slot strip with the three things that actually sit in the
@@ -102,6 +104,48 @@ test('guards degenerate input', () => {
   assert.equal(Frames.findNameRow(new Uint8ClampedArray(0), 0, 0), null);
   assert.equal(Frames.findNameRow(new Uint8ClampedArray(16), 10, 10), null);
   assert.equal(Frames.findNameRow(null, 10, 10), null);
+});
+
+// --- bright/team-colour-tinted plate (2026-09-15) ---------------------------
+// specs/2026-09-15-nameplate-fill-heuristic-handoff.md. Real search bands
+// pulled from the 2026-09-15 390-map replay-bot run's known-bad crops -
+// light-blue and red team-coloured plates that a flat 0.42 fill ceiling
+// either zeroed entirely or fragmented into a one-pixel sliver. Reduced to
+// luminance only (fixtures/*.bin, 1 byte/px): findNameRow never reads colour,
+// and this strips the actual game art out of what ships in the repo.
+// tools/replay_bot/nameplate_fill_sweep.js is the harness these came from,
+// and the harness to re-run over the full corpus if the fix changes again.
+
+function loadFixture(tag) {
+  const index = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'index.json'), 'utf8'));
+  const meta = index.find((r) => r.tag === tag);
+  const gray = fs.readFileSync(path.join(__dirname, 'fixtures', tag + '.bin'));
+  const rgba = new Uint8ClampedArray(meta.w * meta.h * 4);
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    rgba[p] = rgba[p + 1] = rgba[p + 2] = gray[i]; rgba[p + 3] = 255;
+  }
+  return { data: rgba, w: meta.w, h: meta.h };
+}
+
+test('a light-blue team-coloured plate no longer blanks the whole side', () => {
+  const b = loadFixture('bright-plate-total-miss-1');
+  const r = Frames.findNameRow(b.data, b.w, b.h);
+  assert.ok(r, 'expected a row, got null - the bright-plate total-miss bug');
+  assert.ok(r.h >= 10 && r.h <= 25, `row height ${r.h} does not look like a real name row`);
+});
+
+test('a second light-blue plate (different map) also recovers', () => {
+  const b = loadFixture('bright-plate-total-miss-2');
+  const r = Frames.findNameRow(b.data, b.w, b.h);
+  assert.ok(r, 'expected a row, got null');
+  assert.ok(r.h >= 10 && r.h <= 25, `row height ${r.h} does not look like a real name row`);
+});
+
+test('a red team-coloured plate no longer fragments into a 1px sliver', () => {
+  const b = loadFixture('bright-plate-fragmented-1');
+  const r = Frames.findNameRow(b.data, b.w, b.h);
+  assert.ok(r, 'expected a row, got null');
+  assert.ok(r.h >= 10 && r.h <= 25, `row height ${r.h} - the old bug fragmented this to h=1`);
 });
 
 // --- name span --------------------------------------------------------------
