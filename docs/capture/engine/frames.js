@@ -227,6 +227,63 @@
     return { x: lo, w: hi - lo };
   }
 
+  // applyNameContrast(d) -> undefined (mutates d in place)
+  //
+  // `d` is an ImageData.data RGBA buffer for a name crop, already upscaled.
+  // Stretches luminance to the crop's own observed 2nd-98th percentile range
+  // instead of a fixed formula.
+  //
+  // 2026-09-15: the previous recipe, `(g-128)*1.5+140` clamped to [0,255],
+  // assumed glyph and plate sit far apart in luminance - true for a dark
+  // plate (background near 0, glyph near 250, the pair this was tuned
+  // against) but false for a bright/team-coloured one, where both already
+  // sit near 255 and the fixed formula clips them together to flat white:
+  // findNameRow's fix (same date) locates the row correctly, but there was
+  // nothing left in the crop for tesseract to read. Stretching to what the
+  // crop ITSELF actually contains adapts to either case without needing to
+  // know which one a given plate is.
+  //
+  // Measured (tools/replay_bot/nameplate_contrast_sweep.js): on 20 known-bad
+  // bright-plate crops this raises slots landing a confident name match from
+  // 5% to 11% - a real but partial recovery, not a full fix (most of these
+  // crops are still unreadable; some may be a harder problem than contrast,
+  // e.g. an outlined/embossed glyph style that stays hollow even at full
+  // contrast). On 20 already-good dark-plate crops it is not merely neutral
+  // but BETTER - 84/100 confident matches against the old formula's 79/100 -
+  // with a single isolated regression, so this replaces the old recipe
+  // everywhere rather than branching on plate brightness. A
+  // stretch-then-morphological-close variant (meant to solidify a hollow
+  // glyph into a filled one) measured WORSE (7%) and was dropped - re-run
+  // that harness before trying morphology again.
+  function applyNameContrast(d) {
+    var n = d.length / 4, i, p;
+    if (!n) return;
+    var lum = new Float32Array(n);
+    for (i = 0, p = 0; p < d.length; i++, p += 4) {
+      lum[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+    }
+    var sorted = Float32Array.from(lum).sort();
+    var lo = sorted[Math.floor(n * 0.02)];
+    var hi = sorted[Math.floor(n * 0.98)];
+    var range = hi - lo;
+    // A featureless crop (no row, no glyph, just plate) has next to no
+    // spread between its 2nd and 98th percentile - stretching THAT to fill
+    // 0-255 would manufacture contrast out of sensor noise, not reveal any.
+    // Left as plain luminance instead of amplified into speckle; either way
+    // tesseract reads nothing from it, but this stays predictable rather
+    // than surprising (findNameRow already returns null rather than invent
+    // a row for exactly this case - same instinct, applied here).
+    if (range < 8) {
+      for (i = 0, p = 0; p < d.length; i++, p += 4) d[p] = d[p + 1] = d[p + 2] = lum[i];
+      return;
+    }
+    for (i = 0, p = 0; p < d.length; i++, p += 4) {
+      var v = (lum[i] - lo) * 255 / range;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+      d[p] = d[p + 1] = d[p + 2] = v;
+    }
+  }
+
   function make(ctx) {
     // Reused across every ensureWork/cellGrayPadded call, same as the
     // original module-scoped `work`/`wctx` pair each page declared once.
@@ -317,8 +374,8 @@
     // is the brightest thing in it - real tesseract returned letter-soup for 75
     // of 90 slots. With the located row it reads 77 of 90 outright, and every
     // one of the 90 resolves once assign.js applies the role constraint.
-    // Grayscale + 6x upscale + a light contrast stretch lift the ~10px text
-    // enough for OCR.
+    // Grayscale + 6x upscale + applyNameContrast's percentile stretch lift
+    // the ~10px text enough for OCR.
     function nameCanvas(frame, cell, row) {
       var padX = Math.max(4, Math.round(cell.w * 0.05));
       var sx = Math.max(0, cell.x - padX), sw = cell.w + 2 * padX, sc = 6;
@@ -335,11 +392,8 @@
       cv.width = Math.max(1, Math.round(sw * sc)); cv.height = Math.max(1, Math.round(sh * sc));
       var cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
       cx.drawImage(frame, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
-      var im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
-      for (var i = 0; i < d.length; i += 4) {
-        var g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        g = (g - 128) * 1.5 + 140; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i] = d[i + 1] = d[i + 2] = g;
-      }
+      var im = cx.getImageData(0, 0, cv.width, cv.height);
+      applyNameContrast(im.data);
       cx.putImageData(im, 0, 0);
       return cv;
     }
@@ -434,7 +488,7 @@
     };
   }
 
-  var Mod = { make: make, findNameRow: findNameRow, findNameSpan: findNameSpan };
+  var Mod = { make: make, findNameRow: findNameRow, findNameSpan: findNameSpan, applyNameContrast: applyNameContrast };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBFrames = Mod;

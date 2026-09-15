@@ -103,17 +103,30 @@ Entries before 2026-08-11 were reconstructed from git history.
   strings. The ceiling is now judged against each row's own local
   surroundings (floored at the old fixed value, so a genuinely dark plate is
   unaffected) — the same fix already shipped for the scrim scoreboard's read.
-  Shared `docs/capture/engine/frames.js`, so this reaches live capture's name
-  OCR too, not just the replay bot's. `tools/replay_bot/reprocess_attribution.js`
-  re-ran the fixed OCR against every already-captured map with an abstained
-  slot and a roster to try it against (skipping any map a human had already
-  corrected): 84 previously-null slots recovered across 31 maps, over the
+
+  Locating the row correctly then exposed a second, related bug:
+  `nameCrop`'s contrast stretch used a fixed formula tuned the same way, and
+  clipped an already-faint bright-plate glyph to flat white even once the row
+  was found. Replaced with a percentile stretch (`frames.js`'s new
+  `applyNameContrast`) that adapts to whatever range a crop actually has —
+  and measured BETTER than the old formula even on already-good dark-plate
+  crops (84/100 vs 79/100 confident matches on a sample), not just neutral on
+  bright ones. Both fixes are shared `docs/capture/engine/frames.js` code, so
+  they reach live capture's name OCR too, not just the replay bot's.
+
+  `tools/replay_bot/reprocess_attribution.js` re-ran the fixed OCR against
+  every already-captured map with an abstained slot and a roster to try it
+  against (skipping any map a human had already corrected), once per fix:
+  **204 previously-null slots recovered across 67 maps**, over the
   `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined.
-  A residual case remains open: two of the three originally-reported crops
-  now locate the right row but still OCR blank - the plate's own contrast
-  stretch (tuned for a dark plate the same way the fill ceiling was) washes
-  an already-faint bright-plate glyph out further; tracked as a follow-up,
-  not fixed here.
+  On the active `2026-09-15-full` batch this took the review queue from 99
+  flagged maps down to 39 of 390.
+
+  A residual case remains open (PLANS.md P3, Capture app section): some
+  bright-plate glyphs render as a hollow outline even at full contrast and
+  still don't OCR — a font-rendering problem, not a contrast one. A
+  stretch-then-morphological-close attempt measured worse, not better, and
+  was dropped.
 
 ## 2026-09-14
 

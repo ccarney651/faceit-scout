@@ -99,6 +99,16 @@ listed here it is still open.
   `docs/capture/engine/frames.js`, so live capture's name OCR gets the fix
   too. `tools/replay_bot/nameplate_fill_sweep.js` is the harness; 3 real
   fixtures in `docs/capture/engine/fixtures/` back `frames.test.js`.
+- Name-crop contrast replaced with a percentile stretch (`frames.js`'s new
+  `applyNameContrast`, shared by `nameCanvas()` and `nameplate.js`'s
+  `nameCrop()`) — 2026-09-15. The old fixed formula clipped a bright plate's
+  glyph and background together to flat white; the new one adapts to
+  whatever range the crop actually has, and measured BETTER than the old
+  formula even on already-good dark-plate crops (84/100 vs 79/100 confident
+  matches), not just neutral. `tools/replay_bot/nameplate_contrast_sweep.js`
+  is the harness. Does not fully solve bright-plate OCR (see P3, Capture app
+  section) — some glyphs render as a hollow outline that stays unreadable at
+  any contrast.
 
 ## Capture app and ref library
 
@@ -137,23 +147,20 @@ listed here it is still open.
   because `tools/verify_capture_browser.js` does **not** exercise the hero read
   at all, so the change would land on live capture with no automated coverage.
   Do it only alongside a browser check that actually performs a read.
-- **P2 — `nameCrop`'s contrast stretch still washes out some bright-plate
-  glyphs even after the fill-ceiling fix.** Found 2026-09-15 while applying
-  that fix in hindsight: `nameplate.js`'s `nameCrop()` (and `frames.js`'s
-  `nameCanvas()`, the live-tool twin) boosts contrast with a FIXED formula,
-  `(g-128)*1.5+140`, tuned against a dark plate where background and glyph
-  sit far apart. On a very bright plate both are already near 255, so the
-  fixed boost clips both to white — the row is now found correctly (visible
-  by eye in the crop) but there is almost nothing left for tesseract to read.
-  Confirmed on 2 of the 3 originally-reported crops (`BM1S86`-a, `CENQKX`-a);
-  a quick percentile-based local stretch (2nd/98th percentile of the crop's
-  own luminance) made the glyphs clearly visible by eye but tesseract still
-  mostly failed on them — these two look like an OUTLINED/embossed glyph
-  style specific to this plate variant, not just a contrast problem, so a
-  min-max stretch alone is not a full fix. Not shipped: only spot-checked
-  against 2 crops, no regression sweep against the rest of the corpus the way
-  the fill-ceiling fix got. Needs the same rigor (a harness, a corpus check)
-  before changing shared code again.
+- **P3 — Some bright-plate glyphs stay unreadable even after the contrast
+  fix (2026-09-15).** `applyNameContrast`'s percentile stretch (see Recently
+  shipped, replay bot) raises known-bad bright-plate slots from 5% to 11%
+  landing a confident name match — a real but partial recovery, not a full
+  fix. The remaining ~89% look, by eye, like an OUTLINED/embossed glyph style
+  on this specific plate variant: the letter interior sits close in
+  luminance to the plate and only a thin stroke stands out, so even a fully
+  stretched crop gives tesseract a hollow letter, not a filled one. A
+  stretch-then-morphological-close attempt (dilate then erode, to solidify
+  the outline into a blob) measured WORSE (7%), not better, so that specific
+  idea is ruled out — re-run `nameplate_contrast_sweep.js` before trying a
+  different morphology or an outline-aware OCR pass. Low priority: the
+  fill-ceiling + contrast fixes together already shrank the review queue
+  substantially on the active batch (see CHANGELOG for the current count).
 ## Replay bot
 
 The replay bot lives on `tools/replay_bot/` and its full account is in

@@ -90,12 +90,8 @@
     var cx = cv.getContext('2d', { willReadFrequently: true });
     cx.imageSmoothingEnabled = true;
     cx.drawImage(img, sx, row.y, sw, row.h, 0, 0, cv.width, cv.height);
-    var im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
-    for (var i = 0; i < d.length; i += 4) {
-      var g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      g = (g - 128) * 1.5 + 140; g = g < 0 ? 0 : g > 255 ? 255 : g;
-      d[i] = d[i + 1] = d[i + 2] = g;
-    }
+    var im = cx.getImageData(0, 0, cv.width, cv.height);
+    Frames.applyNameContrast(im.data);
     cx.putImageData(im, 0, 0);
     return cv;
   }

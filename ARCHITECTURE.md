@@ -731,6 +731,28 @@ regression corpus (`tools/real_frame_eval/rowfind_parity.py`,
 `screenshots/*.png`) is not on this machine (gitignored, no local copy) -
 re-run it wherever that corpus exists as a final check.
 
+**Locating the row correctly exposed a second bug in the same family:
+`nameCrop`'s contrast stretch.** It used a fixed formula, `(g-128)*1.5+140`,
+also tuned against a dark plate - on a bright one it clipped an already-faint
+glyph to flat white, so a correctly-found row still OCR'd blank. Replaced
+with `applyNameContrast`, a percentile (2nd/98th) min-max stretch to
+whatever luminance range the crop actually has, floored at a minimum-range
+guard so a genuinely featureless crop is left as plain luminance rather than
+having noise amplified into it. `tools/replay_bot/nameplate_contrast_sweep.js`
+measured it against real tesseract: known-bad bright-plate slots landing a
+confident name match rose from 5% to 11% - real but partial, not a full fix
+- and, more importantly, already-good dark-plate slots got BETTER, not just
+neutral (84/100 vs 79/100 confident matches), so it replaced the old formula
+everywhere. A stretch-then-morphological-close variant, meant to solidify a
+hollow/outlined glyph into a filled one, measured WORSE (7%) and was
+dropped. `tools/replay_bot/reprocess_attribution.js`, re-run after both
+fixes landed, recovered 204 previously-abstained slots across 67 maps over
+the `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions
+combined - on the active `2026-09-15-full` batch, the review queue fell from
+99 flagged maps to 39 of 390. The remaining bright-plate failures look like
+an outlined/embossed glyph style specific to that plate variant - a
+font-rendering problem the contrast stretch cannot reach, not this bug.
+
 **Names are not how a slot is assigned to a player — role is.** Overwatch
 tournament play is role-locked, and FACEIT records the role each player queued
 for, per game: 8303 of 8356 team-games in the database are exactly 1 Tank /

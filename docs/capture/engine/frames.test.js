@@ -196,3 +196,45 @@ test('an empty cell reports no span rather than a guess', () => {
   const b = cellBand({ glyphs: [] });
   assert.equal(Frames.findNameSpan(b.data, b.w, b.h, 200), null);
 });
+
+// --- name contrast (2026-09-15) ---------------------------------------------
+// nameCanvas()/nameCrop() both call this on the upscaled crop before OCR.
+// tools/replay_bot/nameplate_contrast_sweep.js measured it against real
+// tesseract: 5% -> 11% of known-bad bright-plate slots land a confident
+// match, and on already-good dark-plate slots it is not merely neutral but
+// better (84/100 vs 79/100 confident matches), so it replaced the old fixed
+// formula everywhere rather than branching on plate brightness.
+
+function solidBand(bg, fg) {
+  const W = 40, H = 20;
+  const d = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const v = (x >= 15 && x < 25) ? fg : bg;
+    const i = (y * W + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  return d;
+}
+
+test('a dark plate with a bright glyph stretches to use the full range', () => {
+  const d = solidBand(20, 230);
+  Frames.applyNameContrast(d);
+  assert.ok(d[0] <= 5, `background landed at ${d[0]}, expected near 0`);
+  assert.ok(d[15 * 4] >= 250, `glyph landed at ${d[15 * 4]}, expected near 255`);
+});
+
+test('a bright plate with a barely-brighter glyph is not clipped to flat white', () => {
+  // The actual bug: plate 235, glyph 245 - both would clip to 255 under the
+  // old (g-128)*1.5+140 formula, erasing the only signal there was.
+  const d = solidBand(235, 245);
+  Frames.applyNameContrast(d);
+  assert.ok(d[0] <= 5, `background landed at ${d[0]}, expected near 0 after stretching`);
+  assert.ok(d[15 * 4] >= 250, `glyph landed at ${d[15 * 4]}, expected near 255`);
+  assert.notEqual(d[0], d[15 * 4], 'background and glyph must not still be equal');
+});
+
+test('a flat band with no contrast at all is left inert, not amplified into noise', () => {
+  const d = solidBand(128, 128);
+  Frames.applyNameContrast(d);
+  for (let i = 0; i < d.length; i += 4) assert.ok(Math.abs(d[i] - 128) <= 1, `pixel drifted to ${d[i]}`);
+});
