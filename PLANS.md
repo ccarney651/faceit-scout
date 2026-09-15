@@ -115,10 +115,38 @@ listed here it is still open.
   eye. The single biggest lever of the three name-OCR fixes: nearly TRIPLED
   confident matches on known-hard bright-plate crops (11/75 → 31/75 in a
   sample) and sharply improved already-good crops too (53/75 → 65/75).
-  Together, all three fixes recovered 616 previously-abstained slots across
-  106 maps when `tools/replay_bot/reprocess_attribution.js` re-ran the fixed
-  OCR against already-captured maps; on the active `2026-09-15-full` batch
-  the review queue fell from 99 flagged maps to 27 of 390.
+  Together, all three fixes recovered 616+ previously-abstained slots across
+  106+ maps when `tools/replay_bot/reprocess_attribution.js` re-ran the fixed
+  OCR against already-captured maps — on the active `2026-09-15-full` batch
+  the review queue fell from 99 flagged maps to 27 of 390, and further as
+  Doctrine's registration (below) resolved more role-group cascades.
+- The review page stops offering an already-claimed player as a manual-
+  correction candidate for a different slot (`claimedElsewhere()`, reads
+  `effSlot()` so it reflects both an automatic confident match and a prior
+  manual correction uniformly) — 2026-09-15.
+- Doctrine (support) registered as an operator-added hero (`custom:doctrine`)
+  from a real replay capture rather than the normal live-client `refs learn`
+  flow — 2026-09-15. Also fixed a real gap it surfaced: an operator-added
+  hero's role never reached `hero_roles` in `docs/capture/data.json`
+  (`tools/build_capture_data.py` only ever queried FACEIT's own `heroes`
+  table), which abstains the hero's WHOLE role group via `assign.js`'s
+  exact-cover check, not just its own slot. Only a red-team portrait ref
+  exists so far — `match.test.js` tracks the missing blue-team one as a
+  known, deliberate gap rather than silently weakening that test.
+- A map can be excluded from a contribution without deleting it
+  (`status: 'excluded'` + `exclude_reason`/`prior_status`, `finalize()`
+  drops it, the review page shows it dimmed with a Restore button) —
+  2026-09-15. Used to pull 252 maps (every region) finished
+  2026-09-12T19:00Z–2026-09-15T19:00Z from the active batch, since Doctrine's
+  portrait ref was unverified/absent for that whole window and there is no
+  way to rule out a silent misread map by map. None had reached the live
+  site. Their codes are queued at
+  `tools/replay_bot/state/doctrine-window-recapture.txt` for a re-run.
+- The review page's "Loop every live code" path (the unattended overnight
+  one) now always passes `--fail-streak-cap 8` instead of `run.js`'s
+  attended-run default of 2 — 2026-09-15. The tight default is what killed
+  the original 545-code overnight run after two back-to-back timeouts that
+  turned out to be the client losing its session state, not a stuck client.
 
 ## Capture app and ref library
 
@@ -165,9 +193,12 @@ listed here it is still open.
   problem instead — PSM 8 alone recovered most of what the "outline" theory
   predicted would need morphology to fix. What is left after all three is a
   much smaller, not-yet-characterised tail; no working theory for it yet.
-  Low priority: 27 of 390 maps on the active batch still need a look, down
-  from 99, and most of the remaining ones are for other reasons entirely
-  (low-score, unknown-hero, genuinely contested rounds), not just this.
+  Low priority: the operator finished reviewing the active batch 2026-09-15
+  (99 flagged maps at the start of the day down to 12 maps carrying a
+  surviving non-`contested` flag they chose to accept anyway — 5
+  `attribution-abstained`, 7 `low-support` — everything else clean or
+  excluded, see the 252-map exclude entry above).
+
 ## Replay bot
 
 The replay bot lives on `tools/replay_bot/` and its full account is in

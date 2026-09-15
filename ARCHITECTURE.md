@@ -759,11 +759,14 @@ single largest lever of the three fixes, and one that had nothing to do with
 plate colour at all.
 
 `tools/replay_bot/reprocess_attribution.js`, re-run after all three fixes
-landed, recovered 616 previously-abstained slots across 106 maps over the
+landed, recovered 616+ previously-abstained slots across 106+ maps over the
 `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined -
 on the active `2026-09-15-full` batch, the review queue fell from 99 flagged
-maps to 27 of 390. A residual handful still fails even with the row found,
-the contrast fixed, and PSM 8 in place.
+maps down to 12 the operator chose to accept as-is by the time they finished
+reviewing it (before 252 of the batch's 390 maps were separately excluded for
+the Doctrine-window recapture - see PLANS.md/CHANGELOG.md). A residual
+handful still fails even with the row found, the contrast fixed, and PSM 8
+in place.
 
 **Names are not how a slot is assigned to a player — role is.** Overwatch
 tournament play is role-locked, and FACEIT records the role each player queued
@@ -1828,7 +1831,7 @@ does the same for a single strip and lineup.
 | `vote.js` | One slot resolved by agreement across frames | yes |
 | `resolve.js` | Per-sample reads to a per-round per-slot result, presented hero chosen by playtime not sample count, + confidence flags | yes |
 | `attribute.js` | Player attribution: which FACEIT player occupies each HUD slot, abstaining rather than guessing | yes |
-| `nameplate.js` | Name-bar crops and OCR for attribution (shares `frames.js`'s `findNameRow` — see §6's dark-plate note for its open bug) | no |
+| `nameplate.js` | Name-bar crops and OCR for attribution (shares `frames.js`'s `findNameRow`/`applyNameContrast` — see §6's dark-plate notes) | no |
 | `emit.js` | Per-side observations in the contribution schema (per-sample, and per-round after review) | yes |
 | `review_out.js` | The session review artifact + per-round portrait crops | no |
 | `review/server.js` | The local review page: render, correct, finalize, upload | no |
