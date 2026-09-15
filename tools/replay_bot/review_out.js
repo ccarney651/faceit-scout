@@ -19,6 +19,7 @@
   var path = require('path');
   var canvas = require('@napi-rs/canvas');
   var Attribute = require('./attribute.js');
+  var Resolve = require('./resolve.js');
 
   // A little vertical slack around the frozen box so a plate that drew a few
   // pixels low is still whole in the crop.
@@ -125,7 +126,10 @@
       attribution: attribution || null,
       frames: frames,
       corrections: [],
-      status: 'unreviewed',
+      // A map with nothing but resolved swaps to show (see resolve.js
+      // needsReview) is auto-reviewed - it does not sit in the queue for the
+      // operator to click through when there is nothing to actually check.
+      status: Resolve.needsReview(resolved) ? 'unreviewed' : 'reviewed',
     };
   }
 

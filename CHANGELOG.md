@@ -34,6 +34,40 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Changed
 
+- **`timing.js`'s `sample.quiesceMs` raised 700ms → 1300ms.** The 390-map
+  2026-09-15 run's `attribution-abstained` flags correlated with a name-plate
+  still showing its white fade-in border at read time. This also surfaced (and
+  folded in) an untracked `state/console_timing.json` override pinning it to
+  1000ms since 2026-09-11 — a console-slider tweak that had been silently
+  active for four days without the tracked default ever reflecting it; that
+  override is cleared so the number lives in one place again.
+
+- **A map with nothing but a resolved swap is auto-reviewed.** `review_out.js`
+  used to write every captured map as `'unreviewed'`, so a large batch meant
+  clicking through every map even when nothing needed checking. It now marks
+  a map `'reviewed'` on write when `resolve.js`'s `needsReview()` finds no
+  flag except `contested` — the playtime fix above makes a resolved swap a
+  real answer, not a guess, so it stops gating the review queue by itself.
+  Any other flag still gates it. On the 390-map run this landed on, only 50
+  maps needed an actual look instead of 99. `/upload` still refuses while any
+  map is `'unreviewed'`.
+
+- **A round's presented hero is chosen by playtime, not raw sample count.**
+  `resolve.js` used to pick the winner and the `contested`/`support` numbers
+  from a straight vote across a round's frames — fine on an even sampling grid,
+  but a live review turned up a slot with a 2-2 sample tie that was really an
+  80/20 playtime split (one hero's two reads 100s apart early in the round, the
+  other's two reads 40s apart right before it ended); the vote called that
+  contested when one hero plainly held the slot for most of the round.
+  `resolve.js` now derives the winner, `support`, and `alt_guid` from the
+  slot's confirmed segments' durations (a segment runs to the next segment's
+  start, or the round's end); `contested` now means no hero held a clear
+  majority of the round's tracked time, not that the frame count tied. The raw
+  vote still exists and still drives the independent `low-support` noise flag
+  for a single-segment slot whose frames disagreed, and still backstops
+  `contested` for the one case with no timed segment to judge — a fast
+  multi-hop swap where every hero is read exactly once.
+
 - **The review page's Run tab can run the code-stack loop.** A new "Loop every
   live code" checkbox routes `/go` through `--code-stack` (the console's
   overnight path, cycled over `state/console_codes.json`) instead of the

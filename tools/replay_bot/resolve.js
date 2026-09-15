@@ -3,13 +3,19 @@
 // explicit confidence and the reasons an operator should look.
 // See specs/2026-09-10-replay-bot-autonomous-scouting-design.md §2.
 //
-// The sweep samples each slot several times a round. `vote.js` already resolves
-// one slot across frames and says how much the frames agreed; this groups a
-// map's samples into rounds first, votes each slot inside each round, and then
-// turns "the frames disagreed" / "the best frame still scored badly" / "nobody
-// was placed in this slot's player" into a flag - a reason to look, never a
-// verdict. A flagged slot still carries its best guess. Nothing is dropped here;
-// the operator decides in the review page.
+// The sweep samples each slot several times a round. `vote.js` resolves one
+// slot across frames and says how much the frames agreed - used here only to
+// catch noisy disagreement within an otherwise-stable read. The hero actually
+// PRESENTED for a round is picked by `segmentWinner`, by playtime across the
+// slot's confirmed segments: a fixed sampling grid makes raw sample count a
+// poor stand-in for playtime whenever samples land unevenly around a swap
+// (2026-09-15 - a 2-2 sample tie turned out to be an 80/20 time split in
+// review). This groups a map's samples into rounds, resolves each slot inside
+// each round by segment duration, and turns "no hero held a time majority" /
+// "the frames disagreed" / "the best frame still scored badly" / "nobody was
+// placed in this slot's player" into a flag - a reason to look, never a
+// verdict. A flagged slot still carries its best guess. Nothing is dropped
+// here; the operator decides in the review page.
 //
 // PURE. run.js calls this after a map is captured; it imports vote.js and reads
 // the feed's hero_roles, and touches nothing else.
@@ -53,9 +59,12 @@
     });
   }
 
-  // The guid held second-most-often across a slot's frames, for a contested
-  // slot's runner-up. Deterministic: ties break alphabetically, the same way
-  // vote.js breaks them, so two runs over one replay never disagree.
+  // The guid held second-most-often across a slot's raw frame votes. Only
+  // reached for a single-segment slot the raw vote still calls contested (a
+  // fast multi-hop swap with no repeated guid to time) - a multi-segment slot
+  // gets its runner-up from segmentWinner, by playtime, instead. Deterministic:
+  // ties break alphabetically, the same way vote.js breaks them, so two runs
+  // over one replay never disagree.
   function runnerUp(guids, winner) {
     var counts = {};
     guids.forEach(function (g) {
@@ -141,39 +150,85 @@
     return segments;
   }
 
+  // The round's single presented hero for a slot, chosen by PLAYTIME across
+  // the slot's confirmed segments - not by raw sample count. A fixed sampling
+  // grid makes vote count a proxy for playtime only when the samples land
+  // evenly around a swap; when they don't (an early hero seen twice far apart,
+  // a late one seen twice right before the round ends) a straight vote ties or
+  // even flips while one hero plainly held the slot for most of the round. A
+  // segment's duration runs to the next segment's start, or the round's end
+  // for the last one; ties (equal duration) break alphabetically by guid, the
+  // same convention `vote.js`/`runnerUp` use, so two runs over one replay
+  // never disagree.
+  //
+  // `support` is now the winner's SHARE OF TRACKED TIME (from the first
+  // post-grace segment to the round's end), not a frame-agreement fraction -
+  // a stable single-segment slot is always support 1, by construction.
+  function segmentWinner(segments, roundToT) {
+    if (!segments.length) return { guid: null, name: null, support: 0, alt: null };
+    var withDur = segments.map(function (seg, i) {
+      var to = (i + 1 < segments.length) ? segments[i + 1].from_t : roundToT;
+      return { guid: seg.guid, name: seg.name, duration: Math.max(0, to - seg.from_t) };
+    });
+    var total = withDur.reduce(function (s, x) { return s + x.duration; }, 0);
+    var winner = null;
+    withDur.forEach(function (x) {
+      if (!winner || x.duration > winner.duration ||
+        (x.duration === winner.duration && x.guid < winner.guid)) winner = x;
+    });
+    var runner = null;
+    withDur.forEach(function (x) {
+      if (x.guid === winner.guid) return;
+      if (!runner || x.duration > runner.duration ||
+        (x.duration === runner.duration && x.guid < runner.guid)) runner = x;
+    });
+    return {
+      guid: winner.guid,
+      name: winner.name,
+      support: total > 0 ? winner.duration / total : 0,
+      alt: runner ? runner.guid : null,
+    };
+  }
+
   // One slot, resolved across a round's frames.
   //
   // `cells` is the slot's per-sample reads for this round, in sample order -
   // each a {name, guid, score}. `roleKnown` says whether the feed has a role
   // for the winning hero. `player` is {id, conf} from attribution, or null.
-  function resolveSlot(cells, times, roundFromT, roleKnown, player) {
+  function resolveSlot(cells, times, roundFromT, roundToT, roleKnown, player) {
     var guids = cells.map(function (c) { return (c && c.guid) || null; });
+    // The raw frame vote still drives the noise-detection flags below (a
+    // single-segment slot whose frames disagreed more than SUPPORT_MIN is
+    // exactly what `low-support` exists to catch) - it no longer decides which
+    // hero gets PRESENTED for the round; segmentWinner does that by playtime.
     var v = Vote.slot(guids);
-    var winner = v.name;                       // guids were passed, so name IS the guid
     var scores = cells.map(function (c) { return (c && typeof c.score === 'number') ? c.score : null; });
+
+    var segments = segmentSlot(cells, times, roundFromT);
+    var picked = segmentWinner(segments, roundToT);
+    var winner = picked.guid;
+    var name = picked.name;
+    var support = picked.support;
+    // A genuine mid-round swap (segments.length > 1) is only worth flagging
+    // when no hero held a clear majority of the tracked time - two segments
+    // where one plainly dominates by duration is a resolved swap, not an open
+    // question, even if the raw sample count happened to tie. A single-segment
+    // slot has no playtime split to judge (the whole window is one hero by
+    // construction), so it falls back to the raw vote - the case that still
+    // needs catching is a fast multi-hop swap (each hero read once, never
+    // confirmed twice) collapsing onto its first-read hero while the reads
+    // themselves plainly disagreed.
+    var contested = segments.length > 1 ? support <= 0.5 : v.contested;
+
     var winnerScores = cells
       .filter(function (c) { return c && c.guid === winner; })
       .map(function (c) { return c.score; });
-    var name = null;
-    cells.forEach(function (c) { if (c && c.guid === winner && c.name) name = c.name; });
-
-    var segments = segmentSlot(cells, times, roundFromT);
 
     var flags = [];
     if (winner === null) {
       flags.push('no-read');
     } else {
-      // A multi-segment slot (segments.length > 1) is a mid-round swap the
-      // segment builder already tracked, not noise - low support there is
-      // what a genuine swap looks like, so only flag it for a slot that
-      // never resolved into more than one segment. Since segmentSlot() now
-      // confirms a new segment on a single differing read, this also means a
-      // slot with even one stray misread outside the grace window no longer
-      // reads as low-support (its lone bad sample becomes its own segment
-      // instead) - only a round where every post-grace sample shares one
-      // guid, and the *raw* vote (which is not grace-filtered) still disagrees
-      // enough to miss SUPPORT_MIN, still reaches this branch.
-      if (v.contested) flags.push('contested');
+      if (contested) flags.push('contested');
       else if (v.support < SUPPORT_MIN && segments.length <= 1) flags.push('low-support');
       if (winnerScores.length && Math.max.apply(null, winnerScores) < LOW_SCORE) flags.push('low-score');
       if (String(winner).indexOf('custom:') === 0 || !roleKnown(winner)) flags.push('unknown-hero');
@@ -183,10 +238,13 @@
     return {
       guid: winner,
       name: name,
-      support: v.support,
+      support: support,
       reads: scores,
-      contested: v.contested,
-      alt_guid: v.contested ? runnerUp(guids, winner) : null,
+      contested: contested,
+      // Multi-segment: picked.alt is the second-longest-playtime hero. Single-
+      // segment (the fast-multi-hop case above): there is no second segment to
+      // ask, so fall back to the raw vote's runner-up.
+      alt_guid: contested ? (picked.alt || runnerUp(guids, winner)) : null,
       segments: segments,
       player_id: player ? player.id : null,
       player_conf: player ? player.conf : null,
@@ -238,7 +296,7 @@
             continue;
           }
           var cells = mine.map(function (s) { return s[side] && s[side][slot]; });
-          out[side].push(resolveSlot(cells, times, round.from_t, roleKnown, player));
+          out[side].push(resolveSlot(cells, times, round.from_t, round.to_t, roleKnown, player));
         }
       });
 
@@ -252,8 +310,29 @@
     });
   }
 
+  // Whether a map's rounds carry anything worth the operator's eyes.
+  // `contested` alone does NOT count: it means a genuine mid-round swap with
+  // no clear playtime majority, which segmentWinner already resolved with a
+  // real confidence number, not a reason to hold up the whole map. Every
+  // other flag - no-read, low-score, low-support, unknown-hero,
+  // attribution-abstained, and the round-level round-unsampled/sparse-round -
+  // still does. Drives review_out.js's initial `status`, so a flag-free (or
+  // swap-only) map is auto-reviewed instead of sitting in the queue with
+  // nothing for a human to actually check.
+  function needsReview(rounds) {
+    return (rounds || []).some(function (rd) {
+      if ((rd.flags || []).length) return true;
+      return SIDES.some(function (side) {
+        return (rd[side] || []).some(function (s) {
+          return (s.flags || []).some(function (f) { return f !== 'contested'; });
+        });
+      });
+    });
+  }
+
   var Mod = {
     SUPPORT_MIN: SUPPORT_MIN,
+    needsReview: needsReview,
     LOW_SCORE: LOW_SCORE,
     SPARSE_RATIO: SPARSE_RATIO,
     samplesIn: samplesIn,

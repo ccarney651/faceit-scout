@@ -687,6 +687,26 @@ the 90 resolves once the role constraint is applied - against 36 of 90 with two
 (1800 box/resolution variants, all landing on the row) and a parity check that
 runs the shipped JS over real pixels.
 
+**The dark-plate assumption breaks on a bright/colour-tinted name plate.**
+(2026-09-15, unresolved — see
+`specs/2026-09-15-nameplate-fill-heuristic-handoff.md`.) `findNameRow`'s
+per-row `score` is zeroed whenever a row's bright-pixel fill exceeds
+`NAME_FILL_MAX` (0.42), which is what tells real name text apart from a health
+bar on the dark plate the constant was measured against. A team-colour-tinted
+plate (light blue, bright red) can push the *name text's own row* fill above
+that ceiling — reproduced two ways on the 2026-09-15 390-map run: a light-blue
+plate zeroes every text row outright (`findNameRow` returns `null`, five blank
+OCR reads for that side), a red plate zeroes just enough interior rows to
+fragment the run into the wrong (much shorter) one, so `nameCrop` hands
+tesseract a one-pixel sliver of glyph tops instead of the glyphs. Both produce
+`attribution-abstained`, indistinguishable from every other cause without
+reading `m.attribution.reads` off the review artifact (kept exactly for this -
+see its own comment in `attribute.js`). Distinct from, and not fixed by, the
+2026-09-15 `sample.quiesceMs` 700→1300 change (CHANGELOG) — that targets a
+frame caught mid-transition; this is a fully-settled frame the heuristic
+still cannot read. Shared code (`docs/capture/engine/frames.js`), so a fix
+here also reaches the live capture pages' name OCR, not just the bot's.
+
 **Names are not how a slot is assigned to a player — role is.** Overwatch
 tournament play is role-locked, and FACEIT records the role each player queued
 for, per game: 8303 of 8356 team-games in the database are exactly 1 Tank /
@@ -1748,9 +1768,9 @@ does the same for a single strip and lineup.
 | `timeline.js` | Round structure off the scrubber; bar arithmetic; the sampling plan | yes |
 | `segment.js` | Observations to rounds, opening comp and hero pool | yes |
 | `vote.js` | One slot resolved by agreement across frames | yes |
-| `resolve.js` | Per-sample reads to a per-round per-slot result + confidence flags | yes |
+| `resolve.js` | Per-sample reads to a per-round per-slot result, presented hero chosen by playtime not sample count, + confidence flags | yes |
 | `attribute.js` | Player attribution: which FACEIT player occupies each HUD slot, abstaining rather than guessing | yes |
-| `nameplate.js` | Name-bar crops and OCR for attribution | no |
+| `nameplate.js` | Name-bar crops and OCR for attribution (shares `frames.js`'s `findNameRow` — see §6's dark-plate note for its open bug) | no |
 | `emit.js` | Per-side observations in the contribution schema (per-sample, and per-round after review) | yes |
 | `review_out.js` | The session review artifact + per-round portrait crops | no |
 | `review/server.js` | The local review page: render, correct, finalize, upload | no |
@@ -1782,11 +1802,35 @@ else reads pixels, which is ordinary use.
 
 A run writes the contribution (`out/<session>.json`) **and** a review artifact
 (`out/<session>.review.json`, with portrait crops under `out/<session>/`).
-`resolve.js` groups the map's samples into rounds, votes each slot across the
-round's frames with `vote.js`, and turns thin evidence — a slot the frames
-disagreed on, a winner whose best frame still scored badly, an attribution the
-role constraint could not settle — into a flag. Nothing is dropped; a flagged
-slot keeps its best guess. `review/server.js` serves a localhost page over the
+`resolve.js` groups the map's samples into rounds and picks each slot's
+presented hero by **playtime**, not raw sample count — a segment's duration
+runs to the next segment's start (or the round's end for the last one), and
+whichever segment covers the most time wins. A fixed sampling grid makes raw
+vote count a poor stand-in for playtime whenever samples land unevenly around
+a swap: a live 2026-09-15 review found a 2-2 sample tie that was really an
+80/20 time split (one hero's two reads 100s apart early, the other's two reads
+40s apart right before the round ended) — a vote-count resolver called that
+contested, but nobody actually held the slot for half the round. `vote.js`'s
+raw frame agreement still exists and still drives its own flag (a
+single-segment slot whose frames disagreed more than usual, i.e. noise, not a
+swap) independently of which hero gets presented. Thin evidence — a slot with
+no playtime majority, a winner whose best frame still scored badly, an
+attribution the role constraint could not settle — becomes a flag, never a
+verdict. Nothing is dropped; a flagged slot keeps its best guess.
+
+`review_out.js` writes each map's initial `status` as `'reviewed'` rather than
+`'unreviewed'` when `resolve.js`'s `needsReview()` finds nothing but resolved
+swaps — a `contested` slot alone is not, by itself, a reason to hold up the
+whole map now that its winner is a real playtime majority, not a guess. Any
+other flag (`low-score`, `low-support`, `unknown-hero`,
+`attribution-abstained`, `round-unsampled`/`sparse-round`) still gates it. This
+exists because a captured batch is mostly clean maps with nothing to check —
+390 maps from one 2026-09-15 run had only 50 that needed an actual look once
+swap-only maps stopped counting, against 99 that would have under the old
+all-flags-count rule. `/upload` still refuses while any map is `'unreviewed'`
+(`review/server.js`), so this is what makes uploading a large batch a matter of
+reviewing the handful that need it, not clicking through every map that
+doesn't. `review/server.js` serves a localhost page over the
 newest artifact where the operator checks every map against its portrait strip,
 corrects heroes and players (corrections are appended as data and replayed at
 finalize, so the machine's original read stays visible), and then Finalize

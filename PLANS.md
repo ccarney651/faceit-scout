@@ -131,6 +131,12 @@ listed here it is still open.
   because `tools/verify_capture_browser.js` does **not** exercise the hero read
   at all, so the change would land on live capture with no automated coverage.
   Do it only alongside a browser check that actually performs a read.
+- **P2 — `findNameRow`'s dark-plate assumption breaks name OCR on a bright or
+  team-colour-tinted plate.** Root-caused 2026-09-15, not yet fixed — full
+  writeup, evidence and a recommended direction in
+  `specs/2026-09-15-nameplate-fill-heuristic-handoff.md`. Shared
+  `docs/capture/engine/frames.js` code, so this affects the live capture
+  pages' name OCR too, not only the replay bot's `attribution-abstained` rate.
 
 ## Replay bot
 

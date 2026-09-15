@@ -51,7 +51,7 @@ test('mapEntry writes one crop per round per side and points at them relatively'
                      'crops/ABC123-r2-a.png', 'crops/ABC123-r2-b.png']) {
     assert.ok(fs.existsSync(path.join(dir, rel)), rel + ' should exist');
   }
-  assert.strictEqual(entry.status, 'unreviewed');
+  assert.strictEqual(entry.status, 'reviewed', 'no slots at all means nothing to flag - auto-reviewed');
   assert.deepStrictEqual(entry.corrections, []);
   assert.strictEqual(entry.side_a_team, 'Wasp');
   assert.strictEqual(entry.duration_sec, 612, 'the measured length rides the artifact');
@@ -89,6 +89,45 @@ test('a round-side with a real swap gets one crop per sample, not just the openi
   // side b never swapped: no extra crops written, keeping the common case cheap.
   assert.strictEqual(entry.frames['1'].b_samples, undefined);
   assert.strictEqual(entry.duration_sec, null, 'no measurement in got stays null');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a map with nothing but a resolved swap is auto-reviewed', async () => {
+  const dir = tmpdir();
+  const frame = blankFrame();
+  const got = { samples: [{ t: 50, framePath: frame }] };
+  const contestedSlot = { guid: 'DMON', flags: ['contested'] };
+  const cleanSlot = { guid: 'ANA', flags: [] };
+  const resolved = [
+    { round_no: 1, from_t: 0, to_t: 300,
+      a: [contestedSlot, cleanSlot, cleanSlot, cleanSlot, cleanSlot],
+      b: [cleanSlot, cleanSlot, cleanSlot, cleanSlot, cleanSlot],
+      flags: [] },
+  ];
+
+  const entry = await RO.mapEntry(io, dir, CODE, resolved, null, got, calib);
+  assert.strictEqual(entry.status, 'reviewed', 'a resolved swap alone is not a reason to hold up the map');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a map with a genuine flag stays unreviewed even alongside a resolved swap', async () => {
+  const dir = tmpdir();
+  const frame = blankFrame();
+  const got = { samples: [{ t: 50, framePath: frame }] };
+  const contestedSlot = { guid: 'DMON', flags: ['contested'] };
+  const lowScoreSlot = { guid: 'SHION', flags: ['low-score'] };
+  const cleanSlot = { guid: 'ANA', flags: [] };
+  const resolved = [
+    { round_no: 1, from_t: 0, to_t: 300,
+      a: [contestedSlot, lowScoreSlot, cleanSlot, cleanSlot, cleanSlot],
+      b: [cleanSlot, cleanSlot, cleanSlot, cleanSlot, cleanSlot],
+      flags: [] },
+  ];
+
+  const entry = await RO.mapEntry(io, dir, CODE, resolved, null, got, calib);
+  assert.strictEqual(entry.status, 'unreviewed', 'low-score still needs a human, even with contested alongside it');
 
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -31,14 +31,17 @@ test('a unanimous round resolves every slot with full support and no flags', () 
   assert.deepStrictEqual(slot.flags, []);
 });
 
-// One frame misreads a slot; the frames around it outvote it for `guid`/
-// `support` (those are unaffected by segmentation). With 2-in-a-row
-// confirmation restored (2026-09-14, the operator's rule - a swap must be
-// seen twice to be counted), the lone WIDOW read is absorbed back into the
-// tank run instead of becoming its own segment, so the slot is single-segment
-// again and support below SUPPORT_MIN reaches the low-support branch - which
-// is the point: a slot whose reads do not agree is exactly a reason to look.
-test('a lone misread is outvoted for guid/support, absorbed into one segment, and flagged low-support', () => {
+// One frame misreads a slot; with 2-in-a-row confirmation restored
+// (2026-09-14, the operator's rule - a swap must be seen twice to be
+// counted), the lone WIDOW read is absorbed back into the tank run instead of
+// becoming its own segment. `guid` is now chosen by playtime, and a single
+// segment spans the whole tracked window by construction - support is 1
+// regardless of the noisy vote underneath it. The noise still surfaces: the
+// RAW vote (which the absorbed WIDOW read still counts against) drives
+// `low-support` independently of the presented support number - which is the
+// point: a slot whose frames did not agree is a reason to look even though
+// the hero it presents, and its playtime share, are not in question.
+test('a lone misread is outvoted for guid, absorbed into one segment, and flagged low-support', () => {
   const good = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const bad = [['WIDOW', 0.61], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
   const got = R.rounds(
@@ -46,29 +49,53 @@ test('a lone misread is outvoted for guid/support, absorbed into one segment, an
     ROUNDS, { heroRoles: ROLES });
 
   const slot = got[0].a[0];
-  assert.strictEqual(slot.guid, 'tank', 'two of three frames win');
-  assert.ok(slot.support < 0.67 + 1e-9 && slot.support > 0.6, 'support ~0.67: ' + slot.support);
+  assert.strictEqual(slot.guid, 'tank', 'the only segment, so playtime is moot - it is the presented hero');
+  assert.strictEqual(slot.support, 1, 'one segment spans the whole tracked window by construction');
   assert.strictEqual(slot.segments.length, 1, 'the lone WIDOW read is absorbed, not a segment');
   assert.strictEqual(slot.segments[0].guid, 'tank');
-  assert.ok(slot.flags.includes('low-support'), 'a single-segment slot that disagreed is a reason to look');
+  assert.ok(slot.flags.includes('low-support'), 'the raw vote still disagreed - a reason to look');
   assert.deepStrictEqual(slot.reads.slice().sort(), [0.61, 0.95, 0.95].sort(), 'the misread score is not dropped');
 });
 
-// A genuine mid-round hero swap: half the frames one hero, half another. Must
-// be reported as contested with the runner-up, not averaged to a winner.
-test('an even split is contested and carries the runner-up', () => {
+// A genuine mid-round hero swap, split down the middle BY PLAYTIME (DVA holds
+// t50-175, DMON holds t175-300 - 125s each of the round's 300s). Must be
+// reported as contested with the runner-up, not averaged to a winner. Sample
+// COUNT is not what decides this any more - see the next test for a swap
+// where the sample count ties but the playtime plainly does not.
+test('a playtime-even split is contested and carries the runner-up', () => {
   const early = [['DVA', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const late = [['DMON', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const got = R.rounds(
-    [sample(50, early, early), sample(150, early, early), sample(250, late, late), sample(290, late, late)],
+    [sample(50, early, early), sample(175, late, late), sample(225, late, late)],
     ROUNDS, { heroRoles: ROLES });
 
   const slot = got[0].a[0];
+  assert.strictEqual(slot.support, 0.5, '125s of 250s tracked - dead even');
   assert.strictEqual(slot.contested, true);
   assert.ok(['DVA', 'DMON'].includes(slot.guid));
   assert.ok(['DVA', 'DMON'].includes(slot.alt_guid));
   assert.notStrictEqual(slot.guid, slot.alt_guid);
   assert.ok(slot.flags.includes('contested'));
+});
+
+// The case that motivated the change (2026-09-15, from a live review): a 2-2
+// SAMPLE tie that is an 80/20 PLAYTIME split, because the samples do not land
+// evenly around the swap - DVA's two reads are 100s apart early, DMON's two
+// are 40s apart right before the round ends. The old vote-count resolver
+// called this contested; it is not, DVA plainly held the slot for most of the
+// round.
+test('a tied sample count is not contested when the playtime split is not close', () => {
+  const dva = [['DVA', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const dmon = [['DMON', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, dva, dva), sample(150, dva, dva), sample(250, dmon, dmon), sample(290, dmon, dmon)],
+    ROUNDS, { heroRoles: ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.guid, 'DVA', 'held the slot for 200 of the tracked 250s');
+  assert.strictEqual(slot.support, 0.8);
+  assert.strictEqual(slot.contested, false);
+  assert.ok(!slot.flags.includes('contested'));
 });
 
 // A slot no frame could read at all.
@@ -137,11 +164,12 @@ test('a round that lost most of its planned samples is flagged sparse-round', ()
   assert.ok(got[0].flags.includes('sparse-round'), '1 of 4 planned landed');
 });
 
-// A real swap across two multi-frame runs: support dips below SUPPORT_MIN
-// because neither hero has a frame majority, but this is exactly what a
-// genuine mid-round swap looks like, not noise - segments already caught it,
-// so low-support would be a redundant, misleading flag.
-test('a low-support slot with a multi-segment swap is not flagged low-support', () => {
+// A real swap across two multi-frame runs, all samples bunched early (X held
+// the slot for only 20 of the round's 300s before Y took over and held it the
+// rest of the way). The raw SAMPLE count is close (2 vs 3) - a vote-count
+// resolver would call this borderline - but the PLAYTIME is not close at all,
+// and low-support would be a misleading flag for a swap this one-sided.
+test('a low-support-by-sample-count multi-segment swap is not flagged low-support', () => {
   const early = [['X', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const late = [['Y', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
   const got = R.rounds(
@@ -151,8 +179,9 @@ test('a low-support slot with a multi-segment swap is not flagged low-support', 
 
   const slot = got[0].a[0];
   assert.strictEqual(slot.segments.length, 2);
-  assert.ok(slot.support < 0.67, 'support: ' + slot.support);
-  assert.strictEqual(slot.contested, false, 'not an even split - Y has a real majority');
+  assert.strictEqual(slot.guid, 'Y', 'held the slot for 260 of the tracked 280s');
+  assert.ok(slot.support > 0.9, 'support: ' + slot.support);
+  assert.strictEqual(slot.contested, false, 'not an even split - Y has an overwhelming majority');
   assert.ok(!slot.flags.includes('low-support'), 'a multi-segment slot is not noise');
 });
 
@@ -273,4 +302,39 @@ test('resolve is pure: it does not mutate the samples it is given', () => {
   const snapshot = JSON.stringify(samples);
   R.rounds(samples, ROUNDS, { heroRoles: ROLES });
   assert.strictEqual(JSON.stringify(samples), snapshot);
+});
+
+// --- needsReview: drives review_out.js's initial status ---------------------
+
+test('needsReview is false for a map with no flags at all', () => {
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(100, comp, comp), sample(200, comp, comp), sample(500, comp, comp)],
+    ROUNDS, { heroRoles: ROLES });
+  assert.strictEqual(R.needsReview(got), false);
+});
+
+test('needsReview is false for a map whose only flag is a resolved swap', () => {
+  const early = [['DVA', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const late = [['DMON', 0.95], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const roles = Object.assign({ DVA: 'tank', DMON: 'tank' }, ROLES);
+  const got = R.rounds(
+    [sample(50, early, early), sample(175, late, late), sample(225, late, late), sample(500, late, late)],
+    ROUNDS, { heroRoles: roles });
+  assert.strictEqual(got[0].a[0].contested, true, 'sanity: this fixture is the playtime-even-split case');
+  assert.strictEqual(R.needsReview(got), false, 'a resolved swap alone is not a reason to review');
+});
+
+test('needsReview is true for a genuine flag, contested or not', () => {
+  const weak = [['SHION', 0.55], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds([sample(100, weak, weak), sample(200, weak, weak)], ROUNDS, { heroRoles: ROLES });
+  assert.ok(got[0].a[0].flags.includes('low-score'));
+  assert.strictEqual(R.needsReview(got), true);
+});
+
+test('needsReview is true for a round-level flag (round-unsampled/sparse-round)', () => {
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds([sample(100, comp, comp)], ROUNDS, { heroRoles: ROLES });
+  assert.ok(got[1].flags.includes('round-unsampled'));
+  assert.strictEqual(R.needsReview(got), true);
 });

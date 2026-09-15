@@ -103,10 +103,17 @@
     // (run.js --sample-quiesce overrides it for a run.) 2026-09-12: bumped
     // 500->700 - reviewing a ~270-map unattended run found later codes in the
     // run landing samples mid-transition again, not just the first sample.
-    // Not root-caused to a specific mechanism (client/system slowdown deep
-    // into a long run vs. something else); this is the cheap first fix, worth
-    // re-measuring with probe_limits.js if it doesn't hold.
-    sample: { quiesceMs: 700 },
+    // 2026-09-15: bumped 700->1300 - the 2026-09-15 390-map run's
+    // attribution-abstained flags correlated with a name-plate still showing
+    // its white fade-in border at read time (a slower fade than the portrait
+    // band this value was tuned against). This folds in an untracked
+    // state/console_timing.json override of 1000 that had been silently
+    // active since 2026-09-11 (a console-slider tweak nobody rolled into the
+    // default) plus the operator's requested +300ms on top of the value
+    // actually in effect, not the stale 700 this comment used to cite.
+    // Not root-caused to a specific mechanism; worth re-measuring with
+    // probe_limits.js if it doesn't hold.
+    sample: { quiesceMs: 1300 },
 
     // The generic post-seek wait before a one-frame grab (capture.js quiesce).
     // THIS WAS ZERO, AND ZERO WAS RIGHT UNTIL GRABBING GOT FAST: a PowerShell
