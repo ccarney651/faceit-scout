@@ -274,7 +274,12 @@ function failureList(attempts, feedCodes) {
 function finalize(review, feed) {
   const byKey = {};
   for (const c of (feed && feed.codes) || []) byKey[c.match_id + ':' + c.game_no] = c;
-  const maps = (review.maps || []).map((m) => {
+  // 'excluded' (e.g. the operator ruling a batch untrustworthy after the
+  // fact - see PLANS.md/CHANGELOG.md's Doctrine hero-trial note) drops the
+  // map from the contribution entirely rather than shipping it with a caveat
+  // nobody downstream would see. The data stays on disk either way - this
+  // only affects what finalize() builds.
+  const maps = (review.maps || []).filter((m) => m.status !== 'excluded').map((m) => {
     const rounds = applyCorrections(m.rounds, m.corrections);
     const fc = byKey[m.match_id + ':' + m.game_no] || {};
     const code = {

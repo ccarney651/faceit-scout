@@ -27,6 +27,7 @@
   .map { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
     margin-bottom: 20px; overflow: hidden; }
   .map.reviewed { opacity: .72; }
+  .map.excluded { opacity: .55; border-color: var(--flag); }
   .maphead { padding: 12px 16px; border-bottom: 1px solid var(--line);
     display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
   .maphead b { font-size: 15px; }
@@ -444,18 +445,21 @@ function render() {
   const host = $('#maps'); host.textContent = '';
   (DATA.maps || [])
     .map((m, mi) => [m, mi])
-    .filter(([m]) => !(hideReviewed && m.status === 'reviewed'))
+    .filter(([m]) => !(hideReviewed && (m.status === 'reviewed' || m.status === 'excluded')))
     .forEach(([m, mi]) => host.appendChild(renderMap(m, mi)));
   refreshFooter();
 }
 
 function renderMap(m, mi) {
-  const box = el('div', 'map' + (m.status === 'reviewed' ? ' reviewed' : ''));
+  const box = el('div', 'map' + (m.status === 'reviewed' ? ' reviewed' : '') + (m.status === 'excluded' ? ' excluded' : ''));
   box.id = 'map-' + mi;
   const head = el('div', 'maphead');
   head.appendChild(el('b', null, m.map_name || '(unknown map)'));
   head.appendChild(el('span', 'code', m.demo_code));
   head.appendChild(el('span', 'summary', (m.side_a_team || 'A') + ' vs ' + (m.side_b_team || 'B')));
+  if (m.status === 'excluded') {
+    head.appendChild(el('span', 'summary has-flags', '🚫 excluded: ' + (m.exclude_reason || 'no reason recorded')));
+  }
   const fc = mapFlagCount(m);
   const sm = el('span', 'summary' + (fc ? ' has-flags' : ''),
     (m.rounds || []).length + ' rounds · ' + fc + ' flags'
@@ -484,9 +488,19 @@ function renderMap(m, mi) {
   }
 
   const foot = el('div', 'mapfoot');
-  const rev = el('button', null, m.status === 'reviewed' ? 'Reviewed ✓' : 'Mark reviewed');
-  rev.onclick = () => { m.status = m.status === 'reviewed' ? 'unreviewed' : 'reviewed'; dirty = true; markDirty(); render(); };
-  foot.appendChild(rev);
+  if (m.status === 'excluded') {
+    const restore = el('button', null, 'Restore (undo exclude)');
+    restore.onclick = () => {
+      m.status = m.prior_status || 'unreviewed';
+      delete m.prior_status; delete m.exclude_reason;
+      dirty = true; markDirty(); render();
+    };
+    foot.appendChild(restore);
+  } else {
+    const rev = el('button', null, m.status === 'reviewed' ? 'Reviewed ✓' : 'Mark reviewed');
+    rev.onclick = () => { m.status = m.status === 'reviewed' ? 'unreviewed' : 'reviewed'; dirty = true; markDirty(); render(); };
+    foot.appendChild(rev);
+  }
   box.appendChild(foot);
   return box;
 }
@@ -660,12 +674,19 @@ function openHeroEdit(cell, m, mi, round_no, side, i) {
 
 function refreshFooter() {
   const maps = DATA.maps || [];
-  const allReviewed = maps.length && maps.every((m) => m.status === 'reviewed');
+  // 'excluded' does not block Upload (server.js's finalize() drops those maps
+  // from the contribution entirely; its /upload gate only refuses on a
+  // genuine 'unreviewed' map), so it must not count as "still to review" here
+  // either, or the button stays disabled forever once anything is excluded.
+  const excludedCount = maps.filter((m) => m.status === 'excluded').length;
+  const allReviewed = maps.length && maps.every((m) => m.status === 'reviewed' || m.status === 'excluded');
   $('#upload').disabled = !allReviewed;
   $('#finalize').disabled = !maps.length;
   $('#banner').textContent = allReviewed
-    ? 'every map reviewed — Finalize to rebuild the contribution, then Upload'
-    : (maps.filter((m) => m.status !== 'reviewed').length + ' map(s) still to review');
+    ? ('every map reviewed — Finalize to rebuild the contribution, then Upload'
+       + (excludedCount ? ' (' + excludedCount + ' excluded, not included)' : ''))
+    : (maps.filter((m) => m.status !== 'reviewed' && m.status !== 'excluded').length + ' map(s) still to review'
+       + (excludedCount ? ', ' + excludedCount + ' excluded' : ''));
 }
 
 async function save() {

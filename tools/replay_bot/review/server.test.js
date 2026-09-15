@@ -182,6 +182,26 @@ test('finalize leaves duration null when the artifact never measured one', () =>
   assert.strictEqual(contrib.maps[0].duration_sec, null);
 });
 
+test('finalize drops an excluded map from the contribution entirely', () => {
+  const review = { session: 's', maps: [
+    {
+      demo_code: 'KEEP01', match_id: 'm1', game_no: 1, map_name: 'Busan', map_guid: '0xMAP',
+      map_category: 'Control', side_a_team: 'Wasp', side_b_team: 'NewGens',
+      side_a_team_id: 'ta', side_b_team_id: 'tb', captured_at: '2026-09-10T00:00:00Z',
+      rounds: ROUNDS(), corrections: [], status: 'reviewed',
+    },
+    {
+      demo_code: 'DROP02', match_id: 'm2', game_no: 1, map_name: 'Busan', map_guid: '0xMAP',
+      map_category: 'Control', side_a_team: 'Wasp', side_b_team: 'NewGens',
+      side_a_team_id: 'ta', side_b_team_id: 'tb', captured_at: '2026-09-10T00:00:00Z',
+      rounds: ROUNDS(), corrections: [], status: 'excluded', exclude_reason: 'test',
+    },
+  ] };
+  const contrib = SV.finalize(review, { codes: [] });
+  assert.strictEqual(contrib.maps.length, 1);
+  assert.strictEqual(contrib.maps[0].demo_code, 'KEEP01');
+});
+
 test('uploadToken is stable across calls and written to state/', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbtok-'));
   const a = SV.uploadToken(dir);

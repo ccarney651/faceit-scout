@@ -37,6 +37,18 @@ Entries before 2026-08-11 were reconstructed from git history.
   read is clean. `tools/build_capture_data.py` now merges in
   `faceit_sync/subroles.py`'s `SUBROLE` (already the committed source for
   this per its own docstring) for any hero name FACEIT has no row for.
+- **A map can be excluded from a contribution without deleting it.** Added so
+  the 134 NA maps finished 2026-09-12T19:00Z–2026-09-15T19:00Z (the window
+  Doctrine's portrait ref was unverified/absent for — see the entry above)
+  could be pulled from the active `2026-09-15-full` batch without losing the
+  capture: `status: 'excluded'` (+ `exclude_reason`, `prior_status`) marks a
+  map, `finalize()` (`review/server.js`) drops it from the contribution
+  entirely, and the review page shows it dimmed with its reason and a
+  Restore button rather than hiding it outright. None of the 134 had reached
+  the live site yet, so this is a pre-upload safeguard, not a takedown —
+  their codes are queued at
+  `tools/replay_bot/state/doctrine-window-recapture.txt` for a re-run now
+  that Doctrine has a reference.
 - **The review page stops offering an already-claimed player as a candidate
   for a different slot.** Every slot's correction chips used to list the
   whole roster unconditionally, so a reviewer could accidentally assign one
