@@ -36,7 +36,7 @@ const CONTRIBUTOR = 'replay-bot';
 // ---------------------------------------------------------------- pure ----
 
 function readJson(p, fallback) {
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return fallback; }
+  try { return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, '')); } catch (e) { return fallback; }
 }
 
 // The newest out/*.review.json, or null. A run writes the file per map, so
@@ -146,8 +146,20 @@ function feedRows(feed, attempts, opts) {
 // state/attempts.json's failed entries, joined against the feed for map/team
 // context and tagged with a category - what the review page's failures panel
 // filters on. Sorted oldest first, same order the run attempted them in.
-function buildRunArgs(body) {
+function buildRunArgs(body, opts) {
   const args = [];
+  if (body && body.loop) {
+    // Loop mode cycles the console's code stack forever rather than working a
+    // finite ledger queue - the "see every live code" path. Divisions/teams do
+    // not apply (the stack file is the filter), and each loop session gets its
+    // own out file so it never collides with a ledger run's replay-bot-*.json.
+    const codesFile = (opts && opts.codesFile) || path.join(STATE, 'console_codes.json');
+    const outDir = (opts && opts.outDir) || OUT;
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    args.push('--code-stack', codesFile, '--out', path.join(outDir, 'console-loop-' + ts + '.json'));
+    if (body && body.limit) args.push('--limit', String(body.limit));
+    return args;
+  }
   if (body && body.divisions) args.push('--divisions', String(body.divisions));
   if (body && body.teams) args.push('--teams', String(body.teams));
   if (body && body.limit) args.push('--limit', String(body.limit));
@@ -155,7 +167,10 @@ function buildRunArgs(body) {
 }
 
 function startRun(ctx, body) {
-  const args = buildRunArgs(body);
+  const args = buildRunArgs(body, {
+    codesFile: path.join(ctx.stateDir, 'console_codes.json'),
+    outDir: ctx.outDir,
+  });
   try { fs.unlinkSync(path.join(ctx.stateDir, 'loop_stop.flag')); } catch (e) { /* fine */ }
   const proc = ctx.spawn(process.execPath, [RUNJS_PATH].concat(args), { cwd: ctx.repoDir });
   const run = { proc, log: [], subscribers: [], startedAt: Date.now(), exitInfo: null };

@@ -484,6 +484,25 @@ test('buildRunArgs translates division/team/limit into run.js flags', () => {
     ['--divisions', 'EMEA Master', '--teams', 'Wasp,Crabs', '--limit', '5']);
 });
 
+test('buildRunArgs routes a loop run through the code stack into its own out file', () => {
+  const args = SV.buildRunArgs({ loop: true }, { codesFile: '/s/codes.json', outDir: '/o' });
+  assert.deepStrictEqual(args.slice(0, 2), ['--code-stack', '/s/codes.json']);
+  assert.strictEqual(args[2], '--out');
+  // Each loop session gets a timestamped console-loop-*.json, distinct from a
+  // ledger run's replay-bot-<date>.json.
+  assert.match(args[3], /[\\/]console-loop-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/);
+  assert.strictEqual(args.length, 4, 'no limit means exactly the four stack flags');
+});
+
+test('buildRunArgs loop mode ignores divisions/teams but passes a limit through', () => {
+  const args = SV.buildRunArgs(
+    { loop: true, divisions: 'EMEA Master', teams: 'Wasp,Crabs', limit: 5 },
+    { codesFile: '/s/codes.json', outDir: '/o' });
+  assert.deepStrictEqual(args.slice(0, 2), ['--code-stack', '/s/codes.json']);
+  assert.deepStrictEqual(args.slice(4), ['--limit', '5']);
+  assert.strictEqual(args.length, 6);
+});
+
 test('refresh-feed skips the network call when the feed is already fresh today', async () => {
   const { dir, ctx } = tmpSession();
   fs.writeFileSync(ctx.feedPath, JSON.stringify({ built_at: new Date().toISOString(), codes: [] }));

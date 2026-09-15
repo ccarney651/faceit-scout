@@ -19,6 +19,16 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-15
 
+### Changed
+
+- **The review page's Run tab can run the code-stack loop.** A new "Loop every
+  live code" checkbox routes `/go` through `--code-stack` (the console's
+  overnight path, cycled over `state/console_codes.json`) instead of the
+  ledger queue — so every live code in the feed can be seen even after the
+  queue's already-scouted codes have been worked. Divisions/teams don't apply
+  in loop mode, and each loop session writes its own `console-loop-*.json` out
+  file so it never collides with a ledger run's.
+
 ### Fixed
 
 - **Hero portraits were matched a few pixels out of alignment, and side b paid
@@ -40,6 +50,18 @@ Entries before 2026-08-11 were reconstructed from git history.
 ## 2026-09-14
 
 ### Changed
+
+- **The code-stack loop retires a code that keeps failing after import.**
+  `run.js`'s loop mode (the console's overnight `--code-stack` run) used to
+  cycle every code forever regardless of outcome — a persistently-bad code
+  (corrupted replay) came back every rotation with no way to stop it except
+  hand-editing the stack. It now keeps a per-run, in-memory failure count per
+  code, counting only failures *after* the replay loaded (an import or
+  environmental failure never entered the client's ring, so it is safe to retry
+  next rotation). At `FAIL_RETRY_CAP` (3) the code is **retired for the run**:
+  logged, rotated to the bottom of the stack and skipped, and the run stops
+  when every code is retired. The two-consecutive-failure circuit breaker is
+  unchanged and still applies in loop mode.
 
 - **The replay bot samples on a 45s grid now, not 30s.** `INTERVALS` in
   `timeline.js` gained `45`, and the `set-interval` chunk was re-recorded to

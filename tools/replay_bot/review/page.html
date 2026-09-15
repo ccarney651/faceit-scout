@@ -141,10 +141,9 @@
   <div class="runrow">
     <label><input type="checkbox" id="owReady"> Overwatch is open on the Replay History tab</label>
   </div>
-  <div class="runrow">
+<div class="runrow">
     <label>Divisions <select id="fDivisions" multiple size="6"></select></label>
     <label>Teams <input type="text" id="fTeams" list="fTeamsList" placeholder="e.g. Wasp,Crabs"></label>
-    <datalist id="fTeamsList"></datalist>
     <label>Limit <select id="fLimit">
       <option value="">All</option>
       <option value="5">5</option>
@@ -152,6 +151,7 @@
       <option value="20">20</option>
       <option value="50">50</option>
     </select></label>
+    <label><input type="checkbox" id="fLoop"> Loop every live code (cycles the code stack; divisions/teams don't apply)</label>
   </div>
   <div class="runrow">
     <button id="goBtn" class="primary" disabled>Go</button>
@@ -741,6 +741,11 @@ load();
     return s;
   }
   $('#owReady').onchange = refreshStatus;
+  $('#fLoop').onchange = () => {
+    const loop = $('#fLoop').checked;
+    $('#fDivisions').disabled = loop;
+    $('#fTeams').disabled = loop;
+  };
 
   // Divisions is a real multi-select; Teams stays free-text (comma-separated,
   // substring-matched against either side - see queue.js) with a datalist for
@@ -812,6 +817,7 @@ load();
     const body = { confirmed: true };
     const divs = selectedDivisions();
     const teams = currentTeams();
+    if ($('#fLoop').checked) body.loop = true;
     if (divs.length) body.divisions = divs.join(',');
     if (teams.length) body.teams = teams.join(',');
     if ($('#fLimit').value) body.limit = Number($('#fLimit').value);

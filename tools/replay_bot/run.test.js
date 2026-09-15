@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const RUN = require('./run.js');
 
 test('flags are read off the command line', () => {
@@ -137,4 +140,95 @@ test('captured, captured-with-misses and an orphaned "opened" entry are all done
     'm1:3': { status: 'opened' },
   };
   assert.deepStrictEqual(RUN.attemptedKeys(state).sort(), ['m1:1', 'm1:2', 'm1:3']);
+});
+
+// -- The loop-mode per-code cap (specs/2026-09-14-replay-bot-code-stack-retry-handoff.md).
+// The loop never touches the ledger, so its failure counting is a side table
+// keyed by code and scoped to the run; only a failure AFTER the replay loaded
+// counts toward the cap, so an import or environmental failure cannot drive a
+// pool code out of rotation.
+function tmpStack(codes) {
+  const f = path.join(os.tmpdir(), 'owdb-run-stack-test-' + process.pid + '-' +
+    Math.random().toString(36).slice(2) + '.json');
+  require('./codestack.js').save(f, codes);
+  return f;
+}
+
+test('countLoopFailure ignores a failure before the import succeeded', () => {
+  const fails = new Map();
+  assert.deepStrictEqual(RUN.countLoopFailure(fails, 'AAA111', false),
+    { count: null, retired: false });
+  assert.strictEqual(fails.size, 0);
+});
+
+test('countLoopFailure counts only post-import failures and retires at the cap', () => {
+  const fails = new Map();
+  assert.deepStrictEqual(RUN.countLoopFailure(fails, 'AAA111', true), { count: 1, retired: false });
+  assert.deepStrictEqual(RUN.countLoopFailure(fails, 'AAA111', true), { count: 2, retired: false });
+  assert.deepStrictEqual(RUN.countLoopFailure(fails, 'AAA111', true),
+    { count: RUN.FAIL_RETRY_CAP, retired: true });
+  assert.deepStrictEqual(RUN.countLoopFailure(fails, 'AAA111', true),
+    { count: RUN.FAIL_RETRY_CAP + 1, retired: true }, 'stays retired, never un-retires');
+});
+
+test('countLoopFailure keeps codes separate', () => {
+  const fails = new Map();
+  RUN.countLoopFailure(fails, 'AAA111', true);
+  assert.deepStrictEqual(RUN.countLoopFailure(fails, 'BBB222', true), { count: 1, retired: false });
+  assert.strictEqual(fails.get('AAA111'), 1);
+});
+
+test('pullLoopCode skips retired codes but keeps the stack shape', () => {
+  const cs = require('./codestack.js');
+  // Nothing retired: the top code is returned and the stack rotates normally.
+  let f = tmpStack(['AAA111', 'BBB222', 'CCC333']);
+  try {
+    const next = RUN.pullLoopCode(f, new Set());
+    assert.strictEqual(next.code, 'AAA111');
+    assert.deepStrictEqual(next.skipped, [], 'nothing to skip');
+    assert.deepStrictEqual(cs.load(f), ['BBB222', 'CCC333', 'AAA111']);
+  } finally { fs.unlinkSync(f); }
+
+  // Two of three retired: both are rotated to the bottom on the way to the
+  // one that is still live, and are still in the file afterwards - retired
+  // for the run, not deleted.
+  f = tmpStack(['AAA111', 'CCC333', 'BBB222']);
+  try {
+    const next = RUN.pullLoopCode(f, new Set(['AAA111', 'CCC333']));
+    assert.strictEqual(next.code, 'BBB222');
+    assert.deepStrictEqual(next.skipped, ['AAA111', 'CCC333']);
+    assert.deepStrictEqual(cs.load(f), ['AAA111', 'CCC333', 'BBB222'],
+      'a full rotation restored the order - retired ones were rotated past, not removed');
+  } finally { fs.unlinkSync(f); }
+});
+
+test('pullLoopCode stops when every code is retired for the run', () => {
+  const f = tmpStack(['AAA111', 'BBB222']);
+  try {
+    const next = RUN.pullLoopCode(f, new Set(['AAA111', 'BBB222']));
+    assert.strictEqual(next.allRetired, true);
+    assert.deepStrictEqual(next.skipped.sort(), ['AAA111', 'BBB222']);
+  } finally { fs.unlinkSync(f); }
+});
+
+test('pullLoopCode on an empty stack is empty, not allRetired', () => {
+  const f = tmpStack([]);
+  try {
+    assert.deepStrictEqual(RUN.pullLoopCode(f, new Set()), { empty: true });
+  } finally { fs.unlinkSync(f); }
+});
+
+// The feed is regenerated locally sometimes by a writer that leaves a BOM
+// (build_capture_data.py never does; a PowerShell redirect does). run.js used
+// to hand back the fallback for such a file, which turned every code in the
+// loop into an adhoc map with no attribution context. readJson strips the
+// leading BOM first, exactly like recorder.js already does.
+test('readJson strips a leading BOM before parsing', () => {
+  const f = path.join(os.tmpdir(), 'owdb-bom-' + process.pid + '.json');
+  try {
+    fs.writeFileSync(f, '\ufeff{"codes":["AAA111"],"built_at":"2026-09-14T22:13:33Z"}', 'utf8');
+    assert.deepStrictEqual(RUN.readJson(f, null), { codes: ['AAA111'], built_at: '2026-09-14T22:13:33Z' });
+    assert.deepStrictEqual(RUN.readJson(f + '.missing', { codes: [] }), { codes: [] },
+      'a missing file still hands back the fallback');
+  } finally { fs.unlinkSync(f); }
 });

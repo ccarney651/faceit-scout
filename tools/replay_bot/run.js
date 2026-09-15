@@ -228,6 +228,39 @@ function attemptedKeys(state) {
   return Object.keys(state || {}).filter((k) => isDoneEntry(state[k]));
 }
 
+// Loop-mode pull: rotate the code stack until the top code is not retired, or
+// the whole stack has been visited. A retired code is still rotated to the
+// bottom (the stack keeps its shape) but never attempted again this run.
+// Returns { code, skipped } with the next code to attempt and the retired
+// ones rotated past it, { empty } if the file holds nothing, or
+// { allRetired, skipped } if every code has been retired for this run.
+function pullLoopCode(file, retired) {
+  const len = CodeStack.load(file).length;
+  let pulled = null;
+  const skipped = [];
+  for (let seen = 0; seen < len; seen++) {
+    pulled = CodeStack.rotate(file);
+    if (!pulled) return { empty: true };
+    if (!retired.has(pulled)) return { code: pulled, skipped };
+    skipped.push(pulled);
+  }
+  return pulled ? { allRetired: true, skipped } : { empty: true };
+}
+
+// Post-import failure accounting for loop mode. Only a failure after the
+// replay loaded counts toward the cap: a code that never imported (or whose
+// import never drew) is safe to retry next rotation, and an environmental
+// failure (host died, client unfocused) must not retire a third of the pool
+// on one bad night. Returns { count, retired } - count is null when the
+// failure is not post-import - and mutates `fails` (the per-run Map) so the
+// count carries across a code's rotation-and-return.
+function countLoopFailure(fails, code, imported) {
+  if (!imported) return { count: null, retired: false };
+  const n = (fails.get(code) || 0) + 1;
+  fails.set(code, n);
+  return { count: n, retired: n >= FAIL_RETRY_CAP };
+}
+
 // Hand-maintained, dated record of a region's wipe landing stricter than the
 // feed's one global code_wipe_date - see queue.js's regionWipeDates docs for
 // why this can't just be baked into queue.js itself. Same spirit as
@@ -262,7 +295,7 @@ function feedFreshness(feed, now) {
 // ------------------------------------------------------------------- io ----
 
 function readJson(p, fallback) {
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return fallback; }
+  try { return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\ufeff/, '')); } catch (e) { return fallback; }
 }
 
 function writeJson(p, value) {
@@ -460,6 +493,12 @@ async function main() {
   let queueIndex = 0;
   let mapsRun = 0;
 
+  // Loop-mode per-code failures, in memory for the run only ("retired for the
+  // run" = log-and-skip, not a ledger edit). state/attempts.json stays
+  // untouched when looping; this is the loop's own side table.
+  const loopFailures = new Map();   // code -> post-import failure count this run
+  const retired = new Set();        // codes that have hit FAIL_RETRY_CAP
+
   while (true) {
     if (stopRequested) break;
     await checkpoint();
@@ -471,9 +510,17 @@ async function main() {
 
     let code;
     if (looping) {
-      const pulled = CodeStack.rotate(args.codeStack);
-      if (!pulled) { console.log('the code stack is empty - stopping'); break; }
-      code = synthesise([pulled], feed)[0];
+      // Pull-and-skip: a retired code is rotated to the bottom but not worked,
+      // so it stays out of this run's rotation while the stack keeps its shape.
+      const next = pullLoopCode(args.codeStack, retired);
+      if (next.empty) { console.log('the code stack is empty - stopping'); break; }
+      if (next.allRetired) {
+        console.log(`every code in the stack is retired this run - stopping`);
+        break;
+      }
+      next.skipped.forEach((c) =>
+        console.log(`code ${c} retired this run (${loopFailures.get(c)} post-import failures) - skipped`));
+      code = synthesise([next.code], feed)[0];
     } else {
       if (queueIndex >= queue.length) break;
       code = queue[queueIndex++];
@@ -505,6 +552,11 @@ async function main() {
       };
       writeJson(STATE, state);
     }
+    // Whether the import itself succeeded, for loop-mode failure accounting: a
+    // failure before the replay loaded must not count toward the per-code cap
+    // (that code never entered the ring, so it is safe to retry next rotation).
+    let imported = false;
+
     try {
       // The ESC menu is the other place the client gets stuck: a leave-replay
       // whose click misses leaves it up, and the import chunk then clicks
@@ -547,6 +599,7 @@ async function main() {
       const tLoaded = Date.now();
       console.log(`import ${((tPlayed - tOpen) / 1000).toFixed(1)}s, ` +
         `client loaded the replay in ${((tLoaded - tPlayed) / 1000).toFixed(1)}s`);
+      imported = true;
 
       // waitFor returns the moment the team plates are drawn, which is NOT the
       // same as the client being ready for control input - the two live
@@ -638,6 +691,7 @@ async function main() {
       const record = E.mapRecord(oriented, C.observationsOf(got.samples), rounds, {
         profile: { w: calib.FROZEN.frame.w, h: calib.FROZEN.frame.h, hud_variant: 'replay-bot' },
         attribution: attribution,
+        durationSec: got.duration != null ? got.duration : null,
       });
       maps.push(record);
 
@@ -683,6 +737,19 @@ async function main() {
       if (io.sweepTransient) io.sweepTransient();
     } catch (e) {
       consecutiveFailures++;
+      if (looping && imported) {
+        // Only a failure after a successful import counts toward the cap - a
+        // code that never entered the ring is safe to retry, so an import or
+        // environmental failure must not drive a pool code out of rotation.
+        const counted = countLoopFailure(loopFailures, code.code, imported);
+        if (counted.retired) {
+          console.log(`code ${code.code} failed ${counted.count} times after ` +
+            `import (cap ${FAIL_RETRY_CAP}) - retired for this run`);
+        } else {
+          console.log(`code ${code.code} post-import failures: ` +
+            `${counted.count}/${FAIL_RETRY_CAP}`);
+        }
+      }
       if (!looping) {
         state[key].status = 'failed';
         state[key].error = e.message;
@@ -725,7 +792,7 @@ async function main() {
 
 module.exports = {
   parseArgs, synthesise, attemptedKeys, feedFreshness, isDoneEntry, FAIL_RETRY_CAP,
-  REGION_WIPE_OVERRIDES,
+  REGION_WIPE_OVERRIDES, pullLoopCode, countLoopFailure, readJson,
 };
 
 // Only when run as a command. Requiring this file - which the tests do - must

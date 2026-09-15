@@ -137,20 +137,22 @@ listed here it is still open.
 The replay bot lives on `tools/replay_bot/` and its full account is in
 `ARCHITECTURE.md` §14. Open items:
 
-- **P3 — Per-code retry-and-requeue for the code-stack loop.** The finite
-  feed/queue path now has a per-code retry cap (`FAIL_RETRY_CAP = 3`, sits
-  *alongside* the two-consecutive-failure abort — 2026-09-12). The `--code-stack`
-  loop is explicitly skipped from the attempt ledger (`run.js`: "Skipped
-  entirely when looping" — a code-stack code is meant to be imported again), so
-  `CodeStack.rotate()` still cycles every code regardless of outcome and the
-  whole-run abort still applies there. The operator's design question remains
-  open for the loop: should a per-code retry cap *replace* the
-  two-consecutive-failure guard (accept more risk of burning codes against a
-  stuck client to finish the batch), sit *alongside* it (keep the circuit
-  breaker, possibly stopping early), or be left alone in favour of a throwaway
-  wrapper driving `run.js --codes <one>` per attempt? Retrying is only safe for
-  the reusable test pool (`state/console_codes.json`); "one shot per code"
-  still holds for a finite `--codes`/live-feed run.
+- **P3 — Per-code retry-and-requeue for the code-stack loop.**
+  **DECIDED 2026-09-14 — implemented in `run.js`.** The finite feed/queue path
+  has a per-code retry cap (`FAIL_RETRY_CAP = 3`, sits *alongside* the
+  two-consecutive-failure abort — 2026-09-12). The `--code-stack` loop is
+  explicitly skipped from the attempt ledger (a code-stack code is meant to be
+  imported again), so `CodeStack.rotate()` still cycles every code regardless of
+  outcome and the whole-run abort still applies there. The operator chose: keep
+  the circuit breaker and add a per-code cap **alongside** it; the cap lives in
+  `run.js` next to `FAIL_RETRY_CAP`; only **post-import failures** count
+  (import/environmental failures never entered the ring, so they are safe to
+  retry next rotation); retirement is **log-and-skip for the run** — the code is
+  rotated to the bottom and skipped, not deleted, and the run stops if every
+  code retires. The loop's failure table is in-memory and scoped to the run
+  (`pullLoopCode`/`countLoopFailure` in `run.js`); nothing touches
+  `state/attempts.json`. One-shot-per-code still holds for a finite
+  `--codes`/live-feed run.
 - **P3 — No reference for the "no hero picked yet" portrait state.** Before a
   player locks in, their slot shows a generic placeholder — a plain silhouette
   with a "?" icon, 0% ult — instead of real hero art. The ref library has no

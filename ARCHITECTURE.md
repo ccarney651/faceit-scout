@@ -1895,7 +1895,17 @@ immediately.
 
 Codes cycled through `--code-stack` never touch `state/attempts.json` - that
 ledger's whole point is "this code can never be imported again", which is
-backwards for codes deliberately meant to be reused.
+backwards for codes deliberately meant to be reused. The loop keeps its own
+**per-code** failure count instead, in memory and scoped to the run: each code's
+post-import failures are counted (never the import or an environmental failure -
+a code that never entered the 10-import ring is safe to retry next rotation),
+and at `FAIL_RETRY_CAP` (3) the code is **retired for the run** — logged and
+skipped, not deleted: the rotation pulls it and pushes it straight to the
+bottom, so the stack keeps its shape while a persistently-bad code (corrupted
+replay) stops costing attempts. If every code retires, the run stops rather than
+spinning on skips. The two-consecutive-failures guard still applies in loop
+mode (a stuck client fails every code), but a retired code is not a failure of
+the client, so a skip neither advances nor resets the streak.
 
 ### 14.4 The run loop
 
@@ -1925,10 +1935,12 @@ backwards for codes deliberately meant to be reused.
 
 Two guards sit outside that sequence. **Two consecutive failures stop the run**,
 because a client stuck in an unexpected menu will otherwise burn every remaining
-code doing nothing. And the **stale-feed guard** refuses a `data.json` that was
-not built today: codes die at every patch, a stale feed lists dead ones while
-looking perfectly healthy, and pointing an unattended run at it would spend the
-entire queue on codes that cannot work.
+code doing nothing. In loop mode (§14.3b) a second, per-code guard sits alongside
+it: a code that keeps failing after import is retired for the run at
+`FAIL_RETRY_CAP` instead of coming back forever. And the **stale-feed guard**
+refuses a `data.json` that was not built today: codes die at every patch, a stale
+feed lists dead ones while looking perfectly healthy, and pointing an unattended
+run at it would spend the entire queue on codes that cannot work.
 
 ### 14.5 One attempt per ring-window
 
