@@ -21,6 +21,7 @@ from .db import Database
 from .errors import CaptureError
 from .faceit import connect_ro, load_heroes
 from .models import REF_STATES, STATE_ALIVE, FaceitHero, HeroRef, Rect, RoiProfile
+from .refs_trainer import DONE_SENTINEL, decode_marker
 
 log = logging.getLogger("owdb.refs")
 
@@ -700,6 +701,272 @@ def run_refs_learn(  # pragma: no cover - runtime-only path
     cv2.destroyWindow(win)
     print(f"done. {written} HUD ref(s) written.")
     return written
+
+
+# --- unattended learning from the refs-trainer workshop code -----------------
+
+# The step counter refs_trainer.opy draws sits at HudPosition.TOP row 0 — top
+# centre. These fractions bound a generous box around it; override with
+# --index-roi if the OCR keeps missing (print the raw read to see what it grabs).
+_INDEX_ROI_FRAC = (0.34, 0.012, 0.32, 0.10)  # x, y, w, h as fractions of the frame
+
+
+def _win_ocr_text(cv2: Any, bgr: Any) -> str:  # pragma: no cover - needs winsdk
+    """One-shot Windows OCR of a BGR crop -> the recognised text (space-joined)."""
+    import asyncio
+
+    import winsdk.windows.graphics.imaging as imaging
+    import winsdk.windows.media.ocr as w_ocr
+    import winsdk.windows.storage.streams as streams
+
+    async def _run() -> str:
+        rgba = cv2.cvtColor(bgr, cv2.COLOR_BGR2BGRA)
+        h, w = rgba.shape[:2]
+        bmp = imaging.SoftwareBitmap(imaging.BitmapPixelFormat.BGRA8, w, h,
+                                     imaging.BitmapAlphaMode.PREMULTIPLIED)
+        buf = streams.Buffer(w * h * 4)
+        buf.length = w * h * 4
+        with memoryview(buf) as mv:
+            mv[:] = rgba.tobytes()
+        bmp.copy_from_buffer(buf)  # type: ignore[arg-type]
+        eng = w_ocr.OcrEngine.try_create_from_user_profile_languages()
+        assert eng is not None, "no OCR language pack installed"
+        res = await eng.recognize_async(bmp)
+        return " ".join(line.text for line in res.lines or [])
+
+    return asyncio.run(_run())
+
+
+# Only the visually-unambiguous confusions. NOT S/5, B/8, Z/2, g/9 — those flip
+# often enough that "repairing" them produces a confident WRONG step number,
+# which mislabels a whole batch of refs. A missed digit just costs a re-poll.
+_OCR_DIGIT_FIX = str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "|": "1"})
+
+
+def parse_step_index(text: str) -> int | None:
+    """Pull the step number out of an OCR'd ``REFS <n>`` string.
+
+    Anchors on the ``REFS`` label and takes only the token right after it, so a
+    stray number elsewhere in the crop (a countdown, a score) is ignored.
+    Repairs only O->0 and I/l->1. Returns that integer, or None.
+    """
+    import re
+
+    if not text:
+        return None
+    m = re.search(r"R[E3]FS\s*([0-9OoIl|]+)", text, re.IGNORECASE)
+    if m:
+        nums = re.findall(r"\d+", m.group(1).translate(_OCR_DIGIT_FIX))
+        return int(nums[-1]) if nums else None
+    return None
+
+
+def classify_marker(
+    marker: int | None, done: set[int], nrows: int,
+) -> tuple[str, tuple[int, str] | None, list[int]]:
+    """Decide what ``run_refs_autolearn`` should do with an OCR'd counter value.
+
+    The workshop marches markers 0, 1, 2, … monotonically (``2*step`` alive,
+    ``+1`` dead) and then the ``DONE_SENTINEL``. ``done`` is the set of markers
+    already captured. Returns ``(kind, decoded, lost)`` where:
+
+    * ``("done", None, [])``        — the roster march finished.
+    * ``("expected", (step, state), [])`` — the next marker in sequence; capture it.
+    * ``("ahead", (step, state), lost)``  — the workshop jumped forward; capture it
+      but treat ``lost`` (the skipped markers) as missed.
+    * ``("wait", None, [])``        — behind, already handled, unreadable, or off
+      the end; poll again.
+    """
+    if marker == DONE_SENTINEL:
+        return ("done", None, [])
+    total = 2 * nrows
+    if marker is None or not 0 <= marker < total:
+        return ("wait", None, [])
+    expected = (max(done) + 1) if done else 0
+    if marker == expected:
+        return ("expected", decode_marker(marker), [])
+    if expected < marker < total:
+        return ("ahead", decode_marker(marker), list(range(expected, marker)))
+    return ("wait", None, [])
+
+
+def _ocr_step_index(  # pragma: no cover - needs cv2 + winsdk
+    cv2: Any, frame: Any, roi: Rect,
+) -> tuple[int | None, str]:
+    crop = frame[roi.y: roi.y + roi.h, roi.x: roi.x + roi.w]
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    big = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    big = cv2.cvtColor(big, cv2.COLOR_GRAY2BGR)
+    text = _win_ocr_text(cv2, big)
+    return parse_step_index(text), text
+
+
+def run_refs_autolearn(  # pragma: no cover - runtime-only path
+    db: Database,
+    faceit_db_path: str,
+    *,
+    hud_variant: str,
+    refs_dir: str | Path,
+    index_roi: Rect | None = None,
+    flip_b: bool = False,
+    only: str | None = None,
+    roster_size: int | None = None,
+    poll_interval: float = 0.5,
+    dry_run: bool = False,
+) -> int:
+    """Learn the whole library unattended, driven by ``refs_trainer.opy``.
+
+    The workshop code cycles dummy bots through the roster and draws a
+    ``REFS <n>`` counter. Each roster row is shown twice — bots alive, then
+    killed — and the counter encodes which (``n = 2*step``, ``+1`` for the dead
+    pass). This loop grabs frames, OCRs that counter, and whenever it sees a new
+    stable marker it crops all ten HUD portraits and stores each as the ref for
+    ``rows[step][slot]`` in that visual state. No per-hero confirmation. Ctrl-C
+    to stop early; it ends on its own when the workshop signals done. Returns a
+    ``refs verify`` exit code.
+
+    ``roster_size`` is how many heroes ``gen_refs_trainer.py`` packed per SEQ
+    row — NOT necessarily ``profile.team_size``. Since the replay-saving
+    redesign, the workshop fills only ``team_size - 1`` slots with roster dummies
+    (one seat per side is left for the human/AI filler that lets the match save
+    a replay), so ``profile.team_size`` (real on-screen portrait slots, used for
+    cropping) and the roster chunk width baked into SEQ now regularly differ.
+    Chunking ``plan_sequence`` by the wrong width silently relabels every row
+    after the first. Defaults to ``profile.team_size`` for old recordings where
+    the two were the same.
+    """
+    import time
+
+    from . import capture
+    from .match import face_subrect
+    from .models import SIDE_LEFT, SIDE_RIGHT
+    from .refs_trainer import plan_sequence
+
+    cv2 = _import_cv2()
+    ctx = prepare_learn(db, faceit_db_path, hud_variant=hud_variant)
+    profile, pid = ctx.profile, ctx.pid
+    by_name = {h.name: h for h in ctx.heroes}
+    names = list(by_name)
+    if only:  # must match gen_refs_trainer.py --only exactly, or labels drift
+        wanted = {s.strip().lower() for s in only.split(",") if s.strip()}
+        names = [n for n in names if n.lower() in wanted]
+    chunk = roster_size if roster_size is not None else profile.team_size
+    rows = plan_sequence(names, team_size=chunk)
+    if not rows:
+        raise CaptureError(
+            "no roster hero maps to a workshop Hero constant — nothing to auto-learn")
+
+    roi = index_roi or Rect(
+        int(_INDEX_ROI_FRAC[0] * profile.resolution_w),
+        int(_INDEX_ROI_FRAC[1] * profile.resolution_h),
+        int(_INDEX_ROI_FRAC[2] * profile.resolution_w),
+        int(_INDEX_ROI_FRAC[3] * profile.resolution_h),
+    )
+
+    total = 2 * len(rows)
+    print(f"AUTO-LEARN profile #{pid} "
+          f"({profile.resolution_w}x{profile.resolution_h} '{hud_variant}') — "
+          f"{len(rows)} steps of {chunk} roster dummies "
+          f"({profile.team_size} on-screen slots/side), alive + dead.")
+    print("  Paste refs_trainer.txt, pick a Control/Push map with unlimited time, "
+          "START THE MATCH, and spectate. Ctrl-C to stop.\n")
+
+    done: set[int] = set()
+    skipped: set[int] = set()
+    pending: tuple[int, int] | None = None
+    written = 0
+    misses = 0
+    try:
+        while len(done) + len(skipped) < total:
+            frame, fw, fh = capture.grab_frame()
+            if (fw, fh) != (profile.resolution_w, profile.resolution_h):
+                print(f"  resolution {fw}x{fh} != profile "
+                      f"{profile.resolution_w}x{profile.resolution_h} — fix and wait.")
+                time.sleep(1.0)
+                continue
+
+            idx, raw = _ocr_step_index(cv2, frame, roi)
+            kind, decoded, lost = classify_marker(idx, done, len(rows))
+
+            if kind == "done":
+                if done or skipped:
+                    print("  workshop signalled DONE.")
+                    break
+                time.sleep(poll_interval)  # still warming up — bots not spawned yet
+                continue
+
+            # A read that is behind, already handled, unreadable, or off the end
+            # is a misread — wait it out.
+            if kind == "wait":
+                misses += 1
+                if misses % 20 == 3:
+                    nxt = (max(done) + 1) if done else 0
+                    print(f"  (waiting for marker {nxt} — last OCR read: {raw!r})")
+                pending = None
+                time.sleep(poll_interval)
+                continue
+
+            # kind is "expected" or "ahead". A forward jump means the workshop
+            # moved on before we got a clean number: accept it only after extra
+            # confirmations (guards against a one-frame digit flip mislabelling a
+            # whole batch), and write off the markers we skipped rather than
+            # capturing stale bots.
+            assert idx is not None and decoded is not None  # guaranteed by classify_marker
+            pending = (idx, pending[1] + 1) if pending and pending[0] == idx else (idx, 1)
+            need = 4 if kind == "ahead" else 2
+            if pending[1] < need:
+                time.sleep(poll_interval)
+                continue
+
+            if kind == "ahead":
+                skipped.update(lost)
+                print(f"  ! missed marker(s) {lost} — workshop already on {idx}")
+
+            step, ref_state = decoded
+            step_written = 0
+            for side in (SIDE_LEFT, SIDE_RIGHT):
+                for slot in range(profile.team_size):
+                    # Slots >= chunk are the human/AI filler seat that lets the
+                    # match save a replay (see roster_size above) — never a
+                    # roster dummy, so there is nothing in `rows` to label it with.
+                    if slot >= chunk:
+                        continue
+                    # refs_trainer puts the same heroes on both teams; the right
+                    # HUD strip may run right-to-left relative to bot slots, so
+                    # --flip-b reverses the lookup for side b.
+                    src = chunk - 1 - slot if flip_b and side == SIDE_RIGHT else slot
+                    hero = by_name.get(rows[step][src])
+                    if hero is None:
+                        continue
+                    cell = profile.slots[side][slot]
+                    crop = _crop(frame, face_subrect(cell))
+                    if not dry_run:
+                        save_learn_ref(db, refs_dir, pid=pid, hero=hero, crop=crop,
+                                       state=ref_state, variant=variant_for_cell(cell, profile))
+                    step_written += 1
+            written += step_written
+            done.add(idx)
+            pending = None
+            misses = 0
+            print(f"  marker {idx} (step {step} {ref_state}): "
+                  f"{', '.join(dict.fromkeys(rows[step]))} → {step_written} refs  "
+                  f"({len(done)}/{total} markers)")
+    except KeyboardInterrupt:
+        print("\n  stopped by operator.")
+
+    print(f"\ndone. {written} HUD ref(s) across {len(done)}/{total} markers.")
+    if skipped:
+        missed: set[str] = set()
+        for m in skipped:
+            d = decode_marker(m)
+            if d is None:
+                continue
+            step_i, ref_state = d
+            missed.update(f"{n} [{ref_state}]" for n in dict.fromkeys(rows[step_i]))
+        print(f"MISSED markers {sorted(skipped)} — re-run for: {', '.join(sorted(missed))}\n")
+    else:
+        print()
+    return run_refs_verify(db, faceit_db_path, hud_variant=hud_variant)
 
 
 def run_refs_verify(

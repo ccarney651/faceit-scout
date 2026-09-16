@@ -201,6 +201,39 @@ button:disabled{opacity:.45;cursor:default}
   .slot .pn{font-style:normal;color:var(--muted);font-size:12px}
   .slot .sc{text-align:right}
 </style></head><body>
+<div id="capturepaused" style="position:fixed;inset:0;z-index:999999;background:var(--bg);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div style="max-width:520px">
+    <span class="prodname" style="justify-content:center;margin-bottom:10px"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">Capture</span></span>
+    <h1 style="font-size:26px;margin:0 0 10px">Manual capture is closed</h1>
+    <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 20px">Scouting is now automated. Head back to the league site to browse what's been captured.</p>
+    <a class="btn primary" href="../" style="display:inline-block;text-decoration:none">Back to owdb →</a>
+  </div>
+</div>
+<script>
+// ---- capture lock ----
+// Manual capture is being retired in favour of the automated replay bot. The
+// overlay above is STATIC MARKUP; this script only ever REMOVES it - same
+// design as docs/capture/scrim.html's lock, and for the same reason: a syntax
+// error, a CSP block, localStorage disabled, an exception - any of it leaves
+// the page locked, which is the safe failure. A gate that added the overlay
+// instead would fail open.
+//
+// It is a soft gate, not a security boundary - nothing behind it is secret.
+// Unlock once per browser with ?unlock=capturebeta (it persists), re-lock
+// with ?lock=1. No localhost exemption, deliberately - see scrim.html's note.
+(function(){
+  try{
+    var KEY='owdb_capture_unlock', TOKEN='capturebeta';
+    var q=new URLSearchParams(location.search);
+    if(q.get('lock')) localStorage.removeItem(KEY);
+    else if(q.get('unlock')) localStorage.setItem(KEY, q.get('unlock'));
+    if(localStorage.getItem(KEY)===TOKEN){
+      var el=document.getElementById('capturepaused');
+      if(el) el.remove();
+    }
+  }catch(e){ /* stay locked */ }
+})();
+</script>
 <div id="captureAuthGate" style="position:fixed;inset:0;z-index:1000000;background:var(--bg);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
   <div style="max-width:520px">
     <span class="prodname" style="justify-content:center;margin-bottom:10px"><span class="wordmark"><span class="br">[</span><span class="ow">ow</span><span class="db">db</span><span class="br">]</span></span><span class="sub">Capture</span></span>
@@ -211,17 +244,21 @@ button:disabled{opacity:.45;cursor:default}
 </div>
 <script>
 // ---- capture auth gate (2026-09-12) ----
-// Real access control: capture is operator-only. STATIC MARKUP, fail-closed -
-// this script only ever REMOVES the overlay, and only once a verified admin
-// Discord session is confirmed. The actual authority is the Worker's
-// isAdminSession() check on every write (upload.owdb.io/worker.js); this is
-// only the client-side reflection of it, so a non-admin never even sees the
-// capture UI rather than clicking through it to a 403 at the end.
+// A SEPARATE lock from #capturepaused just above - that one is about manual
+// capture being retired in favour of the replay bot; this one is real access
+// control, independent of that. STATIC MARKUP, fail-closed, same reasoning as
+// #capturepaused: this script only ever REMOVES the overlay, and only once a
+// verified admin Discord session is confirmed - the actual authority is the
+// Worker's isAdminSession() check on every write (upload.owdb.io/worker.js),
+// this is only the client-side reflection of it, so a non-admin never even
+// sees the capture UI rather than clicking through it to a 403 at the end.
+// Higher z-index than #capturepaused, so this is what a fresh, non-admin
+// visitor sees regardless of whether they also know the old beta-unlock code.
 //
 // ENDPOINT is defined later in the file (with the rest of the publish/claims
-// code); duplicated as a literal here so this works standalone, before the
-// rest of the page's script has run - the same reason this can't wait for
-// renderAcct() further down to do the check instead.
+// code); duplicated as a literal here rather than hoisted up, for the same
+// reason #capturepaused doesn't reach for anything defined later either - this
+// has to work standalone, before the rest of the page's script has run.
 (function(){
   try{
     // The OAuth callback appends the session to the URL hash before the
@@ -318,7 +355,6 @@ document.getElementById('captureGateLogin').onclick=function(){
       <div class="row" style="margin-top:8px">
         <select id="code" class="skel" disabled></select>
         <button id="copy" class="ghost" title="Copy the selected replay code into your clipboard">Copy</button>
-        <button id="readcode" class="ghost" title="Read the replay code off the screen and check it against this division's codes">Read code</button><span class="wip" title="Experimental — OCRs the code printed on the HUD banner. Checked against the feed, so a misread cannot select a code that does not exist.">WIP</span>
         <button id="skip" class="ghost">Skip <svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><path d="M4 3.8l7 4.2-7 4.2z" fill="currentColor"/><path d="M11.5 3.5v9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
       </div>
       <div class="row" style="margin-top:8px">
@@ -335,6 +371,7 @@ document.getElementById('captureGateLogin').onclick=function(){
       <span class="pill" id="mapinfo">pick a replay</span>
       <span class="pill" id="roundpill">Round 1</span>
       <span class="pill" id="subpill" style="display:none">sub: —</span>
+      <span class="pill" id="codeverify" style="display:none"></span>
     </div>
     <div class="row poprow" style="margin-top:10px">
       <button id="pop" title="Open the control panel over Overwatch — snapshot, round, finish and copy without alt-tabbing"><svg class="ticon" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px"><rect x="2" y="3" width="12" height="10" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="8.6" y="8.4" width="4.4" height="3.6" rx="1" fill="currentColor"/></svg> Control panel</button>
@@ -461,7 +498,7 @@ const {normName, simScore, affinity,
 const {esc, css, scl, ico, evp, b64bytes, bytesToB64, isTyping,
        toast, uiModal, uiConfirm} = OWDBUtil;
 const PAD=2;
-let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
+let REFS=[], REF_W=64, REF_H=36, LF=0.42, TF=0.45, RF=0.06, DATA={codes:[],rosters:{},divisions:[]}, CLAIMED=new Set();
 let HERO_ICON={};   // {heroSlug: colored portrait data-URI} — optional, from sibling hero_icons.json
 let feedError=null;   // set when data.json fails to load — surfaced in feedmeta instead of a silent "0 codes"
 let LOCAL_REFS=[], CUSTOM_HEROES={};   // operator-learned hero refs + heroes not in refs.json (persisted in IndexedDB)
@@ -493,7 +530,7 @@ function ocrProgress(frac){ const b=document.getElementById('ocrbar'); if(!b) re
 // ---------- load feeds ----------
 async function loadFeeds(){
   try{ const rj=await (await fetch('refs.json',{cache:'no-store'})).json();
-    REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction;
+    REF_W=rj.w; REF_H=rj.h; LF=rj.left_fraction; TF=rj.top_fraction; RF=rj.right_fraction||0;
     REFS=rj.refs.map(r=>{const px=b64bytes(r.d);let m=0;for(let i=0;i<px.length;i++)m+=px[i];m/=px.length;
       const c=new Float32Array(px.length);let ss=0;for(let i=0;i<px.length;i++){c[i]=px[i]-m;ss+=c[i]*c[i];}
       return {n:r.n,g:r.g,v:r.v,c,norm:Math.sqrt(ss)||1};});
@@ -655,9 +692,13 @@ function syncCodeOptions(){ if(!DATA.codes||!DATA.codes.length) return false;   
 // wrong code, which foldCode cannot detect - but it is unlikely to yield the
 // SAME wrong code under different preprocessing.
 const CODE_CONTRASTS=[1.0, 1.45, 1.9];
-let LAST_CODE_READ={why:null, raw:null, box:null};
+// weak: a code every crop that COULD read agreed on, when some crops could not.
+// Never a return value - readReplayCode still returns null for it - because the
+// corpus says this shape is not safe to act on. It is kept so the page can ASK.
+// See the abstain branch of ensureCodeChecked.
+let LAST_CODE_READ={why:null, raw:null, box:null, weak:null};
 async function readReplayCode(){
-  LAST_CODE_READ={why:null, raw:null, box:null};
+  LAST_CODE_READ={why:null, raw:null, box:null, weak:null};
   if(!vid.srcObject){ LAST_CODE_READ.why='share your screen first'; return null; }
   if(!boxes.a){ LAST_CODE_READ.why='calibrate first — the code is found relative to the left team portraits'; return null; }
   const box=OWDBReplayCode.codeBox(boxes.a);
@@ -704,6 +745,13 @@ async function readReplayCode(){
       return null;
     }
     if(distinct.length===1){
+      // Unanimous among the crops that could read, but not all of them could.
+      // STILL NULL. Measured over code_guard_crops (5 probes x 3 contrasts x
+      // injected strip errors): accepting this shape passes a WRONG code -
+      // a 0.97 scale error read H6R64E for H6R64B on three probes with two
+      // silent, which is the same shape as a correct partial read, so no
+      // threshold separates them. Carried as `weak` instead, for asking only.
+      LAST_CODE_READ.weak=distinct[0];
       LAST_CODE_READ.why='only some crops could read a code ('+distinct[0]
         +') — not recording it on one reading';
       return null;
@@ -717,31 +765,17 @@ async function readReplayCode(){
   }
 }
 function codeReadProblem(){ return (LAST_CODE_READ&&LAST_CODE_READ.why)||'could not read the code'; }
-
-// matchReadCode(read, codes) - what a code read off the screen corresponds to
-// in this division's feed.
-//
-// The feed is what makes the league read trustworthy where a scrim read is not:
-// here every code has a right answer available, so a one-character miss is
-// recoverable rather than silently wrong. Crockford excludes I/L/O precisely
-// because they are confusable with 1/0 and foldCode applies the published
-// folding; this catches what survives it.
-//
-// A TIE ABSTAINS. Two feed codes one character from the read means choosing
-// either could file the capture against the wrong match, which is the exact
-// failure this exists to prevent.
-function matchReadCode(read, codes){
-  if(!read) return {kind:'none', code:null};
-  const list=(codes||[]).map(c=>c.code).filter(Boolean);
-  if(list.indexOf(read)!==-1) return {kind:'exact', code:read};
-  const near=list.filter(c=>{
-    if(c.length!==read.length) return false;
-    let d=0; for(let i=0;i<c.length;i++) if(c[i]!==read[i]) d++;
-    return d===1;
-  });
-  if(near.length===1) return {kind:'near', code:near[0]};
-  return {kind:'none', code:null};
+// Two codes from one match differ only by map and game number, so a bare code
+// tells the operator nothing they can check against their own screen.
+function codeLabel(code){
+  const c=(DATA.codes||[]).find(x=>x.code===code);
+  if(!c) return code;
+  return code+' — '+(c.map||'?')+(c.game_no?', game '+c.game_no:'');
 }
+
+// matchReadCode and the verdict built on it now live in engine/replaycode.js,
+// where they can be exercised by node:test without a browser or an OCR pass.
+// See ensureCodeChecked() below for the one place the page consults them.
 function selectedCode(){ const sel=document.getElementById('code'); return (sel._codes||[])[+sel.value]; }
 function onCode(){ const c=selectedCode(); if(!c) return;
   const rs=(DATA.rosters||{})[c.match_id]||{}; const nameOf=id=>(rs[id]&&rs[id].name)||null;
@@ -766,23 +800,6 @@ document.getElementById('div').onchange=()=>{ savePref('div'); refreshCodes(); }
 document.getElementById('opp').onchange=()=>{ savePref('opp'); refreshCodes(); };
 document.getElementById('hide').onchange=()=>{ savePref('hide'); refreshCodes(); };
 document.getElementById('code').onchange=onCode;
-// The wrong-match guard. Picking the wrong code from a dropdown of lookalike
-// six-character strings attributes every comp captured afterwards to the wrong
-// match, teams and players, and publishes it - with nothing to say it happened.
-// This asks the screen instead.
-document.getElementById('readcode').onclick=async()=>{
-  const got=await readReplayCode();
-  if(!got){ snapMsg(esc(codeReadProblem()), true); return; }
-  const cs=currentCodes(), m=matchReadCode(got, cs);
-  if(m.kind==='none'){ snapMsg('screen says '+esc(got)+', which is not a code in this division — nothing changed', true); return; }
-  const cur=selectedCode();
-  if(cur && cur.code===m.code){ snapMsg('screen says '+esc(m.code)+' — matches what is selected'); return; }
-  const idx=cs.findIndex(c=>c.code===m.code);
-  const sel=document.getElementById('code');
-  sel.value=String(idx); onCode();
-  snapMsg((m.kind==='near'?'read '+esc(got)+', nearest code is ':'screen says ')
-      +esc(m.code)+' — selected it');
-};
 document.getElementById('copy').onclick=()=>{const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`copied ${c.code} — paste into OW`;}};
 function nextCode(){ const sel=document.getElementById('code'); const n=(sel._codes||[]).length; if(!n)return; sel.value=(((+sel.value)+1)%n); onCode(); const c=selectedCode(); if(c){navigator.clipboard.writeText(c.code); document.getElementById('codenote').textContent=`${c.code} — copied`;} }
 document.getElementById('skip').onclick=nextCode;
@@ -1250,6 +1267,298 @@ function retagPlayers(){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return
 // first snapshot pays no OCR cost. On failure the snapshot is refused outright
 // (never guess a side) and BOTH surfaces — the main page and the control panel —
 // are told to set the left team by hand; the next Snapshot press retries fresh.
+// The wrong-match guard, run on a map's FIRST snapshot.
+//
+// Picking the wrong code from a dropdown of lookalike six-character strings
+// attributes every comp captured afterwards to the wrong match, teams and
+// players, and publishes it with nothing to say it happened. The codes are fed
+// to the operator, so there is nothing to LOOK UP here - what is worth checking
+// is that the replay actually on screen is the one they picked.
+//
+// Returns false only to block a snapshot, and only on a definite disagreement
+// between two codes that both exist in the feed. Everything it cannot settle
+// abstains and lets capture proceed: the code banner is not always on screen
+// and OCR can simply fail, so a guard that can make capture impossible would be
+// worse than the bug it prevents. See engine/replaycode.js for the verdict
+// table, which is unit-tested there.
+//
+// CAPPED AT THREE ATTEMPTS per map. One is fragile at a map transition, where
+// the banner may not be painted yet; unlimited retries would cost an OCR pass
+// on every snapshot of a map whose banner never reads. After the third, it says
+// so once and stands down.
+const CODE_CHECK_TRIES=3;
+// The same cap for the mid-map re-check, counted CONSECUTIVELY rather than per
+// map: a banner that reads again after a blind stretch clears it, because the
+// question there is "is this still the pinned replay", and it stays worth
+// asking for as long as the map lasts. See ensureCodeUnchanged.
+const RECHECK_FULL_TRIES=3;
+// The map's verification state, kept as STATE rather than announced as a
+// message. snapMsg was the wrong mechanism: ensureSideResolved writes to it and
+// then "snapshot N kept" overwrites it a moment later, so the operator saw a
+// verdict for a few milliseconds at most and reasonably concluded the guard had
+// let a wrong code slide. This is the answer to "which match is this capture
+// filed against", it stays true for the whole map, so it is drawn every time
+// the panel ticks and every time the map bar renders.
+function setCodeVerdict(ok, text){
+  if(session) session.codeVerdict={ok:!!ok, text:text};
+  renderCodeVerdict();
+}
+function renderCodeVerdict(){
+  const el=document.getElementById('codeverify'); if(!el) return;
+  const v=session&&session.codeVerdict;
+  if(!v){ el.style.display='none'; el.textContent=''; return; }
+  el.style.display='';
+  el.textContent=(v.ok?'✓ ':'⚠ ')+v.text;
+  el.className='pill'+(v.ok?'':' warn');
+}
+// Move the capture onto the code the screen is showing.
+//
+// The dropdown holds the FILTERED list, and the code on screen is very often
+// filtered out of it - that is how the guard's first field failure was found: a
+// replay already captured that night had been removed by "hide already-scouted".
+// The filters are about choosing what to scout NEXT; they have no bearing on
+// what is open in Overwatch. So they are cleared to reach it - the operator is
+// not choosing here, the screen already chose.
+//
+// Returns false: onCode() restarts the map, so the snapshot that triggered this
+// is void and the operator presses again. Nothing has been captured yet, which
+// is exactly why this runs on the map's FIRST snapshot.
+// confirmed: the operator answered a question rather than the read deciding.
+// The switch is then right because they looked at their own screen, but the
+// READ still failed, so the capture stays unverified and says so.
+function switchToScreenCode(code, wasNear, confirmed){
+  const findIdx=()=>currentCodes().findIndex(c=>c.code===code);
+  let idx=findIdx();
+  if(idx===-1){
+    const hide=document.getElementById('hide'), opp=document.getElementById('opp');
+    if(hide && hide.checked){ hide.checked=false; savePref('hide'); }
+    if(opp && opp.value && opp.value!=='all'){ opp.value='all'; savePref('opp'); }
+    refreshCodes(); idx=findIdx();
+  }
+  if(idx===-1){
+    // Another division. This page cannot change that without discarding the
+    // operator's whole context, so it says so instead of reporting a switch
+    // that did not happen.
+    setCodeVerdict(false, code+' is on screen but sits in another division — change Division to capture it');
+    return false;
+  }
+  const full=(DATA.codes||[]).find(c=>c.code===code);
+  const done=full?isDone(full):false;
+  const el=document.getElementById('code'); el.value=String(idx); onCode();
+  // onCode() rebuilt the session, so the verdict is set AFTER it, on the new one.
+  if(confirmed) setCodeVerdict(false, 'switched to '+code+' — you confirmed it; '
+    +'the read was not conclusive, so this stays unverified');
+  else setCodeVerdict(true, 'switched to '+code+' — the replay you have open'
+    +(wasNear?' (read was one character off)':''));
+  // Already scouted is a heads-up, not a wall: re-capturing a map is allowed and
+  // sometimes wanted, and the operator has better things to do than be blocked.
+  snapMsg(done
+    ? code+' is already scouted — capturing it again. Snapshot to start.'
+    : 'switched to '+code+' — snapshot again to capture it', done);
+  return false;
+}
+// One read, one geometry, one contrast - about a fifteenth of readReplayCode's
+// work. Not enough to IDENTIFY a match from scratch, which is why the full read
+// exists, but plenty to answer "is this still the replay we pinned": the pinned
+// code is a known answer to compare against, and a wrong crop or a changed
+// replay both fail to reproduce it.
+//
+// Null means "could not tell", never "changed". The banner is not always on
+// screen and one pass is the least reliable kind of read, so an unreadable
+// result must never stop a capture that is going fine.
+async function readCodeOnce(){
+  try{
+    if(!vid.srcObject||!boxes.a) return null;
+    const box=OWDBReplayCode.codeBox(boxes.a);
+    if(!box) return null;
+    const w=await ocrWorker();
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:OWDBReplayCode.ALPHABET });
+    const {data}=await ocrRead(w, codeCanvas(grabFrame(), box, CODE_CONTRASTS[1]));
+    await w.setParameters({ tessedit_pageseg_mode:'7', tessedit_char_whitelist:'' });
+    return OWDBReplayCode.foldCode((data&&data.text||'').replace(/\s+/g,''));
+  }catch(e){ console.warn('quick code read skipped:', e); return null; }
+}
+
+// The replay must not change under a map that is already being captured.
+//
+// Verifying once at the start proves the FIRST snapshot's match and nothing
+// after it: an operator can scrub to a different replay at any point, and the
+// map record would then hold comps from two matches under one code, which is
+// the same wrong-attribution this whole guard exists to prevent - only harder
+// to spot, because the code it is filed under really was on screen once.
+//
+// Refuses rather than autocorrecting. Switching mid-map is not a correction:
+// snapshots already taken belong to the pinned match, so the operator has to
+// decide what happens to them. Returns true when capture may proceed.
+//
+// SAYS WHAT IT SAW EVERY TIME, including when nothing is wrong. The first
+// version spoke only to refuse, so all four of its other outcomes - not armed,
+// could not read, agreed, not certain enough - looked identical from the
+// outside: nothing at all. On 2026-09-08 the operator swapped replays mid-map,
+// saw no indication of any kind, and reported the check as not working. That is
+// word for word the report ensureCodeChecked's abstain branch already exists to
+// prevent, and the lesson written out at length there was never carried across
+// to here. A guard heard from only when it refuses cannot be told from a guard
+// that is not running.
+async function ensureCodeUnchanged(){
+  const s=session;
+  if(!s||!s.codePinned||!s.snaps.length) return true;
+  const n=s.snaps.length, pl=n===1?'':'s';
+  const banked=n+' snapshot'+pl;
+  const quick=await readCodeOnce();
+  if(session!==s) return true;
+  if(quick===s.codePinned){    // the cheap pass is enough when it AGREES
+    s.recheckBlind=0; setCodeVerdict(true, 'still '+s.codePinned+' · '+banked); return true; }
+  // The cheap pass either disagreed or read nothing at all, and NEITHER of
+  // those is an answer: it is one geometry at one contrast, and the frames just
+  // after a replay swap - menus, a loading screen, a HUD still settling - are
+  // exactly when it comes back null. The first version returned true on null,
+  // which abandoned the question on the weakest evidence available in the one
+  // moment the guard existed for. Escalate instead: the full read is five
+  // geometries and three contrasts, and it is the only read this page trusts to
+  // identify a match.
+  //
+  // Bounded, because that read costs fifteen OCR passes. If the banner simply
+  // is not on screen, paying for it on every snapshot forever would make
+  // capture unusable - so after RECHECK_FULL_TRIES consecutive failures it
+  // stands down to the cheap pass alone and keeps saying so. Any pass that
+  // agrees clears the count.
+  if((s.recheckBlind||0)>=RECHECK_FULL_TRIES){
+    setCodeVerdict(false, 'could not re-check the replay code — '+banked
+      +' captured as '+s.codePinned+', unverified since');
+    return true;
+  }
+  const sure=await readReplayCode();
+  if(session!==s) return true;
+  const v=OWDBReplayCode.recheckPinned(sure, DATA.codes, s.codePinned);
+  if(v.status==='same'){
+    s.recheckBlind=0; setCodeVerdict(true, 'still '+s.codePinned+' · '+banked); return true; }
+  if(v.status==='unsure'){
+    // Stops nothing - an unreadable banner must never make capture impossible -
+    // but it is no longer silent, and the count says how much of the map is
+    // riding on a code nobody has confirmed since it was pinned. A scrim replay
+    // lands here too: the screen really did change, but a code this feed does
+    // not carry cannot be named, so 'I cannot tell' is the whole truth.
+    s.recheckBlind=(s.recheckBlind||0)+1;
+    setCodeVerdict(false, (v.read
+        ? 'screen read '+v.read+(v.near?' (one character off '+v.code+')':'')+', not confirmed as '+s.codePinned
+        : codeReadProblem())
+      +' — '+banked+' captured as '+s.codePinned+', unverified since');
+    return true;
+  }
+  setCodeVerdict(false, 'replay changed to '+v.code+' mid-map — '
+    +banked+' already captured as '+s.codePinned);
+  await uiModal({ title:'The replay changed while capturing',
+    bodyHtml:'This map has <b>'+s.snaps.length+'</b> snapshot'+(s.snaps.length===1?'':'s')
+      +' captured as <b>'+esc(s.codePinned)+'</b>, but the screen is now showing <b>'+esc(v.code)+'</b>.'
+      +'<br><br>Capturing on would file two different matches under one code. '
+      +'<b>Finish + save</b> this map first, or <b>Undo</b> back to nothing, then pick up the new replay.',
+    escapeValue:'ok', actions:[{label:'Got it', value:'ok'}] });
+  return false;
+}
+async function ensureCodeChecked(){ const s=session; if(!s||s.codeChecked) return true;
+  if(s._codeChecking) return false;   // an attempt is in flight (rapid S presses) - don't stack OCR passes
+  const sel=selectedCode(); if(!sel||!sel.code){ s.codeChecked=true; return true; }
+  s._codeChecking=true;
+  try{
+    const got=await readReplayCode();
+    if(session!==s) return true;      // the operator changed code or map mid-read
+    // DATA.codes, NOT currentCodes(). The division / opponent / hide-done
+    // filters exist to help the operator choose what to scout NEXT; they say
+    // nothing about what replay is on screen. Asking the filtered list to
+    // identify a code makes the guard fail in the cases it exists for: on
+    // 2026-09-08 the screen showed QPC797 against a selected DE8N10 - same
+    // division, both real - and the guard abstained, because QPC797 had already
+    // been captured that night and "hide done" had removed it from the working
+    // list. Re-watching a replay you already did is precisely a wrong match.
+    //
+    // It also makes the near-match safer: one character is resolved against
+    // every real code, so a miss cannot land on some other code merely because
+    // the right one was filtered out of view.
+    const v=OWDBReplayCode.checkAgainstSelected(got, DATA.codes, sel.code);
+    if(v.status==='ok'){
+      s.codeChecked=true;
+      s.codePinned=v.code;            // every later snapshot is checked against this
+      setCodeVerdict(true, 'verified '+v.code);
+      return true;
+    }
+    if(v.status==='abstain'){
+      // A read too weak to ACT on can still be strong enough to ASK about, and
+      // throwing it away is how 04C5WM (Nepal, game 1) got captured off a
+      // D5T959 (Neon Junction, game 3) replay on 2026-09-08. Both codes were in
+      // the feed, from the SAME match: same two teams, same rosters, so side
+      // detection and every player name resolved perfectly and nothing else on
+      // this page could tell them apart. Three of five crops had read D5T959.
+      //
+      // It asks rather than switching because the corpus is unambiguous that
+      // this shape is not safe to act on (see readReplayCode). The operator can
+      // see which map they are watching; the page cannot.
+      const weak=LAST_CODE_READ.weak;
+      const wv=weak?OWDBReplayCode.checkAgainstSelected(weak, DATA.codes, sel.code):null;
+      if(wv && wv.status==='mismatch' && !wv.near){
+        const act=await uiModal({ title:'Which replay is this?',
+          bodyHtml:'The code did not read cleanly enough to act on by itself — but every crop that could read it read <b>'+esc(weak)+'</b>.'
+            +'<br><br>On screen may be <b>'+esc(codeLabel(weak))+'</b>'
+            +'<br>You selected <b>'+esc(codeLabel(sel.code))+'</b>'
+            +'<br><br>Check the map you are watching. These can be the same two teams in the same match, in which case nothing else on this page can tell them apart.',
+          escapeValue:'keep',
+          actions:[{label:'Keep '+sel.code, value:'keep', ghost:true},
+                   {label:'Use '+weak, value:'switch'}] });
+        if(session!==s) return true;
+        s.codeChecked=true;             // asked once per map; do not nag every snapshot
+        if(act==='switch') return switchToScreenCode(wv.code, false, true);
+        setCodeVerdict(false, 'screen may be showing '+weak+' — capturing as '
+          +sel.code+' unverified');
+        return true;
+      }
+      s.codeTries=(s.codeTries||0)+1;
+      const last=s.codeTries>=CODE_CHECK_TRIES;
+      if(last) s.codeChecked=true;    // stand down; retrying forever costs an OCR pass a snapshot
+      // SAY IT EVERY TIME, not just on the last try. The first version was
+      // silent until the third attempt, on the theory that a map transition can
+      // fail once harmlessly. What that actually produced was a guard
+      // indistinguishable from no guard at all: the operator ran two full
+      // wrong-match tests, saw nothing, and reasonably reported it as "not
+      // reading the replay code at all". An unverified capture is worth one
+      // line every time it happens.
+      setCodeVerdict(false, (got ? 'screen read '+got+', not in the feed'
+                                 : 'code unreadable')
+        +' — NOT verified as '+sel.code+(last?'':' · retrying'));
+      return true;                    // NEVER blocks
+    }
+    // THE SCREEN IS AUTHORITATIVE, so an exact read CORRECTS the selection
+    // rather than asking about it. The operator's pick is a starting hint typed
+    // out of a dropdown of lookalike six-character strings; the replay actually
+    // open in Overwatch is the fact. Asking "keep or switch" spent the
+    // operator's attention on a question with one right answer, and left a way
+    // to answer it wrongly - which is the whole hazard, since a kept mismatch is
+    // silent, permanent, and undetectable downstream.
+    //
+    // A NEAR match still asks. One character off is an OCR inference, not a
+    // reading, and silently refiling a capture on an inference is the same error
+    // this prevents, only automated and unattributable.
+    if(v.near){
+      const act=await uiModal({ title:'Is this the right replay?',
+        bodyHtml:'The code reads <b>'+esc(v.read)+'</b>, which is not a code in the feed.'
+          +'<br>The nearest one is <b>'+esc(v.code)+'</b> — a single character apart, so this is a guess.'
+          +'<br><br>You selected <b>'+esc(sel.code)+'</b>'
+          +(sel.team_a?' — '+esc(sel.team_a)+' vs '+esc(sel.team_b||'?'):''),
+        escapeValue:'keep',
+        actions:[{label:'Keep '+sel.code, value:'keep', ghost:true},
+                 {label:'Use '+v.code, value:'switch'}] });
+      if(session!==s) return true;
+      s.codeChecked=true;
+      if(act!=='switch'){
+        setCodeVerdict(false, 'read '+v.read+' — capturing as '+sel.code+' unverified');
+        return true;
+      }
+    } else {
+      s.codeChecked=true;
+    }
+    return switchToScreenCode(v.code, v.near);
+  }catch(e){ console.warn('code check skipped:', e); s.codeChecked=true; return true; }
+  finally{ s._codeChecking=false; }
+}
 async function ensureSideResolved(){ const s=session; if(!s||s.sideResolved) return true;
   if(s._detecting) return false;    // an attempt is already in flight (rapid S presses) — let it finish, don't stack OCR passes
   s._detecting=true;
@@ -1455,8 +1764,15 @@ function startMap(){ const c=selectedCode();
   // input needed; round 3+ is decided by time bank, not parity, so it starts
   // false each such round and gates snapshots until the operator confirms.
   session={code:c, submaps, phased, round:1, sub: submaps.length?null:null,
-    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[]};
+    attacker: phased?'b':null, attackerConfirmed:true, sideResolved:false, snaps:[], lastKept:null, history:[],
+    // The replay-code guard, per map: whether it has reached a verdict, and how
+    // many times it has tried to. Both reset with the map, because the answer
+    // is about the replay now on screen - see ensureCodeChecked.
+    // recheckBlind: consecutive full re-reads that could not confirm the pinned
+    // code, so the escalation in ensureCodeUnchanged can stand down.
+    codeChecked:false, codeTries:0, codeVerdict:null, codePinned:null, recheckBlind:0};
   document.getElementById('mapinfo').textContent=c?`${c.code} · ${c.map||'?'} · ${c.map_category||'?'}`:'pick a replay';
+  renderCodeVerdict();
   document.getElementById('subpill').style.display=submaps.length?'':'none';
   refreshSession(); relabelTeams(); updateBtns(); renderPipControls();
 }
@@ -1509,9 +1825,23 @@ function snapMsg(t,warn){ const html=t?`<span class="${warn?'warn':'ok'}">${t}</
   const e=document.getElementById('snapmsg'); if(e) e.innerHTML=html;
   if(pipWin&&!pipWin.closed){ const p=pipWin.document.getElementById('pmsg'); if(p) p.innerHTML=html; } }
 async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) return;
+  // WHICH MATCH IS THIS? Asked first, before every other check on a map's first
+  // snapshot, because every one of them is meaningless if the answer is "not the
+  // one you picked" - and one of them actively does harm. Side detection reads
+  // the HUD names against the SELECTED match's roster, so on the wrong replay it
+  // cannot succeed: it either fails and sends the operator hunting a calibration
+  // fault that does not exist, or it half-matches and teaches the map the wrong
+  // names. The operator hit exactly that twice on 2026-09-08 and said so:
+  // "it will always fail if it's a code from the wrong game entirely".
+  //
+  // The line above is a precondition, not a check - there is no frame to read a
+  // code from without a stream and calibrated boxes.
+  if(!(await ensureCodeChecked())) return;
+  // ...and that it is STILL that replay, on every snapshot after the first.
+  if(!(await ensureCodeUnchanged())) return;
   // Control maps: capture needs to know which sub-map the round is played on.
-  // Checked FIRST so the operator gets instant feedback ("pick a sub-map")
-  // instead of waiting through OCR only to be refused afterwards.
+  // After the code, because "pick a sub-map" is advice about the wrong match
+  // when the replay on screen is not the one selected.
   if(session.submaps.length && !session.sub){ if(!auto) snapMsg('pick a sub-map first',true); return; }
   // Auto-detect sides on this map's first snapshot (see ensureSideResolved).
   // Fast path: once resolved, this is a synchronous no-op on every later call.
@@ -1534,7 +1864,12 @@ async function snapshot(auto){ if(!session||!boxes.a||!boxes.b||!vid.srcObject) 
   const pA=(session.players&&session.players.a)||[], pB=(session.players&&session.players.b)||[];
   const snap={round:session.round, sub:session.sub, attacker:session.attacker,
     a:aG, b:bG, aNames:comp.a.map(s=>s.name), bNames:comp.b.map(s=>s.name),
-    aPlayers:pA.map(playerName), bPlayers:pB.map(playerName), ts:session.snaps.length*1000};
+    aPlayers:pA.map(playerName), bPlayers:pB.map(playerName), ts:session.snaps.length*1000,
+    // The replay code this snapshot was taken under, as READ off the screen -
+    // not the one the map is filed as. Null when it was never verified. Carrying
+    // it per snapshot rather than once per map is what makes a mid-map replay
+    // switch visible to the merge instead of only to the operator who was there.
+    code:session.codePinned||null};
   // Keep the opening portraits (10 grayscale crops) so a misread can be corrected
   // AND taught from Review later, not just live — closes the correction→learning loop.
   if(!session.crops){ const cr={a:[],b:[]}; for(const s of ['a','b']) for(let i=0;i<5;i++) cr[s].push(learnCrop(s,i)); session.crops=cr; }
@@ -1647,6 +1982,10 @@ function buildObservations(snaps, players, playersRaw, phased, playersConf){
       player_conf.push(confs[i]||null); }
     observations.push({side, ts:s.ts, sub_map:s.sub, round_no:s.round,
       phase: phased? (s.attacker===side?'attack':'defend') : null,
+      // The code READ off the screen when this snapshot was taken, or null if
+      // it was never verified. The merge compares it to the code the map is
+      // filed under; absence means unknown, never wrong.
+      screen_code: s.code||null,
       heroes, pairs, ingame_names, player_conf }); } }
   return observations;
 }
@@ -1657,6 +1996,10 @@ async function finishMap(){ if(!session||!session.snaps.length) return; const c=
   const observations=buildObservations(session.snaps, session.players, session.playersRaw,
     session.phased, session.playersConf);
   const rec={ id:c.match_id+':'+c.game_no, code:c.code, match_id:c.match_id, game_no:c.game_no,
+    // What the SCREEN said, as opposed to what this map is filed as. Null when
+    // the code was never read. See owdb/contribute.py: a map is refused when
+    // these provably disagree, and kept when the screen code is simply unknown.
+    screen_code:(session&&session.codePinned)||null,
     division:c.division, map_name:c.map, map_category:c.map_category, map_guid:c.map_guid,
     side_a_team_id:leftId, side_a_team:nm(leftId)||c.team_a, side_b_team_id:rightId, side_b_team:nm(rightId)||c.team_b,
     winner_side:null, profile:{w:vid.videoWidth,h:vid.videoHeight,hud_variant:'browser'},
@@ -1766,7 +2109,14 @@ const overlay=OWDBOverlay.make({doc:document, width:360, height:500,
     const {leftName,rightName}=sideNames();
     el.innerHTML=`<div>${c?esc(c.code):''} · R${session.round} · ${session.snaps.length} snaps</div>`+
       `<div class="pmap">${esc((c&&c.map)||'?')}${c&&c.map_category?' · '+esc(c.map_category):''}</div>`+
-      `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`; },
+      `<div class="pteams"><span class="tl">${esc(leftName)}</span> vs <span class="tr">${esc(rightName)}</span></div>`+
+      // Whether this capture is verified as the match it is being filed
+      // against. Drawn on every tick, so it cannot be overwritten by the next
+      // status message the way the first attempt was.
+      (session.codeVerdict
+        ? `<div style="margin-top:3px;font-weight:700;font-size:11px;color:${session.codeVerdict.ok?'#5fd08a':'#ffb454'}">`
+          +`${session.codeVerdict.ok?'✓':'⚠'} ${esc(session.codeVerdict.text)}</div>`
+        : ''); },
   // Controls are rebuilt per map (startMap calls renderPipControls) so
   // sub-map / flip buttons always match the current map — no alt-tab.
   controls:[
@@ -1900,6 +2250,7 @@ function buildContribution(name, maps){
   const heroes={}; used.forEach(g=>{ if(CUSTOM_HEROES[g]) heroes[g]={name:CUSTOM_HEROES[g].name, role:CUSTOM_HEROES[g].role}; });
   return {format:1, contributor:name, tool_version:'browser-0.2', heroes,
   maps: maps.map(r=>({ match_id:r.match_id, game_no:r.game_no, demo_code:r.code,
+    screen_code:r.screen_code||null,
     map_guid:r.map_guid, map_name:r.map_name, map_category:r.map_category,
     side_a_team_id:r.side_a_team_id, side_a_team:r.side_a_team, side_b_team_id:r.side_b_team_id, side_b_team:r.side_b_team,
     winner_side:r.winner_side, captured_at:r.captured_at, bans:r.bans||[], profile:r.profile, observations:r.observations })) }; }

@@ -3,7 +3,7 @@
 The dashboard computes its aggregations in Python at export time; `scrims.html`
 must compute in the browser at read time, because scrim data is local and
 private and never reaches a build step. So the same analysis genuinely exists
-twice, and the design (`specs/2026-08-12-scrim-mode-design.md` §8.1) is explicit
+twice, and the scrim-mode design (`ARCHITECTURE.md` §7) is explicit
 that the fix is not to share the implementation but to **stop the two from
 drifting**: define each aggregation once, implement it in both, and assert they
 agree over a shared fixture.

@@ -1,0 +1,24 @@
+{
+  "name": "leave-replay",
+  "recorded_at": "2026-09-09T00:37:42.943Z",
+  "client": {
+    "w": 2560,
+    "h": 1440
+  },
+  "events": [
+    {
+      "type": "key",
+      "key": "ESC",
+      "waitMs": 0,
+      "holdMs": 93
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "x": 1382,
+      "y": 852,
+      "waitMs": 1030,
+      "holdMs": 94
+    }
+  ]
+}

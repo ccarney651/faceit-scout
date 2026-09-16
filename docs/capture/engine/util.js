@@ -103,6 +103,75 @@
   // the page. opts: {title, body|bodyHtml, actions:[{label,value,ghost}], escapeValue,
   // collect} — with collect, resolves {value, fields:{id:text}} reading the
   // modal's inputs/selects. Enter in a field triggers the last (primary) action.
+  // The floating control panel, when one is open. Registered by engine/overlay.js
+  // rather than passed per call: a modal that forgets to mirror is invisible to
+  // an operator watching Overwatch, and "remember to pass it" is exactly how
+  // that gets forgotten. Every uiModal caller mirrors automatically.
+  var pipGetter = null;
+  function setPipGetter(fn) { pipGetter = fn; }
+  function livePip() {
+    try { var w = pipGetter && pipGetter(); return (w && !w.closed) ? w : null; }
+    catch (e) { return null; }
+  }
+
+  // A modal is a QUESTION, and the whole point of the pop-out panel is that the
+  // operator never alt-tabs. Asking on a page they cannot see is a hang: on
+  // 2026-09-08 the wrong-match guard blocked correctly and the operator, working
+  // from the panel, saw nothing at all. So the question is drawn in BOTH
+  // documents and either one answers it; the first answer closes the other.
+  //
+  // `collect` modals are NOT mirrored - they read values back out of their own
+  // inputs, and two copies of a form is a question about which one is real. The
+  // panel gets a line pointing at the main window instead. Nothing mid-capture
+  // uses collect today.
+  function mirrorIntoPip(w, opts, done) {
+    var d = w.document;
+    var back = d.getElementById('owdb-mback');
+    if (!back) {
+      back = d.createElement('div'); back.id = 'owdb-mback';
+      back.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;'
+        + 'align-items:center;justify-content:center;padding:10px;'
+        + 'background:rgba(0,0,0,.62);font:13px system-ui,sans-serif';
+      d.body.appendChild(back);
+    }
+    back.innerHTML = ''; back.style.display = 'flex';
+    var card = d.createElement('div');
+    card.style.cssText = 'background:#16181d;color:#e9ecf1;border:1px solid #333a45;'
+      + 'border-radius:10px;padding:12px 13px;max-width:100%;max-height:100%;overflow:auto;'
+      + 'box-shadow:0 10px 34px rgba(0,0,0,.6)';
+    if (opts.title) {
+      var h = d.createElement('div');
+      h.style.cssText = 'font-weight:700;font-size:13px;margin-bottom:6px';
+      h.textContent = opts.title; card.appendChild(h);
+    }
+    var b = d.createElement('div');
+    b.style.cssText = 'font-size:12px;color:#aab2bf;line-height:1.5;margin-bottom:10px';
+    if (opts.collect) {
+      b.textContent = 'Answer this in the main owdb window.';
+    } else if (opts.bodyHtml) { b.innerHTML = opts.bodyHtml; } else if (opts.body) { b.textContent = opts.body; }
+    card.appendChild(b);
+    if (!opts.collect) {
+      var row = d.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap';
+      (opts.actions || [{ label: 'OK', value: true }]).forEach(function (a) {
+        var btn = d.createElement('button'); btn.type = 'button'; btn.textContent = a.label;
+        btn.style.cssText = 'padding:6px 11px;border-radius:7px;cursor:pointer;font:inherit;'
+          + 'font-weight:700;border:1px solid #3a4250;'
+          + (a.ghost ? 'background:#20242b;color:#cfd6e0' : 'background:#5b6ee1;color:#fff;border-color:#5b6ee1');
+        btn.onclick = function () { done(a.value); };
+        row.appendChild(btn);
+      });
+      card.appendChild(row);
+    }
+    back.appendChild(card);
+  }
+  function clearPipModal(w) {
+    try {
+      var back = w && !w.closed && w.document.getElementById('owdb-mback');
+      if (back) { back.innerHTML = ''; back.style.display = 'none'; }
+    } catch (e) { /* the panel can close mid-answer; nothing to clean up then */ }
+  }
+
   function uiModal(opts) {
     return new Promise(function (res) {
       var back = document.getElementById('mback'); back.innerHTML = '';
@@ -112,8 +181,13 @@
       if (opts.bodyHtml) body.innerHTML = opts.bodyHtml; else if (opts.body) body.textContent = opts.body;
       m.appendChild(body);
       var row = document.createElement('div'); row.className = 'mrow';
+      var pip = livePip();
+      var settled = false;
       var done = function (v) {
+        if (settled) return;              // both copies are live; the first answer wins
+        settled = true;
         back.classList.remove('open'); back.innerHTML = ''; document.removeEventListener('keydown', onkey, true);
+        if (pip) clearPipModal(pip);
         if (!opts.collect) { res(v); return; }
         var fields = {}; m.querySelectorAll('input,select,textarea').forEach(function (el) { fields[el.id] = el.value; }); res({ value: v, fields: fields });
       };
@@ -123,8 +197,14 @@
         if (a.ghost) b.className = 'ghost'; b.onclick = function () { done(a.value); }; row.appendChild(b);
       });
       m.appendChild(row); back.appendChild(m); back.classList.add('open');
+      // Draw the same question in the control panel, so an operator watching
+      // Overwatch can answer without alt-tabbing back to a page they cannot see.
+      if (pip) { try { mirrorIntoPip(pip, opts, done); } catch (e) { pip = null; } }
       var onkey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); done(opts.escapeValue !== undefined ? opts.escapeValue : null); } };
       document.addEventListener('keydown', onkey, true);
+      // Escape works from whichever window has focus - the panel takes keyboard
+      // shortcuts already, so it must not be the one place Escape does nothing.
+      if (pip) { try { pip.document.addEventListener('keydown', onkey, true); } catch (e) { /* panel closed */ } }
       var primary = row.lastChild;
       m.querySelectorAll('input').forEach(function (inp) { inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); primary.click(); } }); });
       var first = m.querySelector('input,select'); if (first) first.focus();
@@ -150,6 +230,7 @@
     toast: toast,
     uiModal: uiModal,
     uiConfirm: uiConfirm,
+    setPipGetter: setPipGetter,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;

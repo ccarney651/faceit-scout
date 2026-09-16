@@ -124,8 +124,14 @@ def test_a_capture_with_no_confidence_data_still_publishes_nulls() -> None:
 
 def test_the_rest_of_the_observation_shape_is_unchanged() -> None:
     got = _run(f"return buildObservations({_FULL},{_PLAYERS},{_RAW},true);")
+    # screen_code joined the shape on 2026-09-08: the replay code READ off the
+    # screen when this snapshot was taken, which is what lets the merge see a
+    # replay that changed mid-map. Per observation rather than per map, because
+    # a swapped replay leaves the map filed under a code that genuinely was on
+    # screen once - only the snapshots disagree. Null when never verified.
     assert set(got[0]) == {"side", "ts", "sub_map", "round_no", "phase",
-                           "heroes", "pairs", "ingame_names", "player_conf"}
+                           "heroes", "pairs", "ingame_names", "player_conf",
+                           "screen_code"}
     assert (got[0]["side"], got[0]["phase"]) == ("a", "attack")
     assert (got[1]["side"], got[1]["phase"]) == ("b", "defend")
     # Unphased maps (Control/Push) carry no attack/defend at all.

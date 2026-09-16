@@ -880,6 +880,35 @@ def test_map_coverage_counts_a_captured_playoff_game(tmp_path) -> None:
     assert got["captured"] == 1 and got["played"] == 3 and got["live"] == 2
 
 
+def test_map_coverage_uses_measured_duration_for_captured_games(tmp_path) -> None:
+    # Two captured Numbani games carry their real measured lengths (300s + 600s
+    # = 900s = 15 min) instead of the flat 20-min Hybrid estimate: the map's
+    # minutes drop from 5*20=100 to (5-2)*20 + 15 = 75. Uncaptured games were
+    # never measured, so unseenMin keeps the pure estimate.
+    got = _run(
+        f"return mapCoverage({_MATCHES}, new Set(['m1:1','m1:2']), null, "
+        f"{{'m1:1':300,'m1:2':600}});", tmp_path)
+    numb = got[0]
+    assert numb["map"] == "Numbani"
+    assert numb["measured"] == 2
+    assert numb["minutes"] == 75
+    assert numb["unseenMin"] == 60        # 3 unseen Hybrid games at 20 min each
+    # Without any durations the same two captures keep the flat estimate.
+    plain = _run(
+        f"return mapCoverage({_MATCHES}, new Set(['m1:1','m1:2']), null);", tmp_path)[0]
+    assert plain["measured"] == 0 and plain["minutes"] == 100
+
+
+def test_map_coverage_ignores_a_zero_or_null_duration(tmp_path) -> None:
+    # A captured game whose duration could not be measured must fall back to the
+    # estimate rather than counting as a 0-second or bogus measurement.
+    got = _run(
+        f"return mapCoverage({_MATCHES}, new Set(['m1:1']), null, "
+        f"{{'m1:1':0,'m1:2':null}});", tmp_path)[0]
+    assert got["measured"] == 0
+    assert got["minutes"] == 100
+
+
 
 # --- draft simulator: pure decision engine + explainers ---------------------
 # simModelFrom/divBanBaseFrom/mapsFrom/banSuggest/sigLift/mapCompare/autoMap/
