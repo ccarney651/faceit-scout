@@ -297,12 +297,20 @@
   // whole side - so one player's card leaving the HUD outright (a leaver;
   // see resolve.js's ABSENT_GUID) does not get washed out by its four
   // present neighbours the way a side-wide average would hide it.
+  //
+  // Reads calib.presenceBadge(), NOT the full slot - a real hero portrait can
+  // be dominated by warm colour (orange goggles, skin tone, hair) that drags
+  // a full-slot average under HUD_TINT with the card plainly present. See
+  // presenceBadge's comment and corpus.js's 'warm-portrait-low-tint', found
+  // 2026-09-16 after that exact false read crashed a live run. The badge is
+  // UI chrome the game always colours by team, unlike the portrait next to
+  // it, which is coloured by whichever hero got picked.
   function cellTint(img, calib) {
     var d = pixelsOf(img);
     var tf = calib.FROZEN.ref.TF;
     var out = { a: [], b: [] };
     ['a', 'b'].forEach(function (side) {
-      calib.slots(side).forEach(function (rect) {
+      calib.presenceBadge(side).forEach(function (rect) {
         out[side].push(tintOfRect(d, img.width, rect, tf, side));
       });
     });

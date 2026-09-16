@@ -228,6 +228,26 @@
     return { ok: true, reason: null };
   }
 
+  // The ult-charge badge alone - the left LF of a slot, where cells() starts
+  // (it trims this away to isolate the portrait for face-matching) and where
+  // slots() ends (it keeps the whole column, for nameplate.js). Found needed
+  // 2026-09-16: crop.cellTint used to average the FULL slot, and a warm-toned
+  // portrait (a lot of orange/skin-tone in the top band) can drag that mean
+  // under HUD_TINT even with the card plainly on screen - confirmed by eye
+  // against a live crash, see corpus.js's 'warm-portrait-low-tint'. The badge
+  // is UI chrome: its colour is guaranteed by the game itself, not by which
+  // hero happens to be drawn in the cell, so it is the one region a presence
+  // check can read without the portrait's own colour fighting it.
+  function presenceBadge(side) {
+    var b = FROZEN.boxes[side];
+    var cw = b.w / 5;
+    var out = [];
+    for (var i = 0; i < 5; i++) {
+      out.push({ x: b.x + i * cw, y: b.y, w: cw * FROZEN.ref.LF, h: b.h });
+    }
+    return out;
+  }
+
   var Mod = {
     FROZEN: FROZEN,
     HUD_TINT: HUD_TINT,
@@ -235,6 +255,7 @@
     cellPresent: cellPresent,
     cells: cells,
     slots: slots,
+    presenceBadge: presenceBadge,
     check: check,
     eventsViewerOpen: eventsViewerOpen,
   };

@@ -21,6 +21,25 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ### Fixed
 
+- **A warm-toned hero portrait could read as a leaver's empty slot and crash
+  the capture.** `crop.cellTint`'s per-slot presence check averaged the
+  WHOLE slot's top band — the blue/red ult-charge badge on the left and the
+  hero's own portrait art on the right — into one tint number. A portrait
+  dominated by warm colour (orange goggles, skin tone, hair) can drag that
+  average under `HUD_TINT` even with the card plainly present: caught live
+  when a Tracer-like portrait read 12.6 against a threshold of 15, tripping
+  `phases.js`'s `ABSENT_GUID` path and crashing `capture.js`'s diagnostic log
+  (`.toFixed()` on the resulting `null` score) — confirmed a false read both
+  by eye and against FACEIT's own data (zero disconnected players in the
+  game). `calib.presenceBadge()` now gives `cellTint` just the ult-badge —
+  the one region the game always colours by team rather than by whichever
+  hero got picked — which reads the same slot at 93.2. `capture.js` also no
+  longer crashes on a null score regardless (`resolve.js` already handles
+  `ABSENT_GUID` correctly downstream; only the log line didn't). New
+  regression test against a real retained frame
+  (`corpus.js`'s `warm-portrait-low-tint`) — every prior `cellTint` test
+  painted a slot one flat colour end to end, which cannot expose this, since
+  a real portrait never is one.
 - **The nightly FACEIT fetch had been silently skipping for at least two
   nights running.** `update.yml`'s DST gate re-derived "is it 9pm in London"
   from the wall clock at the moment the gate step actually ran, but GitHub

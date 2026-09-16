@@ -66,6 +66,27 @@
         'why there is now a wait after a seek.',
       open: true, hud: false, playhead: true,
     },
+    'warm-portrait-low-tint': {
+      file: 'cap-w6f9bt-warm-portrait-t90.png',
+      saw: 'Route 66, both rosters clearly present, all ten portraits normal ' +
+        'and on screen - confirmed by eye (the operator, 2026-09-16) against ' +
+        'this exact frame after it crashed a live run. Side a slot 3 (a ' +
+        'Tracer-like portrait, orange goggles and hair filling most of the ' +
+        'cell) reads a cellTint of 12.6 against HUD_TINT=15 - a false ' +
+        'ABSENT_GUID, not a leaver. Checked against FACEIT\'s own data too: ' +
+        'zero disconnected players in this game. cellTint averaged the ' +
+        'WHOLE slot width, so the blue ult-badge on the left and the warm ' +
+        'portrait art on the right get blended into one number; the ' +
+        'portrait\'s orange drags the mean under the line. Restricting the ' +
+        'measurement to the badge alone (the left LF of the slot, the exact ' +
+        'region cells() trims OFF for face-matching) reads this same slot ' +
+        'at 93.2 - the badge is UI chrome, not hero art, so its colour is ' +
+        'guaranteed by the game rather than by which hero happens to be ' +
+        'drawn there. Every existing cellTint test paints a slot ONE flat ' +
+        'colour end to end, which cannot expose this - a real portrait is ' +
+        'the whole failure mode.',
+      open: true, hud: true, playhead: true,
+    },
     'panel-shut-bright': {
       file: 'cap-zero-51.png',
       saw: 'Route 66 in daylight, panel shut, media controls up and the ' +

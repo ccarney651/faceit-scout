@@ -398,6 +398,11 @@
         log(mmss(t).padStart(6) + '  (' + ((Date.now() - started) / 1000).toFixed(1) + 's)');
         ['a', 'b'].forEach(function (side) {
           log('        ' + side + ': ' + s[side].map(function (r) {
+            // A disconnected player's card is gone from the HUD outright - see
+            // phases.js's ABSENT_GUID. score/name are both null for that slot;
+            // it is real data, not a matcher failure, so it must not crash the
+            // capture over a missing .toFixed() call.
+            if (r.score === null) return 'absent';
             return r.name + ' ' + r.score.toFixed(2) + (r.score < LOW_SCORE ? ' ??' : '');
           }).join(' | '));
         });

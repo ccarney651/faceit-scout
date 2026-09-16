@@ -1,8 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { createCanvas } = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const U = require('../../docs/capture/engine/util.js');
 const Crop = require('./crop.js');
+const C = require('./corpus.js');
 
 const REF = { REF_W: 64, REF_H: 36 };
 
@@ -200,4 +201,17 @@ test('cellTint reads each slot independently, not the side averaged together', (
     ['#a01010', '#a01010', '#a01010', '#a01010', '#a01010']);
   const got = Crop.cellTint(img, calib);
   assert.ok(got.a[4] < calib.HUD_TINT, 'the black slot must not be washed out by its neighbours');
+});
+
+// Every test above paints a slot ONE FLAT COLOUR end to end, which is exactly
+// what a real hero portrait never is - so none of them could have caught
+// this. See corpus.js's 'warm-portrait-low-tint' for the full account: a
+// warm-toned portrait crashed a live run by reading as a leaver's empty
+// slot, and it was never a leaver (confirmed against FACEIT's own data, and
+// by eye against the frame itself).
+test('a warm-toned real portrait does not read as an absent slot', { skip: C.absent() || false }, async () => {
+  const img = await loadImage(C.file('warm-portrait-low-tint'));
+  const got = Crop.cellTint(img, calib);
+  got.a.forEach((t, i) => assert.ok(t >= calib.HUD_TINT, 'side a slot ' + i + ' tint ' + t + ' should clear HUD_TINT'));
+  got.b.forEach((t, i) => assert.ok(t >= calib.HUD_TINT, 'side b slot ' + i + ' tint ' + t + ' should clear HUD_TINT'));
 });
