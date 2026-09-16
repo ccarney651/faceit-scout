@@ -258,27 +258,53 @@
   // Measured over every frame known to be a replay because its events panel is
   // open: the dimmest reads 31.3, against exactly 0.0 on a loading screen, a
   // black frame and the ESC menu. The threshold of 15 never moved.
-  function hudTint(img, calib) {
+  // The signed team-colour tint of one rect's top `tf` band: positive
+  // towards the side's own colour (blue for a, red for b), so a real plate
+  // reads positive on both sides and exposed scenery - which owes no
+  // allegiance to either team's colour - does not.
+  function tintOfRect(d, imgWidth, rect, tf, side) {
+    var r = 0, b = 0, n = 0;
+    var bottom = Math.round(rect.y + rect.h * tf);
+    for (var y = Math.round(rect.y); y < bottom; y += 3) {
+      for (var x = Math.round(rect.x); x < Math.round(rect.x + rect.w); x += 3) {
+        var i = (y * imgWidth + x) * 4;
+        r += d[i];
+        b += d[i + 2];
+        n++;
+      }
+    }
+    return n ? (side === 'a' ? (b - r) / n : (r - b) / n) : 0;
+  }
+
+  function pixelsOf(img) {
     var cv = createCanvas(img.width, img.height);
     var cx = cv.getContext('2d', { willReadFrequently: true });
     cx.drawImage(img, 0, 0);
-    var d = cx.getImageData(0, 0, img.width, img.height).data;
+    return cx.getImageData(0, 0, img.width, img.height).data;
+  }
 
+  function hudTint(img, calib) {
+    var d = pixelsOf(img);
+    var tf = calib.FROZEN.ref.TF;
     var out = {};
     ['a', 'b'].forEach(function (side) {
-      var box = calib.FROZEN.boxes[side];
-      var r = 0, b = 0, n = 0;
-      var bottom = Math.round(box.y + box.h * calib.FROZEN.ref.TF);
-      for (var y = Math.round(box.y); y < bottom; y += 3) {
-        for (var x = Math.round(box.x); x < Math.round(box.x + box.w); x += 3) {
-          var i = (y * img.width + x) * 4;
-          r += d[i];
-          b += d[i + 2];
-          n++;
-        }
-      }
-      // Signed towards the side's own colour, so both are positive in a replay.
-      out[side] = n ? (side === 'a' ? (b - r) / n : (r - b) / n) : 0;
+      out[side] = tintOfRect(d, img.width, calib.FROZEN.boxes[side], tf, side);
+    });
+    return out;
+  }
+
+  // Same signal as hudTint, per portrait cell rather than averaged across a
+  // whole side - so one player's card leaving the HUD outright (a leaver;
+  // see resolve.js's ABSENT_GUID) does not get washed out by its four
+  // present neighbours the way a side-wide average would hide it.
+  function cellTint(img, calib) {
+    var d = pixelsOf(img);
+    var tf = calib.FROZEN.ref.TF;
+    var out = { a: [], b: [] };
+    ['a', 'b'].forEach(function (side) {
+      calib.slots(side).forEach(function (rect) {
+        out[side].push(tintOfRect(d, img.width, rect, tf, side));
+      });
     });
     return out;
   }
@@ -286,6 +312,7 @@
   var Mod = {
     cell: cell,
     hudTint: hudTint,
+    cellTint: cellTint,
     all: all,
     barFlags: barFlags,
     panelBrightFraction: panelBrightFraction,

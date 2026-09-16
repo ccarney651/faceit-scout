@@ -105,3 +105,24 @@ test('the threshold sits between the loading screen and the tightest real frame'
   assert.ok(C.HUD_TINT > 0 && C.HUD_TINT < 29,
     'below the smallest margin measured on a real replay, above black');
 });
+
+// --- is one specific cell's card present? ---------------------------------
+//
+// hudPresent asks the question for a whole side at once, which a leaver
+// slides straight past: four present cards keep the side-wide average well
+// clear of HUD_TINT even with the fifth gone outright. cellPresent asks the
+// same threshold of one cell's own tint (from crop.cellTint), so a single
+// missing card cannot hide behind its neighbours.
+
+test('a single cell at a real-plate tint reads present', () => {
+  assert.strictEqual(C.cellPresent(76.2), true);
+});
+
+test('a single cell at loading-screen tint reads absent', () => {
+  assert.strictEqual(C.cellPresent(0), false);
+});
+
+test('cellPresent uses the same HUD_TINT threshold hudPresent does', () => {
+  assert.strictEqual(C.cellPresent(C.HUD_TINT), true, 'the threshold itself counts as present');
+  assert.strictEqual(C.cellPresent(C.HUD_TINT - 0.001), false, 'just under it does not');
+});

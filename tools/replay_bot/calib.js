@@ -161,6 +161,13 @@
     return tint.a >= HUD_TINT && tint.b >= HUD_TINT;
   }
 
+  // Same threshold as hudPresent, asked of one cell's own tint (from
+  // crop.cellTint) rather than a whole side averaged together - so a single
+  // missing card cannot hide behind its four present neighbours.
+  function cellPresent(tint) {
+    return tint >= HUD_TINT;
+  }
+
   // Whether the events viewer is open, given the panel-row fraction crop.js
   // read out of the box. See crop.panelRowFraction for why it is neither
   // brightness nor flatness on its own.
@@ -225,6 +232,7 @@
     FROZEN: FROZEN,
     HUD_TINT: HUD_TINT,
     hudPresent: hudPresent,
+    cellPresent: cellPresent,
     cells: cells,
     slots: slots,
     check: check,

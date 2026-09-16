@@ -45,6 +45,19 @@
   // expected - and its comp is thin evidence.
   var SPARSE_RATIO = 0.5;
 
+  // phases.js's own ABSENT_GUID, restated rather than imported - requiring
+  // phases.js would pull @napi-rs/canvas and the whole grab stack into a pure
+  // module, same reason LOW_SCORE below is restated rather than imported. A
+  // cell readHud found untinted (a leaver's card, gone from the HUD outright)
+  // arrives here as this guid, never having reached a matcher at all.
+  var ABSENT_GUID = 'ABSENT';
+
+  // The sentinel guid refs.json's "no hero chosen yet" reference is stored
+  // under - a real ref, matched like any hero, for the grey silhouette OW
+  // shows before a player locks in. Distinct from ABSENT_GUID: the card is
+  // there, plainly, just without a hero yet.
+  var UNSELECTED_GUID = 'UNSELECTED';
+
   // Seconds into a round segmentSlot ignores before segmenting - the same
   // pre-render/spawn window timeline.js's ASSEMBLE_STARTS_BY_S already
   // excludes at the map level (ASSEMBLE_STARTS_BY_S = 10 there), applied here
@@ -227,13 +240,21 @@
     var flags = [];
     if (winner === null) {
       flags.push('no-read');
+    } else if (winner === ABSENT_GUID) {
+      // Confidently the truth, not a data-quality problem - see ABSENT_GUID.
+      flags.push('player-absent');
+    } else if (winner === UNSELECTED_GUID) {
+      // Also confidently the truth - see UNSELECTED_GUID.
+      flags.push('not-picked');
     } else {
       if (contested) flags.push('contested');
       else if (v.support < SUPPORT_MIN && segments.length <= 1) flags.push('low-support');
       if (winnerScores.length && Math.max.apply(null, winnerScores) < LOW_SCORE) flags.push('low-score');
       if (String(winner).indexOf('custom:') === 0 || !roleKnown(winner)) flags.push('unknown-hero');
     }
-    if (player && player.id === null) flags.push('attribution-abstained');
+    // A leaver has nobody to attribute by construction - player-absent
+    // already says so, so this would only be the same fact twice.
+    if (winner !== ABSENT_GUID && player && player.id === null) flags.push('attribution-abstained');
 
     return {
       guid: winner,
@@ -310,21 +331,29 @@
     });
   }
 
-  // Whether a map's rounds carry anything worth the operator's eyes.
-  // `contested` alone does NOT count: it means a genuine mid-round swap with
-  // no clear playtime majority, which segmentWinner already resolved with a
-  // real confidence number, not a reason to hold up the whole map. Every
-  // other flag - no-read, low-score, low-support, unknown-hero,
-  // attribution-abstained, and the round-level round-unsampled/sparse-round -
-  // still does. Drives review_out.js's initial `status`, so a flag-free (or
-  // swap-only) map is auto-reviewed instead of sitting in the queue with
-  // nothing for a human to actually check.
+  // Flags that are the truth, confidently read, rather than a reason to
+  // doubt the read - `contested` because segmentWinner already resolved it
+  // with a real confidence number, `not-picked` because UNSELECTED_GUID is
+  // itself the correct answer and every map's opening seconds produces it on
+  // every slot, not a matcher failure worth an operator's time.
+  //
+  // `player-absent` is deliberately NOT here: a leaver is rare enough (unlike
+  // "still picking", which happens on every single map) that the operator
+  // asked to see it - 2026-09-16.
+  var BENIGN_FLAGS = { contested: true, 'not-picked': true };
+
+  // Whether a map's rounds carry anything worth the operator's eyes. Every
+  // flag not in BENIGN_FLAGS does - no-read, low-score, low-support,
+  // unknown-hero, attribution-abstained, and the round-level
+  // round-unsampled/sparse-round. Drives review_out.js's initial `status`, so
+  // a flag-free (or benign-only) map is auto-reviewed instead of sitting in
+  // the queue with nothing for a human to actually check.
   function needsReview(rounds) {
     return (rounds || []).some(function (rd) {
       if ((rd.flags || []).length) return true;
       return SIDES.some(function (side) {
         return (rd[side] || []).some(function (s) {
-          return (s.flags || []).some(function (f) { return f !== 'contested'; });
+          return (s.flags || []).some(function (f) { return !BENIGN_FLAGS[f]; });
         });
       });
     });
@@ -335,6 +364,8 @@
     needsReview: needsReview,
     LOW_SCORE: LOW_SCORE,
     SPARSE_RATIO: SPARSE_RATIO,
+    ABSENT_GUID: ABSENT_GUID,
+    UNSELECTED_GUID: UNSELECTED_GUID,
     samplesIn: samplesIn,
     runnerUp: runnerUp,
     rounds: rounds,

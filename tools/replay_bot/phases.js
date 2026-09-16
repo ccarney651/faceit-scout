@@ -359,14 +359,30 @@
     return { segments: segs, per: plan.length, plan: plan };
   }
 
+  // A disconnected player's card is gone from the HUD outright, not a
+  // portrait of the wrong hero - the cell shows whatever the 3D scene behind
+  // it looks like. Matching that against the hero library is pointless (it
+  // is not a hero) and risky (scenery does not reliably score below every
+  // real hero's floor the way a genuine misread does). resolve.js's
+  // resolveSlot special-cases this exact string; see its ABSENT_GUID.
+  var ABSENT_GUID = 'ABSENT';
+
   // Match the ten HUD cells of one frame. `matcher` is a makeMatcher() result
-  // or anything with .match(crop, side).
+  // or anything with .match(crop, side). A cell whose own tint fails
+  // calib.cellPresent (crop.cellTint) never reaches the matcher at all - see
+  // ABSENT_GUID above.
   async function readHud(io, matcher, framePath) {
     var img = await io.loadImage(framePath);
     var crops = Crop.all(img, calib);
+    var tint = Crop.cellTint(img, calib);
     var out = { a: [], b: [] };
     ['a', 'b'].forEach(function (side) {
-      out[side] = crops[side].map(function (c) { return matcher.match(c, side); });
+      out[side] = crops[side].map(function (c, i) {
+        if (!calib.cellPresent(tint[side][i])) {
+          return { score: null, name: null, guid: ABSENT_GUID };
+        }
+        return matcher.match(c, side);
+      });
     });
     return out;
   }
@@ -490,6 +506,7 @@
     deriveDuration: deriveDuration,
     readStructure: readStructure,
     readHud: readHud,
+    ABSENT_GUID: ABSENT_GUID,
     shouldKeep: shouldKeep,
     sampleAt: sampleAt,
   };

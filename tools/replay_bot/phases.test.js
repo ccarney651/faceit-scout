@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const canvas = require('@napi-rs/canvas');
 const P = require('./phases.js');
 const Corpus = require('./corpus.js');
+const calib = require('./calib.js');
 
 const skip = Corpus.absent() || false;
 
@@ -207,4 +208,59 @@ test('sampleAt: the retry frame is what a change keeps', { skip }, async () => {
   assert.strictEqual(t.kept.length, 1);
   assert.strictEqual(t.kept[0].src, frame, 'keepAs was handed the retry frame');
   assert.strictEqual(s.a[2].guid, 'SWAP', 'the retry read is the one returned');
+});
+
+// ---- readHud: a leaver's slot is never handed to the matcher --------------
+//
+// A disconnected player's card leaves the HUD outright - the cell is exposed
+// scenery, not a portrait of the wrong hero - so matching it against the
+// hero library is both pointless and risky (scenery scores low against
+// everything, but not reliably below every real hero's floor). readHud must
+// recognise the cell as absent from its own pixels, via crop.cellTint, before
+// it ever reaches the matcher.
+
+// A frame built at the real FROZEN geometry with every slot given its own
+// solid colour, one HUD colour per side plus per-slot overrides - the same
+// approach crop.test.js uses to exercise cellTint against real geometry.
+function frameWithSlots(overrides) {
+  const f = calib.FROZEN.frame;
+  const cv = canvas.createCanvas(f.w, f.h);
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#000000';
+  cx.fillRect(0, 0, f.w, f.h);
+  const base = { a: '#1040a0', b: '#a01010' };
+  ['a', 'b'].forEach((side) => {
+    calib.slots(side).forEach((rect, i) => {
+      const o = overrides && overrides[side] && overrides[side][i];
+      cx.fillStyle = o || base[side];
+      cx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    });
+  });
+  return cv;
+}
+
+test('readHud marks an untinted slot ABSENT without calling the matcher', async () => {
+  const img = frameWithSlots({ a: { 3: '#808080' } });
+  const io = { loadImage: async () => img };
+  let calls = { a: 0, b: 0 };
+  const matcher = {
+    match: (crop, side) => {
+      calls[side]++;
+      return { score: 0.9, name: 'SomeHero', guid: '0xABC' };
+    },
+  };
+  const read = await P.readHud(io, matcher, 'unused-path');
+  assert.strictEqual(read.a[3].guid, 'ABSENT');
+  assert.strictEqual(read.a[3].score, null);
+  assert.strictEqual(calls.a, 4, 'the matcher was asked about the four present side-a slots only');
+  assert.strictEqual(calls.b, 5, 'side b had no absent slots');
+});
+
+test('readHud still matches every present slot normally', async () => {
+  const img = frameWithSlots({ a: { 3: '#808080' } });
+  const io = { loadImage: async () => img };
+  const matcher = { match: () => ({ score: 0.9, name: 'SomeHero', guid: '0xABC' }) };
+  const read = await P.readHud(io, matcher, 'unused-path');
+  [0, 1, 2, 4].forEach((i) => assert.strictEqual(read.a[i].guid, '0xABC', 'slot ' + i + ' still matched'));
+  read.b.forEach((c, i) => assert.strictEqual(c.guid, '0xABC', 'side b slot ' + i + ' still matched'));
 });

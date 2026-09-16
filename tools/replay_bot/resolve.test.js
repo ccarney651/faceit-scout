@@ -338,3 +338,69 @@ test('needsReview is true for a round-level flag (round-unsampled/sparse-round)'
   assert.ok(got[1].flags.includes('round-unsampled'));
   assert.strictEqual(R.needsReview(got), true);
 });
+
+// --- leaver detection: ABSENT and UNSELECTED are their own states, not ------
+// --- generic no-read / unknown-hero noise ----------------------------------
+//
+// phases.readHud never hands a matcher an untinted cell (see its ABSENT_GUID)
+// - it hands resolve.js the sentinel directly. A slot that reads ABSENT every
+// frame is a card that left the HUD outright, which is a different fact from
+// "we could not read whoever is there" (no-read) and must not be graded as an
+// unrecognised hero either.
+
+test('a slot whose card left the HUD resolves ABSENT, flagged player-absent', () => {
+  const gone = [[R.ABSENT_GUID, null], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds([sample(100, gone, gone), sample(200, gone, gone)], ROUNDS, { heroRoles: ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.guid, R.ABSENT_GUID);
+  assert.deepStrictEqual(slot.flags, ['player-absent']);
+});
+
+test('an UNSELECTED read resolves to it, flagged not-picked, not unknown-hero', () => {
+  const picking = [[R.UNSELECTED_GUID, 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds([sample(100, picking, picking), sample(200, picking, picking)], ROUNDS, { heroRoles: ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.guid, R.UNSELECTED_GUID);
+  assert.deepStrictEqual(slot.flags, ['not-picked']);
+});
+
+test('a leaver never has a player to attribute - that alone does not add a second flag', () => {
+  // A real capture attributes an ABSENT slot's necessarily-empty name row to
+  // no player, every time - that is not new information once player-absent
+  // already says so; flagging it too would just say the same fact twice.
+  const gone = [[R.ABSENT_GUID, null], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const attribution = {
+    a: { ids: [null, 'p2', 'p3', 'p4', 'p5'], conf: [null, 'matched', 'matched', 'matched', 'matched'] },
+    b: { ids: ['q1', 'q2', 'q3', 'q4', 'q5'], conf: ['matched', 'matched', 'matched', 'matched', 'matched'] },
+  };
+  const got = R.rounds(
+    [sample(100, gone, gone), sample(200, gone, gone)],
+    [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES, attribution: attribution });
+
+  assert.deepStrictEqual(got[0].a[0].flags, ['player-absent']);
+});
+
+test('needsReview does not fire for not-picked alone - every map opens with it', () => {
+  // UNSELECTED is the correct answer for the hero-select seconds every map
+  // starts with, on every slot. Flagging it the way low-score/unknown-hero
+  // do would put every single map in front of an operator for nothing.
+  const picking = [[R.UNSELECTED_GUID, 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(100, picking, picking), sample(200, picking, picking)],
+    [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES });
+  assert.strictEqual(R.needsReview(got), false);
+});
+
+// A leaver is rare enough - unlike "still picking" - that the operator wants
+// to see it: 2026-09-16, "im okay with leavers triggering a flag as its
+// fairly uncommon."
+test('needsReview DOES fire for player-absent - a leaver is rare enough to be worth a look', () => {
+  const gone = [[R.ABSENT_GUID, null], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(100, gone, comp), sample(200, gone, comp)],
+    [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES });
+  assert.strictEqual(R.needsReview(got), true);
+});

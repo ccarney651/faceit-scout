@@ -141,3 +141,63 @@ test('the playhead is found at either end of the bar', () => {
   assert.strictEqual(Crop.playheadX(withBar(t.x0, 40), calib).x0, t.x0);
   assert.strictEqual(Crop.playheadX(withBar(t.x1 - 39, 40), calib).x1, t.x1);
 });
+
+// --- per-cell presence (leaver detection) ---------------------------------
+//
+// hudTint reads one tint for a whole side's box, five cells averaged
+// together - fine for "is a replay on screen" but blind to one cell among
+// five going dark, which is what a disconnected player's card leaving the
+// HUD looks like (the card is gone outright, not merely showing the wrong
+// hero - see the 2026-09-16 design note on leaver detection).
+//
+// A frame built entirely of the FROZEN geometry, both sides' five slots
+// painted a caller-chosen colour each so cellTint can be pointed at a
+// specific cell and asked what it saw there.
+function frameWithSlotColours(aColours, bColours) {
+  const f = calib.FROZEN.frame;
+  const cv = createCanvas(f.w, f.h);
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#000000';
+  cx.fillRect(0, 0, f.w, f.h);
+  ['a', 'b'].forEach((side) => {
+    const colours = side === 'a' ? aColours : bColours;
+    calib.slots(side).forEach((rect, i) => {
+      cx.fillStyle = colours[i];
+      cx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    });
+  });
+  return cv;
+}
+
+test('a blue-tinted side-a cell reads a strongly positive tint', () => {
+  const img = frameWithSlotColours(
+    ['#1040a0', '#1040a0', '#1040a0', '#1040a0', '#1040a0'],
+    ['#a01010', '#a01010', '#a01010', '#a01010', '#a01010']);
+  const got = Crop.cellTint(img, calib);
+  assert.strictEqual(got.a.length, 5);
+  got.a.forEach((t) => assert.ok(t >= calib.HUD_TINT, 'tint ' + t + ' should clear HUD_TINT'));
+});
+
+test('a slot painted like exposed scenery, not a plate, reads below HUD_TINT', () => {
+  // A disconnected player's slot is not blue- or red-tinted at all - it is
+  // whatever the 3D scene behind the HUD looks like there. Neutral grey
+  // stands in for "could be anything", same as a loading screen already does
+  // for hudTint.
+  const img = frameWithSlotColours(
+    ['#1040a0', '#1040a0', '#1040a0', '#808080', '#1040a0'],
+    ['#a01010', '#a01010', '#a01010', '#a01010', '#a01010']);
+  const got = Crop.cellTint(img, calib);
+  assert.ok(got.a[3] < calib.HUD_TINT, 'the ungoverned slot should not read as tinted');
+  [0, 1, 2, 4].forEach((i) => assert.ok(got.a[i] >= calib.HUD_TINT, 'slot ' + i + ' is still tinted'));
+});
+
+test('cellTint reads each slot independently, not the side averaged together', () => {
+  // hudTint would average a dark cell into a still-passing side-wide mean.
+  // cellTint must not: it exists specifically to catch the one cell a side
+  // average would hide.
+  const img = frameWithSlotColours(
+    ['#1040a0', '#1040a0', '#1040a0', '#1040a0', '#000000'],
+    ['#a01010', '#a01010', '#a01010', '#a01010', '#a01010']);
+  const got = Crop.cellTint(img, calib);
+  assert.ok(got.a[4] < calib.HUD_TINT, 'the black slot must not be washed out by its neighbours');
+});
