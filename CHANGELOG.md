@@ -17,6 +17,21 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ---
 
+## 2026-09-16
+
+### Fixed
+
+- **The nightly FACEIT fetch had been silently skipping for at least two
+  nights running.** `update.yml`'s DST gate re-derived "is it 9pm in London"
+  from the wall clock at the moment the gate step actually ran, but GitHub
+  had been delaying both scheduled crons by 2-3+ hours — a run meant for
+  21:17 UTC/BST actually executing as late as London 00:32 — so both slots'
+  re-checked hour landed past 21 and both skipped, every night since at
+  least 2026-09-14. The gate now keys off `github.event.schedule` (the exact
+  cron string GitHub fired, unaffected by how late it actually ran) paired
+  with today's BST/GMT state, instead of the hour the delayed run happens to
+  land on.
+
 ## 2026-09-15
 
 ### Added

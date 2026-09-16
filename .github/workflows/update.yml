@@ -36,6 +36,20 @@ concurrency:                    # never let two runs overlap
 jobs:
   # Which of the two daily crons is really 9pm in London? (Manual runs and
   # data pushes always proceed.)
+  #
+  # PAST BUG (found 2026-09-16): this used to re-derive "is it 9pm in London
+  # RIGHT NOW" from the wall clock at the moment the gate step actually ran.
+  # GitHub's scheduled triggers are not exact - congested slots can fire
+  # 2-3+ hours late - and both crons were observed drifting past the London
+  # 21:00 hour before the check ran (e.g. a run meant for 21:17 UTC/BST
+  # actually executing at London 23:56 or 00:32), so BOTH slots read
+  # hour!=21 and BOTH silently skipped the fetch, some nights in a row. The
+  # fix below never looks at the hour the check happens to run at: it uses
+  # `github.event.schedule`, which GitHub sets to the exact cron expression
+  # that fired regardless of how late it actually ran, and pairs that with
+  # which cron is currently the "real" 9pm slot under BST/GMT. A run's
+  # season (BST vs GMT) essentially never flips mid-delay, so this is
+  # immune to the drift that broke the old check.
   gate:
     runs-on: ubuntu-latest
     outputs:
@@ -43,19 +57,24 @@ jobs:
     steps:
       - id: check
         run: |
-          # Always compute and log, even on manual runs: this line is the only
-          # evidence that the runner's timezone database resolves at all. If it
-          # ever prints a London hour equal to the UTC hour in SUMMER, tzdata is
-          # missing and the gate would silently skip every scheduled run.
+          # Always compute and log, even on manual runs: this is the only
+          # evidence that the runner's timezone database resolves at all. If
+          # it ever prints "GMT" in high summer or "BST" in mid-winter,
+          # tzdata is broken and this whole scheme is unreliable.
           utc=$(date -u "+%Y-%m-%d %H:%M UTC")
           london=$(TZ=Europe/London date "+%Y-%m-%d %H:%M %Z")
-          hour=$(TZ=Europe/London date +%H)
-          echo "now: $utc  ->  London: $london  (hour=$hour)"
+          tz=$(TZ=Europe/London date "+%Z")
+          echo "now: $utc  ->  London: $london"
           if [ "${{ github.event_name }}" != "schedule" ]; then
             echo "manual/push run - proceeding regardless of the hour"
             echo "go=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          if [ "$hour" = "21" ]; then
+          # The cron that lands on 21:00 London depends only on today's DST
+          # state, not on how late this run actually started.
+          if [ "$tz" = "BST" ]; then real_cron="17 20 * * *"; else real_cron="17 21 * * *"; fi
+          fired="${{ github.event.schedule }}"
+          echo "London is $tz today -> the real 9pm slot is '$real_cron'; this run was fired by '$fired'"
+          if [ "$fired" = "$real_cron" ]; then
             echo "this is the 9pm London slot - running"
             echo "go=true" >> "$GITHUB_OUTPUT"
           else
