@@ -131,6 +131,19 @@ def test_excluded_map_leaves_the_captured_feed() -> None:
     assert payload["maps_excluded"] == 1
 
 
+def test_captured_durations_carries_measured_map_lengths() -> None:
+    """The replay bot measures each map's real length off the scrubber bar. That
+    must reach the payload keyed by the same 'match_id:game_no' as
+    captured_games — and a map without a measurement (a browser capture, or an
+    old artifact) must not appear as a bogus duration."""
+    from owdb.contribute import merged_payload
+    alice = _contrib("alice", [("m1", 1, ["ram"]), ("m1", 2, ["soj"])])
+    alice["maps"][0]["duration_sec"] = 840
+    payload = merged_payload([alice], {}, {"ram": "Ramattra", "soj": "Sojourn"})
+    assert payload["captured_durations"] == {"m1:1": 840}
+    assert "m1:2" not in payload["captured_durations"]
+
+
 def test_overrides_file_is_not_read_as_a_contribution(tmp_path: Path) -> None:
     """overrides.json lives in the same directory; it must be reserved, not
     loaded, warned about and skipped as a malformed contribution."""
@@ -338,6 +351,58 @@ def test_player_pools_from_slot_pairs() -> None:
     assert alpha["BuFayez2"]["rounds"] == 1
     # the unresolved MEI slot attributed to nobody - never guessed
     assert all(h["hero"] != "MEI" for p in pools["Alpha"] for h in p["heroes"])
+
+
+def test_player_pools_splits_a_swapped_round_by_segment_duration() -> None:
+    """A mid-round swap (two observations sharing one round_no, different
+    heroes) must split that round's credit proportionally to how long each
+    hero's segment measured - not credit both a full round (the bug the old
+    round-key-set dedup had) and not drop either (the bug voting-to-one-
+    winner had before segmentation existed)."""
+    import pytest
+    from owdb.contribute import MapKey, player_pools
+    maps = {MapKey("m1", 1): {
+        "side_a_team": "Alpha", "side_b_team": "Bravo",
+        "observations": [
+            {"side": "a", "ts": 0, "round_no": 1, "sub_map": None,
+             "heroes": ["dva"], "pairs": [["dva", "p1"]]},
+            {"side": "a", "ts": 180000, "round_no": 1, "sub_map": None,
+             "heroes": ["dmon"], "pairs": [["dmon", "p1"]]},
+            {"side": "a", "ts": 240000, "round_no": 1, "sub_map": None,
+             "heroes": ["dmon"], "pairs": [["dmon", "p1"]]},
+        ],
+    }}
+    pools = player_pools(maps, {"p1": "Javi44"}, {"dva": "D.Va", "dmon": "D.Mon"})
+    heroes = {h["hero"]: h for h in pools["Alpha"][0]["heroes"]}
+    # segment durations: DVA 0->180000ms (180s), D.Mon 180000->240000ms (60s,
+    # closed out by the round's own last observed ts, not a next round)
+    assert heroes["D.Va"]["rounds"] == pytest.approx(0.75, abs=0.01)
+    assert heroes["D.Mon"]["rounds"] == pytest.approx(0.25, abs=0.01)
+    assert pools["Alpha"][0]["rounds"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_primary_hero_per_game_weights_by_duration_not_round_count() -> None:
+    """A player who spent most of a swapped round on the second hero should be
+    attributed to that hero, not whichever hero merely appeared in more
+    distinct rounds."""
+    from owdb.contribute import MapKey, rank_player_heroes
+    maps = {MapKey("m1", 1): {
+        "observations": [
+            {"side": "a", "ts": 0, "round_no": 1, "sub_map": None,
+             "pairs": [["dva", "p1"]]},
+            {"side": "a", "ts": 10000, "round_no": 1, "sub_map": None,
+             "pairs": [["dmon", "p1"]]},
+            {"side": "a", "ts": 290000, "round_no": 1, "sub_map": None,
+             "pairs": [["dmon", "p1"]]},
+        ],
+    }}
+    stats = {("m1", 1, "p1"): {"elims": 5, "deaths": 4, "damage": 2000,
+                               "healing": 0, "mitigation": 800, "captured": True}}
+    ranks = rank_player_heroes(maps, stats, {"dva": "tank", "dmon": "tank"})
+    # D.Mon held the slot 10s -> 290s (280s) vs D.Va's 0s -> 10s (10s), so the
+    # whole game's stat line attributes to D.Mon.
+    assert ("p1", "dmon") in ranks
+    assert ranks[("p1", "dmon")]["games"] == 1
 
 
 def test_observations_without_pairs_are_simply_absent() -> None:
@@ -556,3 +621,85 @@ def test_no_target_season_checks_nothing() -> None:
     from owdb.contribute import validate_maps
     contrib = _contrib("alice", [("old", 1, ["ram"])])
     assert len(validate_maps(contrib, _known_seasons())[0]["maps"]) == 1
+
+
+# --- the screen code -------------------------------------------------------
+# Every identifying field on a captured map (match_id, game_no, code, both team
+# names) comes from the operator's SELECTION; only the comps come from the
+# screen. A capture filed against the wrong match is therefore internally
+# consistent and passes every check here - the game exists, the season matches,
+# the teams are the ones FACEIT lists, the code agrees. The browser is the only
+# witness that anything was wrong, so it now sends what it read.
+
+def test_a_map_whose_screen_code_contradicts_its_filing_is_rejected() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    contrib["maps"][0].update(demo_code="CODE1", screen_code="OTHER9")
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert cleaned["maps"] == []
+    assert "OTHER9" in rejects[0][1] and "CODE1" in rejects[0][1], rejects
+
+
+def test_a_screen_code_that_agrees_passes() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    contrib["maps"][0].update(demo_code="CODE1", screen_code="CODE1")
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert len(cleaned["maps"]) == 1 and rejects == []
+
+
+def test_an_absent_screen_code_is_not_evidence_of_anything() -> None:
+    """The banner is not always on screen and OCR can simply fail. Absence must
+    mean unknown, never wrong - the same rule the season guard follows."""
+    from owdb.contribute import validate_maps
+    for missing in ({}, {"screen_code": None}, {"screen_code": ""}):
+        contrib = _contrib("alice", [("m1", 1, ["ram"])])
+        contrib["maps"][0].update(demo_code="CODE1", **missing)
+        cleaned, rejects = validate_maps(contrib, _known())
+        assert len(cleaned["maps"]) == 1, (missing, rejects)
+
+
+def test_a_snapshot_taken_under_a_different_code_rejects_the_map() -> None:
+    """The replay changing mid-map is the case per-observation codes exist for:
+    the map is filed under a code that really was on screen once, so nothing at
+    map level looks wrong. Two matches under one code is the same wrong
+    attribution, only harder to see."""
+    from owdb.contribute import validate_maps
+    contrib = _contrib("alice", [("m1", 1, ["ram"])])
+    m = contrib["maps"][0]
+    m.update(demo_code="CODE1", screen_code="CODE1")
+    m["observations"] = [{"side": "a", "heroes": ["ram"], "screen_code": "CODE1"},
+                         {"side": "b", "heroes": ["ana"], "screen_code": "OTHER9"}]
+    cleaned, rejects = validate_maps(contrib, _known())
+    assert cleaned["maps"] == []
+    assert "OTHER9" in rejects[0][1], rejects
+
+
+def test_a_verified_view_outranks_an_earlier_unverified_one() -> None:
+    """First-wins decides who owns a map, and quality is then a function of who
+    was fastest. A view that confirmed the replay code off the screen is better
+    evidence than one that never could, so it wins regardless of order - the
+    losing view is still retained, exactly as first-wins already retains it."""
+    from owdb.contribute import merge_first_wins
+    early = _contrib("alice", [("m1", 1, ["ram"])])          # no screen_code
+    late = _contrib("bob", [("m1", 1, ["ana"])])
+    late["maps"][0]["screen_code"] = "CODE1"
+    res = merge_first_wins([early, late])
+    assert res.owner[MapKey("m1", 1)] == "bob"
+    assert ("alice", MapKey("m1", 1)) in res.ignored, "the losing view is kept"
+
+
+def test_first_wins_still_decides_between_two_verified_views() -> None:
+    from owdb.contribute import merge_first_wins
+    a = _contrib("alice", [("m1", 1, ["ram"])]); a["maps"][0]["screen_code"] = "CODE1"
+    b = _contrib("bob", [("m1", 1, ["ana"])]); b["maps"][0]["screen_code"] = "CODE1"
+    assert merge_first_wins([a, b]).owner[MapKey("m1", 1)] == "alice"
+
+
+def test_an_override_still_beats_a_verified_view() -> None:
+    """The curator's escape hatch stays the last word."""
+    from owdb.contribute import merge_first_wins
+    early = _contrib("alice", [("m1", 1, ["ram"])])
+    late = _contrib("bob", [("m1", 1, ["ana"])]); late["maps"][0]["screen_code"] = "CODE1"
+    res = merge_first_wins([early, late], overrides={MapKey("m1", 1): "alice"})
+    assert res.owner[MapKey("m1", 1)] == "alice"

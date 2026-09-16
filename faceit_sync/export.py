@@ -602,9 +602,8 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
     seasons.
 
     Returns ``{}`` when no division has data — the caller decides what an empty
-    build means. Split out of ``export_html`` so that the dashboard and the local
-    trials page (``faceit_sync.trials``) build their data through ONE code path
-    and cannot drift apart; ``test_trials.py`` pins the two together.
+    build means. Split out of ``export_html`` so the dashboard data payload is
+    built through one code path and cannot drift.
     """
     want_tier: str | None = None
     if only_tier:
@@ -673,6 +672,7 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
     owdb_pergame: dict[str, object] = {}
     owdb_pergame_players: dict[str, object] = {}
     owdb_contributors: list[object] = []
+    owdb_durations: dict[str, object] = {}
     oc_path = os.environ.get("OWDB_COMPS", "owdb_comps.json")
     if os.path.exists(oc_path):
         try:
@@ -685,6 +685,7 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
             owdb_pergame = oc.get("per_game_comps", {})
             owdb_pergame_players = oc.get("per_game_players", {})
             owdb_contributors = oc.get("contributor_stats", [])
+            owdb_durations = oc.get("captured_durations", {})
         except (json.JSONDecodeError, OSError):
             owdb_comps = {}
 
@@ -810,6 +811,7 @@ def build_dashboard_data(db: Database, championship_id: str | None = None,
         "maps": list(maps.values()),
         "owdb_comps": owdb_comps,
         "owdb_captured": owdb_captured,
+        "owdb_durations": owdb_durations,
         "owdb_pergame": owdb_pergame,
         "owdb_pergame_players": owdb_pergame_players,
         "owdb_contributors": owdb_contributors,

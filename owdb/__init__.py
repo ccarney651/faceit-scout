@@ -1,8 +1,7 @@
 """owdb — Overwatch 2 composition extraction from in-client replays.
 
-Sibling tool to ``faceit-sync``. See ``SPEC.md`` at the repo root for the
-authoritative design. This package is being built in the order given by
-SPEC §13; only step 1 (``owdb calibrate``) is implemented so far.
+Sibling tool to ``faceit-sync``. See ``ARCHITECTURE.md`` §5 at the repo root
+for how the package is put together, and ``AGENTS.md`` for the rules.
 """
 
 from __future__ import annotations

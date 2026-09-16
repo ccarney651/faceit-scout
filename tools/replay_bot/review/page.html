@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>replay-bot review</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --panel2: #232730; --line: #333a46;
+    --fg: #e8eaed; --dim: #9aa3b2; --accent: #6ea8fe; --ok: #57c98b;
+    --flag: #e8b13d; --flagbg: #3a2f16; --bad: #e0685f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex;
+    gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sp { flex: 1; }
+  button { background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #0b1220; border-color: var(--accent); font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .map { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    margin-bottom: 20px; overflow: hidden; }
+  .map.reviewed { opacity: .72; }
+  .map.excluded { opacity: .55; border-color: var(--flag); }
+  .maphead { padding: 12px 16px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+  .maphead b { font-size: 15px; }
+  .maphead .code { font-family: ui-monospace, monospace; color: var(--accent); }
+  .summary { color: var(--dim); font-size: 13px; }
+  .summary .has-flags { color: var(--flag); }
+  .flagstrip { padding: 8px 16px; background: var(--flagbg); border-bottom: 1px solid var(--line);
+    font-size: 13px; color: var(--flag); }
+  .flagstrip a { color: var(--flag); cursor: pointer; text-decoration: underline; margin-right: 10px; }
+  .round { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .round:last-child { border-bottom: 0; }
+  .round h3 { margin: 0 0 8px; font-size: 13px; color: var(--dim); font-weight: 600; }
+  .round h3 .rflag { color: var(--flag); margin-left: 8px; }
+  .side { margin-bottom: 12px; }
+  .side > .team { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .strip { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 6px; }
+  .slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .slot { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font-size: 12.5px; }
+  .slot.flagged { border-color: var(--flag); background: var(--flagbg); }
+  .slot .hero { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: 600; }
+  .slot .hero img { width: 20px; height: 20px; border-radius: 3px; }
+  .slot .hero.none { color: var(--bad); }
+  .slot .player { color: var(--dim); margin-top: 3px; font-size: 11.5px; }
+  .slot .tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+  .tag { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #3a2f16; color: var(--flag); }
+  .tag.sw { background: #16303a; color: #6cc6e0; }
+  .editrow { margin-top: 5px; }
+  .editrow input { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--accent);
+    border-radius: 4px; padding: 3px 5px; font: inherit; }
+  .opts { list-style: none; margin: 3px 0 0; padding: 0; max-height: 160px; overflow: auto;
+    border: 1px solid var(--line); border-radius: 4px; }
+  .opts li { padding: 3px 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .opts li:hover, .opts li.on { background: var(--accent); color: #0b1220; }
+  .opts li img { width: 16px; height: 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+  .chip { font-size: 11px; padding: 1px 5px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); cursor: pointer; }
+  .chip.on { background: var(--accent); color: #0b1220; border-color: var(--accent); }
+  .mapfoot { padding: 10px 16px; display: flex; gap: 10px; align-items: center; }
+  .note { font-size: 13px; color: var(--dim); }
+  .note.ok { color: var(--ok); } .note.bad { color: var(--bad); }
+  #banner { padding: 10px 16px; font-size: 13px; }
+  header label.hdrtoggle { display: flex; align-items: center; gap: 5px; cursor: pointer;
+    font-size: 13px; color: var(--dim); }
+  .segments { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .segrow { display: flex; align-items: center; gap: 4px; font-size: 11.5px; }
+  .segrow img { width: 14px; height: 14px; border-radius: 2px; }
+  .segtime { color: var(--dim); margin-left: auto; }
+  .slot.swapped { border-color: #6cc6e0; background: #16303a; }
+  .gallabel { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+  .gallery { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; }
+  .galitem { flex: 0 0 auto; text-align: center; }
+  .galitem .strip { width: 170px; max-width: 170px; margin-bottom: 2px; }
+  .galtime { font-size: 10.5px; color: var(--dim); }
+  #failures { background: var(--panel); border: 1px solid var(--bad); border-radius: 10px; margin-bottom: 20px; }
+  #failures .maphead { border-bottom-color: var(--bad); }
+  #failChips { padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
+  .failrow { padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 12px;
+    align-items: baseline; font-size: 12.5px; flex-wrap: wrap; }
+  .failrow:last-child { border-bottom: 0; }
+  .failrow .code { font-family: ui-monospace, monospace; color: var(--accent); }
+  .failrow .cat { padding: 1px 7px; border-radius: 10px; background: var(--flagbg); color: var(--flag); font-size: 11px; white-space: nowrap; }
+  .failrow .err { color: var(--dim); flex: 1 1 260px; }
+  #tabbar { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  #tabbar button.on { border-color: var(--accent); color: var(--accent); }
+  #runView { max-width: 700px; margin: 0 auto; padding: 16px; }
+  .runrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .runrow label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .runrow input[type=text], .runrow input[type=number] {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font: inherit; width: 120px; }
+  .runrow select {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font: inherit; }
+  .runrow select[multiple] { width: 160px; }
+  #runLog { background: #0b0d10; border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+    height: 320px; overflow-y: auto; white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; }
+  #feedPanel { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  #feedPanel .maphead { padding: 10px 14px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 12px; align-items: baseline; background: var(--panel); }
+  #feedTable { width: 100%; max-height: 360px; overflow-y: auto; display: block; }
+  #feedTable table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  #feedTable th { text-align: left; position: sticky; top: 0; background: var(--panel); padding: 6px 10px;
+    border-bottom: 1px solid var(--line); color: var(--dim); font-weight: 600; }
+  #feedTable td { padding: 5px 10px; border-bottom: 1px solid var(--line); }
+  #feedTable .code { font-family: ui-monospace, monospace; color: var(--accent); }
+  .needsmanual { color: var(--bad); font-weight: 600; }
+  .failrow button.retry { margin-left: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>replay-bot review</h1>
+  <span id="sessionname" class="summary"></span>
+  <span class="sp"></span>
+  <label class="hdrtoggle"><input type="checkbox" id="onlyIssues" checked> only slots needing review</label>
+  <label class="hdrtoggle"><input type="checkbox" id="hideReviewed"> hide reviewed maps</label>
+  <span id="savenote" class="note"></span>
+  <button id="save">Save</button>
+  <button id="finalize">Finalize</button>
+  <button id="upload" class="primary" disabled>Upload</button>
+</header>
+<div id="tabbar">
+  <button id="tabRun" class="tabbtn">Run</button>
+  <button id="tabReview" class="tabbtn">Review</button>
+</div>
+<section id="runView" hidden>
+  <div class="runrow">
+    <span id="feedStatus" class="summary"></span>
+    <button id="refreshFeed">Refresh feed</button>
+  </div>
+  <div class="runrow">
+    <label><input type="checkbox" id="owReady"> Overwatch is open on the Replay History tab</label>
+  </div>
+<div class="runrow">
+    <label>Divisions <select id="fDivisions" multiple size="6"></select></label>
+    <label>Teams <input type="text" id="fTeams" list="fTeamsList" placeholder="e.g. Wasp,Crabs"></label>
+    <label>Limit <select id="fLimit">
+      <option value="">All</option>
+      <option value="5">5</option>
+      <option value="10">10</option>
+      <option value="20">20</option>
+      <option value="50">50</option>
+    </select></label>
+    <label><input type="checkbox" id="fLoop"> Loop every live code (cycles the code stack; divisions/teams don't apply)</label>
+  </div>
+  <div class="runrow">
+    <button id="goBtn" class="primary" disabled>Go</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <span id="runNote" class="note"></span>
+  </div>
+  <div id="runLog"></div>
+  <div id="feedPanel">
+    <div class="maphead">
+      <b>Backlog</b>
+      <span id="feedSummary" class="summary"></span>
+    </div>
+    <div id="feedTable"><table><thead><tr>
+      <th>code</th><th>division</th><th>teams</th><th>map</th><th>finished</th>
+    </tr></thead><tbody id="feedBody"></tbody></table></div>
+  </div>
+</section>
+<div id="reviewView">
+<div id="flagFilters" class="chips" style="padding:8px 16px; border-bottom:1px solid var(--line)"></div>
+<div id="banner" class="note"></div>
+<main>
+<section id="failures" style="display:none">
+  <div class="maphead">
+    <b>Failures</b>
+    <span id="failSummary" class="summary"></span>
+  </div>
+  <div id="failChips"></div>
+  <div id="failList"></div>
+</section>
+<div id="maps"></div>
+</main>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const esc = (s) => String(s == null ? '' : s);
+
+let DATA = null;
+let HEROES = [];
+let HERO_BY_GUID = {};
+let dirty = false;
+let onlyIssues = true;
+let hideReviewed = false;
+
+// The flag vocabulary resolve.js actually produces (round-level: unsampled/
+// sparse; slot-level: everything else), plus the synthetic 'swap' category for
+// a confirmed mid-round hero change (segments.length > 1), which drives the
+// same "needs review" gating as a real flag but isn't one. Labels here are the
+// only place these strings are made human-readable - keep in sync with
+// resolve.js's flags.push(...) call sites.
+const FLAG_LABELS = {
+  'no-read': 'no read', 'contested': 'contested', 'low-support': 'low support',
+  'low-score': 'low confidence', 'unknown-hero': 'unknown hero',
+  'attribution-abstained': 'attribution abstained',
+  'round-unsampled': 'round unsampled', 'sparse-round': 'sparse round',
+  'swap': 'hero swap',
+};
+// Which flag types currently count toward "needs review". null until the
+// first load populates it with every type actually present, all on by
+// default - so filtering starts as a no-op and only narrows from there.
+let activeFlagTypes = null;
+// Player attribution display, re-enabled 2026-09-12: hero-capture accuracy
+// work is done for now, and hiding this let real attribution gaps (down to
+// 0/20 on some maps) go unreviewed and unnoticed. Attribution and orientation
+// detection always ran in run.js regardless of this flag (they share one OCR
+// pass) - this only ever controlled whether the review page showed it.
+const SHOW_ATTRIBUTION = true;
+
+async function load() {
+  try {
+    DATA = await (await fetch('/review.json')).json();
+  } catch (e) { $('#banner').textContent = 'no review artifact - run a capture first'; return; }
+  const hl = await (await fetch('/hero-list')).json();
+  HEROES = hl.heroes || [];
+  HERO_BY_GUID = Object.fromEntries(HEROES.map((h) => [h.guid, h]));
+  $('#sessionname').textContent = DATA.session + ' · ' + (DATA.maps || []).length + ' maps';
+  activeFlagTypes = new Set(Object.keys(flagTypeCounts()));
+  render();
+  loadFailures();
+}
+
+// Every flag type present across the whole session right now, with how many
+// slots/rounds carry it - effective (post-correction) so a fixed slot's old
+// flag stops counting the moment it's corrected, same as the rest of the page.
+function flagTypeCounts() {
+  const counts = {};
+  const bump = (k) => { counts[k] = (counts[k] || 0) + 1; };
+  (DATA.maps || []).forEach((m) => (m.rounds || []).forEach((r) => {
+    (r.flags || []).forEach(bump);
+    ['a', 'b'].forEach((side) => (r[side] || []).forEach((base, i) => {
+      const s = effSlot(m, r.round_no, side, i);
+      effectiveFlags(base, s).forEach(bump);
+      const segs = effectiveSegments(base, s);
+      if (segs && segs.length > 1) bump('swap');
+    }));
+  }));
+  return counts;
+}
+
+function renderFlagFilters() {
+  const bar = $('#flagFilters');
+  const counts = flagTypeCounts();
+  const types = Object.keys(counts);
+  bar.style.display = types.length ? '' : 'none';
+  bar.textContent = '';
+  types.sort((a, b) => counts[b] - counts[a]).forEach((t) => {
+    const chip = el('span', 'chip' + (activeFlagTypes.has(t) ? ' on' : ''),
+      (FLAG_LABELS[t] || t) + ' (' + counts[t] + ')');
+    chip.title = activeFlagTypes.has(t)
+      ? 'counts toward "needs review" - click to stop counting it'
+      : 'hidden from "needs review" - click to count it again';
+    chip.onclick = () => {
+      if (activeFlagTypes.has(t)) activeFlagTypes.delete(t); else activeFlagTypes.add(t);
+      render();
+    };
+    bar.appendChild(chip);
+  });
+}
+
+// Codes run.js never got a map for at all - state/attempts.json's failed
+// entries, categorised server-side by error text. These never appear in
+// review.json (a failure throws before RO.mapEntry runs), so this is the
+// only place in the page that shows them.
+let FAILURES = [];
+let activeFailCats = null; // null until loaded, then a Set of categories shown
+
+async function loadFailures() {
+  try {
+    const r = await (await fetch('/failures')).json();
+    FAILURES = r.failures || [];
+  } catch (e) { FAILURES = []; }
+  activeFailCats = new Set(FAILURES.map((f) => f.category));
+  renderFailures();
+}
+
+function renderFailures() {
+  const box = $('#failures');
+  if (!FAILURES.length) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  const counts = {};
+  const labelOf = {};
+  FAILURES.forEach((f) => { counts[f.category] = (counts[f.category] || 0) + 1; labelOf[f.category] = f.category_label; });
+  $('#failSummary').textContent = FAILURES.length + ' failed code' + (FAILURES.length === 1 ? '' : 's');
+
+  const chips = $('#failChips'); chips.textContent = '';
+  Object.keys(counts).sort((a, b) => counts[b] - counts[a]).forEach((cat) => {
+    const chip = el('span', 'chip' + (activeFailCats.has(cat) ? ' on' : ''),
+      labelOf[cat] + ' (' + counts[cat] + ')');
+    chip.onclick = () => {
+      if (activeFailCats.has(cat)) activeFailCats.delete(cat); else activeFailCats.add(cat);
+      renderFailures();
+    };
+    chips.appendChild(chip);
+  });
+
+  const list = $('#failList'); list.textContent = '';
+  FAILURES.filter((f) => activeFailCats.has(f.category)).forEach((f) => {
+    const row = el('div', 'failrow');
+    row.appendChild(el('span', 'code', f.code));
+    row.appendChild(el('span', 'cat', f.category_label));
+    const ctx = [f.division, f.map, (f.team_a && f.team_b) ? f.team_a + ' vs ' + f.team_b : null]
+      .filter(Boolean).join(' · ');
+    if (ctx) row.appendChild(el('span', 'summary', ctx));
+    row.appendChild(el('span', 'err', f.error || ''));
+    if (f.needs_manual) {
+      row.appendChild(el('span', 'needsmanual',
+        'needs manual attention (failed ' + f.fail_count + '×) - scout it by hand, or retry:'));
+    }
+    const retry = el('button', 'retry', f.needs_manual ? 'Retry anyway' : 'Retry now');
+    retry.title = f.needs_manual
+      ? 'forces this code back into the queue despite hitting the retry cap'
+      : 'this code is already back in the queue automatically - use this to jump the line';
+    retry.onclick = async () => {
+      retry.disabled = true;
+      const r = await fetch('/failures/retry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: f.key }),
+      });
+      if (r.ok) { loadFailures(); } else { retry.disabled = false; }
+    };
+    row.appendChild(retry);
+    list.appendChild(row);
+  });
+}
+
+function mapFlagCount(m) {
+  let n = 0;
+  for (const r of m.rounds || []) {
+    n += (r.flags || []).filter(flagTypeActive).length;
+    for (const s of (r.a || []).concat(r.b || [])) n += (s.flags || []).filter(flagTypeActive).length;
+  }
+  return n;
+}
+function attributionScore(m) {
+  let have = 0, all = 0;
+  const a = m.attribution || {};
+  for (const side of ['a', 'b']) for (const id of ((a[side] || {}).ids || [])) { all++; if (id) have++; }
+  return all ? have + '/' + all : '–';
+}
+
+// The effective slot after this map's corrections - what the operator sees.
+function effSlot(m, round_no, side, i) {
+  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const s = Object.assign({}, base);
+  for (const c of m.corrections || []) {
+    if (c.round_no !== round_no || c.side !== side || c.slot !== i) continue;
+    if (c.kind === 'hero') { s.guid = c.now_guid; s.name = c.now_name || c.now_guid; s.corrected = true; }
+    if (c.kind === 'player') { s.player_id = c.now_id; s.player_corrected = true; }
+  }
+  return s;
+}
+// Player ids already claimed by this round+side's OTHER four slots (after
+// corrections) - a player can only be in one slot at once, so once they are
+// confidently matched (or a reviewer manually matches them) elsewhere, they
+// should stop being offered as a candidate for every other slot too. Recomputed
+// per render rather than cached: cheap (5 slots), and always correct after a
+// correction changes effSlot()'s output.
+function claimedElsewhere(m, round_no, side, excludeSlot) {
+  const claimed = new Set();
+  for (let j = 0; j < 5; j++) {
+    if (j === excludeSlot) continue;
+    const pid = effSlot(m, round_no, side, j).player_id;
+    if (pid) claimed.add(pid);
+  }
+  return claimed;
+}
+function setCorrection(m, c) {
+  m.corrections = (m.corrections || []).filter(
+    (x) => !(x.round_no === c.round_no && x.side === c.side && x.slot === c.slot && x.kind === c.kind));
+  m.corrections.push(c);
+  dirty = true; markDirty();
+}
+function markDirty() { $('#savenote').textContent = 'unsaved'; $('#savenote').className = 'note bad'; }
+
+function mmss(t) {
+  t = Math.max(0, Math.round(Number(t) || 0));
+  const m = Math.floor(t / 60), s = t % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+// Flags as Finalize will actually ship them - mirrors review/server.js's
+// applyCorrections so "needs review" matches what a correction resolves.
+function effectiveFlags(base, s) {
+  let flags = (base.flags || []).slice();
+  if (s.corrected) flags = flags.filter((f) => f === 'attribution-abstained');
+  if (s.player_corrected) flags = flags.filter((f) => f !== 'attribution-abstained');
+  return flags;
+}
+
+// resolve.js's segmentSlot() stretches, or null once a hero correction has
+// collapsed the slot to one assertion for the whole round (emit.js's
+// slotSegments() treats a corrected slot the same way).
+function effectiveSegments(base, s) {
+  if (s.corrected) return null;
+  return Array.isArray(base.segments) ? base.segments : null;
+}
+
+// A slot is worth an operator's eyes if it carries a flag, or if it holds a
+// real mid-round hero swap (2+ segments) - a swap ships an extra observation
+// whether or not anything else about the slot was flagged.
+// null activeFlagTypes (before the first load populates it) means "every
+// type counts", so this degrades to the pre-filter behaviour rather than
+// hiding everything for one render.
+const flagTypeActive = (t) => !activeFlagTypes || activeFlagTypes.has(t);
+
+function slotNeedsReview(base, s) {
+  const flags = effectiveFlags(base, s).filter(flagTypeActive);
+  const segs = effectiveSegments(base, s);
+  return flags.length > 0 || (segs && segs.length > 1 && flagTypeActive('swap'));
+}
+function sideNeedsReview(m, r, side) {
+  for (let i = 0; i < 5; i++) {
+    const base = (r[side] || [])[i] || {};
+    const s = effSlot(m, r.round_no, side, i);
+    if (slotNeedsReview(base, s)) return true;
+  }
+  return false;
+}
+function roundFlagsActive(r) {
+  return (r.flags || []).some(flagTypeActive);
+}
+function roundNeedsReview(m, r) {
+  if (roundFlagsActive(r)) return true;
+  return sideNeedsReview(m, r, 'a') || sideNeedsReview(m, r, 'b');
+}
+
+function render() {
+  renderFlagFilters();
+  const host = $('#maps'); host.textContent = '';
+  (DATA.maps || [])
+    .map((m, mi) => [m, mi])
+    .filter(([m]) => !(hideReviewed && (m.status === 'reviewed' || m.status === 'excluded')))
+    .forEach(([m, mi]) => host.appendChild(renderMap(m, mi)));
+  refreshFooter();
+}
+
+function renderMap(m, mi) {
+  const box = el('div', 'map' + (m.status === 'reviewed' ? ' reviewed' : '') + (m.status === 'excluded' ? ' excluded' : ''));
+  box.id = 'map-' + mi;
+  const head = el('div', 'maphead');
+  head.appendChild(el('b', null, m.map_name || '(unknown map)'));
+  head.appendChild(el('span', 'code', m.demo_code));
+  head.appendChild(el('span', 'summary', (m.side_a_team || 'A') + ' vs ' + (m.side_b_team || 'B')));
+  if (m.status === 'excluded') {
+    head.appendChild(el('span', 'summary has-flags', '🚫 excluded: ' + (m.exclude_reason || 'no reason recorded')));
+  }
+  const fc = mapFlagCount(m);
+  const sm = el('span', 'summary' + (fc ? ' has-flags' : ''),
+    (m.rounds || []).length + ' rounds · ' + fc + ' flags'
+    + (SHOW_ATTRIBUTION ? ' · attribution ' + attributionScore(m) : ''));
+  head.appendChild(sm);
+  if (m.orientation === 'swapped' || m.orientation === null) {
+    head.appendChild(el('span', 'summary has-flags',
+      m.orientation === 'swapped'
+        ? '⇄ sides were swapped (' + (m.side_a_team || 'A') + ' is on the left) — check the strips'
+        : '⚠ side detection was not sure — check ' + (m.side_a_team || 'A') + ' is really on the left'));
+  }
+  box.appendChild(head);
+
+  const flagged = [];
+  (m.rounds || []).forEach((r) => {
+    box.appendChild(renderRound(m, mi, r, flagged));
+  });
+  if (flagged.length) {
+    const strip = el('div', 'flagstrip');
+    strip.appendChild(el('span', null, flagged.length + ' flagged: '));
+    flagged.forEach((f) => {
+      const a = el('a', null, f.label); a.onclick = () => f.node.scrollIntoView({ block: 'center' });
+      strip.appendChild(a);
+    });
+    box.insertBefore(strip, box.children[1]);
+  }
+
+  const foot = el('div', 'mapfoot');
+  if (m.status === 'excluded') {
+    const restore = el('button', null, 'Restore (undo exclude)');
+    restore.onclick = () => {
+      m.status = m.prior_status || 'unreviewed';
+      delete m.prior_status; delete m.exclude_reason;
+      dirty = true; markDirty(); render();
+    };
+    foot.appendChild(restore);
+  } else {
+    const rev = el('button', null, m.status === 'reviewed' ? 'Reviewed ✓' : 'Mark reviewed');
+    rev.onclick = () => { m.status = m.status === 'reviewed' ? 'unreviewed' : 'reviewed'; dirty = true; markDirty(); render(); };
+    foot.appendChild(rev);
+  }
+  box.appendChild(foot);
+  return box;
+}
+
+function renderRound(m, mi, r, flagged) {
+  const roundClean = onlyIssues && !roundNeedsReview(m, r);
+  const wrap = el('div', 'round' + (roundClean ? ' clean' : ''));
+  const h = el('h3', null, 'Round ' + r.round_no);
+  (r.flags || []).forEach((fl) => h.appendChild(el('span', 'rflag', ' ' + fl)));
+  wrap.appendChild(h);
+  if (roundClean) {
+    wrap.appendChild(el('div', 'summary', '✓ nothing needs review'));
+    return wrap;
+  }
+  ['a', 'b'].forEach((side) => {
+    const sd = el('div', 'side');
+    sd.appendChild(el('div', 'team', side === 'a' ? (m.side_a_team || 'Side A') : (m.side_b_team || 'Side B')));
+    // A round-level flag (round-unsampled, sparse-round) is a reason to look at
+    // everything in it even if no single slot is flagged - only collapse a side
+    // when the round itself is clean too.
+    const sideClean = onlyIssues && !roundFlagsActive(r) && !sideNeedsReview(m, r, side);
+    if (sideClean) {
+      sd.appendChild(el('div', 'summary', '✓ 5/5 clean'));
+      wrap.appendChild(sd);
+      return;
+    }
+    const cropRel = ((m.frames || {})[r.round_no] || {})[side];
+    if (cropRel) { const im = el('img', 'strip'); im.src = '/' + cropRel; im.loading = 'lazy'; sd.appendChild(im); }
+
+    // Every sample this round-side actually took, when a slot on it holds a
+    // confirmed swap - review_out.js only writes this gallery for a side with
+    // a real swap, so its presence alone means "look here". One gallery per
+    // side, not per slot, since these are the same full portrait-band crops a
+    // swapped slot's segments were read off.
+    const gallery = ((m.frames || {})[r.round_no] || {})[side + '_samples'];
+    if (Array.isArray(gallery) && gallery.length) {
+      sd.appendChild(el('div', 'gallabel', 'every sample this round took (a slot below swapped):'));
+      const gal = el('div', 'gallery');
+      gallery.forEach((g) => {
+        const item = el('div', 'galitem');
+        const im = el('img', 'strip'); im.src = '/' + g.path; im.loading = 'lazy';
+        item.appendChild(im);
+        item.appendChild(el('div', 'galtime', mmss(g.t)));
+        gal.appendChild(item);
+      });
+      sd.appendChild(gal);
+    }
+
+    const slots = el('div', 'slots');
+    for (let i = 0; i < 5; i++) {
+      const base = (r[side] || [])[i] || {};
+      const s = effSlot(m, r.round_no, side, i);
+      if (onlyIssues && !slotNeedsReview(base, s)) continue;
+      slots.appendChild(renderSlot(m, mi, r.round_no, side, i, flagged));
+    }
+    sd.appendChild(slots);
+    wrap.appendChild(sd);
+  });
+  return wrap;
+}
+
+function renderSlot(m, mi, round_no, side, i, flagged) {
+  const s = effSlot(m, round_no, side, i);
+  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const flags = effectiveFlags(base, s);
+  const segs = effectiveSegments(base, s);
+  const swapped = !!(segs && segs.length > 1);
+  const cell = el('div', 'slot' + (flags.length ? ' flagged' : '') + (swapped ? ' swapped' : ''));
+  if (flags.length || swapped) {
+    flagged.push({
+      label: 'R' + round_no + ' ' + side + (i + 1) + (swapped && !flags.length ? ' (swap)' : ''),
+      node: cell,
+    });
+  }
+
+  const hero = el('div', 'hero' + (s.guid ? '' : ' none'));
+  const h = HERO_BY_GUID[s.guid];
+  if (h && h.icon) { const im = el('img'); im.src = h.icon; hero.appendChild(im); }
+  hero.appendChild(el('span', null, (h && h.name) || s.name || (s.guid ? s.guid : 'no read')));
+  if (s.corrected) hero.appendChild(el('span', 'tag sw', 'fixed'));
+  hero.onclick = () => openHeroEdit(cell, m, mi, round_no, side, i);
+  cell.appendChild(hero);
+
+  // A confirmed mid-round swap - segmentSlot()'s stretches, in order, each with
+  // the real time it started. This is what emit.fromRounds() actually ships,
+  // replacing the old vote-based "also X" guess.
+  if (swapped) {
+    const segBox = el('div', 'segments');
+    segs.forEach((seg) => {
+      const row = el('div', 'segrow');
+      const sh = HERO_BY_GUID[seg.guid];
+      if (sh && sh.icon) { const im = el('img'); im.src = sh.icon; row.appendChild(im); }
+      row.appendChild(el('span', null, (sh && sh.name) || seg.name || seg.guid));
+      row.appendChild(el('span', 'segtime', mmss(seg.from_t)));
+      segBox.appendChild(row);
+    });
+    cell.appendChild(segBox);
+  }
+
+  const roster = (m.roster || {})[side] || [];
+  const pid = s.player_id;
+  if (SHOW_ATTRIBUTION) {
+    const pname = (roster.find((p) => p.id === pid) || {}).name || (pid ? pid.slice(0, 8) : '—');
+    cell.appendChild(el('div', 'player', 'player: ' + pname));
+  }
+
+  if (flags.length) {
+    const tags = el('div', 'tags');
+    flags.forEach((f) => tags.appendChild(el('span', 'tag', f)));
+    cell.appendChild(tags);
+  }
+
+  if (SHOW_ATTRIBUTION && roster.length) {
+    const chips = el('div', 'chips');
+    const claimed = claimedElsewhere(m, round_no, side, i);
+    roster.forEach((p) => {
+      // Already matched to a sibling slot this round - not offered here, so a
+      // reviewer cannot accidentally double-assign one player to two slots,
+      // and an abstained slot's remaining candidates shrink as its teammates
+      // resolve. Still show THIS slot's own pick (if any) so it stays
+      // toggleable.
+      if (claimed.has(p.id) && p.id !== pid) return;
+      const c = el('span', 'chip' + (p.id === pid ? ' on' : ''), p.name);
+      c.onclick = () => setCorrection(m, { kind: 'player', round_no, side, slot: i,
+        was_id: base.player_id || null, now_id: p.id === pid ? null : p.id }) || render();
+      chips.appendChild(c);
+    });
+    cell.appendChild(chips);
+  }
+  return cell;
+}
+
+function openHeroEdit(cell, m, mi, round_no, side, i) {
+  if ($('.editrow', cell)) { $('.editrow', cell).remove(); return; }
+  const row = el('div', 'editrow');
+  const inp = el('input'); inp.placeholder = 'hero name, or blank to drop';
+  const opts = el('ul', 'opts');
+  row.appendChild(inp); row.appendChild(opts);
+  cell.appendChild(row);
+  inp.focus();
+  let on = -1;
+  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const commit = (guid, name) => {
+    setCorrection(m, { kind: 'hero', round_no, side, slot: i,
+      was_guid: base.guid || null, now_guid: guid || null, now_name: name || null });
+    render();
+  };
+  const refresh = () => {
+    const q = inp.value.trim().toLowerCase();
+    const list = (q ? HEROES.filter((h) => h.name.toLowerCase().includes(q)) : HEROES).slice(0, 40);
+    opts.textContent = '';
+    if (!q) { const li = el('li', null, '(drop this read)'); li.onclick = () => commit(null, null); opts.appendChild(li); }
+    list.forEach((h, k) => {
+      const li = el('li', k === on ? 'on' : null);
+      if (h.icon) { const im = el('img'); im.src = h.icon; li.appendChild(im); }
+      li.appendChild(el('span', null, h.name + (h.role ? ' · ' + h.role : '')));
+      li.onclick = () => commit(h.guid, h.name);
+      opts.appendChild(li);
+    });
+  };
+  inp.oninput = () => { on = -1; refresh(); };
+  inp.onkeydown = (e) => {
+    const lis = [...opts.children];
+    if (e.key === 'ArrowDown') { on = Math.min(lis.length - 1, on + 1); refresh(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { on = Math.max(0, on - 1); refresh(); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (lis[on]) lis[on].click(); e.preventDefault(); }
+    else if (e.key === 'Escape') { row.remove(); }
+  };
+  refresh();
+}
+
+function refreshFooter() {
+  const maps = DATA.maps || [];
+  // 'excluded' does not block Upload (server.js's finalize() drops those maps
+  // from the contribution entirely; its /upload gate only refuses on a
+  // genuine 'unreviewed' map), so it must not count as "still to review" here
+  // either, or the button stays disabled forever once anything is excluded.
+  const excludedCount = maps.filter((m) => m.status === 'excluded').length;
+  const allReviewed = maps.length && maps.every((m) => m.status === 'reviewed' || m.status === 'excluded');
+  $('#upload').disabled = !allReviewed;
+  $('#finalize').disabled = !maps.length;
+  $('#banner').textContent = allReviewed
+    ? ('every map reviewed — Finalize to rebuild the contribution, then Upload'
+       + (excludedCount ? ' (' + excludedCount + ' excluded, not included)' : ''))
+    : (maps.filter((m) => m.status !== 'reviewed' && m.status !== 'excluded').length + ' map(s) still to review'
+       + (excludedCount ? ', ' + excludedCount + ' excluded' : ''));
+}
+
+async function save() {
+  const r = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(DATA) });
+  if (r.ok) { dirty = false; $('#savenote').textContent = 'saved'; $('#savenote').className = 'note ok'; }
+  else { $('#savenote').textContent = 'save failed'; $('#savenote').className = 'note bad'; }
+}
+
+$('#onlyIssues').onchange = (e) => { onlyIssues = e.target.checked; render(); };
+$('#hideReviewed').onchange = (e) => { hideReviewed = e.target.checked; render(); };
+$('#save').onclick = save;
+$('#finalize').onclick = async () => {
+  if (dirty) await save();
+  const r = await fetch('/finalize', { method: 'POST' });
+  const j = await r.json();
+  $('#banner').textContent = r.ok
+    ? 'finalized: ' + j.maps + ' maps, ' + j.observations + ' observations → ' + j.wrote
+    : 'finalize failed: ' + (j.error || r.status);
+  $('#banner').className = r.ok ? 'note ok' : 'note bad';
+};
+$('#upload').onclick = async () => {
+  if (dirty) await save();
+  if (!confirm('Upload ' + (DATA.maps || []).length + ' reviewed maps to owdb.io as replay-bot?')) return;
+  $('#banner').textContent = 'uploading…'; $('#banner').className = 'note';
+  const r = await fetch('/upload', { method: 'POST' });
+  const j = await r.json();
+  const b = (j && j.body) || {};
+  $('#banner').textContent = j.ok
+    ? 'uploaded: ' + (b.action || 'ok') + ' · ' + (b.maps != null ? b.maps + ' maps' : '') + ' — site rebuilds in ~2 min'
+    : 'upload failed: ' + (b.error || (j && j.error) || (j && j.status) || 'error');
+  $('#banner').className = j.ok ? 'note ok' : 'note bad';
+};
+window.onbeforeunload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+
+load();
+</script>
+
+<script>
+// --- the Run tab -----------------------------------------------------
+// Self-contained: this is the only script block that touches #runView /
+// #tabbar. Duplicates the ~4-line landing.js decision (this file has no
+// module system, so a require() here would need a build step it isn't
+// worth adding for four lines) - keep the two in sync if that logic changes.
+(function () {
+  const $ = (s) => document.querySelector(s);
+  function landingView(status) {
+    if (status && status.running) return 'run';
+    if (status && status.hasReview) return 'review';
+    return 'run';
+  }
+
+  function showTab(tab) {
+    $('#runView').hidden = tab !== 'run';
+    $('#reviewView').hidden = tab !== 'review';
+    $('#tabRun').className = 'tabbtn' + (tab === 'run' ? ' on' : '');
+    $('#tabReview').className = 'tabbtn' + (tab === 'review' ? ' on' : '');
+  }
+  $('#tabRun').onclick = () => showTab('run');
+  $('#tabReview').onclick = () => showTab('review');
+
+  let logSource = null;
+  function openLog() {
+    if (logSource) return;
+    logSource = new EventSource('/run-log');
+    logSource.onmessage = (e) => {
+      const pane = $('#runLog');
+      const atBottom = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 4;
+      pane.textContent += JSON.parse(e.data);
+      if (atBottom) pane.scrollTop = pane.scrollHeight;
+    };
+    logSource.addEventListener('done', () => {
+      logSource.close(); logSource = null;
+      loadFeed();
+      refreshStatus().then((s) => { if (s && s.hasReview) { load(); loadFailures(); showTab('review'); } });
+    });
+    logSource.onerror = () => { if (logSource) { logSource.close(); logSource = null; } };
+  }
+
+  let lastStatus = null;
+  async function refreshStatus() {
+    let s;
+    try { s = await (await fetch('/status')).json(); } catch (e) { return null; }
+    lastStatus = s;
+    $('#feedStatus').textContent = s.feed.fresh
+      ? 'feed: fresh (built ' + (s.feed.built || '?') + ')'
+      : 'feed: stale (built ' + (s.feed.built || 'never') + ') - refresh before a run';
+    $('#goBtn').disabled = !($('#owReady').checked && s.feed.fresh && !s.running);
+    $('#stopBtn').disabled = !s.running;
+    if (s.running) { $('#runNote').textContent = 'running…'; openLog(); }
+    else if (s.exitInfo) $('#runNote').textContent = 'last run exited ' + s.exitInfo.code;
+    if (s.refresh && s.refresh.state === 'pending') {
+      setTimeout(refreshStatus, 2000);
+    }
+    return s;
+  }
+  $('#owReady').onchange = refreshStatus;
+  $('#fLoop').onchange = () => {
+    const loop = $('#fLoop').checked;
+    $('#fDivisions').disabled = loop;
+    $('#fTeams').disabled = loop;
+  };
+
+  // Divisions is a real multi-select; Teams stays free-text (comma-separated,
+  // substring-matched against either side - see queue.js) with a datalist for
+  // autocomplete, since a 170+-team list is worse as a select than as typing
+  // with suggestions.
+  function selectedDivisions() {
+    return [...$('#fDivisions').selectedOptions].map((o) => o.value);
+  }
+  function currentTeams() {
+    return $('#fTeams').value ? $('#fTeams').value.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  }
+
+  async function loadFilters() {
+    let f;
+    try { f = await (await fetch('/filters')).json(); } catch (e) { return; }
+    const sel = $('#fDivisions');
+    const had = new Set(selectedDivisions());
+    sel.textContent = '';
+    (f.divisions || []).forEach((d) => {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d; opt.selected = had.has(d);
+      sel.appendChild(opt);
+    });
+    const dl = $('#fTeamsList');
+    dl.textContent = '';
+    (f.teams || []).forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      dl.appendChild(opt);
+    });
+  }
+
+  async function loadFeed() {
+    const params = new URLSearchParams();
+    const divs = selectedDivisions();
+    const teams = currentTeams();
+    if (divs.length) params.set('divisions', divs.join(','));
+    if (teams.length) params.set('teams', teams.join(','));
+    let f;
+    try { f = await (await fetch('/feed?' + params.toString())).json(); } catch (e) { return; }
+    $('#feedSummary').textContent = f.pending + ' of ' + f.total + ' codes still unscouted' +
+      (divs.length || teams.length ? ' (filtered)' : '');
+    const body = $('#feedBody'); body.textContent = '';
+    (f.codes || []).forEach((c) => {
+      const tr = document.createElement('tr');
+      const cell = (cls, txt) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt || ''; return td; };
+      tr.appendChild(cell('code', c.code));
+      tr.appendChild(cell(null, c.division));
+      tr.appendChild(cell(null, [c.team_a, c.team_b].filter(Boolean).join(' vs ')));
+      tr.appendChild(cell(null, c.map));
+      tr.appendChild(cell(null, (c.finished_at || '').slice(0, 10)));
+      body.appendChild(tr);
+    });
+  }
+
+  $('#fDivisions').onchange = loadFeed;
+  $('#fTeams').onchange = loadFeed;
+
+  $('#refreshFeed').onclick = async () => {
+    $('#refreshFeed').disabled = true;
+    try {
+      const r = await (await fetch('/refresh-feed', { method: 'POST' })).json();
+      $('#feedStatus').textContent = 'feed refresh: ' + r.state;
+      if (r.state === 'pending') setTimeout(refreshStatus, 2000);
+    } finally { $('#refreshFeed').disabled = false; refreshStatus(); loadFilters(); loadFeed(); }
+  };
+
+  $('#goBtn').onclick = async () => {
+    const body = { confirmed: true };
+    const divs = selectedDivisions();
+    const teams = currentTeams();
+    if ($('#fLoop').checked) body.loop = true;
+    if (divs.length) body.divisions = divs.join(',');
+    if (teams.length) body.teams = teams.join(',');
+    if ($('#fLimit').value) body.limit = Number($('#fLimit').value);
+    $('#runLog').textContent = '';
+    const r = await fetch('/go', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    $('#runNote').textContent = r.ok ? 'started' : ('refused: ' + (j.error || r.status));
+    if (r.ok) { openLog(); refreshStatus(); }
+  };
+  $('#stopBtn').onclick = async () => {
+    const r = await fetch('/stop', { method: 'POST' });
+    const j = await r.json();
+    $('#runNote').textContent = r.ok ? (j.note || 'stopping…') : ('error: ' + (j.error || r.status));
+  };
+
+  refreshStatus().then((s) => {
+    showTab(landingView(s || {}));
+    if (s && s.running) openLog();
+  });
+  setInterval(refreshStatus, 5000);
+  loadFilters();
+  loadFeed();
+})();
+</script>
+</body>
+</html>

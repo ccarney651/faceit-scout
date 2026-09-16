@@ -34,8 +34,126 @@ Entries before 2026-08-11 were reconstructed from git history.
 
 ## 2026-09-15
 
+### Added
+
+- **Doctrine (support) registered as an operator-added hero.** Revealed and
+  hero-trialled at BlizzCon; FACEIT could not stop it being picked in real
+  games even though it was not meant to be pickable, so it started showing up
+  in replay-bot captures misread as a low-confidence Baptiste. Registered as
+  `custom:doctrine` (`owdb heroes add`), with a red-team portrait reference
+  built directly from a real replay capture (`E8KD69`, side b, 4 rounds — no
+  blue-team sighting yet, tracked as a known one-sided gap in
+  `match.test.js`) since a live client to run the normal `refs learn` flow
+  wasn't available. Also fixed a real gap this surfaced: an operator-added
+  hero's role never reached `hero_roles` in `docs/capture/data.json` (only
+  FACEIT's own `heroes` table was queried), which doesn't just abstain that
+  hero's own slot — `assign.js`'s exact-cover role check mismatches for the
+  hero's WHOLE role group, abstaining every slot in it even when every other
+  read is clean. `tools/build_capture_data.py` now merges in
+  `faceit_sync/subroles.py`'s `SUBROLE` (already the committed source for
+  this per its own docstring) for any hero name FACEIT has no row for.
+- **A map can be excluded from a contribution without deleting it.** Added so
+  the 252 maps finished 2026-09-12T19:00Z–2026-09-15T19:00Z, every region
+  (the window Doctrine's portrait ref was unverified/absent for — see the
+  entry above; BlizzCon hero trials are not region-gated, so the first pass
+  at NA-only was widened) could be pulled from the active `2026-09-15-full`
+  batch without losing the capture: `status: 'excluded'` (+ `exclude_reason`,
+  `prior_status`) marks a map, `finalize()` (`review/server.js`) drops it
+  from the contribution entirely, and the review page shows it dimmed with
+  its reason and a Restore button rather than hiding it outright. None of
+  the 252 had reached the live site yet, so this is a pre-upload safeguard,
+  not a takedown — their codes are queued at
+  `tools/replay_bot/state/doctrine-window-recapture.txt` for a re-run now
+  that Doctrine has a reference.
+- **The review page stops offering an already-claimed player as a candidate
+  for a different slot.** Every slot's correction chips used to list the
+  whole roster unconditionally, so a reviewer could accidentally assign one
+  player to two slots in the same round, and an abstained slot's candidate
+  list never shrank as its teammates resolved (confidently, or by a prior
+  manual correction) even though a player can only occupy one slot. A new
+  `claimedElsewhere()` helper excludes any player already matched to a
+  sibling slot in the same round+side — reading `effSlot()`, so it reflects
+  both an automatic confident match and a manual correction uniformly, no
+  separate code path per trigger.
+- **Captures now record the map's real length.** The replay bot already
+  measured each map's duration off the scrubber bar but threw it away; that
+  number now rides the whole way to the site — the contribution's map records
+  gain a `duration_sec` field (`null` when nothing measured it, e.g. a browser
+  capture), the review artifact carries it through Finalize, the merged payload
+  exposes it as `captured_durations` (`'match_id:game_no'` → seconds), and the
+  export ships it as `owdb_durations`. `mapCoverage` uses the measured length
+  for captured games and falls back to the flat per-mode estimate everywhere
+  else. FACEIT gives no game duration, so this is the first real number where
+  an estimate used to sit.
+
+### Changed
+
+- **`timing.js`'s `sample.quiesceMs` raised 700ms → 1300ms.** The 390-map
+  2026-09-15 run's `attribution-abstained` flags correlated with a name-plate
+  still showing its white fade-in border at read time. This also surfaced (and
+  folded in) an untracked `state/console_timing.json` override pinning it to
+  1000ms since 2026-09-11 — a console-slider tweak that had been silently
+  active for four days without the tracked default ever reflecting it; that
+  override is cleared so the number lives in one place again.
+
+- **A map with nothing but a resolved swap is auto-reviewed.** `review_out.js`
+  used to write every captured map as `'unreviewed'`, so a large batch meant
+  clicking through every map even when nothing needed checking. It now marks
+  a map `'reviewed'` on write when `resolve.js`'s `needsReview()` finds no
+  flag except `contested` — the playtime fix above makes a resolved swap a
+  real answer, not a guess, so it stops gating the review queue by itself.
+  Any other flag still gates it. On the 390-map run this landed on, only 50
+  maps needed an actual look instead of 99. `/upload` still refuses while any
+  map is `'unreviewed'`.
+
+- **A round's presented hero is chosen by playtime, not raw sample count.**
+  `resolve.js` used to pick the winner and the `contested`/`support` numbers
+  from a straight vote across a round's frames — fine on an even sampling grid,
+  but a live review turned up a slot with a 2-2 sample tie that was really an
+  80/20 playtime split (one hero's two reads 100s apart early in the round, the
+  other's two reads 40s apart right before it ended); the vote called that
+  contested when one hero plainly held the slot for most of the round.
+  `resolve.js` now derives the winner, `support`, and `alt_guid` from the
+  slot's confirmed segments' durations (a segment runs to the next segment's
+  start, or the round's end); `contested` now means no hero held a clear
+  majority of the round's tracked time, not that the frame count tied. The raw
+  vote still exists and still drives the independent `low-support` noise flag
+  for a single-segment slot whose frames disagreed, and still backstops
+  `contested` for the one case with no timed segment to judge — a fast
+  multi-hop swap where every hero is read exactly once.
+
+- **The review page's Run tab can run the code-stack loop.** A new "Loop every
+  live code" checkbox routes `/go` through `--code-stack` (the console's
+  overnight path, cycled over `state/console_codes.json`) instead of the
+  ledger queue — so every live code in the feed can be seen even after the
+  queue's already-scouted codes have been worked. Divisions/teams don't apply
+  in loop mode, and each loop session writes its own `console-loop-*.json` out
+  file so it never collides with a ledger run's.
+
 ### Fixed
 
+- **The overnight loop stopped after two consecutive failures - the wrong
+  trade for a run nobody is watching.** `run.js --fail-streak-cap`'s default
+  of 2 is right for an attended run (a human sees the stall and fixes it),
+  but it's what killed the 2026-09-15 545-code overnight run early: two
+  back-to-back timeouts turned out to be the client losing its session state
+  (a display sleep/lock), not a stuck client, and it cost the rest of the
+  night's queue. The review page's "Loop every live code" path now always
+  passes `--fail-streak-cap 8` (`review/server.js`'s `buildRunArgs`) - loop
+  mode IS the unattended path, so a looser cap there costs a few wasted
+  attempts against a genuinely stuck client but saves the whole night against
+  a transient one. Not a measured number, just that asymmetry.
+- **A stale review-server process could finalize a contribution with the old
+  code.** Found while double-checking a Finalize: `review/server.js`'s
+  `finalize()` had been fixed to drop `status: 'excluded'` maps (see the
+  exclude entry above), but the already-running server process had loaded
+  the OLD version into memory before that fix shipped - Node does not
+  hot-reload a running process's `require()`'d modules, so the actual
+  contribution it wrote still had all 390 maps, 252 of them the excluded
+  ones. No code change; the fix is operational (restart the server after
+  editing `server.js`, same as any other long-running Node process) but
+  worth a note since nothing else would have caught it short of diffing the
+  contribution against the review artifact's status field by hand.
 - **Hero portraits were matched a few pixels out of alignment, and side b paid
   for it.** `engine/refs.js`'s matcher slid each crop over a ±2px window inside a
   **zero-filled** buffer, so a strip a few pixels off read the black band and
@@ -52,9 +170,457 @@ Entries before 2026-08-11 were reconstructed from git history.
   byte-for-byte ±2 window, so this lands on the replay bot's reads and the review
   page's "Teach recognition" preview.
 
-## 2026-09-08
+- **Name OCR blanked or garbled on a bright or team-coloured name plate.**
+  `findNameRow`'s row-fill check used a fixed ceiling tuned only against dark
+  plates; a light-blue or red team-coloured plate pushed real name text above
+  it, either blanking the whole side's OCR or fragmenting it into a one-pixel
+  sliver — both surfaced as `attribution-abstained` with no way to tell them
+  apart from every other cause without reading the review artifact's raw OCR
+  strings. The ceiling is now judged against each row's own local
+  surroundings (floored at the old fixed value, so a genuinely dark plate is
+  unaffected) — the same fix already shipped for the scrim scoreboard's read.
+
+  Locating the row correctly then exposed a second, related bug:
+  `nameCrop`'s contrast stretch used a fixed formula tuned the same way, and
+  clipped an already-faint bright-plate glyph to flat white even once the row
+  was found. Replaced with a percentile stretch (`frames.js`'s new
+  `applyNameContrast`) that adapts to whatever range a crop actually has —
+  and measured BETTER than the old formula even on already-good dark-plate
+  crops (84/100 vs 79/100 confident matches on a sample), not just neutral on
+  bright ones. Both fixes are shared `docs/capture/engine/frames.js` code, so
+  they reach live capture's name OCR too, not just the replay bot's.
+
+  A third bug turned out to be the biggest of the three: the OCR worker used
+  tesseract's default page-segmentation mode (full automatic page layout,
+  built for scanned documents), which regularly failed to even find a text
+  region on a small, single-word crop — returning empty at zero confidence
+  on an image that read perfectly by eye. Every name crop is one word;
+  switching to PSM 8 ("treat as a single word") nearly TRIPLED confident
+  matches on the hardest bright-plate cases (11/75 → 31/75 in a sample) and
+  sharply improved already-good cases too (53/75 → 65/75).
+
+  `tools/replay_bot/reprocess_attribution.js` re-ran the fixed OCR against
+  every already-captured map with an abstained slot and a roster to try it
+  against (skipping any map a human had already corrected), once per fix:
+  **616 previously-null slots recovered across 106 maps**, over the
+  `2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined.
+  On the active `2026-09-15-full` batch this took the review queue from 99
+  flagged maps down to 27 of 390.
+
+  A residual case remains open (PLANS.md P3, Capture app section): a handful
+  of bright-plate glyphs still don't OCR even with the row found, the
+  contrast fixed and PSM 8 in place. A stretch-then-morphological-close
+  contrast attempt measured worse, not better, and was dropped.
+
+## 2026-09-14
+
+### Changed
+
+- **The code-stack loop retires a code that keeps failing after import.**
+  `run.js`'s loop mode (the console's overnight `--code-stack` run) used to
+  cycle every code forever regardless of outcome — a persistently-bad code
+  (corrupted replay) came back every rotation with no way to stop it except
+  hand-editing the stack. It now keeps a per-run, in-memory failure count per
+  code, counting only failures *after* the replay loaded (an import or
+  environmental failure never entered the client's ring, so it is safe to retry
+  next rotation). At `FAIL_RETRY_CAP` (3) the code is **retired for the run**:
+  logged, rotated to the bottom of the stack and skipped, and the run stops
+  when every code is retired. The two-consecutive-failure circuit breaker is
+  unchanged and still applies in loop mode.
+
+- **The replay bot samples on a 45s grid now, not 30s.** `INTERVALS` in
+  `timeline.js` gained `45`, and the `set-interval` chunk was re-recorded to
+  take the Options menu to 45s. `planGrid` refuses any step not in `INTERVALS`
+  (a target off the client's skip-interval grid is unreachable by keypresses),
+  so `--step 45` is the only valid cadence until `INTERVALS` changes again. A
+  full season still runs faster than the 30s version (~3.0h vs ~3.8h for the
+  same ~130-map gameday), keeping the grid dense enough to see mid-round swaps.
+
+### Fixed
+
+- **The capture feed was shipping NA's wipe-day codes as live.** FACEIT's NA
+  restart landed mid-day on 2026-09-08, so NA games finished that day are dead
+  under the stricter NA wipe date that `run.js` already applied — but
+  `build_capture_data.py` only knew the global `2026-09-07` wipe, so
+  `docs/capture/data.json` carried 124 NA Expert/Advanced/Intermediate codes
+  the bot would correctly refuse at runtime. `REGION_WIPE_OVERRIDES` in
+  `build_capture_data.py` now mirrors `run.js`'s per-region dates, the feed
+  dropped those 124 codes (0 live codes lost), and a new test pins the Python
+  and JS override tables together so they cannot drift again.
+
+## 2026-09-12
+
+### Fixed
+
+- **The 2026-09-08 patch's code wipe is registered and live.** `owdb/db.py`'s
+  `_SEED_WIPES` gained the `2026-09-07` entry (dated a day early, deliberately,
+  same reasoning as the `2026-08-18` entry — see `AGENTS.md`) back on
+  2026-09-08, but the commit sat on a local feature branch and never reached
+  `main`, so the live site kept showing the stale `2026-08-18` wipe date for
+  four days. Cherry-picked the isolated commit onto `main` directly; every
+  code from a game on or before 2026-09-07 now correctly reads as wiped.
+- **`resolve.js`'s `segmentSlot()` no longer requires two consecutive matching
+  reads to confirm a mid-round hero swap.** A fast multi-hop swap (three
+  different heroes, one read each, no repeats) previously never reached the
+  old confirmation threshold and collapsed onto whichever hero was read
+  first — losing the intermediate hero entirely. A single differing read now
+  starts its own segment. Trade-off: a lone misread that used to be absorbed
+  into the running segment (and flagged `low-support`) now becomes its own
+  segment too, so that specific noise case no longer gets flagged either.
+- **`timing.js`'s `sample.quiesceMs` (the wait after a seek settles, before a
+  sample's HUD is read) raised 500ms → 700ms.** Reviewing a ~270-map
+  unattended run found screenshots on later codes landing mid-UI-transition.
+
+## 2026-09-11
 
 ### Added
+
+- **The console can run the real overnight loop, not just one phase at a
+  time.** A new **loop** panel spawns `node run.js --code-stack
+  state/console_codes.json` — the actual queue/import/capture/leave loop
+  (`run.js`), cycling the 20-code stack instead of the live feed, so "leave it
+  running" costs nothing from the real pool. Manual phases and the loop refuse
+  to run at the same time — both drive the mouse and keyboard.
+- **`console/hotkey.ps1` — a global pause/resume hotkey (default Ctrl+Alt+P).**
+  Registers via `RegisterHotKey`/`WM_HOTKEY`, so it fires with Overwatch
+  focused, not the browser. Toggles `state/loop_pause.flag`, which `run.js`'s
+  loop checks **between maps only** (never mid-map — the current map always
+  finishes) and waits on while it exists; a beep confirms each toggle (low =
+  paused, high = resumed). The page's Pause/Resume buttons and Stop/force-stop
+  (SIGINT, then a second SIGINT) work the same way. `run.js` also reloads
+  `timing.js` at that checkpoint, so a slider saved while paused — chunk
+  speed, a quiesce, anything — applies to the next map without restarting the
+  loop; `--chunk-speed`/`--esc-wait`/`--load-settle` now read `TIMING` live
+  per map unless an explicit CLI flag pins one.
+- **`codestack.js`** — the rotating code-stack load/save/rotate, shared by the
+  console (the manual `import` phase and the loop) and by `run.js`'s new
+  `--code-stack <file>` mode. Codes cycled this way never touch
+  `state/attempts.json`; that ledger tracks the account's current 10-import
+  ring, which is the wrong semantics for a stack of codes meant to be reused.
+
+## 2026-09-10
+
+### Added
+
+- **`tools/replay_bot/console/` — a local page to run any capture phase on its
+  own against the live client.** `node tools/replay_bot/console/server.js`, then
+  `http://127.0.0.1:8789`. Buttons for each phase in pipeline order — client
+  state, clear-ESC, back-out-of-list, import, leave, pause, events viewer,
+  set-interval, calibrate bar, measure rate, structure, seek, sample — each
+  showing its result, its log lines, and the frame it took. A **sequence**
+  runner walks a span of phases with an optional checkpoint pause. A **timing**
+  panel is a slider per `timing.js` knob, tried live per run and saved to
+  `state/console_timing.json`. **import** is the only phase that spends a code,
+  drawn from a rotating 20-code stack (`state/console_codes.json`): pull the
+  top, import it, push it to the bottom — 20 is clear of the client's 10-import
+  ring, so a returning code has been evicted and re-imports cleanly. Binds
+  loopback, refuses cross-origin, one phase at a time. Replaces the `drag_tuner`
+  page added earlier the same day. `probe_drag` / `probe_seek` / `probe_limits`
+  / `probe_chunk` stay for multi-trial rate measurement.
+
+### Changed
+
+- **Every tunable wait in the replay bot lives in one file, `timing.js`.** The
+  numbers that were literals in `capture.js`, `input.js`, `drag.js` and `run.js`
+  — the seek gap, the post-seek and sample quiesces, the media-controls poll,
+  the ESC retries, the load settle, the chunk speed, the drag gesture's five
+  waits — are now namespaced entries in `timing.js`, each carrying its measured
+  history. `timing.js` merges `state/console_timing.json` over the defaults when
+  present (per-machine, gitignored). `run.js`'s `--sample-quiesce` /
+  `--load-settle` / `--esc-wait` / `--chunk-speed` flags still override per run.
+  Structural constants that have never moved (`MIN_PLAY_S`, `MOTION_DIFF`,
+  `MIN_STEPS`) stay put. `play_input.ps1`'s drag branch reads the four gesture
+  waits off the stamped event.
+
+- **`capture.js`'s `captureMap` is a sequence over `phases.js`.** The events
+  viewer, bar calibration, the structure read and the sample loop were one
+  300-line function; they are units now (`openEventsViewer`, `calibrateBar`,
+  `readStructure`, `sampleAt`, …), which is what lets the console run any one
+  alone. Screen-state detection (`inReplay` / `escMenuUp` / `replayHistoryUp` /
+  `clearEscMenu` / `waitFor`) likewise moved out of `run.js` into
+  `clientstate.js`. Behaviour and every refusal message are unchanged — the
+  offline corpus pins them.
+
+- **The replay bot seeks by dragging the scrubber, not by pressing the skip
+  key.** `driver.seekTo` now drives the playhead straight to the target second
+  in one drag (`drag.js` / `drag.seeker`), crossing any distance in a flat ~3s
+  where counted presses cost ~0.7s each with a mandatory gap. `probe_drag.js`
+  measured the landing at ≤0.3s once the drag path was densified so no cursor
+  hop outruns the client's scrubber tracking. Keypress seeking remains as the
+  fallback — before the bar is calibrated, when the playhead is unreadable, or
+  on a target off the bar — and `run.js --no-drag` forces it for a whole run.
+
+## 2026-09-09
+
+### Added
+
+- **The replay bot can be run without a client, against recorded frames.**
+  `tools/replay_bot/fakeio.js` is `capture.js`'s injected I/O backed by a script
+  instead of a rig - no PowerShell, no grabs, and no waiting, since the waits
+  are counted rather than served. It records every grab, key and wait, so a test
+  can assert *the order the keys were pressed in* rather than only the answer;
+  the bugs that cost the most were never visible in the answers.
+
+  `corpus.js` names the retained frames that have actually been looked at and
+  says what is in each - a night sky, a loading screen, the ESC menu - and
+  nothing there was labelled by running a detector over it.
+  `node tools/replay_bot/corpus_sweep.js` runs every detector over every retained frame
+  and prints the table. The frames stay out of git; the tests skip themselves
+  when they are absent.
+
+  This matters because **a replay code imports exactly once, ever.** Twelve were
+  spent on bugs in one night, three of them the same shape - the client was not
+  where the code assumed, so the code clicked blind - and every one was
+  reproducible for nothing from frames already on disk.
+
+- **`tools/replay_bot/scrape_codes.js`, which finds test codes that will
+  actually work.** It pulls from owreplays.tv filtered to competitive role queue
+  - the only mode on there shaped like a FACEIT game - and drops anything from
+  before the last code wipe. Both filters were learned the hard way on the same
+  day: four of five codes picked by hand were quick play and three were 6v6,
+  which draws six portraits a side against geometry frozen at five; and 83 of
+  the ~100 competitive replays listed sit on a wiped patch. The site's patch
+  levels corroborate `_SEED_WIPES` to within seven hours, so it doubles as an
+  independent check on a wipe date.
+
+### Fixed
+
+- **A replay on a bright map was read as no replay at all, and it cost a code.**
+  `hudTint` averaged the team colour over the whole plate box, which also takes
+  in the name plates, the health pips and whatever the map shows between the
+  five cells. On a bright blue map that cancels team B's red outright - 4.8
+  against a threshold of 15, measured live on a replay that was open on screen.
+  `run.js` decides whether a replay loaded on exactly this, so it waited its 90
+  seconds, gave up, and spent the code; the ledger records that as RCR3NK
+  "timed out waiting for the replay to load". It had loaded. The tint is now
+  read off the portrait band only - the crop `calib.cells` already used, for the
+  reason already written next to it - and the dimmest known replay reads 31.3
+  against 0.0 for a loading screen. The threshold of 15 never moved.
+
+- **The events panel reading depended on how many rounds the map has.** Push and
+  Flashpoint play one long round, Control up to three, Escort and Hybrid at
+  least two, so a fraction taken over the panel's ROUND rows means something
+  different on every map type: three-round frames read 0.340 and up, and a live
+  one-round map read 0.170 against a threshold of 0.15. It is now read off the
+  panel's two dropdowns, which are there whatever the map - weakest open 0.587,
+  and nothing shut registers at all.
+
+- **The check that reopens the panel after the options menu compared two
+  different units.** It measured a row fraction before the menu and a brightness
+  fraction after, against one threshold - a leftover from the brightness era
+  that nothing flagged when the reading changed. Depending on the map it would
+  either never reopen a shut panel or press K on an open one and shut it. It now
+  simply asks whether the panel is open.
+
+- **The events panel was read as open on a night sky, a loading screen, a black
+  frame, and the ESC menu.** The detector counted uniform horizontal rows, which
+  separated the three maps it was measured on perfectly and does not generalise:
+  all four of those are perfectly uniform. Over the whole retained corpus,
+  closed readings spanned 0.000-1.000 against open ones 0.345-0.805 - no
+  threshold at all. A row now has to be uniform **and light**, which separates
+  the corpus completely (closed tops out at 0.015, open bottoms out at 0.340)
+  and holds anywhere between 150 and 210 luminance. Found by the offline sweep
+  above, at the cost of no codes. `crop.panelFlatRows` is now
+  `crop.panelRowFraction`, because the reading is no longer flatness alone.
+
+### Added
+
+- **An unattended replay scout, `tools/replay_bot/`.** It drives an Overwatch
+  client through FACEIT replay codes and reads hero compositions off the HUD,
+  because capture was otherwise bounded by operator time and a code dies at the
+  next patch. FACEIT already supplies the map, the code, bans, the scoreboard
+  and both lineups, so the client is used for the single fact FACEIT withholds:
+  which heroes each team actually played.
+
+  It runs the **shipped** matcher rather than a copy - the capture engine
+  injects its DOM handle, so `refs.js`, `frames.js` and `calibration.js` are
+  consumed unmodified - which is what makes bot output comparable to an
+  operator's. Output lands in its own contributor file as
+  `tool_version: "replay-bot-0.1"`, so merge can weight it, audit it, or ignore
+  it wholesale.
+
+  Design in `specs/2026-09-08-replay-bot-design.md`, architecture in
+  `ARCHITECTURE.md` §14.
+
+- **It runs unattended, end to end.** `run.js` walks the queue - import a code,
+  capture the map, leave, repeat - at roughly a minute a map, writing a
+  contribution file after every map rather than at the end of a night. Two
+  consecutive failures stop a run rather than burning the remaining codes
+  against a client stuck in a menu, and a **stale-feed guard** refuses a
+  `data.json` that was not built today: a feed from before a patch lists dead
+  codes while looking perfectly healthy, and a run aimed at it would spend the
+  whole queue on codes that cannot work.
+
+- **Round structure is read off the replay scrubber.** Between-round breaks are
+  drawn in a different colour from play time, so a map's rounds are stated by
+  the UI rather than inferred from score changes. Samples are placed 3 per round
+  (5 across the single segment on Push and Flashpoint), always strictly inside a
+  segment, and snapped to the 20-second grid that `REPLAY FORWARD` moves in.
+  That took a measured Control map from ~35 blind samples to 9, all in live
+  play.
+
+- **Menu clicks are recorded, not hardcoded.** `tools/replay_bot/recorder.js`
+  records short named chunks of real mouse and keyboard work - to-replays,
+  open-import, confirm-import, open-replay - and replays them per code, with
+  the replay code itself held as a `$CODE` placeholder. The alternative was
+  reading button positions off a screenshot, and screenshots of the rig arrive
+  at 2557x1437 while the client area is 2560x1440, so every coordinate taken
+  from one is a guess that is wrong by a few pixels in an unknown direction.
+  Coordinates are stored relative to the client area, so a moved window is
+  harmless and a resized one is refused rather than scaled. Seeking is still
+  arithmetic and is never recorded. `node tools/replay_bot/gui.js` serves a
+  local page on 127.0.0.1 that drives the same functions and shows which chunks
+  are still missing.
+
+  Two chunks close the whole loop: `open-import` (Import, paste, OK, Watch) and
+  `leave-replay` (ESC, Leave Game), because leaving a replay lands back on the
+  replay history tab. The code is **pasted** - a recorded `Ctrl+V` becomes the
+  placeholder and playback sets the clipboard to that map's code.
+
+- **A league code is only import-once per ring-window, which the run loop has
+  to respect.** The client keeps its 10 most-recent imports; importing one still
+  in that list warns and demands a manual scroll-and-select, ending an
+  unattended run. Ten newer imports evict the oldest, so a rolled-off code
+  re-imports cleanly. The account starts clean, each code gets one attempt per
+  run, and a failed map is retried automatically up to `FAIL_RETRY_CAP` rather
+  than being reported as an immediate loss.
+
+- **The playhead is read off the scrubber, so a seek can be checked rather than
+  trusted** - `crop.playheadX`, with `probe_seek.js` to measure how many
+  presses a batch actually lands at a given gap.
+
+### Changed
+
+- **Registered the 2026-09-08 code wipe, dated `2026-09-07`.** The patch landed
+  around 19:00 UK, so every code from before it is gone, including all 255 then
+  in the capture feed. Dated a day early on purpose: `codeDead()` compares
+  dates, so dating it the 8th would also mark that evening's post-patch games
+  dead, and a code nobody scouts is never recoverable. Same reasoning as the
+  2026-08-18 entry. CI regenerates the feed on its next run.
+
+- **A map takes about a minute, and where its time goes is measured.** One
+  long-lived PowerShell process replaced a spawn per call, taking a grab from
+  585ms to 204ms - two thirds of the old cost was process startup, paid twenty
+  times a map. The replay is paused before anything waits for the screen to be
+  still, since a playing replay never settles and each failed settle cost seven
+  seconds. Waiting before a grab turned out to do nothing at all, measured
+  twice, and was removed. `probe_limits.js` and `probe_chunk.js` exist so the
+  rest can be re-measured rather than argued about.
+
+### Fixed
+
+- **A calibration number recorded as known-good was the uncommitted default.**
+  Auto-calibrate reports "10/10 portraits confident" for a detection it has not
+  yet applied, so reading `boxes.a` before pressing **Use boxes** returns the
+  `AUTO_STRIPS` strip `(129.536, 119.808, 660.224, 97.2)` - shifted half a
+  portrait right and hanging onto the health pips. Drawn over a real frame the
+  error is obvious; as a number it is invisible. `contact_sheet.js` now renders
+  the ten crops so geometry can be looked at rather than believed.
+
+- **The bot opens the replay events viewer before reading round structure, with
+  N then K.** The scrubber only draws between-round breaks while that panel is
+  showing, so with it closed a three-round Control map read as one continuous
+  segment - confidently and wrongly, which is what the first live run did. The
+  media controls have to be up before `K` will open the panel; a run that
+  pressed only `K` measured 0.023 before and after, having done nothing.
+
+  Its state is judged by the **change** a press makes, not by a brightness
+  threshold. The panel is translucent and its contents vary with how much
+  happened in the game, so an open panel on a quick-play map (0.252) reads
+  dimmer than a closed one on a busy Control map (0.211) - and the threshold
+  version refused two maps that had opened perfectly well.
+
+- **A seek moved one 20-second step per batch, not the number of steps asked
+  for.** Found by reading the playhead in the six frames the first live run
+  retained: the knob advanced 45px between consecutive samples whether the
+  driver had sent eight presses, nine or ten. The run believed it was sampling
+  fourteen minutes of a map and never left the first two, which is exactly why
+  all six samples read the same ten heroes - a result that looked plausible and
+  was an artefact. The mechanism (most likely the client ignoring input while it
+  seeks) is measured by `probe_seek.js`; until that is settled, no full-map run
+  should be believed.
+
+- **The skip interval is measured rather than trusted.** Replay viewer options
+  revert at every client restart - a known Blizzard bug - so an interval set to
+  60 seconds last night is 20 tonight with nothing on screen to say which, and
+  assuming the wrong one puts every sample at a third or triple of its intended
+  time, inside the wrong round, looking entirely reasonable. The bot times
+  playback against the moving playhead and derives what a press is really worth.
+
+- **Setup blips are no longer sampled.** Every map opens with a few seconds of
+  play before the round proper, and with a 60-second interval the only reachable
+  point near it is 0:00 - where no portraits are drawn. Ten cells of confident
+  nonsense went into the output before this was caught; play segments under 30
+  seconds are now shown as setup and excluded.
+
+
+## 2026-09-08
+
+### Changed
+
+- **The replay on screen decides which match a capture is filed against.** The
+  code the operator picks from the dropdown is a hint; the replay open in
+  Overwatch is the fact. An exact read now corrects the selection silently
+  instead of asking "keep or switch" - a question with one right answer, whose
+  wrong answer was the worst outcome available. It clears the operator's own
+  division / opponent / hide-done filters to reach the code when they hide it,
+  and an already-scouted map is a note rather than a wall. A one-character read
+  still asks, because that is an inference and not a reading.
+
+  This matters more than a warning would: every identifying field on a captured
+  map - `match_id`, `game_no`, `demo_code`, both team names - comes from the
+  SELECTION, and only the comps come from the screen. A wrong-match capture is
+  therefore self-consistent and passes every server check that exists. Nothing
+  downstream could ever detect it.
+
+- **The code is pinned for the whole map, and every snapshot carries it.**
+  Verifying once proved the first snapshot and nothing after it; an operator can
+  scrub to another replay at any point, and the map would then hold comps from
+  two matches under one code. Each snapshot is now checked with a single OCR
+  pass (a fifteenth of a full read) against the pinned code, and capture stops
+  if the replay genuinely changed. `screen_code` travels with every observation
+  and with the map.
+
+- **The merge refuses a map whose screen code contradicts its filing**, per
+  observation as well as per map, and a **verified view now outranks an earlier
+  unverified one** for ownership. Absence is still not evidence: a code that was
+  never read is unknown, not wrong.
+
+### Fixed
+
+- **Every question the capture tool asks now appears in the floating control
+  panel.** Modals were drawn only in the main page. The panel exists precisely
+  so an operator never alt-tabs away from Overwatch, so a modal it could not
+  show was a silent hang: the wrong-match guard blocked correctly and the
+  operator, working from the panel, saw nothing at all. The same applied to the
+  scrim page's league-code block and its per-round board read. The question is
+  now drawn in both documents and either one answers it - the first answer
+  closes the other, and Escape works from whichever window has focus. Registered
+  once by `engine/overlay.js` rather than passed per call, because a modal that
+  has to remember to mirror is one that will not.
+
+### Added
+
+- **The league capture page checks the replay code itself, on a map's first
+  snapshot.** The codes are fed to the operator, so there was never anything to
+  look *up* - what is worth checking is that the replay actually on screen is the
+  match they picked, and asking for that by hand meant it was skipped exactly
+  when it mattered. Picking the wrong code from a dropdown of lookalike
+  six-character strings files every comp captured afterwards against the wrong
+  match, teams and players, and publishes it with nothing to say it happened.
+
+  The guard only ever REFUSES, never reassigns: a disagreement names both codes
+  and puts the choice to the operator. It runs before side detection, because
+  resolving sides on the wrong replay spends an OCR pass and can teach the map's
+  roster the wrong names. Anything it cannot settle - an unreadable banner, a
+  read matching no feed code, a tie - abstains and lets capture proceed, capped
+  at three attempts per map: a guard that can make capture impossible would be
+  worse than the bug it prevents. The manual **Read code** button is gone.
+
+  `matchReadCode` moved out of `index.html` into `engine/replaycode.js`, where
+  node:test reaches it without a browser. 29 unit tests there, and 8 new checks
+  in `tools/verify_capture_browser.js` (144 total) driving the real modal DOM -
+  the blocking path, both codes named, Keep, silence on agreement, and abstain.
 
 - **Every division FACEIT runs for the season now has a page, played or not.**
   The export skipped any championship with no finished match, so in the week
@@ -81,6 +647,23 @@ Entries before 2026-08-11 were reconstructed from git history.
   A season is now finished only when no division has a fixture left to play, and
   a codeless division speaks only for itself. The flag defaults to "finished",
   so a frozen season archive reads exactly as it did.
+- **A scrim round no longer advances in silence when no board was read.** The
+  per-round scoreboard read does nothing when the lobby is not running `B44BZ`
+  with *Draw Capture Markers* on and no SCOREBOARD box has been set by hand, and
+  it is deliberately skipped before the map's first snapshot. Both cases
+  returned `null` and said nothing, so an untaken read and a failed one looked
+  identical from the outside — which is how "the marker detector never works in
+  the field" came to be written down. The tool now says which it is, once per
+  map and again at Finish: passive, because this is a configuration state rather
+  than a failed read, and the design reserves interruptions for real failures.
+- **Withdrawn: "`Scoreboard.findMarkerBox()` has never succeeded in the
+  field."** It was inferred from one symptom, never measured. Run over the
+  operator's real frames it returns a box on 7 of 7 that have the rules drawn,
+  including the frame exported during the test that was thought to prove it
+  broken. `tools/real_frame_eval/marker_parity.py` is the harness, and two unit
+  tests now pin the property the synthetic fixtures were missing: a rendered
+  rule has holes in it (measured fill 0.94–0.95 against a 0.8 threshold),
+  because U+2500 glyphs do not join.
 
 - **Auto-calibrate finds the portrait strips by the HUD's own structure.** It
   placed the two boxes at fixed fractions of the frame, hand-measured once off a

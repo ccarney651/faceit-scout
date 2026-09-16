@@ -617,15 +617,27 @@ const MAP_MIN_GAMES=3, MAP_COVER_TARGET=0.5;
 // ranked by unseen playtime (games uncaptured × typical length) — the maps
 // where the most league minutes are still unobserved. `liveCode` is the newest
 // capturable code on the map, for a straight "Scout →" deep link.
-function mapCoverage(matches, captured, wipe){
+//
+// `durations`, when given, is {'match_id:game_no': seconds} for captured games
+// that measured their own length (the replay bot reads the scrubber bar). Each
+// such game then contributes its REAL length to the map's total minutes instead
+// of the flat per-mode estimate — `minutes` is measured where it can be and
+// estimated only where it must. `unseenMin` stays the pure estimate: those games
+// were never captured, so nothing measured them.
+function mapCoverage(matches, captured, wipe, durations){
   const agg={};
   (matches||[]).forEach(m=>(m.games||[]).forEach(g=>{
     if(!g.map) return;
     const key=m.id+':'+g.game_no;
-    const e=agg[g.map]||(agg[g.map]={map:g.map, mode:g.map_category||'', played:0, captured:0, live:0, liveCode:null});
+    const e=agg[g.map]||(agg[g.map]={map:g.map, mode:g.map_category||'', played:0, captured:0, live:0, liveCode:null, measured:0, measuredSec:0});
     e.played++;
     const dead=!!(wipe&&m.finished_at&&String(m.finished_at).slice(0,10)<=wipe);
-    if(captured.has(key)){ e.captured++; return; }
+    if(captured.has(key)){
+      e.captured++;
+      const sec=(durations||{})[key];
+      if(sec!=null&&sec>0){ e.measured++; e.measuredSec+=sec; }
+      return;
+    }
     if(g.demo_code&&!dead){
       e.live++;
       // Newest capturable code on the map, for the "Scout →" link — freshest
@@ -637,12 +649,13 @@ function mapCoverage(matches, captured, wipe){
   const out=[];
   for(const e of Object.values(agg)){
     const mp=MODE_MINUTES[e.mode]||12;
-    e.minutes=e.played*mp;
+    e.minutes=e.played*mp - e.measured*mp + e.measuredSec/60;
     e.unseen=e.played-e.captured;
     e.unseenMin=e.unseen*mp;
     e.pct=e.played?Math.round(100*e.captured/e.played):0;
     e.needed=Math.max(0, Math.ceil(e.played*MAP_COVER_TARGET)-e.captured);
     delete e.liveWhen;
+    delete e.measuredSec;
     if(e.played>=MAP_MIN_GAMES && e.needed>0 && e.live>0) out.push(e);
   }
   return out.sort((a,b)=> b.unseenMin-a.unseenMin || b.played-a.played);

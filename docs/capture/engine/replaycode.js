@@ -135,9 +135,104 @@
     return { x: cx - w / 2 + dx * a.w, y: cy - h / 2 + dy * a.h, w: w, h: h };
   }
 
+  // matchReadCode(read, codes) - what a code read off the screen corresponds to
+  // in this division's feed.
+  //
+  // The feed is what makes the league read trustworthy where a scrim read is
+  // not: here every code has a right answer available, so a one-character miss
+  // is recoverable rather than silently wrong. Crockford excludes I/L/O
+  // precisely because they are confusable with 1/0 and foldCode applies the
+  // published folding; this catches what survives it.
+  //
+  // A TIE ABSTAINS. Two feed codes one character from the read means choosing
+  // either could file the capture against the wrong match, which is the exact
+  // failure this exists to prevent.
+  function matchReadCode(read, codes) {
+    if (!read) return { kind: 'none', code: null };
+    var list = (codes || []).map(function (c) { return c && c.code; })
+      .filter(Boolean);
+    if (list.indexOf(read) !== -1) return { kind: 'exact', code: read };
+    var near = list.filter(function (c) {
+      if (c.length !== read.length) return false;
+      var d = 0;
+      for (var i = 0; i < c.length; i++) if (c[i] !== read[i]) d++;
+      return d === 1;
+    });
+    if (near.length === 1) return { kind: 'near', code: near[0] };
+    return { kind: 'none', code: null };
+  }
+
+  // checkAgainstSelected(read, codes, selected) - the verdict the league page
+  // needs on a map's FIRST snapshot: is the screen showing the match the
+  // operator picked to scout?
+  //
+  // Picking the wrong code from a dropdown of lookalike six-character strings
+  // attributes every comp captured afterwards to the wrong match, teams and
+  // players, and publishes it with nothing to say it happened. This asks the
+  // screen instead - but only ever to REFUSE, never to reassign: 'mismatch'
+  // reports both codes and the page puts the choice to the operator.
+  //
+  // 'abstain' is the important status. The code banner is not always on screen
+  // and OCR can simply fail, so a guard that cannot tell must let capture
+  // proceed - one that can make capture impossible is worse than the bug it
+  // prevents. Everything unknown lands here: a failed read, a read matching no
+  // feed code, a tie, an empty feed, and a selection the feed does not carry
+  // (which is a page bug, not an operator error, and blocking on it would
+  // accuse the operator of something they did not do).
+  function checkAgainstSelected(read, codes, selected) {
+    var out = { status: 'abstain', code: null, selected: selected || null,
+                read: read || null, near: false };
+    if (!read || !selected) return out;
+    var list = (codes || []).map(function (c) { return c && c.code; })
+      .filter(Boolean);
+    if (!list.length || list.indexOf(selected) === -1) return out;
+    var m = matchReadCode(read, codes);
+    if (m.kind === 'none') return out;
+    out.code = m.code;
+    out.near = m.kind === 'near';
+    out.status = m.code === selected ? 'ok' : 'mismatch';
+    return out;
+  }
+
+  // recheckPinned(read, codes, pinned) - the verdict on every snapshot AFTER
+  // the first, once a code is pinned to the map.
+  //
+  // checkAgainstSelected answers "is the operator's PICK right", and abstain
+  // there means "carry on, nothing to report" - the pick is only ever a hint.
+  // Here the question is different: a code is already pinned and snapshots are
+  // already banked under it, so the only honest outcomes are "still the same
+  // replay", "demonstrably a different one", and "I could not tell" - and the
+  // third is not the same as the first. Giving it its own name is the point of
+  // this function: the page had collapsed unsure into same and reported both
+  // as silence, which made a guard that could not see indistinguishable from a
+  // guard that had checked and was happy. The operator swapped replays
+  // mid-capture on 2026-09-08 and the page said nothing either way.
+  //
+  // 'changed' is deliberately the narrowest status: an EXACT read of a
+  // DIFFERENT code the feed carries. A near match is an inference and a code
+  // in no feed is unnameable, so both are unsure - the caller must not stop a
+  // capture that is going fine on either.
+  function recheckPinned(read, codes, pinned) {
+    var out = { status: 'unsure', code: null, pinned: pinned || null,
+                read: read || null, near: false };
+    if (!read || !pinned) return out;
+    var list = (codes || []).map(function (c) { return c && c.code; })
+      .filter(Boolean);
+    if (!list.length || list.indexOf(pinned) === -1) return out;
+    var m = matchReadCode(read, codes);
+    if (m.kind === 'none') return out;
+    out.near = m.kind === 'near';
+    out.code = m.code;                   // named even when near, so the page can say what it nearly read
+    if (m.kind === 'near') return out;   // an inference never moves the verdict
+    out.status = m.code === pinned ? 'same' : 'changed';
+    return out;
+  }
+
   var Mod = {
     ALPHABET: ALPHABET, LEN: LEN, foldCode: foldCode, codeBox: codeBox,
     PROBES: PROBES, probeStrip: probeStrip,
+    matchReadCode: matchReadCode, checkAgainstSelected: checkAgainstSelected,
+    recheckPinned: recheckPinned,
     OFFSETS: { DX: DX, DW: DW, DY: DY, DH: DH, PAD: PAD },
   };
 

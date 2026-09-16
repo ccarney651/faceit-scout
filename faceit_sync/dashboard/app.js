@@ -155,6 +155,10 @@ const HERO_SEAT={}; (DATA.heroes||[]).forEach(h=>{ if(h.subrole) HERO_SEAT[h.nam
 const SEATS=DATA.seat_order||['Tank','Hitscan','Flex DPS','Main Support','Flex Support'];
 // Games whose comps have been captured by owdb ("match_id:game_no").
 const CAPTURED=new Set(DATA.owdb_captured||[]);
+// Real measured lengths (seconds) for captured games that measured their own
+// ("match_id:game_no" -> sec) — the replay bot reads the scrubber bar. Where a
+// game is absent here, the flat per-mode estimate stands.
+const DURATIONS=DATA.owdb_durations||{};
 // OW wipes invalidate replay codes each patch: a game finished on or before this
 // date can never be replayed, so it is only "scoutable" if already captured.
 // Region-aware via codeDeadFor/regionOfName/REGION_WIPE_OVERRIDES (pure.js) -
@@ -385,7 +389,7 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-match]');
   if(t&&t.dataset.match&&!e.target.closest('[data-scout]')&&!e.target.closest('.rc')&&!e.target.closest('a')){ e.preventDefault(); openMatch(t.dataset.match); } });
 // Overwatch replay code — click to jump into the capture tool with this code
 // pre-loaded (the tool copies it, so pasting into OW2 → Watch → Replays still works).
-function rcChip(code){ return `<code class="rc">${esc(code)}</code>`; }
+function rcChip(code){ return `<code class="rc" title="Replay code">${esc(code)}</code>`; }
 // Evidence-row codes cell: exactly one backing game -> the code chip inline,
 // no click needed (the common thin-sample case, and the explicit ask —
 // "bring me straight to code"). More than one -> a small click-to-open link.
@@ -800,7 +804,7 @@ function aggregate(matches,team){
 // into a 32-slot bracket, so the top 8 draw byes automatically — no special case.
 const PLAYOFF_QUALIFIERS={Master:8,Expert:16,Advanced:24,Open:32};
 const tierOf=(name)=>['Master','Expert','Advanced','Open'].find(t=>(name||'').includes(t))||null;
-const regionOf=(name)=>['EMEA','NA'].find(r=>String(name||'').toUpperCase().replace(/-/g,' ').split(/\s+/).includes(r))||null;
+const regionOf=(name)=>['EMEA','NA','SA','OCE'].find(r=>String(name||'').toUpperCase().replace(/-/g,' ').split(/\s+/).includes(r))||null;
 // Deep-link into the browser capture tool, pre-filtered to a team (+ its division).
 // The division must be REGION-QUALIFIED ("EMEA Master") to match the labels
 // tools/build_capture_data.py emits — a bare tier merges both regions there.

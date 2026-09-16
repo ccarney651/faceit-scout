@@ -307,6 +307,23 @@ def validate_maps(
         if code and game.demo_code and str(code) != str(game.demo_code):
             rejects.append((key, f"replay code {code!r} does not match FACEIT's"))
             continue
+        # What the capture tool READ off the screen, against what the map is
+        # filed as. This is the only check that can catch a capture of the wrong
+        # replay: every other identifying field comes from the operator's
+        # selection, so a wrong-match capture agrees with itself and satisfies
+        # everything above. Per observation as well as per map, because the
+        # replay can be changed mid-capture - the map is then filed under a code
+        # that genuinely was on screen once, and only the snapshots disagree.
+        #
+        # Absence is not evidence. A code that was never read is unknown, not
+        # wrong: the banner is not always on screen and OCR fails honestly.
+        seen = [m.get("screen_code")]
+        seen += [o.get("screen_code") for o in (m.get("observations") or [])]
+        bad = next((str(sc) for sc in seen
+                    if sc and code and str(sc) != str(code)), None)
+        if bad:
+            rejects.append((key, f"screen showed {bad!r}, filed as {code!r}"))
+            continue
         cleaned.append(m)
     for rkey, why in rejects:
         log.warning("rejected map from %s (%s): %s", who, rkey, why)
@@ -389,7 +406,33 @@ def merge_first_wins(
             log.warning("override for %s prefers %r, who has no view of it - "
                         "falling back to first-wins", key, preferred)
             preferred = None
-        winner = preferred or arrival[key][0]
+        # First-wins makes quality a function of who was fastest. A view that
+        # CONFIRMED the replay code off the screen is better evidence than one
+        # that never could, so it takes the map regardless of order - among
+        # equally-verified views, and among equally-unverified ones, arrival
+        # still decides. An override remains the last word either way.
+        #
+        # KNOWN TRUST LIMIT, stated rather than papered over. screen_code is
+        # supplied by the contributor, so this priority is self-asserted: adding
+        # one field jumps the queue past an honest earlier submission. That sits
+        # awkwardly beside this function's own rule that ordering must not come
+        # from the files, for the same reason timestamps do not.
+        #
+        # It is accepted deliberately and narrowly. A forger still has to clear
+        # validate_maps - real game, right season, teams FACEIT lists, code
+        # matching FACEIT's published one - so the reachable harm is displacing
+        # a competing view of a map they could already submit, which is the
+        # weakness first-wins always had in the other direction and which the
+        # overrides file exists to correct. The REJECTION use of screen_code is
+        # not affected: forging it there only avoids a rejection, which is
+        # exactly the behaviour before the field existed.
+        #
+        # The real fix is a verification the contributor cannot write - the
+        # upload Worker stamping it, or a signature over the read - and that is
+        # worth doing before this tool is opened to strangers.
+        order = arrival[key]
+        verified = [w for w in order if by_who[w].get("screen_code")]
+        winner = preferred or (verified[0] if verified else order[0])
         owner[key] = winner
         maps[key] = by_who[winner]
         ignored.extend((who, key) for who in arrival[key] if who != winner)
@@ -605,6 +648,15 @@ def merged_payload(
     # Which real games are covered - lets the site badge scouted games and show
     # the "still to scout" queue per team, which is the capture work-list.
     payload["captured_games"] = sorted(f"{k.match_id}:{k.game_no}" for k in merged.maps)
+    # The measured length in seconds of each captured game, when the capture
+    # carried one (the replay bot reads it off the scrubber bar; a browser
+    # capture does not measure it). The site's playtime estimates use this where
+    # present and fall back to the flat per-mode estimate elsewhere.
+    payload["captured_durations"] = {
+        f"{k.match_id}:{k.game_no}": m["duration_sec"]
+        for k, m in merged.maps.items()
+        if m.get("duration_sec") is not None
+    }
     # Deciding-cycle attacker per captured escort/hybrid game (for the attacking-
     # first panel: FACEIT only knows the round-1 attacker, not round 3's).
     payload["attack_cycles"] = attack_first_cycles(merged.maps)
@@ -756,25 +808,84 @@ _STAT_WEIGHTS: dict[str, dict[str, float]] = {
 _STAT_FIELDS = ("elims", "deaths", "damage", "healing", "mitigation")
 
 
+def _segment_weights(
+    observations: Iterable[Mapping[str, Any]],
+) -> dict[tuple[str, int, str], dict[str, float]]:
+    """One map's observations -> (side, round_no, player_id) -> {hero_guid:
+    weight}, weights for one key summing to 1.0.
+
+    A player who holds one hero for a round (every human contribution, and
+    the overwhelming majority of replay-bot rounds) gets {guid: 1.0} -
+    unconditional, no duration math - identical to the old round-presence-
+    is-one-round-of-credit rule.
+
+    A player replay-bot's segmentation caught swapping heroes mid-round (2+
+    distinct-guid observations sharing one round_no) splits that 1.0
+    proportionally to how long each stretch measured, closing the final
+    stretch out at the ROUND's own latest observed timestamp (the max ts of
+    ANY observation sharing that side+round_no, not just this player's own)
+    - so no cross-round bookkeeping is needed, and total > 0 is guaranteed
+    whenever there are 2+ distinct timestamps in the round.
+    """
+    by_key: dict[tuple[str, int, str], list[tuple[int, str]]] = {}
+    round_end: dict[tuple[str, int], int] = {}
+    for o in observations:
+        rno = o.get("round_no")
+        if rno is None:
+            continue
+        side = str(o.get("side"))
+        ts = int(o.get("ts") or 0)
+        rk = (side, rno)
+        round_end[rk] = max(round_end.get(rk, ts), ts)
+        for pair in o.get("pairs") or []:
+            if not pair or len(pair) != 2 or not pair[1]:
+                continue
+            guid, pid = str(pair[0]), str(pair[1])
+            by_key.setdefault((side, rno, pid), []).append((ts, guid))
+
+    out: dict[tuple[str, int, str], dict[str, float]] = {}
+    for (side, rno, pid), pts in by_key.items():
+        pts.sort()
+        segs: list[tuple[int, str]] = []
+        for ts, guid in pts:
+            if segs and segs[-1][1] == guid:
+                continue
+            segs.append((ts, guid))
+        if len(segs) == 1:
+            out[(side, rno, pid)] = {segs[0][1]: 1.0}
+            continue
+        end = round_end[(side, rno)]
+        weights: dict[str, float] = {}
+        total = 0.0
+        for i, (ts, guid) in enumerate(segs):
+            seg_end = segs[i + 1][0] if i + 1 < len(segs) else end
+            dur = max(0, seg_end - ts)
+            weights[guid] = weights.get(guid, 0.0) + dur
+            total += dur
+        if total > 0:
+            out[(side, rno, pid)] = {g: w / total for g, w in weights.items()}
+        else:
+            out[(side, rno, pid)] = {g: 1.0 / len(weights) for g in weights}
+    return out
+
+
 def _primary_hero_per_game(
     maps: Mapping[Any, Mapping[str, Any]]
 ) -> dict[tuple[str, int, str], str]:
     """(match_id, game_no, player_id) -> the hero that player spent the most
-    captured rounds on that game, so a whole-game stat line can be attributed to
-    a single hero."""
-    rounds: dict[tuple[str, int, str], dict[str, set[str]]] = {}
+    weighted duration on that game (a mid-round swap splits credit between
+    both heroes proportional to how long each stretch measured, rather than
+    crediting either a full round), so a whole-game stat line can be
+    attributed to a single hero."""
+    acc: dict[tuple[str, int, str], dict[str, float]] = {}
     for key, m in maps.items():
-        for o in m.get("observations", []):
-            side = str(o.get("side"))
-            rk = f"{side}:{o.get('round_no') or 0}:{o.get('sub_map') or ''}"
-            for pair in o.get("pairs", []):
-                if not pair or len(pair) != 2 or not pair[1]:
-                    continue
-                guid, pid = str(pair[0]), str(pair[1])
-                rounds.setdefault((key.match_id, key.game_no, pid), {}) \
-                      .setdefault(guid, set()).add(rk)
-    return {k: max(hs.items(), key=lambda kv: (len(kv[1]), kv[0]))[0]
-            for k, hs in rounds.items()}
+        weights = _segment_weights(m.get("observations", []))
+        for (_side, _rno, pid), hero_w in weights.items():
+            slot = acc.setdefault((key.match_id, key.game_no, pid), {})
+            for guid, w in hero_w.items():
+                slot[guid] = slot.get(guid, 0.0) + w
+    return {k: max(hs.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            for k, hs in acc.items()}
 
 
 def rank_player_heroes(
@@ -859,32 +970,33 @@ def player_pools(
     ranks: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Per team, each attributed player's hero pool in ROUNDS (same unit as the
-    team pool). Only observations that carry (hero, player) pairs contribute;
-    captures made before OCR attribution simply do not appear."""
-    agg: dict[str, dict[str, dict[str, set[str]]]] = {}   # team->player->hero->rounds
-    seen_rounds: dict[tuple[str, str], set[str]] = {}     # (team, player) -> rounds
+    team pool). A mid-round swap splits its 1.0 round of credit between both
+    heroes proportional to how long each stretch measured, instead of
+    crediting both a full round. Only observations that carry (hero, player)
+    pairs contribute; captures made before OCR attribution simply do not
+    appear."""
+    agg: dict[str, dict[str, dict[str, float]]] = {}
+    seen: dict[tuple[str, str], float] = {}
     for key, m in maps.items():
-        for o in m.get("observations", []):
-            side = str(o.get("side"))
+        weights = _segment_weights(m.get("observations", []))
+        for (side, _rno, pid), hero_w in weights.items():
             team = m.get(f"side_{side}_team")
             if not team:
                 continue
-            rk = f"{key.match_id}:{key.game_no}:{side}:{o.get('round_no') or 0}:{o.get('sub_map') or ''}"
-            for pair in o.get("pairs", []):
-                if not pair or len(pair) != 2 or not pair[1]:
-                    continue
-                guid, pid = str(pair[0]), str(pair[1])
-                agg.setdefault(team, {}).setdefault(pid, {}).setdefault(guid, set()).add(rk)
-                seen_rounds.setdefault((team, pid), set()).add(rk)
+            for guid, w in hero_w.items():
+                agg.setdefault(team, {}).setdefault(pid, {}).setdefault(guid, 0.0)
+                agg[team][pid][guid] += w
+                seen[(team, pid)] = seen.get((team, pid), 0.0) + w
     out: dict[str, list[dict[str, Any]]] = {}
     for team, players in agg.items():
         rows = []
         for pid, heroes in players.items():
-            total = len(seen_rounds[(team, pid)])
+            total = seen[(team, pid)]
             hrows: list[dict[str, Any]] = []
-            for g, rs in heroes.items():
-                d: dict[str, Any] = {"hero": hero_names.get(g, g), "rounds": len(rs),
-                                     "share": round(len(rs) / total, 3) if total else 0.0}
+            for g, w in heroes.items():
+                rounds = round(w, 2)
+                d: dict[str, Any] = {"hero": hero_names.get(g, g), "rounds": rounds,
+                                     "share": round(w / total, 3) if total else 0.0}
                 ri = (ranks or {}).get((pid, g))
                 if ri:
                     d["stats"] = ri["avg"]
@@ -894,13 +1006,13 @@ def player_pools(
                         d["low_data"] = ri.get("low_data", False)
                         d["comp"] = ri.get("comp")
                 hrows.append(d)
-            hrows.sort(key=lambda h: (-int(str(h["rounds"])), str(h["hero"])))
+            hrows.sort(key=lambda h: (-float(h["rounds"]), str(h["hero"])))
             rows.append({
                 "player": player_names.get(pid, pid),
-                "rounds": total,
+                "rounds": round(total, 2),
                 "heroes": hrows[:8],
             })
-        rows.sort(key=lambda r: (-int(str(r["rounds"])), str(r["player"])))
+        rows.sort(key=lambda r: (-float(r["rounds"]), str(r["player"])))
         out[team] = rows
     return out
 

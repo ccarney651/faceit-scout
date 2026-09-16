@@ -17,27 +17,30 @@ packages feed **one website** (`docs/index.html`):
 
 ## Read this first
 
-**`ARCHITECTURE.md` explains every part of the project and how the parts
-connect.** Read it before deep work. Fast paths:
+Three files carry the documentation, and they never overlap:
 
-| You need | Go to |
-| --- | --- |
-| Where anything lives | `ARCHITECTURE.md` §0-2 |
-| Ingest and the three data hazards | `ARCHITECTURE.md` §3 |
-| How `docs/index.html` is built | `ARCHITECTURE.md` §4 |
-| The capture pipeline | `ARCHITECTURE.md` §5-6 |
-| Scrims | `ARCHITECTURE.md` §7 |
-| CI and the Cloudflare Worker | `ARCHITECTURE.md` §8 |
-| File formats crossing a boundary | `ARCHITECTURE.md` §9 |
-| Code wipes and season cutover | `ARCHITECTURE.md` §10 |
-| Project vocabulary | `ARCHITECTURE.md` §11 |
-| **Rules that must not be broken** | **`ARCHITECTURE.md` §12** |
-| Which test guards what | `ARCHITECTURE.md` §13 |
+- **`AGENTS.md`** — this file. The rules, commands, gotchas and conventions an
+  agent must operate by. Injected into every session; keep it lean.
+- **`ARCHITECTURE.md`** — how the built system works and why. Read it before
+  deep work. Fast paths:
 
-Other documentation: `README.md` (ingest and data hazards, long-form),
-`FEATURES.md` (feature-by-feature — known to lag the code), `SPEC.md` (the
-original `owdb` design reference), `CHANGELOG.md` (what changed and when),
-`specs/` (one design and plan document per feature, plus `specs/BACKLOG.md`).
+  | You need | Go to |
+  | --- | --- |
+  | Where anything lives | `ARCHITECTURE.md` §0-2 |
+  | Ingest and the three data hazards | `ARCHITECTURE.md` §3 |
+  | How `docs/index.html` is built | `ARCHITECTURE.md` §4 |
+  | The capture pipeline | `ARCHITECTURE.md` §5-6 |
+  | Scrims | `ARCHITECTURE.md` §7 |
+  | CI and the Cloudflare Worker | `ARCHITECTURE.md` §8 |
+  | File formats crossing a boundary | `ARCHITECTURE.md` §9 |
+  | Code wipes and season cutover | `ARCHITECTURE.md` §10 |
+  | Project vocabulary | `ARCHITECTURE.md` §11 |
+  | Which test guards what | `ARCHITECTURE.md` §12 |
+
+- **`PLANS.md`** — what is *not* built yet: the backlog plus open design
+  decisions.
+
+`CHANGELOG.md` records what changed and when.
 
 ## Commands
 
@@ -60,7 +63,6 @@ faceit-sync export --format html --out docs/index.html          # build the site
 faceit-sync export --format html --out docs/index.html --region na
 faceit-sync resolve-season --season s10          # the season CI would publish today
 owdb ... contribute merge --dir data/captures/s10 --out owdb_comps.json
-faceit-sync trials --out trials.html                 # local trialist comparison (never commit it)
 ```
 
 ### Verifying the dashboard
@@ -78,9 +80,9 @@ bracket-balance checks will not catch. Always:
 
 ## Invariants
 
-These are the same rules as `ARCHITECTURE.md` §12, stated here so they are never
-one file-read away. If the two lists ever disagree, `ARCHITECTURE.md` is
-canonical and this copy is the bug.
+Rules that must not be broken, stated once, here. They are not restated in
+`ARCHITECTURE.md`; fix a disagreement by fixing the code, then updating this
+file.
 
 1. **Never hand-edit `docs/index.html`.** CI regenerates it from
    `faceit_sync/dashboard/head.html` on every run; the edit disappears at the
@@ -112,11 +114,7 @@ canonical and this copy is the bug.
     feature.
 13. **The scrim lock must fail closed.** The overlay is static markup and the
     gate only removes it, so any failure leaves the page locked.
-14. **Never commit or publish the trials page.** `faceit-sync trials` writes a
-    private page naming who you are trialling. `/trials.html` is gitignored
-    (root-anchored: `faceit_sync/dashboard/trials.html` is its shell and *is*
-    tracked), and it must never be written under `docs/`.
-15. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never trust a replay code read through a hand-dragged calibration box.**
     Past ~±2% of strip error the read returns a well-formed *wrong* code, not a
     failure. The probes in `engine/replaycode.js` refuse there now; the
     sensitivity itself remains.
@@ -160,7 +158,7 @@ canonical and this copy is the bug.
   external script and left the whole viewer blank. `tools/verify_capture_browser.js`
   closes most of it: serve `docs/`, `npm install --no-save playwright-core
   tesseract.js` (both, in one command — separate `--no-save` installs prune each
-  other), then run it. 129 checks. Everything left needs a human with Overwatch
+  other), then run it. 148 checks. Everything left needs a human with Overwatch
   open: screen share, calibration, portrait recognition, the overlay over the
   game.
 - **`docs/theme.css` is the design system; a page that restates one of its
@@ -227,8 +225,7 @@ canonical and this copy is the bug.
   the Worker's copy is not live until someone deploys it. The *reader* no longer
   needs keeping in step by hand — CI merges whichever season directory matches
   the season it is publishing (`faceit-sync resolve-season`). At a cutover,
-  follow `specs/2026-08-10-season10-cutover-design.md` rather than improvising —
-  **start at its §6**, then §7 for what actually shipped.
+  follow `ARCHITECTURE.md` §10 rather than improvising.
 - **The S10 coverage is seeded and measured (2026-09-05).** Ten divisions:
   EMEA and NA Master/Expert/Advanced/**Intermediate**, plus SA Master and OCE
   Master. Open stays out and is the reason the page fits at all. The team counts
@@ -305,6 +302,245 @@ canonical and this copy is the bug.
 - The stats endpoint is `…/stats/v1/stats/matches/{id}` — the documented `/time`
   segment 404s.
 
+- **The replay bot lives in `tools/replay_bot/` and its facts were all measured,
+  not reasoned.** See `ARCHITECTURE.md` §14 for the full account (capture
+  design, player attribution in `attribute.js`/`nameplate.js`, and the
+  confidence + review + upload layer in `resolve.js`/`review_out.js`/
+  `review/server.js`). Run its tests from inside the directory with
+  `node --test` (a repo-root `node --test tools/replay_bot/` does not
+  discover them). It needs
+  `npm install --no-save @napi-rs/canvas tesseract.js`, both in one command -
+  a `--no-save` install **prunes** any other `--no-save` package, so installing
+  just one of them silently removes the other. Reinstall `playwright-core`
+  alongside them in that same command when you next need it too. The traps
+  below are the ones that cost time.
+- **Reproduce it offline before you spend a code.** `fakeio.js` is capture.js's
+  injected I/O backed by recorded frames instead of a client - no PowerShell, no
+  grabs, no waiting - and it records every grab, key and wait so a test can say
+  *"N was pressed before K"* rather than *"the answer came out right"*. The
+  ordering bugs were never visible in the answers. `corpus.js` names the frames
+  that have been **looked at** and says what is in each; `corpus.test.js` and
+  `capture.offline.test.js` are graded against those, and skip themselves when
+  `frames/` is empty. `node tools/replay_bot/corpus_sweep.js` runs every
+  detector over every retained frame, which is how the panel detector was
+  caught.
+
+- **A run writes two files.** `out/<session>.json` is the contribution;
+  `out/<session>.review.json` (plus portrait crops under `out/<session>/`) is
+  what the operator checks first. `resolve.js` votes each slot across a round's
+  frames and flags the thin evidence (`low-support`, `contested`, `no-read`,
+  `attribution-abstained`, ...); nothing is dropped, a flagged slot keeps its
+  best guess. `node tools/replay_bot/review/server.js` serves a localhost page
+  over the newest review artifact - every map, round by round, flags surfaced -
+  where heroes and player attribution are corrected, then **Finalize** rebuilds
+  the contribution one-observation-per-round (`emit.fromRounds`) and **Upload**
+  POSTs it to the worker as `replay-bot`. It refuses to upload while any map is
+  unreviewed. `out/` and `state/` are gitignored; a merged contribution belongs
+  in `data/captures/`.
+
+- **Test codes come from `scrape_codes.js`, and picking them by hand goes wrong.**
+  `node tools/replay_bot/scrape_codes.js` pulls fresh ones off owreplays.tv
+  filtered to **competitive role queue** (the site's mode 2 / gametype 1), which
+  is the only thing on there shaped like a FACEIT game. Four of five codes
+  picked by hand on 2026-09-09 turned out to be quick play and three of those
+  were **6v6** - six portraits a side against geometry frozen at five, so every
+  cell would have read the wrong hero with nothing in the output saying so.
+- **The patch filter is the part that matters, and it is not optional.** Codes
+  die at a patch. The site records each replay's `PatchLevel`, and it lines up
+  with `owdb/db.py._SEED_WIPES` exactly: uploads on 2.24.0.3 stop at 2026-09-08
+  12:42Z, 2.24.1.0 starts 19:15Z, against the ledger's *"patch on the 8th ~19:00
+  UK"*. **That makes the site an independent witness to a wipe date** the project
+  otherwise records only by observation - worth checking against when a new wipe
+  is suspected. Of ~100 competitive role-queue replays listed, 83 sit on the
+  wiped patch; the scraper drops them and says how many it dropped.
+- **The live-patch pool is small - about 14 at any moment, and shared with
+  yourself.** The scraper skips anything in `state/attempts.json` or
+  `state/seen_codes.json` (both per-machine and gitignored, like the ledger they
+  sit beside). It refills as people upload, so re-running it later finds more;
+  running it twice in one evening will not.
+
+- **A code is only import-once per ring-window, not forever.** The client keeps
+  only its **10 most-recent imports**; importing a code still in that list warns
+  and demands a manual scroll-and-select, which ends an unattended run. The list
+  is a ring — 10 newer imports evict the oldest — so a code that has rolled off
+  re-imports cleanly. Within a run that still shapes everything: the account
+  starts clean, `run.js` logs a code as attempted *before* opening it, and a
+  failed map is retried automatically across runs up to `FAIL_RETRY_CAP` (3)
+  before it is reported as a loss. Retained frames are what make a bad read
+  fixable, and only offline.
+
+- **Never point a run at a stale feed.** A `data.json` built before a patch
+  lists dead codes while looking perfectly healthy - the local one still had the
+  2026-08-18 wipe and 255 dead codes hours after the 2026-09-08 patch. `run.js`
+  refuses a feed not built today; `--stale-ok` overrides it, and rarely should.
+
+- **The events viewer needs N THEN K, every time, and its state is read from
+  STRUCTURE.** The scrubber only draws round breaks while that panel is open -
+  closed, a three-round Control map reads as one continuous segment,
+  confidently and wrongly. The media controls must be up before K does
+  anything: a run that pressed only K measured 0.023 before and after.
+- **Never judge the events panel by brightness, in either direction.** It is
+  translucent, so what the box reads depends entirely on the map behind it. Over
+  three maps: a dark one went 0.045 closed to 0.770 open, a bright one 0.488 to
+  0.519, and a NEON one went 0.548 DOWN to 0.519 - closed readings spanning
+  0.045-0.548 against open ones spanning 0.519-0.770. Overlapping in both
+  directions, so neither a level nor a rise works, and each version of that
+  mistake cost live codes: a level refused two maps that had opened, then
+  false-positived on a bright sky and skipped N and K entirely; a rise then
+  refused two more with the panel plainly open on screen.
+  Counting the panel's flat horizontal bands instead separated those same three
+  maps cleanly - and was then caught by the offline sweep reading a night sky, a
+  loading screen, a black frame and **the ESC menu** as open panels, because all
+  four are perfectly uniform. Requiring the rows to be **light** as well fixed
+  that, and left a worse problem: **the ROUND rows are not the same panel on
+  every map type.** Push and Flashpoint play one long round, Control up to
+  three, Escort and Hybrid at least two, so the fraction means something
+  different each time - a live one-round map read 0.170 against a threshold of
+  0.15, on a panel that was plainly open. `crop.panelRowFraction` reads the
+  panel's **two dropdowns** instead, which do not vary: weakest open 0.587,
+  and nothing shut registers at all.
+
+- **`hudTint` reads the PORTRAIT BAND only, and the day it did not cost a code.**
+  Averaged over the whole plate box it also takes in the name plates, the health
+  pips and the map showing between the cells; on a bright blue map that cancels
+  team B's red outright, 4.8 against a threshold of 15, with the replay open on
+  screen. `run.js` decides "did the replay load" on this, so it waited 90s, gave
+  up and spent RCR3NK. The fix was the crop `calib.cells` already used for the
+  same stated reason. Dimmest replay now 31.3 against 0.0 for a loading screen.
+  **The threshold was never wrong - the region had drifted.**
+- **Seek acceptance is PROBABILISTIC, not a threshold.** The client ignores a
+  seek key arriving while it is still seeking. Bisecting for the cliff twice
+  gave two different answers: 550ms dropped a press in one run and landed all
+  five in the next. Any timing probe here must measure a **rate** over several
+  trials (`probe_limits.js` does), and a number found by one clean pass is a
+  number found by luck. `SEEK_GAP_MS` is 700, above every failure yet seen, and
+  `driver.seekTo` verifies against `crop.playheadX` regardless - **if correction
+  fails, the measured position wins**, so a misplaced sample is dropped rather
+  than mislabelled.
+
+- **The time-skip interval reverts at every client restart** - a known Blizzard
+  bug where replay viewer options apply but are never saved. 60s last night is
+  20s tonight with nothing on screen to say which, and assuming wrong puts every
+  sample at a third or triple of its intended time, in the wrong round, looking
+  entirely reasonable. A `set-interval` chunk sets it once a session and
+  `capture.js` **measures** what a press is worth by timing playback anyway.
+
+- **A 20-second step is not a fixed number of pixels** - 45px on a 17-minute
+  Control map, 69px on an 11-minute Escort one - so the bar is calibrated per
+  map. That also measures the map's duration off the bar span, which is why
+  `capture_map.js` needs no duration argument.
+
+- **A playing replay never settles, and a settle that fails costs seconds.**
+  Pause first: `capture.js` diffs two frames a quarter-second apart, which is a
+  far stronger signal than the playhead and works before the controls are up.
+  Four failed settles before the first pause were most of a 90-second stall.
+
+- **Waiting before a grab does nothing.** Reading a seek immediately scores the
+  same as reading it 640ms later, at every delay, across two runs - a grab is
+  itself half a second of spawn and PrintWindow, so the wait had already
+  happened. `QUIESCE_MS` is 0; measure it again if grabbing ever gets fast.
+
+- **One PowerShell process does the grabs and key sends** (`host.js` +
+  `host.ps1`): 204ms a grab against 585ms for a fresh spawn, because 341ms of
+  the old cost was `Add-Type` and startup, paid twenty times a map. It falls
+  back to the standalone scripts if it cannot start, and `OWDB_NO_HOST=1` forces
+  that. Its child and pipes are **unref'd** - a caller forgetting `close()`
+  would otherwise wait forever on an open pipe for a host waiting for it, which
+  cost the test suite 72 seconds of nothing.
+
+- **Menu input is recorded, never taken from a screenshot.** Screenshots of the
+  rig arrive at 2557x1437 while the client area is 2560x1440, so any coordinate
+  read off one is wrong by a few pixels in an unknown direction. Three chunks
+  close the loop - `open-import`, `set-interval` (once a session, from inside a
+  replay with the controls already up), `leave-replay`. Record with
+  `node tools/replay_bot/recorder.js record <chunk>` (F10 ends it; nothing
+  outside the Overwatch window is recorded), or drive it from
+  `node tools/replay_bot/gui.js` at 127.0.0.1:8787. **Check before you Play** -
+  a dry run sends nothing, and a real `open-import` spends a code.
+
+- **The recorder hooks input, and must.** The polled first version could not see
+  the mouse wheel, recorded a scrollbar drag as a click where it started, and
+  missed every key not on its watch list - three failed attempts at one options
+  menu, in three different ways. Every key now travels with its virtual-key
+  code. The replay code is **pasted**: a recorded Ctrl+V becomes the `$CODE`
+  placeholder and playback sets the clipboard itself.
+
+- **PowerShell variable names are case-insensitive.** `$vk = $VK[$k]` overwrote
+  the lookup table with the value it had just read, so the first key sent fine
+  and every sequence died on the second iteration with "Cannot index into a null
+  array" and no line number. Three unrelated theories about argument separators
+  were tried before anyone read the line number. Get the line number first.
+
+- **`ConvertFrom-Json` hands back an array as ONE object in PowerShell 5.1**, so
+  `@(... | ConvertFrom-Json)` wraps it again and a loop over it runs once with
+  the whole array as its item. It surfaced as "Cannot convert System.Object[] to
+  System.Int32" pointing at nothing. Related: `Set-Content -Encoding utf8`
+  writes a BOM, which lands in front of the first JSON line and makes
+  `JSON.parse` fail on a character that does not print.
+
+- **`SetProcessDPIAware()` before any window call.** Without it Windows reports
+  a 125%-scaled 2560x1440 display as 2048x1152. Geometry frozen at the real size
+  then lands every crop in the wrong place, and both numbers look plausible.
+
+- **Capture survives occlusion; input does not.** `PrintWindow` with
+  `PW_RENDERFULLCONTENT` reads the Overwatch window while it is covered, but
+  `PostMessage`, `SendMessage` and `AttachThreadInput` were all measured and
+  none delivers a key to an unfocused client. The bot is therefore an overnight
+  job that owns the machine while it runs.
+
+- **Press "Use boxes" before reading `boxes.a`.** Auto-calibrate reports "10/10
+  portraits confident" for a detection it has NOT committed; read too early and
+  you get the `AUTO_STRIPS` default `(129.536, 119.808, 660.224, 97.2)`, which
+  is half a portrait out. That exact number was stored in project memory as
+  known-good for three weeks. Draw the box and look at it -
+  `tools/replay_bot/contact_sheet.js` exists for that.
+
+- **Side b reads about 0.11 lower than side a, consistently.** Across both maps'
+  retained frames, side a means 0.91/0.82 and side b 0.75/0.75, and shifting box
+  b left by 1px recovers it to 0.86/0.85 - the same offset on two independent
+  maps, so it is geometry, not a map. **Do not hand-edit `calib.FROZEN.boxes`**
+  to fix it; re-run the bootstrap for side b. Mean match score is not accuracy,
+  and fitting numbers to it is how the last calibration went wrong.
+
+- **A contribution upload REPLACES a contributor's whole file — it never
+  merges.** `infra/upload-worker/worker.js`'s `/` handler PUTs the incoming
+  payload verbatim to `data/captures/<season>/<contributor>.json` via GitHub's
+  contents API; there is no read-modify-merge step. Uploading a fresh session
+  drops every earlier map from that same contributor's file that isn't also in
+  the new payload. Confirmed 2026-09-12: a 270-map replay-bot upload silently
+  deleted a previously-live 6-map contribution from two days earlier. Before
+  uploading, build the FULL set the contributor should own — merge in any
+  older reviewed-but-not-yet-superseded local sessions first — rather than
+  uploading whatever the latest capture run happened to produce.
+
+- **`.github/workflows/update.yml`'s cron gate re-derives "is it 9pm London"
+  from the wall clock at the moment the job actually executes, not from which
+  cron expression fired it.** Both daily crons (20:17 and 21:17 UTC, one for
+  each side of the BST/GMT boundary) get delayed by GitHub — sometimes by 2+
+  hours — and if the delay pushes the actual run past the London-21:00 hour
+  the gate is checking for, it skips, silently, reporting `success`. Confirmed
+  2026-09-12: **every single scheduled run from at least 2026-09-06 onward
+  skipped both slots**, so the site's FACEIT database stopped picking up new
+  matches for nearly a week with no failure signal anywhere — surfaced only
+  because a contribution upload started rejecting valid maps as "game does not
+  exist." A manual `repository_dispatch` (the site's "Refresh now" button, or
+  `gh workflow run`) always forces the real fetch regardless of the gate and
+  is the immediate workaround; the gate itself still needs a fix that doesn't
+  depend on execution-time wall-clock (e.g. reading `github.event.schedule` to
+  know which cron actually fired, or widening the accepted hour window).
+
+- **`capture-read-guards` has diverged a long way from `main`.** As of
+  2026-09-12 it is 102 commits ahead / 7 behind `origin/main` — `tools/
+  replay_bot/` does not exist on `main` at all. This does not block
+  contribution uploads (the Worker commits pure JSON data straight to `main`
+  regardless of what branch produced it locally), but it does mean `owdb/db.py`
+  changes, `resolve.js`/`timing.js` fixes, and anything else made on this
+  branch stay purely local until someone deliberately merges. A wipe-date
+  registration (`e1a092a`) sat finished and tested on this branch for 4 days
+  before reaching `main` — cherry-pick a specific fix onto a worktree off
+  `origin/main` when only that one change needs to go live now; don't assume
+  committing here is the same as shipping.
+
 ## Roadmap
 
 ### Season state (2026-09-01)
@@ -335,7 +571,7 @@ so treat anything without an explicit zone as approximate to the hour.
 **Seed collection unblocks on 3 September, not on the 7th.** Bracket generation
 is what creates the S10 match rooms, so the hand-collected seed URLs
 (`matches.txt`) can be gathered four days before the first game. Everything
-`specs/BACKLOG.md` files under "around 7 September" is really "after 2026-09-03
+`PLANS.md` files under "around 7 September" is really "after 2026-09-03
 15:30". Two caveats: only round 1 exists on the day, and a division's bracket
 may lag the announced time — FACEIT says generation is slow and posts a separate
 notice when every division is done. Wait for that notice before concluding a
@@ -369,7 +605,7 @@ ingest assumptions moves. FACEIT promised a per-playday key-dates article the
 day after the season-start post; if precise playday dates ever matter, that
 article — not this table — is the source.
 
-The readiness work is **done** (2026-08-27, `specs/2026-08-27-season10-readiness-plan.md`):
+The readiness work is **done** (2026-08-27):
 Season 9 is frozen at `docs/s9/` behind `docs/archive.html`, SA/OCE are
 supported regions, the page labels the season it rendered and explains a
 finished one, and a pinned season with no data now falls back to the newest
@@ -411,7 +647,7 @@ region's switcher silently).
    still-live code from the 7th and closes the only capture window Season 10's
    first playday has.
 
-Open items: `specs/BACKLOG.md` § "Added 2026-08-27". The Season Finals shape
+Open items: `PLANS.md` § "Added 2026-08-27". The Season Finals shape
 (cross-tier, no division to attach to) is still undecided and still has until
 November.
 
@@ -453,7 +689,7 @@ November.
    invariants 12 and 13. Opening it to the public is a decision, not a cleanup
    task.
 
-   What remains, per `specs/2026-08-12-scrim-mode-design.md`: the rest of
+   What remains, per `PLANS.md`: the rest of
    opponent identification and roster search (2); the stats read plus a workshop
    hero-glyph reference set (3); the viewer's Players tab (4); sync and sharing
    (5); auto map detection (6). See `ARCHITECTURE.md` §7.
@@ -461,12 +697,11 @@ November.
    **Hero bans shipped 2026-08-28**, outside those phases:
    `tools/scrim_code/scrim_owdb.opy` runs a ban phase in setup and draws the
    result as text on the spectator view; `docs/capture/engine/banrow.js` reads
-   it back. Design: `specs/2026-08-27-scrim-hero-bans-design.md`. Its §6.1
-   records two Overwatch behaviours that each cost an in-game test cycle and are
-   invisible from compiled output — `destroyAllHudTexts()` erasing anything
-   created by a condition that never transitions again, and `getAllPlayers()`
-   with `SpecVisibility.NEVER` rendering for nobody at all. Read it before
-   touching workshop HUD code.
+   it back. Its §6.1 notes two Overwatch behaviours that each cost an in-game
+   test cycle and are invisible from compiled output — `destroyAllHudTexts()`
+   erasing anything created by a condition that never transitions again, and
+   `getAllPlayers()` with `SpecVisibility.NEVER` rendering for nobody at all.
+   Read `ARCHITECTURE.md` §7 before touching workshop HUD code.
 
    **The scoreboard read shipped 2026-09-06, and it is measured, not guessed.**
    Three rules, each of which cost a wrong turn to learn:
@@ -504,7 +739,7 @@ November.
    **Auto map detection (6) is now cheaper than it was**: the code reader can
    already tell when the replay on screen is not the one being captured. It was
    deliberately left on-demand rather than polling — see
-   `specs/2026-08-19-replay-code-ocr-design.md` §4.6 for what polling would cost
+   `ARCHITECTURE.md` §7 for what polling would cost
    and why it was declined.
 
    **Aspect ratios other than 16:9 are no longer assumed away.** This said the
@@ -573,7 +808,9 @@ audiences if the analytics are strong enough.
   `owdb_app.py`, the PyInstaller specs, `Scout app.cmd`). Do not resurrect it.
 - **`docs/scrims.html` is the single scrims viewer.** The two implementations
   were consolidated on 2026-08-08.
-- **Feature work gets a design document then a plan**, both under `specs/`, named
-  `YYYY-MM-DD-<topic>-design.md` and `-plan.md`.
+- **Feature work gets a design document then a plan** (scoped features only), a
+  `specs/` directory created for the feature, named
+  `YYYY-MM-DD-<topic>-design.md` and `-plan.md`. The backlog lives in `PLANS.md`;
+  an item leaves it when it gets scoped.
 - **Update `CHANGELOG.md`** when a change is visible on owdb.io, changes a data
   contract, or changes an operational procedure.

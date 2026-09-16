@@ -11,9 +11,8 @@ one-line summary, and every paragraph stands on its own — so landing in the
 middle of this document, whether by scrolling or by search, still lands you in
 context.
 
-`README.md`, `FEATURES.md`, and `SPEC.md` remain the long-form references for
-ingest, features, and the capture design respectively. This document sits above
-them and says how everything connects.
+It is the sole how-it-works document. The agent-facing rules and commands live
+in `AGENTS.md`; what is not built yet lives in `PLANS.md`.
 
 ## Contents
 
@@ -31,6 +30,7 @@ them and says how everything connects.
 - [11. Glossary](#11-glossary)
 - [12. Invariants](#12-invariants)
 - [13. Testing map](#13-testing-map)
+- [14. Replay bot](#14-replay-bot)
 
 ---
 
@@ -67,6 +67,7 @@ independent.
 | Hero portraits on the dashboard | `faceit_sync/hero_icons.py`, `faceit_sync/hero_icons.json` | [4](#4-dashboard-build) |
 | Hero templates used for HUD matching | `owdb/refs.py`, `tools/build_capture_refs.py` | [5](#5-capture--the-python-owdb-package) |
 | Which matches are known about at all | `matches.txt` | [3](#3-ingest--faceit_sync) |
+| The unattended replay scout | `tools/replay_bot/` | [14](#14-replay-bot) |
 
 ## 1. The map
 
@@ -154,23 +155,18 @@ and is not in git.
 | `docs/` | **The GitHub Pages web root.** Everything here is published to owdb.io. | live |
 | `docs/capture/` | The browser capture app — the only supported capture path. | live |
 | `data/captures/` | Committed contributor observations, one JSON file per person per season. | live |
-| `tools/` | Build scripts that produce feeds for the capture app, plus the social-preview image generator. | live |
+| `tools/` | Build scripts that produce feeds for the capture app, plus the reference-capture and replay-bot tooling. | live |
 | `tools/scrim_code/` | OverPy source for the in-game Overwatch Workshop scrim helper. | live |
 | `infra/upload-worker/` | The Cloudflare Worker source. Deployed by hand, not by CI. | live |
 | `tests/` | Pytest suite for `faceit_sync`, the dashboard, and the browser capture app. | live |
 | `.github/workflows/update.yml` | The only writer of the live site. | live |
 | `matches.txt` | Seed list of match IDs and championship URLs that ingest starts from. | live |
 | `pyproject.toml` | Packaging, dependencies, the `faceit-sync` and `owdb` entry points, mypy and pytest config. | live |
-| `README.md` | Long-form reference: ingest, the schema, and the data-quality hazards. | reference |
-| `FEATURES.md` | Long-form reference: every feature in both packages. Known to lag the code. | reference |
-| `SPEC.md` | The original `owdb` design reference — design intent, not current state. | reference |
-| `ARCHITECTURE.md` | This document. | reference |
+| `ARCHITECTURE.md` | This document — how everything works. | reference |
 | `CHANGELOG.md` | What changed and when, reconstructed back to the first commit. | reference |
 | `AGENTS.md` | Canonical instructions for coding agents — every agent reads this one. | reference |
-| `CLAUDE.md` | A pointer to `AGENTS.md`. | reference |
-| `specs/` | Design and implementation-plan documents, one pair per feature, plus `specs/BACKLOG.md`. | reference |
+| `PLANS.md` | What is not built yet — the backlog. | reference |
 | `verify_accuracy.py` | Standalone audit script that re-derives dashboard numbers independently. | reference |
-| `Dockerfile`, `docker-compose.yml` | Containerised ingest, for running the sync somewhere other than a desktop. | reference |
 | `*.cmd` (7 files at root) | Double-clickable Windows launchers wrapping the two CLIs, for non-technical contributors. | reference |
 | `.env.example` | The environment variables ingest and the Worker read. | reference |
 | `faceit.sqlite3` | The local ingest database. | local-only |
@@ -396,8 +392,13 @@ does not parse skips `by_region_tier` and lands in the fallback at the end of
 the view build: a plain view labelled with its raw championship name, outside
 the region grouping and outside Combined. A stage the split does not recognise
 is simply treated as a regular-season division. Season 10 introduces one of
-each — an Intermediate tier and a Season Finals stage — and neither classifies
-today; `AGENTS.md` records what that costs and why nothing has changed yet.
+each — an Intermediate tier and a Season Finals stage. `TIERS` gained
+`Intermediate` on 2026-09-05, so a division by that name now classifies and
+lands in its region's switcher. A `… - Season Finals` championship still does
+not: `is_playoff_name` matches only `playoff`/`knockout`, and the stage is also
+cross-tier by design (top 4 Master plus top 2 of each lower division), so it
+has no single region+tier division to attach to. `AGENTS.md` records what that
+costs and why nothing has changed yet.
 
 **Four drill-ins hang off those tabs**, each a non-nav screen reached by hash:
 `#match=<id>`, `#scout=<team>` / `#prep=<team>`, `#compare=<A>|<B>`, and
@@ -572,7 +573,6 @@ injected defaults, exercised only at runtime.
 | `owdb/context.py` | Replay-code context derivation |
 | `owdb/contribute.py` | Export, publish, and the multi-contributor merge |
 | `owdb/firstrun.py` | First-run helpers, retained from the removed native GUI |
-| `SPEC.md` | The original design reference these modules cite by section |
 
 ### How it connects
 
@@ -687,6 +687,87 @@ the 90 resolves once the role constraint is applied - against 36 of 90 with two
 (1800 box/resolution variants, all landing on the row) and a parity check that
 runs the shipped JS over real pixels.
 
+**The dark-plate assumption broke on a bright/colour-tinted name plate, fixed
+2026-09-15.** `findNameRow`'s per-row `score` used to be zeroed whenever a
+row's bright-pixel fill exceeded a FIXED `NAME_FILL_MAX` (0.42), which is what
+told real name text apart from a health bar on the dark plate the constant was
+measured against. A team-colour-tinted plate (light blue, bright red) could
+push the *name text's own row* fill above that ceiling — reproduced two ways
+on the 2026-09-15 390-map run: a light-blue plate zeroed every text row
+outright (`findNameRow` returned `null`, five blank OCR reads for that side),
+a red plate zeroed just enough interior rows to fragment the run into the
+wrong (much shorter) one, so `nameCrop` handed tesseract a one-pixel sliver of
+glyph tops instead of the glyphs. Both produced `attribution-abstained`,
+indistinguishable from every other cause without reading `m.attribution.reads`
+off the review artifact (kept exactly for this - see its own comment in
+`attribute.js`). Distinct from, and not fixed by, the 2026-09-15
+`sample.quiesceMs` 700→1300 change (CHANGELOG) — that targets a frame caught
+mid-transition; this was a fully-settled frame the heuristic still could not
+read.
+
+The fix (`tools/replay_bot/nameplate_fill_sweep.js` is the harness that
+measured it, full writeup in
+`specs/2026-09-15-nameplate-fill-heuristic-handoff.md`): judge each row
+against its own LOCAL plate baseline - the mean fill of a gapped window of
+nearby rows, floored at the old 0.42 so a genuinely dark plate behaves exactly
+as before - rather than one flat ceiling for every plate. Same principle as
+the scrim scoreboard's local-contrast fix (`scrim.html`'s `scoreCanvas`): "how
+filled is this row" only means something relative to how filled the plate
+around it already is. Recovers all 3 known-bad crops and touches an identical,
+bounded 91/780 (11.7%) of the 2026-09-15 run's r1 strips whether reached via a
+raised fixed ceiling (~0.85+) or this local one (margin ~0.30+) - of those 91,
+88 were already broken under the old 0.42 (40 null, 48 a 1-2px degenerate
+fragment) and only 3 had a plausible row that grew taller at the same y (no
+health-bar-hijack observed). A first draft with no floor regressed a synthetic
+dark-plate case in `frames.test.js` - a wide, genuinely near-black band made
+the local baseline near 0, so margin-only could compute a ceiling BELOW 0.42
+and re-zero text the original constant always passed; the floor is why that
+can no longer happen. Real fixtures from the 3 known-bad crops, reduced to
+luminance only, back three `frames.test.js` cases directly
+(`docs/capture/engine/fixtures/`). Shared code
+(`docs/capture/engine/frames.js`), so the fix reaches the live capture pages'
+name OCR too, not just the bot's. Still outstanding: the original dark-plate
+regression corpus (`tools/real_frame_eval/rowfind_parity.py`,
+`screenshots/*.png`) is not on this machine (gitignored, no local copy) -
+re-run it wherever that corpus exists as a final check.
+
+**Locating the row correctly exposed a second bug in the same family:
+`nameCrop`'s contrast stretch.** It used a fixed formula, `(g-128)*1.5+140`,
+also tuned against a dark plate - on a bright one it clipped an already-faint
+glyph to flat white, so a correctly-found row still OCR'd blank. Replaced
+with `applyNameContrast`, a percentile (2nd/98th) min-max stretch to
+whatever luminance range the crop actually has, floored at a minimum-range
+guard so a genuinely featureless crop is left as plain luminance rather than
+having noise amplified into it. `tools/replay_bot/nameplate_contrast_sweep.js`
+measured it against real tesseract: known-bad bright-plate slots landing a
+confident name match rose from 5% to 11% - real but partial, not a full fix
+- and, more importantly, already-good dark-plate slots got BETTER, not just
+neutral (84/100 vs 79/100 confident matches), so it replaced the old formula
+everywhere. A stretch-then-morphological-close variant, meant to solidify a
+hollow/outlined glyph into a filled one, measured WORSE (7%) and was
+dropped.
+
+**A third bug turned out to be the biggest: tesseract's default page
+segmentation mode.** `run.js`'s OCR worker never set `tessedit_pageseg_mode`,
+so it ran PSM 3 (full automatic page layout, built for scanned documents) -
+which regularly found no text region at all on a small, single-word crop,
+returning empty at zero confidence on an image that read perfectly by eye.
+Every name crop IS one word; PSM 8 ("treat as a single word") nearly TRIPLED
+confident matches on known-hard bright-plate crops (11/75 -> 31/75 in a
+sample) and sharply improved already-good crops too (53/75 -> 65/75) - the
+single largest lever of the three fixes, and one that had nothing to do with
+plate colour at all.
+
+`tools/replay_bot/reprocess_attribution.js`, re-run after all three fixes
+landed, recovered 616+ previously-abstained slots across 106+ maps over the
+`2026-09-12`, `2026-09-14` and `2026-09-15-full` review sessions combined -
+on the active `2026-09-15-full` batch, the review queue fell from 99 flagged
+maps down to 12 the operator chose to accept as-is by the time they finished
+reviewing it (before 252 of the batch's 390 maps were separately excluded for
+the Doctrine-window recapture - see PLANS.md/CHANGELOG.md). A residual
+handful still fails even with the row found, the contrast fixed, and PSM 8
+in place.
+
 **Names are not how a slot is assigned to a player — role is.** Overwatch
 tournament play is role-locked, and FACEIT records the role each player queued
 for, per game: 8303 of 8356 team-games in the database are exactly 1 Tank /
@@ -789,7 +870,7 @@ commits them into `data/captures/` ([section 8](#8-infrastructure-and-ci)).
 | --- | --- |
 | `docs/capture/index.html` | The league capture app — self-contained apart from theme and OCR |
 | `docs/capture/scrim.html` | Scrim capture — see [section 7](#7-scrims) |
-| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`, `heroes.js`, `replaycode.js`. `names.js`, `session.js`, `opponents.js`, `frames.js`, `heroes.js` and `replaycode.js` have a co-located `*.test.js`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
+| `docs/capture/engine/` | The shared engine: `names.js`, `util.js`, `idb.js`, `frames.js`, `calibration.js`, `refs.js`, `overlay.js`, `tour.js`, `session.js`, `opponents.js`, `heroes.js`, `replaycode.js`, `assign.js`, `banrow.js`, `boardreads.js`, `contribution.js`. Co-located `*.test.js` exist for `assign`, `banrow`, `boardreads`, `calibration`, `contribution`, `names`, `session`, `opponents`, `frames`, `heroes` and `replaycode`; the rest are DOM- and browser-API-coupled and are covered from `tests/` instead |
 | `docs/capture/scoreboard.js` | Scoreboard OCR parsing, with its own `docs/capture/scoreboard.test.js`; the original of the UMD `make(ctx)` pattern |
 | `docs/capture/data.json` | Codes and rosters feed, rebuilt by CI |
 | `docs/capture/refs.json` | Curator-committed hero reference library |
@@ -1191,7 +1272,7 @@ scrim. Same word, opposite meaning, opposite remedy.
 OCR read, and the score-box read. Side detection has since worked end to end in
 the field (2026-08-19, all ten slots), but one confirmed run is not a track
 record and the badge stays until it has several. The other two are scoped to
-phase 3 of `specs/2026-08-12-scrim-mode-design.md`.
+phase 3 of the scrim-mode plan (`PLANS.md`).
 
 **The scrim workflow lives in the pop-out panel, not on the page.** The page is
 setup — share the screen, calibrate, name the scrim — and pressing *Save scrim*
@@ -1365,6 +1446,13 @@ improvements apply retroactively.
 because the contributing machine cannot be trusted to timestamp its own
 submission. Files git knows nothing about sort last, by name.
 
+**A new upload replaces this file wholesale — it is not appended to.** The
+upload Worker's `PUT` (`infra/upload-worker/worker.js`) sends the whole
+incoming payload as the file's new content, with no merge step against what
+was already there. A contributor with two sessions' worth of maps must upload
+them together, or the second upload silently drops the first session's maps
+from the live site — see AGENTS.md's Gotchas.
+
 ### `owdb_comps.json` — the derived report
 
 Written by `owdb contribute merge` at build time, read by
@@ -1516,17 +1604,22 @@ Fixtures whose matches must stay *alive* derive their dates from
 trick in `tests/test_capture_feed.py`), so a new wipe does not silently flip
 them to dead. Keep new fixtures on that pattern rather than hard-coding a date.
 
-Recorded wipes so far: 2026-07-14, 2026-07-28, 2026-08-11 and 2026-08-18. The
-last one is dated a day early on purpose — the patch landed mid-evening on the
-19th, and `codeDead()` is date-granular, so dating it the 19th would have marked
-that day's post-patch league games dead. The comment on the entry explains why
-the two errors are not equal.
+Recorded wipes so far: 2026-07-14, 2026-07-28, 2026-08-11, 2026-08-18 and
+2026-09-07. The 2026-08-18 entry is dated a day early on purpose — the patch
+landed mid-evening on the 19th, and `codeDead()` is date-granular, so dating it
+the 19th would have marked that day's post-patch league games dead. The comment
+on the entry explains why the two errors are not equal. The 2026-09-07 entry is
+the Season 10 patch (landed 8 September ~19:00 UK), dated a day early for the
+same reason, so games played after the patch stay scoutable.
 
 ### Season cutover
 
 Season 9 finished on 2026-08-17 and is frozen at `docs/s9/`. As of 2026-09-05 the
-cutover is done in code and waits only on the operator: seed room URLs in
-`matches.txt`, a `wrangler deploy`, and the Season 10 code-wipe date.
+cutover is done in code: the seed room URLs are in `matches.txt` (all ten
+divisions, 2026-09-05) and the Season 10 wipe date is registered in
+`_SEED_WIPES`. What remains is the operator's: a `wrangler deploy` so the live
+Worker writes uploads to `data/captures/s10/` rather than `s9/` (harmless while
+no league replay code is live, wrong from the first S10 playday).
 
 **The trigger is S10 having results, not S9 ending** — those are weeks apart, and
 publishing `--season s10` in between would mean an empty site. That is why the
@@ -1542,8 +1635,8 @@ its captured comps for as long as the seeds took to arrive.
 Do not improvise the cutover. The full sequence and the reasoning behind it —
 archive export, bumping the season constants in both the Worker and
 `owdb/contribute.py`, seeding Season 10 into `matches.txt`, flipping the live
-`--season` filter — is in `specs/2026-08-10-season10-cutover-design.md`. A useful
-property noted there: a season boundary is in practice one more wipe entry, so
+`--season` filter — is in `AGENTS.md` (Roadmap) and `PLANS.md`. A useful
+property: a season boundary is in practice one more wipe entry, so
 once Season 10's wipe date is registered the capture tool stops offering Season 9
 codes on its own.
 
@@ -1573,7 +1666,7 @@ The project's vocabulary, defined once.
 | **CORE swap** | A mid-map change to a genuinely different comp. |
 | **Sub-role** | A finer classification than Tank/Damage/Support — see `faceit_sync/subroles.py`. |
 | **Region** | EMEA, NA, SA or OCE — `export.REGIONS`. Parsed from the championship name as a whole word. SA and OCE run Master and Open only. |
-| **Tier** | The division's competitive level. FACEIT's Season 10 ladder is Open, **Intermediate**, Advanced, Expert, Master (Intermediate is new in S10, EMEA/NA only). `export.TIERS` lists only Master, Expert, Advanced, Open, strongest-first — a deliberate gap while Intermediate is out of ingest scope, so an Intermediate championship would not classify. See `AGENTS.md`. |
+| **Tier** | The division's competitive level. FACEIT's Season 10 ladder is Open, **Intermediate**, Advanced, Expert, Master (Intermediate is new in S10, EMEA/NA only). `export.TIERS` lists Master, Expert, Advanced, Intermediate, Open, strongest-first, so an Intermediate championship classifies and lands in its region's switcher. A tier that does not parse degrades to an ungrouped view rather than erroring. |
 | **Division** | A region-and-tier competition, e.g. "EMEA Master Central". |
 | **Season** | A league season, e.g. `s9`. Parsed from the championship name. |
 | **Faction** | FACEIT's name for a side in a match: `faction1` or `faction2`. |
@@ -1633,13 +1726,7 @@ Rules that must not be broken, each with the failure mode it prevents.
     markup and the gate script only ever *removes* it, so a syntax error, a
     blocked script or localStorage being unavailable all leave the page locked.
     A gate that added the overlay instead would open the page on any failure.
-14. **Never commit or publish the trials page.** `faceit-sync trials`
-    (`faceit_sync/trials.py`) writes a private page naming the players you are
-    trialling, which leaks recruiting intent. `/trials.html` is gitignored
-    root-anchored, because `faceit_sync/dashboard/trials.html` is the page's
-    shell and must stay tracked; an unanchored pattern would untrack the shell.
-    The page must never be written under `docs/` (see invariant 10).
-15. **Never trust a replay code read through a hand-dragged calibration box.**
+14. **Never trust a replay code read through a hand-dragged calibration box.**
     The crop is fractions of that box, and beyond roughly ±2% of strip error the
     read does not fail — it returns a well-formed code belonging to another
     game. The geometry probes in `engine/replaycode.js` now refuse instead, but
@@ -1699,3 +1786,549 @@ that package's safety net.
 For a visual check, build a local preview and screenshot it with headless Edge —
 on Windows use `--screenshot=FILE`, **not** `--dump-dom`, because the GUI
 executable produces no stdout.
+
+## 14. Replay bot
+
+`tools/replay_bot/` drives an Overwatch client through FACEIT replay codes
+unattended, reading hero compositions off the HUD. It exists because capture is
+otherwise bounded by operator time: a code dies at the next patch, and nobody
+can hand-scrub a fortnight of matches before that.
+
+### 14.1 Scope, and why it is so narrow
+
+FACEIT already supplies the map, the code, bans, the scoreboard and both
+lineups. The client is needed for exactly one fact FACEIT withholds — **which
+heroes each team actually played** — and the bot does nothing else.
+
+### 14.2 It runs the shipped matcher, not a copy
+
+The capture engine dependency-injects its DOM handle (`refs.js` takes
+`{doc, …}`; `frames.js` only ever calls `ctx.doc.createElement`), and
+`matchCrop()` is pure `Float32Array` arithmetic. So the bot supplies a canvas
+shim and consumes `calibration.js`, `frames.js` and `refs.js` **unmodified**.
+
+`refs.js` also resolves `REF_W`/`REF_H`/`PAD`/`REFS` and util.js's helpers as
+*free variables* — documented and deliberate, because the two capture pages
+share them as page-level globals. Under CommonJS those resolve against
+`globalThis`, which `match.js` populates. That is honouring the module's
+contract, not working around it, and it is what makes bot output comparable to
+an operator's: the same matcher, not a lookalike.
+
+`match.js` calls `Refs.bestMatch` through `matchCrop`, so a change to the
+matcher reaches the bot the day it lands — as the 2026-09-15 ±2 → ±14 search
+widening did (the measurement and its radius decision live in §6). The corpus
+sweep that settled it, `tools/replay_bot/match_search_sweep.js`, is the harness
+to re-run before touching the search window again; `tools/replay_bot/match_search_check.js`
+does the same for a single strip and lineup.
+
+### 14.3 Modules
+
+| Module | Purpose | Pure |
+| --- | --- | --- |
+| `queue.js` | Drop wiped codes, skip attempted maps, order oldest first | yes |
+| `timeline.js` | Round structure off the scrubber; bar arithmetic; the sampling plan | yes |
+| `segment.js` | Observations to rounds, opening comp and hero pool | yes |
+| `vote.js` | One slot resolved by agreement across frames | yes |
+| `resolve.js` | Per-sample reads to a per-round per-slot result, presented hero chosen by playtime not sample count, + confidence flags | yes |
+| `attribute.js` | Player attribution: which FACEIT player occupies each HUD slot, abstaining rather than guessing | yes |
+| `nameplate.js` | Name-bar crops and OCR for attribution (shares `frames.js`'s `findNameRow`/`applyNameContrast` — see §6's dark-plate notes) | no |
+| `emit.js` | Per-side observations in the contribution schema (per-sample, and per-round after review) | yes |
+| `review_out.js` | The session review artifact + per-round portrait crops | no |
+| `review/server.js` | The local review page: render, correct, finalize, upload | no |
+| `calib.js` | Frozen HUD geometry and the smoke check | yes |
+| `crop.js` | Frame regions to matcher buffers; playhead; the events panel | no |
+| `match.js` | The shipped hero matcher, headless | no |
+| `grab.js` | Overwatch window to PNG | no |
+| `input.js` | Key delivery, and settling by measurement | no |
+| `timing.js` | Every tunable wait, namespaced, + the console's override file | yes |
+| `host.js` | One long-lived PowerShell, so a grab costs 204ms not 585 | no |
+| `driver.js` | **The only module that sends keys** | no |
+| `recorder.js` | Recorded menu input, replayed per code | part |
+| `screen.js` | Which static screen is showing, by fingerprint | no |
+| `clientstate.js` | Where the client is (in a replay / ESC menu / list), + clear a stuck ESC menu | no |
+| `phases.js` | The stages of a capture, each callable alone | no |
+| `capture.js` | One open replay, start to finish — a sequence over `phases.js` | no |
+| `fakeio.js` | `capture.js`'s I/O, backed by recorded frames | yes |
+| `corpus.js` | The labelled frames, and what a human saw in each | yes |
+| `run.js` | The queue loop; the CLI | no |
+| `codestack.js` | The rotating code stack (§14.3b): pull the top, push it to the bottom | yes |
+| `console/server.js` | Run one phase at a time against the live client, or the whole loop, watched and pausable (§14.3b) | no |
+| `console/hotkey.ps1` | The global pause/resume hotkey - a separate process the operator starts | no |
+| `capture_map.js` | One map, start to finish, using a calibrated bar instead of a duration | no |
+| `drag.js` | Seeking by dragging the scrubber (`--no-drag` falls back to counted presses) | no |
+| `score.js` | Scoreboard reading (markers → crop → OCR) | no |
+
+`driver.js` and `recorder.js` are the two that automate the client. Everything
+else reads pixels, which is ordinary use.
+
+A run writes the contribution (`out/<session>.json`) **and** a review artifact
+(`out/<session>.review.json`, with portrait crops under `out/<session>/`).
+`resolve.js` groups the map's samples into rounds and picks each slot's
+presented hero by **playtime**, not raw sample count — a segment's duration
+runs to the next segment's start (or the round's end for the last one), and
+whichever segment covers the most time wins. A fixed sampling grid makes raw
+vote count a poor stand-in for playtime whenever samples land unevenly around
+a swap: a live 2026-09-15 review found a 2-2 sample tie that was really an
+80/20 time split (one hero's two reads 100s apart early, the other's two reads
+40s apart right before the round ended) — a vote-count resolver called that
+contested, but nobody actually held the slot for half the round. `vote.js`'s
+raw frame agreement still exists and still drives its own flag (a
+single-segment slot whose frames disagreed more than usual, i.e. noise, not a
+swap) independently of which hero gets presented. Thin evidence — a slot with
+no playtime majority, a winner whose best frame still scored badly, an
+attribution the role constraint could not settle — becomes a flag, never a
+verdict. Nothing is dropped; a flagged slot keeps its best guess.
+
+`review_out.js` writes each map's initial `status` as `'reviewed'` rather than
+`'unreviewed'` when `resolve.js`'s `needsReview()` finds nothing but resolved
+swaps — a `contested` slot alone is not, by itself, a reason to hold up the
+whole map now that its winner is a real playtime majority, not a guess. Any
+other flag (`low-score`, `low-support`, `unknown-hero`,
+`attribution-abstained`, `round-unsampled`/`sparse-round`) still gates it. This
+exists because a captured batch is mostly clean maps with nothing to check —
+390 maps from one 2026-09-15 run had only 50 that needed an actual look once
+swap-only maps stopped counting, against 99 that would have under the old
+all-flags-count rule. `/upload` still refuses while any map is `'unreviewed'`
+(`review/server.js`), so this is what makes uploading a large batch a matter of
+reviewing the handful that need it, not clicking through every map that
+doesn't. `review/server.js` serves a localhost page over the
+newest artifact where the operator checks every map against its portrait strip,
+corrects heroes and players (corrections are appended as data and replayed at
+finalize, so the machine's original read stays visible), and then Finalize
+rebuilds the contribution one-observation-per-round via `emit.fromRounds` and
+Upload POSTs it to the worker as `replay-bot`.
+
+Alongside them sit tools whose only job is to look at things rather than do
+them: `contact_sheet.js` renders the ten crops of a frame, `probe_grab.ps1` and
+`probe_input.ps1` established how capture and input work at all, `probe_seek.js`
+measures how many seek presses land, `probe_limits.js` pushes the waits until
+they break, and `probe_chunk.js` does the same for chunk playback. Every number
+in §14.7 came out of one of these. `scrape_codes.js` pulls fresh replay codes
+off owreplays.tv (filtered to competitive role queue and the current patch);
+`sweep.js`, `verify_sheet.js` and `confusion_matrix.js` grade the matcher
+against recorded frames; `prune_frames.js` and `prune_expired_attempts.js` keep
+`frames/` and `state/attempts.json` from growing without bound. The **console**
+(§14.3b) is the interactive version — one phase at a time, with the timings on
+sliders.
+
+### 14.3a Running it without a client
+
+Twelve replay codes were spent on bugs in one night and three of them were the
+same shape: **the client was not where the code assumed, so the code carried on
+anyway.** Each was invisible in the output and obvious in the retained frames
+afterwards. A code imports exactly once, ever, so those frames are the only
+corpus there will ever be — and nothing could re-run the code against them.
+
+`capture.js` already takes everything that touches the machine as one injected
+object. `fakeio.js` is that object backed by a script instead of a rig: no
+PowerShell, no grabs, and **no waiting** — `sleep` is injected too, so the
+harness counts the waits rather than serving them and a refusal that took 1.1
+seconds live takes none here. `loadImage` is the real decoder, so the pixels the
+detectors see are the pixels they saw on the night.
+
+What it *records* matters as much as what it serves. Every grab, key and wait
+goes into a transcript, which is how a test asserts **"N was pressed before K"**
+rather than "the answer came out right" — the ordering bugs were never visible
+in the answers. A screen can also be a picture rather than a path, which is how
+"the frame is the wrong resolution" gets a test without a 7MB PNG.
+
+`corpus.js` is the other half: the frames that have actually been **looked at**,
+each with a note on what is in it. Nothing there was labelled by running a
+detector over it, because a detector graded against its own output grades
+nothing. The frames are gitignored (a few megabytes each); the labels are the
+part worth keeping, and the tests skip themselves when the frames are absent.
+
+`corpus_sweep.js` runs every detector over every retained frame and prints the table.
+That is what caught the panel detector in §14.7: a metric measured on three maps,
+clean on all three, and wrong on six frames already sitting on disk.
+
+### 14.3b The console
+
+`fakeio.js` reproduces a bug offline once the frames exist. The console is the
+other side of that: **run one phase at a time against the live client**, to see
+where it breaks and try a different wait. `node tools/replay_bot/console/server.js`
+serves a page on `127.0.0.1:8789` with a button per phase — the ones
+`clientstate.js` exposes (client state, clear-ESC, back-out-of-list) and the
+ones `phases.js` does (pause, events viewer, calibrate bar, measure rate,
+structure, seek, sample) — plus `import` and `leave`. Each run shows its result,
+its log, and the frame it took; a **sequence** control walks a span of phases
+with an optional checkpoint. The **timing** panel is a slider per `timing.js`
+knob, applied for one run via an in-place override (the console is
+one-phase-at-a-time, so the mutation is never concurrent) and saved to
+`state/console_timing.json`.
+
+`import` is the only phase that spends a code. It draws from a **rotating 20-code
+stack** in `state/console_codes.json`: the top is imported, then pushed to the
+bottom. The client keeps only its 10 most-recent imports, so by the time a code
+comes back to the top it has been evicted and re-imports cleanly — which is what
+makes the console usable for more than ten import cycles between wipes. The stack
+is per-machine and gitignored, and dies at a patch like any other code list.
+
+Same rules as `gui.js` and `review/server.js`: binds loopback, refuses a
+cross-origin or non-loopback request, one operation at a time.
+
+**The loop panel is the other mode: not one phase, the real thing, watched.**
+`/api/loop/start` spawns `node run.js --code-stack state/console_codes.json`
+as a child process - the actual queue/import/capture/leave loop (§14.4), not a
+reimplementation of it, cycling the code stack instead of the live feed so
+"leave it running overnight" costs nothing from the real pool. Manual phases
+and the loop both drive the mouse and keyboard, so each refuses while the
+other is active.
+
+Two ways to reach in without touching the mouse, and both are the same
+mechanism - a flag file, `state/loop_pause.flag`, which `run.js`'s loop checks
+**between maps only** (never mid-map: a map in progress always finishes) and
+polls while it exists:
+
+- `console/hotkey.ps1` registers a **global hotkey** (default Ctrl+Alt+P) via
+  `RegisterHotKey`/`WM_HOTKEY` on a hidden form - the same Win32-via-Add-Type
+  pattern `play_input.ps1` uses - so it fires with Overwatch focused. It
+  toggles the flag directly (create/delete) and beeps low for paused, high for
+  resumed, since the point is not having to look at a screen. It is a separate
+  process the operator starts alongside the console; nothing spawns it
+  automatically.
+- The page's Pause/Resume buttons write the same file over HTTP.
+
+Either way, `run.js` also reloads `timing.js` at that same checkpoint, so a
+slider changed on the page while paused - chunk speed, a quiesce, anything -
+applies to the next map without restarting the loop. `chunkSpeed`/`escWait`/
+`loadSettle` in `run.js` read `TIMING` live at every map for exactly this
+reason unless an explicit CLI flag pins one. Stop is the same checkpoint by a
+different door: the console sends SIGINT to the child (finishes the current
+map, then exits); a second SIGINT, or the page's "force stop", exits
+immediately.
+
+Codes cycled through `--code-stack` never touch `state/attempts.json` - that
+ledger's whole point is "this code can never be imported again", which is
+backwards for codes deliberately meant to be reused. The loop keeps its own
+**per-code** failure count instead, in memory and scoped to the run: each code's
+post-import failures are counted (never the import or an environmental failure -
+a code that never entered the 10-import ring is safe to retry next rotation),
+and at `FAIL_RETRY_CAP` (3) the code is **retired for the run** — logged and
+skipped, not deleted: the rotation pulls it and pushes it straight to the
+bottom, so the stack keeps its shape while a persistently-bad code (corrupted
+replay) stops costing attempts. If every code retires, the run stops rather than
+spinning on skips. The two-consecutive-failures guard still applies in loop
+mode (a stuck client fails every code), but a retired code is not a failure of
+the client, so a skip neither advances nor resets the streak.
+
+### 14.4 The run loop
+
+`run.js` walks the queue: import a code, capture the map, leave, repeat.
+
+1. `queue.pending()` drops wiped codes and anything already attempted, oldest
+   game first.
+2. The code is written to the attempt ledger **before** it is opened.
+3. The client's screen is normalised first — the import chunk navigates from
+   wherever it is, so a leftover ESC menu or replay-history list sends its
+   clicks to the wrong controls. Each is recognised by fingerprint and backed
+   out of. `clearEscMenu` presses ESC up to `ESC_TRIES` (3) times, re-checking
+   between each, because one press is not reliably taken when it lands mid
+   animation; if the menu outlasts them the map is failed, but a frame tagged
+   with the code is kept first (a 2026-09-10 "will not close" failure left
+   nothing to diagnose from).
+4. `recorder.play('open-import')` clicks Import, pastes the code, confirms and
+   watches; the loop waits for the playhead to appear, which is what says a
+   replay is on screen.
+5. On the first map only, `set-interval` runs inside the capture (§14.9).
+6. `capture.js` reads the map.
+7. `emit.js` turns the samples into a contribution record, written after **every**
+   map rather than at the end of the night.
+8. `recorder.play('leave-replay')` returns to the replay history tab — but only
+   if the playhead says a replay is actually open, since those clicks mean
+   something else on the menu screen.
+
+Two guards sit outside that sequence. **Two consecutive failures stop the run**,
+because a client stuck in an unexpected menu will otherwise burn every remaining
+code doing nothing. In loop mode (§14.3b) a second, per-code guard sits alongside
+it: a code that keeps failing after import is retired for the run at
+`FAIL_RETRY_CAP` instead of coming back forever. And the **stale-feed guard**
+refuses a `data.json` that was not built today: codes die at every patch, a stale
+feed lists dead ones while looking perfectly healthy, and pointing an unattended
+run at it would spend the entire queue on codes that cannot work.
+
+### 14.5 One attempt per ring-window
+
+Importing a code the account already holds does not overwrite or no-op — the
+client warns and requires scrolling down to select the existing entry by hand,
+which ends an unattended run. But "already holds" is a **ring of the 10
+most-recent imports**: the client keeps no import history beyond that, so a code
+is only non-importable while it is still in the window. Ten newer imports evict
+the oldest, and an evicted code re-imports cleanly. So:
+
+- the account must start with **no league codes imported**;
+- within a window, **each code gets one attempt per run**, which is why the
+  ledger is written before the import and not after — a crash between opening
+  and finishing must not leave a code looking untried;
+- a failed map is **retried automatically on later runs** up to `FAIL_RETRY_CAP`
+  (3) — `isDoneEntry` keeps a `failed` entry under the cap eligible so the next
+  run picks it up again — and is only reported as a loss once the cap is hit.
+
+What makes that survivable is that every frame is kept. A better matcher can
+re-read a map with no client time and no code; only a broken *grab* is
+unrecoverable, which is why the smoke check, the playhead check and the events
+panel check all refuse loudly rather than carrying on.
+
+### 14.6 Getting into a replay is recorded, not hardcoded
+
+Seeking is arithmetic, but the menus around it are mouse work with no keyboard
+route. Those coordinates are **recorded from the operator's own successful
+clicks** (`recorder.js`) rather than read off a screenshot: screenshots of this
+rig arrive at 2557×1437 while the client area is 2560×1440, so a coordinate
+taken from one is wrong by a few pixels in an unknown direction.
+
+A **chunk** is one short named step. Three of them close the loop:
+`open-import`, `set-interval` (once a session), and `leave-replay` — leaving a
+replay lands back on the replay history tab, so nothing needs to navigate there.
+
+Recording uses low-level mouse and keyboard hooks rather than polling key state.
+The polled first version was blind to the mouse wheel, flattened a drag into a
+click at its starting point, and only saw keys on a fixed watch list — three
+separate failures while recording a single options menu. Hooks see every key by
+virtual-key code, wheel notches, and the path of a drag; the code travels with
+each key so playback never has to reverse a name.
+
+The replay code is **pasted, not typed**: a recorded `Ctrl+V` becomes the
+`$CODE` placeholder, and playback sets the clipboard to that map's code before
+sending the keystroke. One clipboard write cannot half-land the way six
+keystrokes can.
+
+Coordinates are stored **relative to the client area**, so a moved window is
+harmless. A resized one is refused rather than scaled — a scaled click lands
+plausibly close to its button and on nothing. Recording only happens while
+Overwatch is foreground, which keeps the operator's alt-tab out of the chunk.
+
+`gui.js` serves `gui.html` on `127.0.0.1:8787` as a front end for the same
+functions — which chunks are missing, Record/Check/Play/Show/Delete per chunk,
+and the event listing after each recording. It binds to loopback because what it
+exposes is "run PowerShell that clicks in the game", holds one operation at a
+time since recording and playback both own the machine's input, and passes every
+name through `recorder.safeName` before it reaches a file path. **Check** walks
+a chunk without sending anything, which matters because every real attempt at
+`open-import` spends a code.
+
+### 14.7 Measured facts this is built on
+
+Every one of these was found by measuring on the rig, and every one is invisible
+until you look. Several looked entirely healthy while being wrong.
+
+**Capture and input**
+
+- **`PrintWindow` with `PW_RENDERFULLCONTENT` captures the window while it is
+  fully occluded** (mean luma ~55); screen-copy returns ~5 the moment anything
+  covers it. This is what allows capture to happen in the background.
+- **Input needs focus.** `PostMessage`, `SendMessage` and `AttachThreadInput`
+  were all tried against an unfocused client; none delivered. Hence the bot is
+  an overnight job.
+- **`SetProcessDPIAware()` must run before any window call.** Without it a
+  125%-scaled 2560×1440 display reports 2048×1152, and geometry frozen at the
+  real size lands every crop in the wrong place. Both numbers look plausible.
+
+**Is a replay even on screen**
+
+- **Only the portrait band is read, and not reading it cost a code.** The tint
+  used to be averaged over the whole plate box, which also takes in the name
+  plates, the health pips, and whatever the map shows in the gaps between the
+  five cells. On a bright blue map that cancels team B's red outright: **4.8
+  against a threshold of 15**, on a replay open on screen at the time. `run.js`
+  reads this to decide whether a replay loaded, so it waited its 90 seconds,
+  gave up and spent the code. That was **RCR3NK**.
+- **The fix was the crop `cells` already used, for the reason already written
+  down** - *"below that sit the name plate and the health pips, and both are
+  poison"*. `hudTint` was the one place that never got the memo. Over every
+  frame known to be a replay because its events panel is open, the dimmest now
+  reads **31.3**, against exactly 0.0 for a loading screen, a black frame and
+  the ESC menu. **The threshold of 15 never moved; the region had drifted.**
+
+**The scrubber**
+
+- **It only draws round breaks while the events viewer is open**, and that
+  viewer needs **N then K, every time** — the media controls must be up before K
+  will open the panel. A run that pressed only K measured 0.023 before and
+  0.023 after, having done nothing, and refused two maps.
+- **N is a toggle, and the check that it went the right way is polled, not read
+  once.** The controls fade in over a beat and the knob at the start position
+  takes a moment to draw; a single read ~400ms after N saw nothing, decided N
+  had failed, pressed N *again* — hiding the controls — and then K went to a
+  closed panel. Two more codes (XTK7MM, 4TNEAJ, 2026-09-10), both in the GET
+  READY phase where the scenery in the bar's own pixel rows had bright runs
+  wide enough to pass as the knob. The knob is now bounded at **33–100px** (every
+  one actually drawn measures 39–65), and `mediaVisible()` polls for it for
+  ~2.5s before concluding N misfired.
+- **The panel's state is read from its structure, never its brightness.** It is
+  translucent, so the box follows the map behind it: a dark map went 0.045
+  closed to 0.770 open, a bright one 0.488 to 0.519, and a neon one 0.548 *down*
+  to 0.519. Closed readings span 0.045-0.548 and open ones 0.519-0.770 -
+  overlapping in both directions, so neither a level nor a change can separate
+  them, and each attempt at one cost live codes.
+- **Structure meant "flat rows" for one day, and that was wrong too.** Counting
+  uniform rows separated the three maps that were to hand perfectly - closed
+  0.000/0.120/0.000 against open 0.595/0.690/0.345 - and the offline sweep then
+  found six frames on disk with no panel on them at all that read as open:
+  a night sky, a loading screen, a black frame, and **the ESC menu**. All four
+  are perfectly uniform. Requiring the rows to be **light** as well fixed that.
+- **Then the round rows turned out not to be the same panel on every map.**
+  Push and Flashpoint play one long round, Control up to three, Escort and
+  Hybrid at least two - so a fraction taken over the ROUND rows means something
+  different on each. Three-round frames read 0.340 and up; a live **one-round**
+  map read **0.170 against a threshold of 0.15**, on a panel that was plainly
+  open on screen.
+- **So the reading is taken off the panel's two dropdowns**, which are there
+  whenever it is open, whatever the map. They are measured as two boxes because
+  of the gap between them - a row crossing it goes white, dark, white, which is
+  not uniform - and the weaker of the two is the answer, so a lucky bright patch
+  in one place cannot carry it. Over every labelled frame the weakest open
+  reading is **0.587** and nothing shut registers **anything at all**.
+  **Three maps is not a measurement, and neither is one map type.**
+- **Breaks are found by colour, not brightness.** Event ticks and the playhead
+  are bright white; the blue channel's lead over red is clean.
+- **A 20-second step is not a fixed number of pixels** — 45px on a 17-minute
+  Control map, 69px on an 11-minute Escort one — so the bar is calibrated per
+  map, which also measures the map's duration.
+
+**Seeking**
+
+- **A batch of presses landed one step, not *n*.** The six frames the first live
+  run retained all read the same ten heroes, which looked plausible for a
+  Control map. The playhead said otherwise: it advanced exactly one step between
+  consecutive samples whether eight presses had been sent, nine or ten. The run
+  never left the first two minutes and nothing in its output looked wrong.
+- **The cause is that the client ignores a seek key arriving while it is still
+  seeking**, silently. Measured landing rates for five presses: 45ms and 150ms
+  land 1, 300ms lands 3, 600ms and 1000ms land 5.
+- **There is no clean cliff.** Bisecting for one, twice, gave two different
+  answers: 550ms dropped a press in one run and landed all five in the next.
+  Acceptance is a race against however long that seek takes, so any probe here
+  must measure a **rate** over several trials. `SEEK_GAP_MS` is 700, above every
+  failure yet seen, and `driver.seekTo` verifies the result regardless — when
+  correction runs out of attempts, **the measurement wins**, and a misplaced
+  sample is dropped rather than labelled with a time it was never at.
+- **Seeks are dragged, not pressed, by default.** `drag.js` turns a target
+  second into the pixel it sits at on this map's measured bar and `drag.seeker`
+  drives the scrubber there in one gesture — any distance for a flat ~3s,
+  against ~0.7s per fixed-interval press. `probe_drag.js` measured the landing
+  at ≤0.3s across forward and backward seeks once the drag path was split so no
+  cursor hop exceeds `MAX_HOP_PX` (a single 690px jump lost the client's
+  tracking and landed 100s short). The keypress path in `driver.seekPlan`
+  stays as the fallback: `seeker` declines to it before the bar is calibrated,
+  when the playhead is unreadable, or when the target is off the bar, and the
+  last correction attempt after repeated drag misses forces it. `run.js
+  --no-drag` forces keys for the whole run.
+- **Every tunable wait lives in `timing.js`.** The numbers that were literals
+  across `capture.js`, `input.js`, `drag.js` and `run.js` — the seek gap, the
+  post-seek and sample quiesces, the media-controls poll, the ESC retries, the
+  load settle, the chunk speed, and the drag gesture's five waits (`prePress`,
+  `postPress`, `perPoint`, `dwell`, `hopPx`) — are namespaced entries in
+  `timing.js`, each keeping its measured history. It merges
+  `state/console_timing.json` over the defaults when a tuning session has
+  written one (per-machine, gitignored); `run.js`'s `--sample-quiesce` /
+  `--load-settle` / `--esc-wait` / `--chunk-speed` still override per run.
+  Structural constants that have never moved stay as plain consts. This is the
+  config a pipeline-wide tuning/debug console reads and writes.
+
+**The client's own settings**
+
+- **The time-skip interval reverts at every client restart.** Replay viewer
+  options are a known Blizzard bug: they apply while the client runs and are not
+  saved. An interval set to 60s last night is 20s tonight, with nothing on
+  screen to say which, and assuming wrong puts every sample at a third or triple
+  of its intended time — inside the wrong round, looking entirely reasonable.
+
+**Time**
+
+- **A grab is 497ms through a fresh PowerShell and only 156ms of that is work.**
+  A bare spawn is 211ms, one that runs `Add-Type` is 341ms. Through the
+  long-lived host a grab is **204ms** against 585ms.
+- **Waiting before a grab does nothing.** Reading a seek immediately scores the
+  same as reading it 640ms later, at every delay tried, across two runs — a grab
+  is itself half a second of spawn and `PrintWindow`, so the wait had already
+  happened. If grabbing ever gets fast, measure this again.
+- **Reading a frame costs 53ms of our own CPU** — 28ms of it decoding the PNG,
+  11ms matching ten cells. Nothing on our side is worth optimising.
+
+### 14.8 Calibration is frozen, and its provenance is the point
+
+HUD geometry is expressed as fractions *of the calibration box*, so the box must
+be one `auto-calibrate` actually emitted. Auto-calibrate reports "10/10
+portraits confident" for a detection it has **not yet committed** — read
+`boxes.a` before pressing **Use boxes** and you get the `AUTO_STRIPS` default,
+`(129.536, 119.808, 660.224, 97.2)`, which is shifted half a portrait right and
+drops onto the health pips.
+
+`tools/replay_bot/contact_sheet.js` renders the ten crops of a frame so the
+geometry can be looked at rather than believed. Every cell should be a centred
+face.
+
+**Side b currently reads about 0.11 lower than side a.** Swept against both
+maps' retained frames, side a means 0.91/0.82 and side b 0.75/0.75, and shifting
+box b left by 1px recovers it to 0.86/0.85 — the same offset on two independent
+maps, so it is geometry rather than a map. It has **not** been hand-corrected:
+mean match score is not accuracy, the curve is jumpy because a small shift flips
+a cell to a different hero entirely, and fitting numbers to a proxy is how the
+last calibration went wrong. The fix is a bootstrap re-run for side b.
+
+### 14.9 Sampling
+
+The scrubber states the round structure, so nothing is inferred: breaks are read
+off the bar, and samples are placed **3 per round**, or **5 across the single
+segment** where a map has one. Points sit strictly inside a segment — a round's
+first and last instants are setup and aftermath.
+
+Play segments shorter than 30s are **setup, not rounds**. Every map opens with
+one, and with a 60-second step the only reachable grid point near such a segment
+is 0:00 — so the bot sampled the very start of the map, where no portraits are
+drawn, and read ten cells of confident nonsense.
+
+Each map's capture therefore runs: pause the replay (measured by diffing two
+frames, since a playing replay never settles and every settle before the first
+pause cost seven seconds), open the events viewer, calibrate the bar by pressing
+`B` and one `X` and watching the knob, then measure what a press is worth in
+seconds by timing playback against the moving playhead. Positions are counted in
+presses rather than estimated, and every seek is checked against the playhead
+afterwards.
+
+### 14.10 What a map is made of
+
+Roughly, per map, on this rig:
+
+| | cost |
+| --- | --- |
+| `open-import` chunk | ~6.3s, mostly recorded waits — `--chunk-speed` divides them |
+| the client loading the replay | ~2.2s, not ours |
+| pausing, the events viewer, bar calibration | a few seconds each |
+| measuring the interval | ~8s, first map of a session only |
+| each sample | a grab, the key gaps, and 53ms of CPU |
+
+The two costs that resist optimisation are the **700ms between seek presses**,
+which is a probabilistic property of the client, and the **client's own load
+time**. Everything else has been measured and cut at least once, and
+`probe_limits.js` and `probe_chunk.js` exist so it can be done again rather than
+argued about.
+
+### 14.11 Output
+
+The bot writes the normal contribution schema into its **own contributor file**
+with `tool_version: "replay-bot-0.1"`, so merge can weight it, audit it, or drop
+it wholesale — and bot rows can be diffed against an operator's on the same map.
+
+`maps[].observations[]` are **per side, per sample**, carrying hero **GUIDs**.
+`owdb` derives comps downstream. Fields the bot cannot honestly read (`pairs`,
+`sub_map`, `phase`) are emitted as the absences the merge already tolerates,
+never guessed — a wrong `sub_map` is worse than none.
+
+Cells scoring below 0.6 are flagged in the run output rather than quietly
+averaged, and a sample whose first read scores badly is read a second time.
+
+`out/` and `state/` are gitignored. The attempt ledger in particular is
+per-machine: it records which codes *this* client currently holds in its
+10-import ring, and since the ring is per-account it must never be shared
+between rigs or resolved by a merge.
+
+### 14.12 Terms of service
+
+Driving the client with synthetic input is **prohibited by the Blizzard EULA**,
+which defines a Bot as software "not expressly authorized by Blizzard, that
+allows the automated control of a Game or part of a Game". There is no carve-out
+for replay or spectator mode. The operator accepted this on a disposable
+account; it is recorded here so nobody later mistakes it for an oversight, and
+it is why the game-touching code sits in `driver.js` and `recorder.js` alone.

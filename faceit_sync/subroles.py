@@ -53,8 +53,12 @@ SUBROLE: dict[str, str] = {
     "LifeWeaver": MAIN_SUPPORT, "Lucio": MAIN_SUPPORT, "Mercy": MAIN_SUPPORT,
     "Mizuki": MAIN_SUPPORT, "Wuyang": MAIN_SUPPORT,
     # Flex support seat. Moira here per the curator (corrected from MS).
-    "Ana": FLEX_SUPPORT, "Baptiste": FLEX_SUPPORT, "Illari": FLEX_SUPPORT,
-    "Kiriko": FLEX_SUPPORT, "Moira": FLEX_SUPPORT, "Zenyatta": FLEX_SUPPORT,
+    # Doctrine: operator-added 2026-09-15 (custom:doctrine, unreleased hero
+    # trial'd at BlizzCon, picked in FACEIT games it wasn't meant to be
+    # available in) - seat is a placeholder guess, not curator-confirmed.
+    "Ana": FLEX_SUPPORT, "Baptiste": FLEX_SUPPORT, "Doctrine": FLEX_SUPPORT,
+    "Illari": FLEX_SUPPORT, "Kiriko": FLEX_SUPPORT, "Moira": FLEX_SUPPORT,
+    "Zenyatta": FLEX_SUPPORT,
 }
 
 # Commonly played from both DPS seats; the dict above holds the primary.

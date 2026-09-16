@@ -15,7 +15,7 @@
 // which page is running it, so stopCapture takes the teardown from
 // ctx.onStop: index.html passes releaseClaim, scrim.html passes null.
 //
-// ctx = {doc, video, onStop} - only those three. REF_W/REF_H/PAD/LF/TF (the
+// ctx = {doc, video, onStop} - only those three. REF_W/REF_H/PAD/LF/TF/RF (the
 // reference-template geometry, loaded from refs.json) and boxes/
 // selectedCode (calibration + UI state) are deliberately NOT part of ctx:
 // they're page-level globals each page declares identically before its
@@ -64,7 +64,45 @@
   // brighter" or "which is first" test: the bar out-scores a short name on
   // brightness, and the hero portrait sits ABOVE the name, so both of those
   // shortcuts were tried and both picked the wrong band.
-  var NAME_FILL_MAX = 0.42;
+  //
+  // 2026-09-15: that fill test used to be against a FIXED ceiling (0.42),
+  // which assumed the plate under the name is always dark. A light-blue or
+  // saturated-red team-colour plate breaks that assumption exactly the way a
+  // fixed brightness value once broke the scrim scoreboard's read (see
+  // scrim.html's scoreCanvas comment) - the whole row, glyphs and gaps alike,
+  // sits above a flat 0.42 ceiling, so real text gets zeroed out or shredded
+  // into a one-pixel sliver. The fix is the same one that fixed the
+  // scoreboard: judge a row against its OWN LOCAL surroundings, not a value
+  // that only held for the plates it was tuned on. NAME_FILL_MARGIN is how
+  // much fuller a row may be than the plate immediately around it (sampled
+  // from a window of nearby rows, gapped so a text row's own coverage does
+  // not inflate its own baseline) and still count as candidate text.
+  //
+  // specs/2026-09-15-nameplate-fill-heuristic-handoff.md root-caused this;
+  // tools/replay_bot/nameplate_fill_sweep.js is the harness that measured
+  // the replacement - a global-median-relative ceiling never recovered the
+  // fragmented case at any tested margin (ruled out), while both a raised
+  // fixed ceiling and this local one recovered all 3 known-bad crops and
+  // plateaued at an identical, bounded ~11.7% footprint of the 780-strip
+  // 2026-09-15 corpus once the margin/ceiling was generous enough. The local
+  // form is kept because a fixed ceiling is the same kind of number that
+  // already failed once (0.42 itself) and would need retuning again for the
+  // next plate brighter than anything measured so far; a local margin
+  // adapts to a plate's own brightness without a human in the loop.
+  //
+  // NAME_FILL_FLOOR keeps the OLD fixed value as a floor under the new local
+  // one, not a replacement for it: frames.test.js's synthetic dark-plate case
+  // caught a real regression here first - a wide, genuinely near-black band
+  // (this repo has no adversarial-enough real crop for it, only a synthetic
+  // one) makes the local baseline near 0, so a margin alone can compute a
+  // ceiling BELOW 0.42 and re-zero text that the original constant always
+  // passed. `localBg + margin` only ever RAISES the ceiling above the floor,
+  // for a plate brighter than the floor already assumed; it never lowers it.
+  // Re-run frames.test.js, nameplate_fill_sweep.js, and
+  // tools/real_frame_eval/rowfind_parity.py's dark-plate corpus (wherever
+  // screenshots/ is available) before changing any constant below.
+  var NAME_FILL_FLOOR = 0.42;
+  var NAME_FILL_MARGIN = 0.30;
   var NAME_RUN_FRAC = 0.35;   // rows scoring this share of the peak join a run
 
   // findNameRow(rgba, w, h) -> { y, h } | null
@@ -73,9 +111,9 @@
   // Returns the text row's position within that band.
   //
   // Text is a row with many horizontal light/dark transitions that does not
-  // fill the strip; the run of such rows sitting in the quietest surroundings
-  // wins, because the HUD draws the names on a dark plate and nothing else in
-  // the band has empty rows above and below it.
+  // fill much MORE of the strip than the plate around it already does; the
+  // run of such rows sitting in the quietest surroundings wins, because
+  // nothing else in the band has empty rows above and below it.
   function findNameRow(rgba, w, h) {
     if (!w || !h || !rgba || rgba.length < w * h * 4) return null;
     var lum = new Uint8Array(w * h), hist = new Uint32Array(256), i, j, y, x;
@@ -100,7 +138,24 @@
         prev = v;
       }
       fill[y] = on / w; tr[y] = ch / w;
-      score[y] = fill[y] <= NAME_FILL_MAX ? tr[y] : 0;
+    }
+
+    // Each row's own LOCAL plate baseline: mean fill of a window of nearby
+    // rows, gapped around the row itself so a genuine text row's own
+    // coverage cannot inflate the baseline it is being judged against. The
+    // window scales with the band's height the same way the scoreboard's
+    // blur radius scales with its crop - both are standing in for "about the
+    // size of a glyph's neighbourhood," not a fixed pixel count.
+    var WIN = Math.max(6, Math.round(h * 0.2)), GAP = Math.max(2, Math.round(WIN * 0.25));
+    for (y = 0; y < h; y++) {
+      var s = 0, n = 0;
+      for (var k2 = Math.max(0, y - WIN); k2 <= Math.min(h - 1, y + WIN); k2++) {
+        if (Math.abs(k2 - y) <= GAP) continue;
+        s += fill[k2]; n++;
+      }
+      var localBg = n ? s / n : fill[y];
+      var ceiling = Math.min(0.97, Math.max(NAME_FILL_FLOOR, localBg + NAME_FILL_MARGIN));
+      score[y] = fill[y] <= ceiling ? tr[y] : 0;
       if (score[y] > max) max = score[y];
     }
     if (max <= 0) return null;
@@ -172,6 +227,63 @@
     return { x: lo, w: hi - lo };
   }
 
+  // applyNameContrast(d) -> undefined (mutates d in place)
+  //
+  // `d` is an ImageData.data RGBA buffer for a name crop, already upscaled.
+  // Stretches luminance to the crop's own observed 2nd-98th percentile range
+  // instead of a fixed formula.
+  //
+  // 2026-09-15: the previous recipe, `(g-128)*1.5+140` clamped to [0,255],
+  // assumed glyph and plate sit far apart in luminance - true for a dark
+  // plate (background near 0, glyph near 250, the pair this was tuned
+  // against) but false for a bright/team-coloured one, where both already
+  // sit near 255 and the fixed formula clips them together to flat white:
+  // findNameRow's fix (same date) locates the row correctly, but there was
+  // nothing left in the crop for tesseract to read. Stretching to what the
+  // crop ITSELF actually contains adapts to either case without needing to
+  // know which one a given plate is.
+  //
+  // Measured (tools/replay_bot/nameplate_contrast_sweep.js): on 20 known-bad
+  // bright-plate crops this raises slots landing a confident name match from
+  // 5% to 11% - a real but partial recovery, not a full fix (most of these
+  // crops are still unreadable; some may be a harder problem than contrast,
+  // e.g. an outlined/embossed glyph style that stays hollow even at full
+  // contrast). On 20 already-good dark-plate crops it is not merely neutral
+  // but BETTER - 84/100 confident matches against the old formula's 79/100 -
+  // with a single isolated regression, so this replaces the old recipe
+  // everywhere rather than branching on plate brightness. A
+  // stretch-then-morphological-close variant (meant to solidify a hollow
+  // glyph into a filled one) measured WORSE (7%) and was dropped - re-run
+  // that harness before trying morphology again.
+  function applyNameContrast(d) {
+    var n = d.length / 4, i, p;
+    if (!n) return;
+    var lum = new Float32Array(n);
+    for (i = 0, p = 0; p < d.length; i++, p += 4) {
+      lum[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+    }
+    var sorted = Float32Array.from(lum).sort();
+    var lo = sorted[Math.floor(n * 0.02)];
+    var hi = sorted[Math.floor(n * 0.98)];
+    var range = hi - lo;
+    // A featureless crop (no row, no glyph, just plate) has next to no
+    // spread between its 2nd and 98th percentile - stretching THAT to fill
+    // 0-255 would manufacture contrast out of sensor noise, not reveal any.
+    // Left as plain luminance instead of amplified into speckle; either way
+    // tesseract reads nothing from it, but this stays predictable rather
+    // than surprising (findNameRow already returns null rather than invent
+    // a row for exactly this case - same instinct, applied here).
+    if (range < 8) {
+      for (i = 0, p = 0; p < d.length; i++, p += 4) d[p] = d[p + 1] = d[p + 2] = lum[i];
+      return;
+    }
+    for (i = 0, p = 0; p < d.length; i++, p += 4) {
+      var v = (lum[i] - lo) * 255 / range;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+      d[p] = d[p + 1] = d[p + 2] = v;
+    }
+  }
+
   function make(ctx) {
     // Reused across every ensureWork/cellGrayPadded call, same as the
     // original module-scoped `work`/`wctx` pair each page declared once.
@@ -185,7 +297,7 @@
     }
 
     function cellGrayPadded(frame, cell) {
-      var fx = cell.x + cell.w * LF, fy = cell.y, fw = cell.w * (1 - LF), fh = cell.h * TF;
+      var fx = cell.x + cell.w * LF, fy = cell.y, fw = cell.w * (1 - LF - RF), fh = cell.h * TF;
       wctx.drawImage(frame, fx, fy, fw, fh, 0, 0, work.width, work.height);
       var d = wctx.getImageData(0, 0, work.width, work.height).data;
       var g = new Float32Array(work.width * work.height);
@@ -262,8 +374,8 @@
     // is the brightest thing in it - real tesseract returned letter-soup for 75
     // of 90 slots. With the located row it reads 77 of 90 outright, and every
     // one of the 90 resolves once assign.js applies the role constraint.
-    // Grayscale + 6x upscale + a light contrast stretch lift the ~10px text
-    // enough for OCR.
+    // Grayscale + 6x upscale + applyNameContrast's percentile stretch lift
+    // the ~10px text enough for OCR.
     function nameCanvas(frame, cell, row) {
       var padX = Math.max(4, Math.round(cell.w * 0.05));
       var sx = Math.max(0, cell.x - padX), sw = cell.w + 2 * padX, sc = 6;
@@ -280,11 +392,8 @@
       cv.width = Math.max(1, Math.round(sw * sc)); cv.height = Math.max(1, Math.round(sh * sc));
       var cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
       cx.drawImage(frame, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
-      var im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
-      for (var i = 0; i < d.length; i += 4) {
-        var g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        g = (g - 128) * 1.5 + 140; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i] = d[i + 1] = d[i + 2] = g;
-      }
+      var im = cx.getImageData(0, 0, cv.width, cv.height);
+      applyNameContrast(im.data);
       cx.putImageData(im, 0, 0);
       return cv;
     }
@@ -379,7 +488,7 @@
     };
   }
 
-  var Mod = { make: make, findNameRow: findNameRow, findNameSpan: findNameSpan };
+  var Mod = { make: make, findNameRow: findNameRow, findNameSpan: findNameSpan, applyNameContrast: applyNameContrast };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Mod;
   else global.OWDBFrames = Mod;

@@ -933,6 +933,254 @@ async function main() {
     check('board: rows join to players by name', clean.named === 10, JSON.stringify(clean));
 
     await ctx.close();
+
+  // ---- the replay-code guard, on the LEAGUE page ------------------------
+  //
+  // The wrong-match guard stopped being a button on 2026-09-08 and now runs on
+  // a map's first snapshot. Everything it protects is downstream and invisible:
+  // a capture filed against the wrong match names the wrong teams and players
+  // and gets published, with nothing afterwards to say it happened. So the one
+  // thing worth proving in a browser is that a disagreement actually STOPS the
+  // snapshot, and that agreement does not interrupt.
+  //
+  // readReplayCode is a top-level declaration and so stubbable; the modal is
+  // driven through its real DOM, as above.
+  {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto(BASE + '/capture/index.html', { waitUntil: 'load' });
+    await p.waitForTimeout(800);
+
+    check('code guard: the manual Read code button is gone',
+      await p.evaluate(() => !document.getElementById('readcode')));
+    check('code guard: OWDBReplayCode exposes the verdict',
+      await p.evaluate(() => typeof (window.OWDBReplayCode || {}).checkAgainstSelected === 'function'));
+
+    // Two codes that both exist in the feed: one selected, a different one on
+    // screen. That is the case the guard exists for - a read matching nothing
+    // abstains and must never block.
+    const setup = () => p.evaluate(() => {
+      window.__feed = [{ code: 'D9X9N2', match_id: 'm1', team_a: 'Alpha', team_b: 'Bravo' },
+                       { code: 'B4K2M1', match_id: 'm2', team_a: 'Delta', team_b: 'Echo' }];
+      // DATA.codes is the whole feed; currentCodes() is the operator's FILTERED
+      // working list. They are deliberately different here - see the filtered
+      // check below, which is the bug this stub originally hid by making them
+      // identical.
+      DATA.codes = window.__feed;
+      window.currentCodes = () => window.__feed;
+      window.selectedCode = () => window.__feed[1];          // operator picked B4K2M1
+      window.readReplayCode = async () => window.__read;
+      session = { code: window.__feed[1], submaps: [], phased: false, round: 1,
+        sub: null, attacker: null, attackerConfirmed: true, sideResolved: true,
+        snaps: [], lastKept: null, history: [], codeChecked: false, codeTries: 0 };
+    });
+
+    // AN EXACT READ CORRECTS THE SELECTION - it does not ask. The screen is the
+    // fact; the dropdown pick is a hint. A question with one right answer spends
+    // the operator's attention and leaves a way to answer it wrongly, and a kept
+    // mismatch is silent, permanent and undetectable downstream.
+    await setup();
+    await p.evaluate(() => {
+      window.__switched = null;
+      window.onCode = () => { window.__switched = window.__sel; };   // record the switch
+      window.currentCodes = () => window.__feed;
+      Object.defineProperty(document.getElementById('code'), 'value', {
+        configurable: true,
+        set(v) { window.__sel = window.__feed[+v] && window.__feed[+v].code; },
+        get() { return '1'; },
+      });
+      window.__read = 'D9X9N2';
+      window.__g = ensureCodeChecked();
+    });
+    const corrected = await p.evaluate(async () => ({ ok: await window.__g,
+      switched: window.__switched,
+      modal: !!document.querySelector('#mback.open'),
+      verdict: session.codeVerdict }));
+    check('code guard: an exact read switches to the screen, without asking',
+      corrected.switched === 'D9X9N2' && corrected.modal === false,
+      JSON.stringify(corrected).slice(0, 220));
+    check('code guard: the switch voids the snapshot that triggered it',
+      corrected.ok === false, JSON.stringify(corrected).slice(0, 160));
+    check('code guard: and it says which replay it moved to',
+      !!corrected.verdict && corrected.verdict.ok === true
+        && /D9X9N2/.test(corrected.verdict.text), JSON.stringify(corrected.verdict));
+
+    // Agreement must be silent. This page already had a pop-up problem; a
+    // confirmation on every map's first snapshot would be a regression.
+    await setup();
+    await p.evaluate(() => { window.__read = 'B4K2M1'; window.__g = ensureCodeChecked(); });
+    const agree = await p.evaluate(async () => ({ ok: await window.__g,
+      modal: !!document.querySelector('#mback.open') }));
+    check('code guard: the right code does not interrupt',
+      agree.ok === true && agree.modal === false, JSON.stringify(agree));
+
+    // A READ TOO WEAK TO ACT ON IS STILL WORTH ASKING ABOUT. On 2026-09-08 the
+    // operator captured 04C5WM (Nepal, game 1) off a D5T959 (Neon Junction,
+    // game 3) replay: both in the feed, same match, same two teams, so every
+    // roster name and the side detection resolved perfectly. Three of the five
+    // crops had read D5T959 and the page discarded it as "code unreadable".
+    // It must not switch on that (code_guard_crops proves the same shape can
+    // carry a wrong code) - it must ask.
+    await setup();
+    await p.evaluate(() => {
+      window.__switched = null;
+      window.onCode = () => { window.__switched = window.__sel; };
+      window.__read = null;                       // the read itself failed...
+      LAST_CODE_READ = { why: 'partial', raw: '', box: null, weak: 'D9X9N2' };
+      window.__g = ensureCodeChecked();
+    });
+    await p.waitForTimeout(120);
+    const weakAsk = await p.evaluate(() => ({
+      modal: !!document.querySelector('#mback.open'),
+      body: (document.querySelector('#mback .mbody') || {}).textContent || '',
+      switched: window.__switched,
+    }));
+    check('code guard: a weak read asks instead of discarding it',
+      weakAsk.modal === true && /D9X9N2/.test(weakAsk.body),
+      JSON.stringify(weakAsk).slice(0, 220));
+    check('code guard: it has not switched anything before the answer',
+      weakAsk.switched === null, JSON.stringify(weakAsk).slice(0, 160));
+
+    // Keeping the selection is the ESCAPE default - a weak read must never
+    // change the filing on its own - and the capture is unverified either way.
+    await p.evaluate(() => {
+      [...document.querySelectorAll('#mback .mrow button')]
+        .find(b => /^Keep/.test(b.textContent)).click();
+    });
+    const weakKept = await p.evaluate(async () => ({ ok: await window.__g,
+      switched: window.__switched, verdict: session.codeVerdict }));
+    check('code guard: keeping the pick does not block, and says it is unverified',
+      weakKept.ok === true && weakKept.switched === null
+        && weakKept.verdict && weakKept.verdict.ok === false
+        && /unverified/i.test(weakKept.verdict.text),
+      JSON.stringify(weakKept).slice(0, 220));
+
+    // Answering "Use" switches - but the READ still failed, so the map is
+    // filed correctly and stays unverified. A green tick here would claim the
+    // page confirmed something the operator did.
+    await setup();
+    await p.evaluate(() => {
+      window.__switched = null;
+      window.onCode = () => { window.__switched = window.__sel; };
+      Object.defineProperty(document.getElementById('code'), 'value', {
+        configurable: true,
+        set(v) { window.__sel = window.__feed[+v] && window.__feed[+v].code; },
+        get() { return '1'; },
+      });
+      window.__read = null;
+      LAST_CODE_READ = { why: 'partial', raw: '', box: null, weak: 'D9X9N2' };
+      window.__g = ensureCodeChecked();
+    });
+    await p.waitForTimeout(120);
+    await p.evaluate(() => {
+      [...document.querySelectorAll('#mback .mrow button')]
+        .find(b => /^Use/.test(b.textContent)).click();
+    });
+    const weakUsed = await p.evaluate(async () => ({ ok: await window.__g,
+      switched: window.__switched, verdict: session.codeVerdict }));
+    check('code guard: answering Use switches, and stays unverified',
+      weakUsed.switched === 'D9X9N2' && weakUsed.ok === false
+        && weakUsed.verdict && weakUsed.verdict.ok === false,
+      JSON.stringify(weakUsed).slice(0, 220));
+
+    // An unreadable code must NEVER block - the banner is not always on screen,
+    // and a guard that can make capture impossible is worse than the bug.
+    await setup();
+    await p.evaluate(() => { window.__read = null; LAST_CODE_READ = { why: null, raw: null, box: null, weak: null };
+      window.__g = ensureCodeChecked(); });
+    const unread = await p.evaluate(async () => ({ ok: await window.__g,
+      modal: !!document.querySelector('#mback.open') }));
+    check('code guard: an unreadable code abstains rather than blocking',
+      unread.ok === true && unread.modal === false, JSON.stringify(unread));
+
+    // AND IT MUST STILL BE VISIBLE AFTERWARDS. The first version announced the
+    // abstain through snapMsg, which ensureSideResolved and then "snapshot N
+    // kept" overwrite within milliseconds of the guard returning - so a capture
+    // filed against an unverified code looked exactly like a verified one, and
+    // was reported as the guard letting a wrong code slide. The verdict is state
+    // now, not a message: it has to survive anything written after it.
+    const verdictAfterNoise = await p.evaluate(() => {
+      snapMsg('✓ snapshot 1 kept');          // what clobbered it before
+      const el = document.getElementById('codeverify');
+      return { text: el ? el.textContent : null,
+               shown: !!el && el.style.display !== 'none',
+               stored: session.codeVerdict && session.codeVerdict.ok };
+    });
+    check('code guard: an unverified capture says so, and keeps saying so',
+      verdictAfterNoise.shown && verdictAfterNoise.stored === false
+        && /NOT verified/i.test(verdictAfterNoise.text || ''),
+      JSON.stringify(verdictAfterNoise));
+
+    // THE REGRESSION. The guard asked currentCodes() - the division / opponent /
+    // hide-done filtered list - to identify the code on screen. A code already
+    // captured is filtered out of it, so on 2026-09-08 a screen showing QPC797
+    // against a selected DE8N10 (same division, both real) abstained silently.
+    // Re-watching a replay you already captured is precisely a wrong match.
+    await setup();
+    const filtered = await p.evaluate(async () => {
+      window.__switched = null;
+      window.__unhid = false;
+      window.onCode = () => { window.__switched = window.__sel; };
+      var only = [window.__feed[1]];                    // the screen's code is filtered out
+      window.currentCodes = () => only;
+      window.refreshCodes = () => { only = window.__feed; window.__unhid = true; };
+      Object.defineProperty(document.getElementById('code'), 'value', {
+        configurable: true,
+        set(v) { window.__sel = only[+v] && only[+v].code; },
+        get() { return '1'; },
+      });
+      window.__read = 'D9X9N2';
+      const ok = await ensureCodeChecked();
+      return { ok: ok, switched: window.__switched, unhid: window.__unhid };
+    });
+    check('code guard: a code hidden by the operator filters is still reached',
+      filtered.unhid === true && filtered.switched === 'D9X9N2',
+      JSON.stringify(filtered));
+
+    // THE PANEL MUST SEE IT TOO. documentPictureInPicture needs a user gesture
+    // and is not available headless, so the panel is stood up as a plain window
+    // object and registered the same way overlay.js registers the real one -
+    // uiModal cannot tell the difference, which is the point of the getter.
+    await p.evaluate(() => {
+      const w = window.open('', '_blank', 'width=320,height=420');
+      window.__pip = w;
+      w.document.body.innerHTML = '<div id="pmsg"></div>';
+      OWDBUtil.setPipGetter(() => window.__pip);
+    });
+    // A NEAR read is the case that still asks, so it is what raises a modal to
+    // mirror: D9X9N3 is one character from D9X9N2 and is not a code itself.
+    await setup();
+    await p.evaluate(() => { window.__read = 'D9X9N3'; window.__g = ensureCodeChecked(); });
+    await p.waitForSelector('#mback.open', { timeout: 5000 });
+    const mirrored = await p.evaluate(() => {
+      const d = window.__pip.document.getElementById('owdb-mback');
+      return { drawn: !!d, text: d ? d.textContent : '',
+               buttons: d ? [...d.querySelectorAll('button')].map(b => b.textContent) : [] };
+    });
+    check('modal: the control panel is asked the same question',
+      mirrored.drawn && /D9X9N2/.test(mirrored.text) && /B4K2M1/.test(mirrored.text)
+        && /D9X9N3/.test(mirrored.text),
+      JSON.stringify(mirrored).slice(0, 200));
+    check('modal: the panel carries the same choices',
+      mirrored.buttons.length === 2 && mirrored.buttons.some(b => /use /i.test(b)),
+      JSON.stringify(mirrored.buttons));
+
+    // Answering from the PANEL must resolve the question and clear both copies.
+    await p.evaluate(() => [...window.__pip.document.querySelectorAll('#owdb-mback button')]
+      .find(b => /keep/i.test(b.textContent)).click());
+    const afterPanel = await p.evaluate(async () => ({ ok: await window.__g,
+      main: !!document.querySelector('#mback.open'),
+      panel: (window.__pip.document.getElementById('owdb-mback') || {}).innerHTML }));
+    check('modal: answering in the panel resolves it and closes both',
+      afterPanel.ok === true && afterPanel.main === false && !afterPanel.panel,
+      JSON.stringify(afterPanel).slice(0, 200));
+    await p.evaluate(() => { try { window.__pip.close(); } catch (e) {} OWDBUtil.setPipGetter(null); });
+    await p.evaluate(() => { const b = [...document.querySelectorAll('#mback button')]
+      .find(x => /keep/i.test(x.textContent)); if (b) b.click(); });
+    await p.evaluate(() => window.__g);
+
+    await ctx.close();
+  }
   }
 
   await browser.close();
