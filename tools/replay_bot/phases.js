@@ -500,18 +500,36 @@
     var framePath = ready.path;
     var read = await readHud(io, o.matcher, framePath);
 
-    // ONE SECOND LOOK IF IT LOOKS WRONG. A frame caught mid-transition scores
-    // badly, and that is cheaper to detect than to prevent. The retry runs
-    // BEFORE the keep decision, so a read that recovers is compared on the
-    // retry's values and the retry's frame is what a change would keep.
-    if (worstOf(read) < LOW_SCORE) {
-      var retryPath = await io.grabTo('t' + t + '-again');
-      var retry = await readHud(io, o.matcher, retryPath);
-      if (worstOf(retry) > worstOf(read)) {
-        log('        (first read was mid-transition, took a second look)');
-        read = retry;
-        framePath = retryPath;
+    // KEEP LOOKING WHILE IT LOOKS WRONG, WITHIN A BUDGET. A frame caught
+    // mid-transition scores badly, and that is cheaper to detect than to
+    // prevent - but scrub-to-legible latency varies with connection/disk/
+    // scrub distance (specs/[[replay-scrubbing-timing-variance]]), so a
+    // single blind extra look is sometimes not enough. Polls on a short
+    // interval until the read clears LOW_SCORE or the budget runs out,
+    // keeping whichever read scored best across every attempt - runs BEFORE
+    // the keep decision, so a read that recovers is compared on its values
+    // and its frame is what a change would keep.
+    var settleStepMs = o.settleStepMs != null ? o.settleStepMs : TIMING.sample.settleStepMs;
+    var settleMaxMs = o.settleMaxMs != null ? o.settleMaxMs : TIMING.sample.settleMaxMs;
+    var settleDeadline = Date.now() + settleMaxMs;
+    var extraLooks = 0;
+    while (worstOf(read) < LOW_SCORE && Date.now() < settleDeadline) {
+      await realSleep(settleStepMs);
+      extraLooks++;
+      var tryPath = await io.grabTo('t' + t + '-again');
+      var tryRead = await readHud(io, o.matcher, tryPath);
+      if (worstOf(tryRead) > worstOf(read)) {
+        read = tryRead;
+        framePath = tryPath;
       }
+    }
+    if (extraLooks === 1 && worstOf(read) >= LOW_SCORE) {
+      log('        (first read was mid-transition, took a second look)');
+    } else if (extraLooks > 1 && worstOf(read) >= LOW_SCORE) {
+      log('        (first read was mid-transition, took ' + extraLooks + ' extra looks to settle)');
+    } else if (extraLooks > 0) {
+      log('        (warning: never settled after ' + extraLooks +
+        ' extra look' + (extraLooks === 1 ? '' : 's') + ')');
     }
 
     // Names are read from whichever frame the retry logic above settled on,

@@ -96,24 +96,27 @@
     //              hops landed 100s short).
     drag: { prePress: 40, postPress: 30, perPoint: 16, dwell: 120, hopPx: 24 },
 
-    // An extra beat after a SEEK settles, before the HUD is read. The seek's
-    // own settle watches the play area (y 200-1100); the portrait band above it
-    // (y ~95-205) finishes drawing a little later. Every sample after the first
-    // on the 2026-09-10 ten-map run came back mid-transition without this.
-    // (run.js --sample-quiesce overrides it for a run.) 2026-09-12: bumped
-    // 500->700 - reviewing a ~270-map unattended run found later codes in the
-    // run landing samples mid-transition again, not just the first sample.
-    // 2026-09-15: bumped 700->1300 - the 2026-09-15 390-map run's
-    // attribution-abstained flags correlated with a name-plate still showing
-    // its white fade-in border at read time (a slower fade than the portrait
-    // band this value was tuned against). This folds in an untracked
-    // state/console_timing.json override of 1000 that had been silently
-    // active since 2026-09-11 (a console-slider tweak nobody rolled into the
-    // default) plus the operator's requested +300ms on top of the value
-    // actually in effect, not the stale 700 this comment used to cite.
-    // Not root-caused to a specific mechanism; worth re-measuring with
-    // probe_limits.js if it doesn't hold.
-    sample: { quiesceMs: 1300 },
+    // An extra beat after a SEEK settles, before the HUD is FIRST read.
+    // History up to 2026-09-17: bumped 500->700->1300 chasing mid-transition
+    // reads on successive overnight runs (each bump band-aided the previous
+    // run's worst case, never the next one's). ROOT CAUSE (2026-09-17,
+    // [[replay-scrubbing-timing-variance]]): scrub-to-legible latency is not
+    // a constant to discover, it VARIES per scrub - with connection quality,
+    // disk speed, and how far the scrub jumped - so no single fixed wait is
+    // ever right on every machine or every sample. Fixed at the root:
+    // `phases.sampleAt` now polls (settleStepMs/settleMaxMs below) rather
+    // than reading once after one blind wait, so THIS value only needs to
+    // cover the common/fast case - a genuinely slow settle is now the poll
+    // loop's job, not this constant's. Cut 1300->400 to match the
+    // already-established generic post-seek floor (`quiesce.ms` below).
+    // (run.js --sample-quiesce still overrides it for a run.)
+    //
+    // settleStepMs/settleMaxMs: the poll loop's own step and total budget -
+    // matches the events-viewer poll's proven ~2.5s bound
+    // ([[replay-bot-events-viewer-K-bug]], MEDIA_TRIES=10 x
+    // MEDIA_WAIT_MS=250), the other place this codebase already detects
+    // settling instead of assuming it.
+    sample: { quiesceMs: 400, settleStepMs: 200, settleMaxMs: 2500 },
 
     // The generic post-seek wait before a one-frame grab (capture.js quiesce).
     // THIS WAS ZERO, AND ZERO WAS RIGHT UNTIL GRABBING GOT FAST: a PowerShell

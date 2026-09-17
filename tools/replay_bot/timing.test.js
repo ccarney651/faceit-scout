@@ -24,7 +24,9 @@ function withNoOverride(fn) {
 test('the defaults are the measured values', () => {
   withNoOverride(() => {
     assert.strictEqual(T.seek.gapMs, 700);
-    assert.strictEqual(T.sample.quiesceMs, 1300);
+    assert.strictEqual(T.sample.quiesceMs, 400);
+    assert.strictEqual(T.sample.settleStepMs, 200);
+    assert.strictEqual(T.sample.settleMaxMs, 2500);
     assert.strictEqual(T.quiesce.ms, 400);
     assert.strictEqual(T.drag.hopPx, 24);
     assert.strictEqual(T.chunk.speed, 2);

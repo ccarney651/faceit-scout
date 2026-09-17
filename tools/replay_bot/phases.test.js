@@ -210,6 +210,55 @@ test('sampleAt: the retry frame is what a change keeps', { skip }, async () => {
   assert.strictEqual(s.a[2].guid, 'SWAP', 'the retry read is the one returned');
 });
 
+// ---- sampleAt: settle is POLLED within a budget, not one blind extra look -
+//
+// 2026-09-17: scrub-to-legible latency varies with connection/disk/scrub
+// distance (specs/[[replay-scrubbing-timing-variance]]) - a single fixed
+// wait plus exactly one extra look is wrong in both directions: too short on
+// a slow settle (still misreads after the one retry), too long on a fast one
+// (every sample pays the same wait even when the very first read was fine).
+// sampleAt now keeps looking, on a short interval, for as long as the read
+// stays below LOW_SCORE, up to a bounded time budget - injectable via
+// settleStepMs/settleMaxMs so these tests don't sleep for real production
+// durations.
+
+test('sampleAt keeps polling past one retry, within budget, until the read clears LOW_SCORE', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const bad = readOf(GUID_A, 0.2);
+  const stillBad = readOf(GUID_A, 0.4); // improves, but still below LOW_SCORE (0.6)
+  const good = readOf(GUID_B, 0.9);
+  const logs = [];
+  const t = ctxWith(frame, [bad, stillBad, good]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: (l) => logs.push(l),
+    prev: readOf(GUID_A), prevPrev: readOf(GUID_A), firstOfRound: false,
+    settleStepMs: 10, settleMaxMs: 200,
+  });
+  assert.strictEqual(t.grabs.length, 2, 'two extra looks were needed, and taken');
+  assert.strictEqual(s.worst, 0.9, 'the read that finally cleared LOW_SCORE is the one returned');
+  assert.strictEqual(s.a[2].guid, 'SWAP', 'the settled read is the one returned');
+  assert.ok(logs.some((l) => /extra look/.test(l)), 'logged that it took more than one look');
+});
+
+test('sampleAt gives up once the settle budget runs out, keeping the best read seen', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const worst = readOf(GUID_A, 0.1);
+  const best = readOf(GUID_A, 0.4); // still below LOW_SCORE - never actually settles
+  const logs = [];
+  // Every retry after the first reads `best` - however many the budget allows,
+  // the result must still be `best`, never `worst` and never a crash from
+  // running out of queued reads.
+  const t = ctxWith(frame, [worst, best, best, best, best, best, best, best, best, best]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: (l) => logs.push(l),
+    prev: readOf(GUID_A), prevPrev: readOf(GUID_A), firstOfRound: false,
+    settleStepMs: 10, settleMaxMs: 100,
+  });
+  assert.ok(t.grabs.length >= 1, 'at least one extra look was taken');
+  assert.strictEqual(s.worst, 0.4, 'the best read seen is kept, not the last or the first');
+  assert.ok(logs.some((l) => /never settled/.test(l)), 'logged that it gave up without settling');
+});
+
 test('sampleAt reads names alongside heroes when an ocr function is given', { skip }, async () => {
   const frame = Corpus.at('probe-panelopen-live.png');
   const read = readOf(GUID_A);
