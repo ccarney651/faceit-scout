@@ -124,33 +124,64 @@ capture (per sample, per side)
                     v  (all of a map's samples collected)
 
 attribute.js's new aggregation pass (batch, pure, runs once per map):
-  1. Per sample, per side: Assign.assign(rawNames, roster, slotRolesFor(...))
-     -> a candidate player_id per VISUAL position for that sample alone.
-     (Same call `attributeMap` already makes per-frame today - just made
-     once per sample instead of once per map.)
-  2. Aggregate step 1's results across every sample, per side: for each
-     VISUAL position, the MODE (most frequent, not necessarily >50% -
-     three-way noise on a rare sample should not deny an otherwise-clear
-     mode) player_id assigned there across all samples becomes that
-     position's canonical owner. (Rare/brief disconnects are a minority of
-     a round's samples by construction, so the modal position is the
-     undisturbed one.)
-  3. canonicalSlotOf(player_id) is now fixed for the whole map: slot index
-     = the visual position that player_id owned in the mode.
-  4. Re-key: for EVERY sample, for each VISUAL position that sample
-     matched a player_id (step 1's per-sample result, not just the mode
-     samples), move that position's hero-cell read to
-     canonicalSlotOf(player_id) in the OUTPUT sample. A canonical slot no
-     visual position matched this sample becomes ABSENT_GUID for that
-     slot, that sample - correctly attributed now, not dumped on whichever
-     visual position happened to be short a card.
+
+  For every sample, per side: run `Assign.assign(rawNames, roster,
+  slotRolesFor(heroRoles, sampleHeroReads))` - the SAME call `attributeMap`
+  already makes once per map today, just made once per sample instead
+  (reuses the existing role-constrained exact-cover matcher unmodified; a
+  position assign() cannot confidently place, per its own existing
+  floor/margin gates, comes back null - unchanged behavior, just asked
+  more often). This gives, per sample, a candidate player_id per VISUAL
+  position.
+
+  Step A - establish canonicalSlotOf(player_id), once, from ALL samples:
+    Tally which player_id assign() placed at VISUAL position i most often
+    across every sample (the MODE - most frequent, not necessarily >50%).
+    That player's canonical slot = i. A player assign() never confidently
+    places anywhere (persistently bad OCR for their plate, unrelated to
+    any disconnect) simply never enters this map - see Step B for why that
+    is safe rather than a data-loss regression.
+
+  Step B - re-key EVERY sample using canonicalSlotOf, defaulting to no
+  change when identity is unclear (the fix for the regression an earlier
+  draft of this spec had - see below):
+    For each sample, each side, each VISUAL position i:
+      - If assign() placed a player_id at position i THIS SAMPLE, and that
+        player_id has an established canonicalSlotOf (Step A) — call it
+        slot j — this is a HIGH-confidence claim: "position i's hero read
+        belongs to slot j."
+      - Otherwise (assign() abstained on position i this sample) — a
+        LOW-confidence claim: "position i's hero read belongs to slot i"
+        (the default, unchanged assumption).
+    Resolve claims per slot: a HIGH claim always wins over a LOW claim for
+    the same slot. A slot with no claim at all this sample becomes
+    ABSENT_GUID for that slot, that sample.
+
+    This is what makes the common (no disconnect, or a persistently
+    illegible name unrelated to any disconnect) case behave EXACTLY like
+    today: every position defaults to its own slot, so hero data is never
+    lost just because a name was hard to read. Correction only happens
+    where there is POSITIVE evidence a card's identity doesn't match its
+    visual position - never as a side effect of merely being unsure.
 
   Output: the map's samples, now in stable canonical-slot order (same
   shape `resolve.rounds()` already consumes) + a player_id-per-slot
-  attribution map (step 3, directly - no separate resolution needed).
+  attribution map (whichever player_id Step A assigned to each slot -
+  no separate resolution needed).
 
 resolve.rounds(correctedSamples, rounds, opts)   -- UNCHANGED
 ```
+
+**Why not build canonicalSlotOf from Step A's votes as the ONLY source of
+truth (an earlier draft of this design did exactly that)?** Re-keying
+using *only* "did this player win a vote for some slot" means a slot whose
+player never confidently wins ANY position (bad OCR on their plate,
+nothing to do with a disconnect) never gets established at all - so ALL of
+that slot's hero data across the WHOLE map would be silently dropped
+(no canonical slot to file it under), a real regression from today's
+behavior where a hero read survives even when attribution abstains on it.
+Step B's HIGH/LOW priority default is what fixes this: identity evidence
+only ever ADDS a correction, it never REMOVES data by its absence.
 
 ### 3.3 Why aggregation must be a batch pass, not a live per-sample decision
 
@@ -191,14 +222,20 @@ rather than guess.
 
 - **A sample's name read doesn't confidently match anyone** (garbled OCR,
   `Assign.assign`'s floor/margin gates already refuse it): that visual
-  position casts no vote for that sample, for either the majority
-  aggregation or the per-sample re-key. With ~20+ samples per round (30s
-  cadence, `specs/2026-09-14-...`), one bad sample doesn't threaten the
-  majority; a run of them just means less evidence, not wrong evidence.
-- **A slot's player_id never wins a clear majority across the whole map**
-  (e.g. disconnected for most of it, or consistently illegible): that slot
-  stays unattributed (`player_id: null`, `attribution-abstained` — the
-  same flag and meaning it has today), not a forced guess.
+  position casts no vote toward Step A's canonical mapping, AND falls back
+  to its own slot by default for Step B's re-key (never dropped - see
+  §3.2's HIGH/LOW claim priority). With ~20+ samples per round (30s
+  cadence, `specs/2026-09-14-...`), one bad sample doesn't threaten an
+  otherwise-clear mode; a run of them just means less evidence for THAT
+  slot's canonical establishment, never lost hero data.
+- **A slot's player_id never wins a clear mode across the whole map** (e.g.
+  disconnected for most of it, or consistently illegible): attribution for
+  that slot stays unresolved (`player_id: null`, `attribution-abstained` —
+  the same flag and meaning it has today) - but the HERO reads for that
+  slot are still there, exactly as if nothing about this design had
+  changed, because Step B's default only depends on a sample's OWN
+  identity match, never on whether a canonical slot was ever established
+  for it.
 - **A round where a slot's canonical owner is NEVER seen in any sample**:
   falls back to today's existing behavior for an unresolved slot — flagged,
   not guessed. (The single-unattributed-teammate elimination rule, PLANS.md
@@ -233,6 +270,10 @@ Planned cases (TDD, one test per case, red before green):
   canonical slot again, with no drift.
 - Garbled/unreadable names on the disconnect sample itself — confirm the
   slot degrades to `ABSENT_GUID`/unattributed rather than a wrong guess.
+- **A name that is illegible on EVERY sample, no disconnect involved** —
+  confirm the slot's HERO reads are still returned unchanged (Step B's
+  default), only attribution (`player_id`) stays unresolved. This is the
+  regression case an earlier draft of this design would have failed.
 - A name that never confidently matches anyone across the whole map —
   confirm that slot stays `attribution-abstained`, not forced.
 
