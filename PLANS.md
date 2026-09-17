@@ -1577,7 +1577,37 @@ replaces or drops only that segment, leaving its siblings and the
 round-level fields alone, and the review page's segment rows are
 individually clickable to do it. TDD, `tools/replay_bot/review/server.test.js`.
 
-## Scrim mode, phases 2–6
+**2026-09-17, next session - the disconnect slot-shift fix validated live,
+twice.** After committing `attributeFromSamples` (see the goal memory /
+`specs/2026-09-17-replay-bot-disconnect-identity-{design,plan}.md`), ran it
+against two real live captures:
+- A normal map (MTNN40) with no disconnect: 17 samples, 0 missed, all 10
+  slots attributed (`conf: 'matched'` both sides), 3 rounds resolved clean,
+  zero flags.
+- **H5Q9WE re-captured live (the exact map the design doc's pixel inspection
+  was done on)** — and it disconnected again mid-capture. Side a slot 3
+  (Tracer) resolved to `Tracer -> ABSENT -> Tracer` (correctly attributed
+  gap, reconnect recognised as the same player); side a slot 4 (D.Mon, the
+  slot that visually compacted into position 3's pixels during the gap)
+  resolved to a single unbroken `D.Mon` segment with no gap and no false
+  swap. This is the exact bug pattern from the design doc, corrected live,
+  for real, on the map that originally surfaced it.
+
+- **P3 - a crashed capture's `state/attempts.json` entry is invisible to its
+  own recovery UI.** Found live while re-running the smoke check above: a
+  `run.js` process killed mid-capture (e.g. a tool/shell timeout) writes
+  `status: 'opened'` before it starts, and never gets to overwrite that with
+  a real outcome. `isDoneEntry` (run.js) correctly treats `'opened'` as done
+  (deliberate - see its own comment, "an opened orphan from a crash"), so
+  the code is excluded from the normal pending queue - fine so far. But
+  `review/server.js`'s `failureList()` only ever lists entries with
+  `status === 'failed'`, so an `'opened'` orphan never appears in the review
+  page's Failures panel either, and its Retry button (`POST /failures/retry`,
+  `delete attempts[key]`) can never reach it - there is no UI path back for
+  it at all, only a hand-edit of `state/attempts.json` (mirroring what Retry
+  already does). A small fix: `failureList()` should also surface a
+  `status: 'opened'` entry (perhaps its own category, distinct from a real
+  failure) so the existing Retry button can clear it like any other.
 
 Phases 0–2a and phase 4's analysis half shipped 2026-08-19; both pages ship
 locked behind `?unlock=scrimbeta`. The phase list below is open per
