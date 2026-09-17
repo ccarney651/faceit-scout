@@ -73,7 +73,8 @@
   header label.hdrtoggle { display: flex; align-items: center; gap: 5px; cursor: pointer;
     font-size: 13px; color: var(--dim); }
   .segments { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
-  .segrow { display: flex; align-items: center; gap: 4px; font-size: 11.5px; }
+  .segrow { display: flex; align-items: center; gap: 4px; font-size: 11.5px; cursor: pointer; }
+  .segrow:hover { color: var(--accent); }
   .segrow img { width: 14px; height: 14px; border-radius: 2px; }
   .segtime { color: var(--dim); margin-left: auto; }
   .slot.swapped { border-color: #6cc6e0; background: #16303a; }
@@ -145,6 +146,7 @@
 <div class="runrow">
     <label>Divisions <select id="fDivisions" multiple size="6"></select></label>
     <label>Teams <input type="text" id="fTeams" list="fTeamsList" placeholder="e.g. Wasp,Crabs"></label>
+    <datalist id="fTeamsList"></datalist>
     <label>Limit <select id="fLimit">
       <option value="">All</option>
       <option value="5">5</option>
@@ -209,7 +211,8 @@ const FLAG_LABELS = {
   'low-score': 'low confidence', 'unknown-hero': 'unknown hero',
   'attribution-abstained': 'attribution abstained',
   'round-unsampled': 'round unsampled', 'sparse-round': 'sparse round',
-  'swap': 'hero swap',
+  'swap': 'hero swap', 'cross-role-swap': 'impossible role swap',
+  'takeover-frame': 'takeover screen dropped',
 };
 // Which flag types currently count toward "needs review". null until the
 // first load populates it with every type actually present, all on by
@@ -246,7 +249,7 @@ function flagTypeCounts() {
     ['a', 'b'].forEach((side) => (r[side] || []).forEach((base, i) => {
       const s = effSlot(m, r.round_no, side, i);
       effectiveFlags(base, s).forEach(bump);
-      const segs = effectiveSegments(base, s);
+      const segs = effectiveSegments(m, r.round_no, side, i, base, s);
       if (segs && segs.length > 1) bump('swap');
     }));
   }));
@@ -382,7 +385,8 @@ function claimedElsewhere(m, round_no, side, excludeSlot) {
 }
 function setCorrection(m, c) {
   m.corrections = (m.corrections || []).filter(
-    (x) => !(x.round_no === c.round_no && x.side === c.side && x.slot === c.slot && x.kind === c.kind));
+    (x) => !(x.round_no === c.round_no && x.side === c.side && x.slot === c.slot && x.kind === c.kind
+      && x.segment_from_t === c.segment_from_t));
   m.corrections.push(c);
   dirty = true; markDirty();
 }
@@ -403,12 +407,27 @@ function effectiveFlags(base, s) {
   return flags;
 }
 
-// resolve.js's segmentSlot() stretches, or null once a hero correction has
-// collapsed the slot to one assertion for the whole round (emit.js's
-// slotSegments() treats a corrected slot the same way).
-function effectiveSegments(base, s) {
+// resolve.js's segmentSlot() stretches, or null once a WHOLE-ROUND hero
+// correction has collapsed the slot to one assertion for the round (emit.js's
+// slotSegments() treats a corrected slot the same way). A segment-scoped
+// correction (setCorrection's segment_from_t) leaves the array intact and
+// only overwrites - or, for a blank correction, removes - the one segment it
+// targets, mirroring review/server.js's applyCorrections exactly so what the
+// operator sees here matches what Finalize will actually ship.
+function effectiveSegments(m, round_no, side, i, base, s) {
   if (s.corrected) return null;
-  return Array.isArray(base.segments) ? base.segments : null;
+  if (!Array.isArray(base.segments)) return null;
+  const segCorrections = (m.corrections || []).filter((c) =>
+    c.kind === 'hero' && c.round_no === round_no && c.side === side && c.slot === i && c.segment_from_t !== undefined);
+  if (!segCorrections.length) return base.segments;
+  let segs = base.segments.map((sg) => Object.assign({}, sg));
+  segCorrections.forEach((c) => {
+    const idx = segs.findIndex((sg) => sg.from_t === c.segment_from_t);
+    if (idx === -1) return;
+    if (c.now_guid) segs[idx] = Object.assign({}, segs[idx], { guid: c.now_guid, name: c.now_name || c.now_guid, corrected: true });
+    else segs[idx] = null;
+  });
+  return segs.filter(Boolean);
 }
 
 // A slot is worth an operator's eyes if it carries a flag, or if it holds a
@@ -419,16 +438,16 @@ function effectiveSegments(base, s) {
 // hiding everything for one render.
 const flagTypeActive = (t) => !activeFlagTypes || activeFlagTypes.has(t);
 
-function slotNeedsReview(base, s) {
+function slotNeedsReview(m, round_no, side, i, base, s) {
   const flags = effectiveFlags(base, s).filter(flagTypeActive);
-  const segs = effectiveSegments(base, s);
+  const segs = effectiveSegments(m, round_no, side, i, base, s);
   return flags.length > 0 || (segs && segs.length > 1 && flagTypeActive('swap'));
 }
 function sideNeedsReview(m, r, side) {
   for (let i = 0; i < 5; i++) {
     const base = (r[side] || [])[i] || {};
     const s = effSlot(m, r.round_no, side, i);
-    if (slotNeedsReview(base, s)) return true;
+    if (slotNeedsReview(m, r.round_no, side, i, base, s)) return true;
   }
   return false;
 }
@@ -553,7 +572,7 @@ function renderRound(m, mi, r, flagged) {
     for (let i = 0; i < 5; i++) {
       const base = (r[side] || [])[i] || {};
       const s = effSlot(m, r.round_no, side, i);
-      if (onlyIssues && !slotNeedsReview(base, s)) continue;
+      if (onlyIssues && !slotNeedsReview(m, r.round_no, side, i, base, s)) continue;
       slots.appendChild(renderSlot(m, mi, r.round_no, side, i, flagged));
     }
     sd.appendChild(slots);
@@ -566,7 +585,7 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
   const s = effSlot(m, round_no, side, i);
   const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
   const flags = effectiveFlags(base, s);
-  const segs = effectiveSegments(base, s);
+  const segs = effectiveSegments(m, round_no, side, i, base, s);
   const swapped = !!(segs && segs.length > 1);
   const cell = el('div', 'slot' + (flags.length ? ' flagged' : '') + (swapped ? ' swapped' : ''));
   if (flags.length || swapped) {
@@ -595,6 +614,11 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
       if (sh && sh.icon) { const im = el('img'); im.src = sh.icon; row.appendChild(im); }
       row.appendChild(el('span', null, (sh && sh.name) || seg.name || seg.guid));
       row.appendChild(el('span', 'segtime', mmss(seg.from_t)));
+      if (seg.corrected) row.appendChild(el('span', 'tag sw', 'fixed'));
+      // Corrects ONLY this segment - see effectiveSegments/applyCorrections.
+      // stopPropagation is defensive, not load-bearing today: the segment
+      // rows are siblings of the top-level hero name, not its descendants.
+      row.onclick = (e) => { e.stopPropagation(); openHeroEdit(row, m, mi, round_no, side, i, seg.from_t); };
       segBox.appendChild(row);
     });
     cell.appendChild(segBox);
@@ -633,19 +657,28 @@ function renderSlot(m, mi, round_no, side, i, flagged) {
   return cell;
 }
 
-function openHeroEdit(cell, m, mi, round_no, side, i) {
+// `cell` is where the inline editor is anchored - the whole slot for a
+// round-level correction (click the top hero name), or one segment row for a
+// segment-scoped one (click that row) - `segFromT` tells commit() which.
+function openHeroEdit(cell, m, mi, round_no, side, i, segFromT) {
   if ($('.editrow', cell)) { $('.editrow', cell).remove(); return; }
   const row = el('div', 'editrow');
-  const inp = el('input'); inp.placeholder = 'hero name, or blank to drop';
+  const inp = el('input');
+  inp.placeholder = segFromT !== undefined ? 'hero name, or blank to drop this segment' : 'hero name, or blank to drop';
   const opts = el('ul', 'opts');
   row.appendChild(inp); row.appendChild(opts);
   cell.appendChild(row);
   inp.focus();
   let on = -1;
-  const base = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const slotBase = ((m.rounds.find((r) => r.round_no === round_no) || {})[side] || [])[i] || {};
+  const segBase = segFromT !== undefined && Array.isArray(slotBase.segments)
+    ? slotBase.segments.find((sg) => sg.from_t === segFromT) : null;
+  const base = segBase || slotBase;
   const commit = (guid, name) => {
-    setCorrection(m, { kind: 'hero', round_no, side, slot: i,
-      was_guid: base.guid || null, now_guid: guid || null, now_name: name || null });
+    const c = { kind: 'hero', round_no, side, slot: i,
+      was_guid: base.guid || null, now_guid: guid || null, now_name: name || null };
+    if (segFromT !== undefined) c.segment_from_t = segFromT;
+    setCorrection(m, c);
     render();
   };
   const refresh = () => {

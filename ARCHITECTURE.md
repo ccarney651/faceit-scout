@@ -789,6 +789,40 @@ lead between two candidates. `tools/assign_eval.py` measures all of this against
 every real lineup with ground truth known by construction; re-run it when the
 rosters grow.
 
+**A role-count mismatch used to abandon the WHOLE group, discarding every
+name in it even when they read perfectly.** `assign()` requires slots and
+pool to be an exact cover before it runs the permutation search for a role;
+a single low-confidence hero-portrait misread that shifts one slot's
+apparent role (a Damage hero read as Support) breaks the count for both
+roles involved. Confirmed 2026-09-16 on a real map: OCR read four of five
+names as exact roster matches, but only one slot resolved, because the
+other four sat in role groups a misread hero had thrown out of balance —
+this is the mechanism connecting a hero-matching regression to an
+attribution one, not two independent bugs. `assign()` now pools the slots
+and players left over from every mismatched group and gives them one
+cross-role decisive pass: a slot whose read is `STRONG_NAME_SCORE`-decisive
+against exactly one of those players, who in turn has no other decisive
+claimant, is still resolved. This is strictly narrower than the per-role
+floor/margin gates above — it never resolves by elimination or a group
+mean, only an outright, unambiguous name match — so it doesn't reopen the
+wrong-assignment risk the exact-cover rule exists to prevent.
+
+**`tools/replay_bot/reprocess_hero_match.js`** is `reprocess_attribution.js`'s
+counterpart for hero-portrait matching rather than name OCR: it re-runs
+already-captured maps' saved crop images through a corrected `refs.json`
+(and, since a corrected hero guid can change a slot's role, through
+`assign()` again too) without a live client or a fresh capture. A round
+whose ORIGINAL resolution never flagged a swap only has its first sample's
+crop saved, so a stable round is corrected on that single sample and
+assumed to hold for the round, the same assumption `resolve.js`'s own
+single-segment case already makes; a round that WAS flagged has every
+sample's crop saved and is refed sample-by-sample through `resolve.js`'s own
+`segmentSlot`, so an old "swap" that was really the broken matcher
+flickering between two wrong heroes can collapse back into one segment.
+Attribution's role lookup uses round 1's *resolved* guid rather than the
+literal first raw frame — the same accepted approximation
+`reprocess_attribution.js` documents, for the same reason.
+
 **Its corruption model understates the win, and `tools/real_frame_eval/` shows
 why.** Run against real tesseract output on real HUD frames — ground truth taken
 from the replay code burnt into the frame — the name-only matcher resolves 85% of
@@ -1551,17 +1585,55 @@ hero.
 ### `docs/capture/refs.json` — the hero reference library
 
 Written by `tools/build_capture_refs.py` from a curator's local library and
-committed by hand; read by `docs/capture/index.html` and `docs/scrims.html`. It
-carries the calibration geometry the references were captured at, then one
-record per hero-state with a name, GUID, visual state, and the image data.
+committed by hand; read by `docs/capture/index.html`, `docs/scrims.html`, and
+`tools/replay_bot/match.js`. It carries the reference-template geometry (the
+64×36 crop size and the LF/TF/RF fractions), then one record per hero, per
+team-colour variant, per visual state (alive/dead) with a name, GUID, and the
+image data:
 
 ```json
-{"w": 2560, "h": 1440, "left_fraction": 0.0, "top_fraction": 0.0,
- "refs": [{"n": "<name>", "g": "<hero guid>", "v": "<state>", "d": "<image>"}]}
+{"w": 64, "h": 36, "left_fraction": 0.42, "top_fraction": 0.45, "right_fraction": 0.06,
+ "refs": [{"n": "<name>", "g": "<hero guid>", "v": "a"|"b", "d": "<base64 grey bytes>"}]}
 ```
 
 `refs.json` carries **names only, not roles** — which is why `docs/scrims.html`
 keeps its own hero-role table.
+
+**The library's source (`--hud-variant`) is not cosmetic, and picking the
+wrong one is invisible in a diff.** `build_capture_refs.py` reads its images
+from an `owdb.sqlite3` ROI profile, and two real, different capture contexts
+exist: `'default'` (live-spectating a match via `dxcam`/`mss`) and `'replay'`
+(watching a replay through the same browser pipeline `tools/replay_bot`
+actually reads). The two can disagree enough to break matching for a hero
+entirely — measured 2026-09-16, the same Cassidy portrait from the two
+sources scored as low as 0.28 cosine similarity against itself, and even an
+exhaustive ±15px brute-force realignment only recovered it to 0.40, so this
+is a genuine pixel-content difference, not misalignment.
+
+2026-09-12 (`cbcef2e`) deliberately rebuilt `refs.json` from a `'replay'`
+profile for exactly this reason. A later rebuild (2026-09-15, `5bb9d9b`,
+ostensibly just "add one hero") omitted `--hud-variant`/`--profile` and
+`active_profile_id()` silently defaulted to `'default'` — reverting all 53
+other heroes back to the live-spectate source with a change nothing showed
+in review (it's opaque base64). It went unnoticed for about 20 hours of live
+capture because there was no accuracy check broader than a few hand-picked
+frames. `active_profile_id()` now requires `hud_variant` explicitly (no
+default) and the CLI refuses to run without `--hud-variant` or an explicit
+`--profile` id — see CHANGELOG 2026-09-16. `build_capture_refs.py` also used
+to resize captured crops with `cv2.resize(..., INTER_AREA)`, a different
+algorithm from the canvas `imageSmoothingQuality='high'` resize the live
+matcher (`crop.js`'s `cell()`) actually uses; it now shells out to
+`tools/replay_bot/build_capture_refs_resize.js` so a ref and a live read are
+produced by the same pipeline.
+
+**`tools/replay_bot/match_accuracy_sweep.js`** is the standing guard against
+this recurring: it runs the real matcher against every retained frame in
+`frames/` (thousands, not a handful) and fails if any hero's mean score falls
+below a floor. Run it after any `refs.json` rebuild. It's a hero-identity
+analogue to §6's `match_search_sweep.js`, which validated the *search radius*
+against the same kind of broad corpus — that effort got low-score reads down
+to 2.9% for a geometry problem; this one caught a *source* regression that
+had pushed the same metric back up to 15.4% invisibly.
 
 ### The inlined dashboard payload
 
@@ -1830,7 +1902,7 @@ does the same for a single strip and lineup.
 | `segment.js` | Observations to rounds, opening comp and hero pool | yes |
 | `vote.js` | One slot resolved by agreement across frames | yes |
 | `resolve.js` | Per-sample reads to a per-round per-slot result, presented hero chosen by playtime not sample count, + confidence flags | yes |
-| `attribute.js` | Player attribution: which FACEIT player occupies each HUD slot, abstaining rather than guessing | yes |
+| `attribute.js` | Player attribution: which FACEIT player occupies each HUD slot, resolved from every sample a map produced (not one frame), abstaining rather than guessing | yes |
 | `nameplate.js` | Name-bar crops and OCR for attribution (shares `frames.js`'s `findNameRow`/`applyNameContrast` — see §6's dark-plate notes) | no |
 | `emit.js` | Per-side observations in the contribution schema (per-sample, and per-round after review) | yes |
 | `review_out.js` | The session review artifact + per-round portrait crops | no |
@@ -1879,12 +1951,117 @@ no playtime majority, a winner whose best frame still scored badly, an
 attribution the role constraint could not settle — becomes a flag, never a
 verdict. Nothing is dropped; a flagged slot keeps its best guess.
 
+`resolve.js` also flags `cross-role-swap`: a confirmed segment-to-segment
+swap (two-in-a-row, real segments, not raw-frame noise) between two
+*different* roles, which FACEIT's role lock makes physically impossible
+within one round (2026-09-17, a real Ramattra (Tank) → Zenyatta (Support)
+misread found in review — `segmentSlot()` only ever tracked hero-guid
+continuity, never role continuity across a slot's own segment chain). Silent
+when either guid's role is unknown to the feed (`unknown-hero` already
+covers that). Deliberately does not try to guess which of the two segments
+is wrong — a rare role-locked-comp exception is real (53/8356 team-games,
+all missing-role, never an actual 2-tank), so this only flags for a look,
+the same as every other thin-evidence signal above.
+
+`resolve.js` also drops takeover-screen samples before they ever reach
+`segmentSlot`/`Vote.slot`. A post-round/VS-takeover screen blanks the whole
+board — a pattern a real disconnect never produces (at most one, rarely
+two, players leave a match) — and the fixed sampling grid has no concept of
+"still in a cutscene", so it occasionally lands a grid point squarely on
+one (2026-09-17, two real examples in review: Sheffield Larp Central vs
+Chud Maximus, Qwiz Esports vs VQ Ragnarok). Rather than building a new
+pixel/OCR detector for the takeover screen itself — which would need a live
+frame to calibrate and risks the same vendor-dependency trap already noted
+elsewhere (see the TypeSafe/Jev entries) — this reuses a signal the
+pipeline already computes: a sample where at least 6 of its 10 slots read
+`ABSENT_GUID` (`calib.cellPresent`/`crop.cellTint` already runs per cell,
+per frame) is a takeover screen, not ten simultaneous leavers, and is
+filtered out of that round's samples entirely, with the round flagged
+`takeover-frame` so the drop stays visible. The corruption this prevents is
+real even when the segment winner survives it by luck (the 2-in-a-row
+confirmation barrier already absorbs a single trailing bad read into the
+existing segment) — a lone dropped-in `ABSENT` guid still counts against
+`Vote.slot`'s raw agreement, and a tank/ABSENT/tank sample sequence scores
+0.667 support, just under `SUPPORT_MIN` (0.67), producing a false
+`low-support` flag on an otherwise-clean read.
+
+A dead-but-present player used to read the same way a disconnected one
+does. `calib.presenceBadge()`'s 2026-09-16 fix (reading only the ult-charge
+badge, not the whole slot) turned out to fix a DIFFERENT bug (a warm
+portrait dragging a whole-slot tint average below threshold) — a real death
+desaturates the badge too, so `cellPresent` still cannot tell a dead player
+from a disconnected one on tint alone. The one thing a death draws that a
+disconnect never does: a red elimination X, centred under the card in its
+bottom band (`calib.deathMarker()`, geometry measured from a real capture
+rather than a live bootstrap — see its comment). `crop.cellDeath()`
+classifies it by pixel colour on the same every-3rd-pixel sampling grid
+`tintOfRect` uses: vividly red (high red, low green, red clearly above
+blue) with a minimum-cluster-size guard, discriminating it from the team's
+own red-tint background, an orange portrait highlight, and white UI text —
+all three measured on the same real capture the X itself came from.
+`phases.js`'s `readHud` checks it before falling back to `ABSENT_GUID`,
+reading `DEAD_GUID` instead when the X is present (never handed to the
+matcher either way — a desaturated card is not a readable portrait).
+`resolve.js` drops a `DEAD_GUID` read entirely, the same way it drops a
+`takeover-frame` sample above and for the same reason: the hero does not
+actually change while a player is dead, so the read is not evidence for or
+against anything, and an undropped one produces exactly the same two
+failure modes — a false `player-absent` on a player who was there the whole
+round, or a skewed raw vote producing a false `low-support`.
+
+`timeline.js`'s `planGrid()` — the fixed-step sampling grid every round is
+swept on — used to fall back to a SINGLE sample at a segment's nearest
+reachable middle when the segment was too short to contain a normal grid
+point at all. As of 2026-09-17 that fallback takes two independently-snapped
+samples instead, one near each half of the segment (`from + span/4` and
+`to - span/4`, each rounded to the nearest reachable step), collapsing back
+to one sample via the plan's own whole-plan dedupe when the segment is short
+enough that both quarter points land on the same tick — never worse than
+the old behaviour. A short round is exactly where a real mid-round swap is
+most likely to be under-sampled: the same 2026-09-17 review found a genuine
+Lifeweaver → Lucio → Jetpack Cat swap where only "Lucio" was ever detected,
+one contributing cause being too few samples to catch every segment, not a
+matcher-accuracy problem.
+
+A player disconnecting mid-round used to corrupt both the hero read and the
+attribution built from it. Overwatch's replay HUD does not leave a leaver's
+card blank in place — it removes it and compacts every player to its right
+one slot to the left (1-4 slots, depending on which of the 5 original
+positions disconnected), but the fixed 5-way pixel grid `calib.js` reads has
+no notion that the row shrank: the leaver's own slot read whoever shifted
+into its pixel territory (a different real player's hero, misread as a
+same-slot swap), and the single rightmost slot read `ABSENT_GUID` regardless
+of which slot actually left (confirmed live on H5Q9WE: `bones` disconnected,
+`SANTY` visually compacted into their slot). `attribute.js`'s old
+`attributeMap` shared the same fragility one level up — it resolved every
+player's slot from a single frame (falling forward through the first few
+kept samples only when the very first was unreadable), so a disconnect
+already underway on every candidate frame built the whole map's attribution
+from already-shifted data. As of 2026-09-17, `phases.readNames` OCRs all 10
+name crops on every sample (not once per map, ~7% capture overhead measured
+against the ~3.9s/visit baseline), and `attribute.js`'s `attributeFromSamples`
+runs once a map's samples are all collected: it tallies, per visual position,
+which player_id `assign()` placed there most often across every sample (the
+mode — a disconnect only ever affects a minority of a round's samples) to
+establish each side's canonical `player_id → slot` map, then re-keys every
+sample's hero-cell array from visual position into that canonical slot order
+before `resolve.rounds()` ever sees it. A sample's own identity match always
+takes priority when present; a position `assign()` couldn't confidently place
+that sample defaults to its own slot unchanged — so a name that's persistently
+illegible for reasons unrelated to any disconnect never loses that slot's
+hero data, only its player-attribution stays unresolved (`attribution-
+abstained`, same as before). `resolve.js`, `emit.js`, and `owdb/contribute.py`
+are unchanged — they keep consuming the same per-slot shape, now handed
+samples that are already in stable canonical order. See
+`specs/2026-09-17-replay-bot-disconnect-identity-{design,plan}.md`.
+
 `review_out.js` writes each map's initial `status` as `'reviewed'` rather than
 `'unreviewed'` when `resolve.js`'s `needsReview()` finds nothing but resolved
 swaps — a `contested` slot alone is not, by itself, a reason to hold up the
 whole map now that its winner is a real playtime majority, not a guess. Any
-other flag (`low-score`, `low-support`, `unknown-hero`,
-`attribution-abstained`, `round-unsampled`/`sparse-round`) still gates it. This
+other flag (`low-score`, `low-support`, `unknown-hero`, `cross-role-swap`,
+`takeover-frame`, `attribution-abstained`, `round-unsampled`/`sparse-round`)
+still gates it. This
 exists because a captured batch is mostly clean maps with nothing to check —
 390 maps from one 2026-09-15 run had only 50 that needed an actual look once
 swap-only maps stopped counting, against 99 that would have under the old

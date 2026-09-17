@@ -1,16 +1,11 @@
-// attribute.js: player attribution, without a real tesseract worker.
-// The crop against a real frame is exercised here too (nameRow/nameCrop are
-// not injected - only OCR is, matching how `io` is injected everywhere else
-// in the bot), with a fake OCR standing in for tesseract so the suite stays
-// fast and deterministic. See specs/2026-09-10-replay-bot-player-attribution-design.md.
+// attribute.js: which FACEIT player is in which HUD slot, resolved from a
+// whole map's already-collected samples. Pure, synchronous, no image loading
+// or OCR here - names are already-extracted text by the time this runs
+// (phases.readNames, captured once per sample, aggregated here across a
+// whole map). See specs/2026-09-17-replay-bot-disconnect-identity-design.md.
 const test = require('node:test');
 const assert = require('node:assert');
-const canvas = require('@napi-rs/canvas');
-const C = require('./corpus.js');
 const A = require('./attribute.js');
-
-const skip = C.absent() || false;
-const witness = C.NAMEPLATES[0];
 
 const CODE = { match_id: 'm1', game_no: 1, t1: 'team-a', t2: 'team-b' };
 
@@ -74,101 +69,129 @@ test('slotRolesFor looks up each slot\'s recognised hero in hero_roles', () => {
   assert.deepStrictEqual(A.slotRolesFor(heroRoles, reads), ['Tank', 'Damage', null, null, null]);
 });
 
-test('attributeMap resolves all ten slots against a real frame with an injected OCR', { skip }, async () => {
-  const img = await canvas.loadImage(C.at(witness.file));
-  const calls = [];
-  const ocr = async () => { throw new Error('should not be called - see stubbed reads below'); };
-  // Stubbing the OCR call itself (rather than asserting on the crop) keeps
-  // this test about attribute.js's wiring, not about tesseract's accuracy -
-  // that is measured live (§7 of the design), not in this suite. The reads
-  // returned are exactly what real tesseract read off this frame tonight.
-  const reads = { a: witness.a.slice(), b: witness.b.slice() };
-  let i = { a: 0, b: 0 };
-  const stub = A.make(async (cv) => {
-    calls.push(cv);
-    // Side is inferred from call order: five for a, then five for b.
-    const side = calls.length <= 5 ? 'a' : 'b';
-    const idx = side === 'a' ? calls.length - 1 : calls.length - 6;
-    return reads[side][idx];
+// ---- attributeFromSamples -------------------------------------------------
+//
+// specs/2026-09-17-replay-bot-disconnect-identity-design.md. Pure, synchronous,
+// no image loading or OCR here - names are already-extracted text by the time
+// this runs (phases.readNames, captured once per sample, aggregated here
+// across a whole map). Uses the file's existing lineupFeed()/CODE fixtures -
+// team-a: Noki(tank1)/Vilperttis(dmg1)/Jøpez(dmg2)/Lambinen(sup1)/Karhu(sup2).
+// team-b: Rawan(tank1)/Møøn(dmg1)/Cat(dmg2)/Çioüdo(sup1)/Zayano(sup2).
+
+// One sample's worth of {a, b} hero cells + {a, b} name-OCR strings. `heroes`
+// is five [guid, score] pairs per side.
+function sample(t, namesA, namesB, heroesA, heroesB) {
+  const cell = ([guid, score]) => ({ name: guid, guid, score });
+  return {
+    t,
+    a: heroesA.map(cell), b: heroesB.map(cell),
+    names: { a: namesA, b: namesB },
+  };
+}
+
+const NAMES_A = ['Noki', 'Vilperttis', 'Jøpez', 'Lambinen', 'Karhu'];
+const NAMES_B = ['Rawan', 'Møøn', 'Cat', 'Çioüdo', 'Zayano'];
+const HEROES = [['tank1', 0.9], ['dmg1', 0.9], ['dmg2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+const ABSENT_HEROES = [['tank1', 0.9], ['dmg1', 0.9], ['dmg2', 0.9], ['sup1', 0.9], ['ABSENT', null]];
+
+test('attributeFromSamples resolves every slot when nothing ever disconnects', () => {
+  const samples = [
+    sample(30, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(60, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(90, NAMES_A, NAMES_B, HEROES, HEROES),
+  ];
+  const out = A.attributeFromSamples(samples, lineupFeed(), CODE);
+  assert.strictEqual(out.correctedSamples.length, 3);
+  out.correctedSamples.forEach((s) => {
+    assert.strictEqual(s.a[0].guid, 'tank1', "slot 0 is Noki's hero");
+    assert.strictEqual(s.a[4].guid, 'sup2', "slot 4 is Karhu's hero");
   });
-
-  const out = await stub.attributeMap(img, sampleHeroes(), lineupFeed(), CODE);
-  assert.strictEqual(calls.length, 10);
-
-  assert.deepStrictEqual(out.a.ids, ['a-noki', 'a-vilperttis', 'a-jopez', 'a-lambinen', 'a-karhu']);
-  assert.deepStrictEqual(out.b.ids, ['b-rawan', 'b-moon', 'b-cat', 'b-cioudo', 'b-zayano']);
-  out.a.conf.concat(out.b.conf).forEach((c) => assert.ok(c === 'forced' || c === 'matched'));
+  assert.deepStrictEqual(out.attribution.a.ids, ['a-noki', 'a-vilperttis', 'a-jopez', 'a-lambinen', 'a-karhu']);
 });
 
-// The replay viewer put the feed's team B on the LEFT strip. attributeMap must
-// notice from the names and match each screen side against the team actually on
-// it - otherwise every hero is filed under the opponent.
-test('attributeMap detects a swapped orientation and assigns each side its real team', { skip }, async () => {
-  const img = await canvas.loadImage(C.at(witness.file));
-  // The frame's left names are team-a's, right are team-b's. Feed team-a/-b as
-  // if the FEED had them the other way round: now the LEFT screen shows the
-  // feed's "team B".
-  const swappedFeed = lineupFeed();
-  const tmp = swappedFeed.lineups['m1:1']['team-a'];
-  swappedFeed.lineups['m1:1']['team-a'] = swappedFeed.lineups['m1:1']['team-b'];
-  swappedFeed.lineups['m1:1']['team-b'] = tmp;
+test('a mid-round disconnect at an interior slot re-keys the shifted samples back to the right canonical slot', () => {
+  // Lambinen (slot 3, sup1) disconnects; Karhu (slot 4, sup2) visually
+  // compacts into slot 3's position. Position 4 reads nothing. Three
+  // "before" samples to one "during" sample, so the canonical vote clearly
+  // favors the undisturbed majority (spec §3.2's MODE, not needing >50%,
+  // but this keeps the test unambiguous either way).
+  const duringNamesA = ['Noki', 'Vilperttis', 'Jøpez', 'Karhu', ''];
+  const duringHeroesA = [['tank1', 0.9], ['dmg1', 0.9], ['dmg2', 0.9], ['sup2', 0.9], ['ABSENT', null]];
+  const samples = [
+    sample(30, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(60, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(90, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(120, duringNamesA, NAMES_B, duringHeroesA, HEROES), // side a only - side b never disconnects
+  ];
+  const out = A.attributeFromSamples(samples, lineupFeed(), CODE);
 
-  const calls = [];
-  const reads = { a: witness.a.slice(), b: witness.b.slice() };
-  const stub = A.make(async () => {
-    calls.push(1);
-    const side = calls.length <= 5 ? 'a' : 'b';
-    return reads[side][side === 'a' ? calls.length - 1 : calls.length - 6];
-  });
-  const out = await stub.attributeMap(img, sampleHeroes(), swappedFeed, CODE);
-
-  assert.strictEqual(out.orientation, 'swapped', 'code.t2 is on the left');
-  // The left screen shows Noki's team (a-* ids, now under the feed's team-b
-  // key). Matched against the team actually on that side, not code.t1's.
-  assert.deepStrictEqual(out.a.ids, ['a-noki', 'a-vilperttis', 'a-jopez', 'a-lambinen', 'a-karhu']);
-  assert.deepStrictEqual(out.b.ids, ['b-rawan', 'b-moon', 'b-cat', 'b-cioudo', 'b-zayano']);
+  const shiftedA = out.correctedSamples[3].a; // the t=120 sample, side a
+  assert.strictEqual(shiftedA[3].guid, 'ABSENT', 'slot 3 (the real leaver, Lambinen) reads absent, not slot 4');
+  assert.strictEqual(shiftedA[4].guid, 'sup2', "slot 4's hero read (Karhu) is recovered from visual position 3");
 });
 
-test('attributeMap reports orientation direct when the feed order holds', { skip }, async () => {
-  const img = await canvas.loadImage(C.at(witness.file));
-  const calls = [];
-  const reads = { a: witness.a.slice(), b: witness.b.slice() };
-  const stub = A.make(async () => {
-    calls.push(1);
-    const side = calls.length <= 5 ? 'a' : 'b';
-    return reads[side][side === 'a' ? calls.length - 1 : calls.length - 6];
-  });
-  const out = await stub.attributeMap(img, sampleHeroes(), lineupFeed(), CODE);
-  assert.strictEqual(out.orientation, 'direct');
+test('disconnect at the rightmost slot needs no shift - already correct today, must stay correct', () => {
+  const namesGone = ['Noki', 'Vilperttis', 'Jøpez', 'Lambinen', ''];
+  const samples = [
+    sample(30, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(60, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(90, namesGone, NAMES_B, ABSENT_HEROES, HEROES),
+  ];
+  const out = A.attributeFromSamples(samples, lineupFeed(), CODE);
+  assert.strictEqual(out.correctedSamples[2].a[4].guid, 'ABSENT');
+  assert.strictEqual(out.correctedSamples[2].a[3].guid, 'sup1', 'slot 3 (Lambinen) unaffected, no shift needed');
 });
 
-test('attributeMap abstains every slot rather than guessing, when the feed has no lineup', { skip }, async () => {
-  const img = await canvas.loadImage(C.at(witness.file));
-  const stub = A.make(async () => 'irrelevant');
-  const out = await stub.attributeMap(img, sampleHeroes(), {}, CODE);
-  assert.deepStrictEqual(out.a.ids, [null, null, null, null, null]);
-  assert.deepStrictEqual(out.b.ids, [null, null, null, null, null]);
-  assert.strictEqual(out.orientation, null, 'no roster, so the side cannot be proven');
+test('a 4-slot shift (slot 0 disconnects) re-keys all four downstream slots', () => {
+  // Noki (slot 0, tank1) disconnects - Vilperttis/Jøpez/Lambinen/Karhu all
+  // compact one slot to the left; position 4 reads nothing.
+  const duringNamesA = ['Vilperttis', 'Jøpez', 'Lambinen', 'Karhu', ''];
+  const duringHeroesA = [['dmg1', 0.9], ['dmg2', 0.9], ['sup1', 0.9], ['sup2', 0.9], ['ABSENT', null]];
+  const samples = [
+    sample(30, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(60, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(90, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(120, duringNamesA, NAMES_B, duringHeroesA, HEROES),
+  ];
+  const out = A.attributeFromSamples(samples, lineupFeed(), CODE);
+  const shifted = out.correctedSamples[3].a;
+  assert.strictEqual(shifted[0].guid, 'ABSENT', 'Noki genuinely gone');
+  assert.strictEqual(shifted[1].guid, 'dmg1', "Vilperttis' hero recovered into slot 1");
+  assert.strictEqual(shifted[2].guid, 'dmg2', "Jøpez' hero recovered into slot 2");
+  assert.strictEqual(shifted[3].guid, 'sup1', "Lambinen's hero recovered into slot 3");
+  assert.strictEqual(shifted[4].guid, 'sup2', "Karhu's hero recovered into slot 4");
 });
 
-test('attributeMap still forces the singleton role when the name row cannot be found', async () => {
-  // A blank canvas has no text anywhere, so nameRow legitimately finds
-  // nothing - the real degraded path, not a mock standing in for it.
-  const cv = canvas.createCanvas(2560, 1440);
-  cv.getContext('2d').fillStyle = '#222'; cv.getContext('2d').fillRect(0, 0, 2560, 1440);
+test('reconnection: samples after the return match the original canonical slot again', () => {
+  const duringNamesA = ['Noki', 'Vilperttis', 'Jøpez', 'Karhu', ''];
+  const duringHeroesA = [['tank1', 0.9], ['dmg1', 0.9], ['dmg2', 0.9], ['sup2', 0.9], ['ABSENT', null]];
+  const samples = [
+    sample(30, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(60, NAMES_A, NAMES_B, HEROES, HEROES),
+    sample(90, duringNamesA, NAMES_B, duringHeroesA, HEROES),  // Lambinen disconnects
+    sample(120, NAMES_A, NAMES_B, HEROES, HEROES),             // reconnected
+    sample(150, NAMES_A, NAMES_B, HEROES, HEROES),
+  ];
+  const out = A.attributeFromSamples(samples, lineupFeed(), CODE);
+  assert.strictEqual(out.correctedSamples[3].a[3].guid, 'sup1', "back to Lambinen's hero after reconnecting");
+  assert.strictEqual(out.correctedSamples[3].a[4].guid, 'sup2', "Karhu correctly back in her own slot too");
+});
 
-  const ocrCalls = [];
-  const stub = A.make(async (x) => { ocrCalls.push(x); return 'unused'; });
-  const out = await stub.attributeMap(cv, sampleHeroes(), lineupFeed(), CODE);
-
-  assert.strictEqual(ocrCalls.length, 0, 'OCR must not run over an unlocated row');
-  // Tank is a one-player pool - the constraint alone settles it, no name
-  // evidence needed or used. Damage and Support are two-player pools: with
-  // every read empty, both permutations score an identical 0 and assign()
-  // correctly abstains rather than guessing which of the tied two is which.
-  assert.strictEqual(out.a.ids[0], 'a-noki');
-  assert.strictEqual(out.a.conf[0], 'forced');
-  assert.deepStrictEqual(out.a.ids.slice(1), [null, null, null, null]);
-  assert.strictEqual(out.b.ids[0], 'b-rawan');
-  assert.strictEqual(out.b.conf[0], 'forced');
+test('a name illegible on EVERY sample, unrelated to any disconnect, does not lose hero data', () => {
+  // Neither Damage name ever OCRs to anything usable - persistently bad
+  // plates, nothing to do with a disconnect. Both must stay blank (not just
+  // one): assign.js's own decisive-elimination path (a single STRONG_NAME_
+  // SCORE-clean read resolves its partner by elimination in a two-player
+  // pool, unmodified pre-existing behaviour) would otherwise still resolve
+  // the slot from the OTHER Damage player's clean name - this test is about
+  // genuine, whole-pool ambiguity, not one lucky partner read. The hero
+  // reads must survive regardless.
+  const namesA = ['Noki', '', '', 'Lambinen', 'Karhu'];
+  const samples = [
+    sample(30, namesA, NAMES_B, HEROES, HEROES),
+    sample(60, namesA, NAMES_B, HEROES, HEROES),
+  ];
+  const out = A.attributeFromSamples(samples, lineupFeed(), CODE);
+  assert.strictEqual(out.correctedSamples[0].a[1].guid, 'dmg1', 'hero data survives even though the name never resolved');
+  assert.strictEqual(out.attribution.a.ids[1], null, 'attribution correctly stays unresolved for this slot');
 });

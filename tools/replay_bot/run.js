@@ -75,6 +75,9 @@ const A = require('./attribute.js');
 const Resolve = require('./resolve.js');
 const RO = require('./review_out.js');
 const calib = require('./calib.js');
+const Crop = require('./crop.js');
+const S = require('./screen.js');
+const canvas = require('@napi-rs/canvas');
 const TIMING = require('./timing.js');
 const Tesseract = require('tesseract.js');
 
@@ -321,6 +324,213 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // rather than inside main(). An unterminated worker holds Node open exactly
 // as an unclosed PowerShell pipe does.
 let ocrWorker = null;
+let jevWorker = null; // banner OCR for importWithDiagnosis - null when Jev is unavailable
+
+// ---------------------------------------------------- import diagnosis ----
+//
+// 2026-09-17: validated live over several rounds of testing tonight
+// (tools/replay_bot/PROTOTYPE_typesafe_trap_run.js - 3/3 correct trap
+// diagnoses, 248s saved vs this exact blind-wait path) - see PLANS.md's P3
+// TypeSafe/Jev entry and [[typesafe-live-navigation-testing]] for the full
+// writeup. FAILS OPEN, always: this runs unattended overnight, so ANY
+// problem with the TypeSafe API (missing key, network error, malformed
+// response, anything) must fall straight back to the exact ORIGINAL blind
+// `CS.waitFor` behavior rather than stall or crash the run - see
+// [[typesafe-vendor-caution]]. Never load-bearing.
+//
+// Preserves the exact external contract the old two-line block had: resolves
+// normally on success, throws an Error on failure - so the existing outer
+// try/catch, ledger, fail-streak-cap, and retry logic all keep working
+// completely unchanged. Only the INSIDE got smarter and faster.
+
+const JEV_KEY_PATH = path.join(__dirname, 'state', 'typesafe_key.json');
+function loadJevKey() {
+  try {
+    const j = JSON.parse(fs.readFileSync(JEV_KEY_PATH, 'utf8'));
+    return process.env.TYPESAFE_API_KEY || j.TYPESAFE_API_KEY || null;
+  } catch (e) { return null; }
+}
+const JEV_API_KEY = loadJevKey();
+
+const JEV_BANNER_CROP = { x: 0, y: 500, w: 2560, h: 250 };
+async function jevOcrBanner(img) {
+  const cv = canvas.createCanvas(JEV_BANNER_CROP.w, JEV_BANNER_CROP.h);
+  cv.getContext('2d').drawImage(img, JEV_BANNER_CROP.x, JEV_BANNER_CROP.y,
+    JEV_BANNER_CROP.w, JEV_BANNER_CROP.h, 0, 0, JEV_BANNER_CROP.w, JEV_BANNER_CROP.h);
+  const { data } = await jevWorker.recognize(cv.toBuffer('image/png'));
+  return data.text.trim();
+}
+
+let jevReplayHistoryRef = null, jevEscMenuRef = null;
+function loadJevScreenRefs() {
+  jevReplayHistoryRef = readJson(path.join(__dirname, 'screens', 'replay-history.json'), null);
+  jevEscMenuRef = readJson(path.join(__dirname, 'screens', 'esc-menu.json'), null);
+}
+
+const JEV_IMPORT_MEASUREMENT =
+  'Numeric + OCR signals read off one frame of the Overwatch client, taken ' +
+  'right after submitting an import code but BEFORE any further click. ' +
+  'banner_ocr_text is OCR of the on-screen banner where a result message ' +
+  'appears - it may be noisy or partially wrong (OCR on a stylised italic ' +
+  'game font, or empty if nothing is there yet), so treat it as a strong ' +
+  'hint, not ground truth. dist_to_replay_list/dist_to_esc_menu are ' +
+  'fingerprint distances (0-255) against two known reference screens - LOWER ' +
+  'means more similar; neither reference covers a dialog, and multiple ' +
+  'different dialogs read similarly on these alone, so lean on ' +
+  'banner_ocr_text as the primary signal for WHICH outcome this is. ' +
+  'left/right plate tint strongly positive together means a replay is ' +
+  'genuinely open (import succeeded and the viewer has already loaded).';
+
+const JEV_IMPORT_STATES = {
+  match_imported: 'The import succeeded - the banner reads something like ' +
+    '"MATCH LOADED" or similar success wording, typically with DONE/VIEW ' +
+    'buttons, OR tints are already strongly positive together. Safe to ' +
+    'continue: view the replay.',
+  already_imported: 'The code was already imported previously - the banner ' +
+    'reads something like "THAT REPLAY ALREADY EXISTS IN YOUR LIST" with an ' +
+    'OK button. Should NOT continue with this code - dismiss and move on.',
+  incompatible_version: 'The replay cannot load because it is from an ' +
+    'incompatible/old game version - the banner reads something like "LOAD ' +
+    'FAILED: INCOMPATIBLE VERSION" with a CANCEL button. Should NOT continue ' +
+    'with this code - dismiss and move on.',
+  invalid_or_not_found: 'The code itself appears to be rejected as invalid, ' +
+    'unrecognised, or not found - a banner mentioning the code being wrong, ' +
+    'unavailable, or a similar rejection NOT about duplication or version. ' +
+    'Should NOT continue with this code - dismiss and move on.',
+  still_loading: 'Nothing conclusive yet - banner_ocr_text is empty/blank ' +
+    'and tints are not yet positive together. Genuinely ambiguous, worth ' +
+    'polling again rather than guessing.',
+  unrecognized: 'banner_ocr_text is present but does not clearly match any ' +
+    'of the above (garbled beyond recognition), or signals conflict. ' +
+    'Escalate to a human rather than guess - but if this EXACT reading ' +
+    'repeats on a second consecutive check, it is safe to treat as a real, ' +
+    'if unlabelled, dialog that should be dismissed rather than waited out.',
+};
+const JEV_ACTIONABLE = new Set(['already_imported', 'incompatible_version', 'invalid_or_not_found']);
+
+async function jevAskScreen(sig) {
+  const res = await fetch('https://api.typesafe.ai/v1/systemone', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${JEV_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      state: sig,
+      model: 'jev-latest',
+      questions: {
+        screen: {
+          type: 'choice',
+          instructions: 'Which of these best describes the import result currently on ' +
+            'screen, given the signals in state? Can this code be treated as successfully ' +
+            'imported, or should it be dismissed and skipped?',
+          criteria: JEV_IMPORT_STATES,
+        },
+      },
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
+  return JSON.parse(text).answers.screen;
+}
+
+async function jevReadImportSignals(io) {
+  const p = await io.grabTo('jevimport');
+  const img = await io.loadImage(p);
+  const thumb = S.thumb(img);
+  const tint = Crop.hudTint(img, calib);
+  const ocrText = await jevOcrBanner(img);
+  return {
+    measurement: JEV_IMPORT_MEASUREMENT,
+    banner_ocr_text: ocrText,
+    dist_to_replay_list: jevReplayHistoryRef
+      ? Number((S.distance(thumb, jevReplayHistoryRef.thumb) || -1).toFixed(1)) : -1,
+    dist_to_esc_menu: jevEscMenuRef
+      ? Number((S.distance(thumb, jevEscMenuRef.thumb) || -1).toFixed(1)) : -1,
+    left_plate_tint: Number(tint.a.toFixed(1)),
+    right_plate_tint: Number(tint.b.toFixed(1)),
+  };
+}
+
+async function jevClickFinal(speedFn) {
+  // The real chunk's own held-back 5th event (open-import.json[4]): same
+  // spot works for VIEW REPLAY on success and OK/CANCEL on every known
+  // error dialog (validated live tonight, PROTOTYPE_typesafe_trap_run.js).
+  await R.playEvents([{ type: 'click', button: 'left', x: 1340, y: 833, waitMs: 0, holdMs: 93 }],
+    { speed: speedFn(), name: 'dismiss-or-view' });
+}
+
+// Returns nothing (resolves) on success; throws an Error on failure - the
+// SAME contract `CS.waitFor` always had, so the caller's try/catch needs no
+// changes. `deadlineMs` is TIMING.load.timeoutMs, exactly as before.
+async function importWithDiagnosis(io, codeStr, deadlineMs, speedFn) {
+  const chunk = R.load('open-import');
+  const prefix = chunk.events.slice(0, 4); // IMPORT, field, paste, SUBMIT - never the blind dismiss
+  await R.playEvents(prefix, { code: codeStr, speed: speedFn(), name: 'open-import-prefix' });
+
+  if (!JEV_API_KEY || !jevWorker) {
+    // No Jev available at all - the exact original behavior, blind final
+    // click then blind wait.
+    await jevClickFinal(speedFn);
+    await CS.waitFor(io, true, deadlineMs, 'the replay to load');
+    return;
+  }
+
+  const settleMs = Math.max(1000, Math.round(2500 / speedFn()) + 500);
+  await wait(settleMs);
+
+  try {
+    let lastUnrecognized = null;
+    const deadline = Date.now() + deadlineMs;
+    while (Date.now() < deadline) {
+      if (await CS.inReplay(io)) return; // loaded on its own, no click needed
+
+      const sig = await jevReadImportSignals(io);
+      const ans = await jevAskScreen(sig);
+      console.log(`  [jev-import] ${ans.choice} (${ans.confidence.toFixed(2)}) ocr=${JSON.stringify(sig.banner_ocr_text)}`);
+
+      if (ans.choice === 'match_imported' && ans.confidence >= 0.6) {
+        await jevClickFinal(speedFn);
+        // Confidently diagnosed as a success already - a failure HERE is a
+        // real, final failure (the viewer just didn't come up after VIEW),
+        // not a Jev/API problem, so it must not be reinterpreted by the
+        // fallback branch below as "Jev is unavailable, blind-wait 90s more".
+        try {
+          await CS.waitFor(io, true, 15000, 'the viewer to load after VIEW');
+        } catch (e2) {
+          throw new Error(`import rejected (viewer never opened after a confident match_imported): ${e2.message}`);
+        }
+        return;
+      }
+      if (JEV_ACTIONABLE.has(ans.choice) && ans.confidence >= 0.6) {
+        await jevClickFinal(speedFn);
+        throw new Error(`import rejected (${ans.choice}): ${sig.banner_ocr_text}`);
+      }
+      if (ans.choice === 'unrecognized' && sig.banner_ocr_text) {
+        if (lastUnrecognized === sig.banner_ocr_text) {
+          await jevClickFinal(speedFn);
+          throw new Error(`import rejected (unrecognized dialog, stable): ${sig.banner_ocr_text}`);
+        }
+        lastUnrecognized = sig.banner_ocr_text;
+      } else {
+        lastUnrecognized = null;
+      }
+      await io.sleep(TIMING.poll.ms);
+    }
+    // Ran out the clock without ever reaching a confident read either way -
+    // a real, final failure, not a fallback case. Thrown directly (not via
+    // another CS.waitFor call) so it can't be caught by the fallback branch
+    // below and turned into a second, wasteful full-length blind wait.
+    throw new Error(`timed out after ${Math.round(deadlineMs / 1000)}s waiting for the replay to load (jev diagnosis)`);
+  } catch (e) {
+    if (/^import rejected/.test(e.message) || /^timed out.*\(jev diagnosis\)/.test(e.message)) throw e; // a real, diagnosed failure - not a fallback case
+    // Anything else (a network error, a malformed API response, Jev being
+    // down) - fail OPEN. The prefix is already played; the final click may
+    // or may not have been sent yet, so send it (idempotent enough - a
+    // second click at the same spot on an already-resolved screen is a
+    // no-op in practice) and fall back to the ORIGINAL blind behavior.
+    console.log(`  Jev import diagnosis unavailable (${e.message}) - falling back to the blind wait`);
+    await jevClickFinal(speedFn).catch(() => {});
+    await CS.waitFor(io, true, deadlineMs, 'the replay to load');
+  }
+}
 
 // ----------------------------------------------------------------- main ----
 
@@ -433,10 +643,30 @@ async function main() {
     // setting could affect.
     tessedit_pageseg_mode: '8',
   });
-  const attributor = A.make(async (cv) => {
+  // Passed into capture.captureMap({ ocr: ocrPlate }) so every sample reads
+  // names alongside heroes (phases.readNames) - attribution is resolved from
+  // every sample now, not one frame. See
+  // specs/2026-09-17-replay-bot-disconnect-identity-design.md.
+  const ocrPlate = async (cv) => {
     const { data } = await ocrWorker.recognize(cv.toBuffer('image/png'));
     return data.text.trim();
-  });
+  };
+
+  // Jev-diagnosed import (importWithDiagnosis above) - optional, never
+  // load-bearing. Skipped entirely (not just at call time) when there is no
+  // key, so a normal run with no TYPESAFE_API_KEY pays zero extra startup
+  // cost and behaves exactly as it always has.
+  if (JEV_API_KEY) {
+    loadJevScreenRefs();
+    jevWorker = await Tesseract.createWorker('eng');
+    await jevWorker.setParameters({
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ .:'",
+      tessedit_pageseg_mode: '7',
+    });
+    console.log('Jev import diagnosis: ENABLED (key found) - falls back to the blind wait on any problem');
+  } else {
+    console.log('Jev import diagnosis: off (no TYPESAFE_API_KEY) - using the original blind wait');
+  }
 
   // The time-skip interval is a per-SESSION thing, and both halves of handling
   // it matter.
@@ -613,12 +843,9 @@ async function main() {
       }
 
       const tOpen = Date.now();
-      await R.play('open-import', { code: code.code, speed: chunkSpeed() });
-      const tPlayed = Date.now();
-      await CS.waitFor(io, true, TIMING.load.timeoutMs, 'the replay to load');
+      await importWithDiagnosis(io, code.code, TIMING.load.timeoutMs, chunkSpeed);
       const tLoaded = Date.now();
-      console.log(`import ${((tPlayed - tOpen) / 1000).toFixed(1)}s, ` +
-        `client loaded the replay in ${((tLoaded - tPlayed) / 1000).toFixed(1)}s`);
+      console.log(`import + load: ${((tLoaded - tOpen) / 1000).toFixed(1)}s`);
       imported = true;
 
       // waitFor returns the moment the team plates are drawn, which is NOT the
@@ -644,6 +871,7 @@ async function main() {
         stepS: sessionStepS, afterViewer: setInterval,
         sampleQuiesceMs: args.sampleQuiesce,
         noDrag: args.noDrag,
+        ocr: ocrPlate,
       });
       if (!sessionStepS && got.stepS) {
         sessionStepS = got.stepS;
@@ -651,45 +879,27 @@ async function main() {
       }
       first = false;
 
-      // Resolved once per map, off the frames the sample sweep already read -
-      // never per sample (§2 of the player-attribution design). The FIRST
-      // sample's frame is the usual source, but a round-intro or transition
-      // frame can land with its name rows still missing (2026-09-14: the Nepal
-      // first frame OCR'd as kill-feed text while every later frame read the
-      // roster perfectly). So fall forward through the first few kept samples
-      // and keep whichever resolves the most slots - assignment is additive,
-      // and a bad name read abstains rather than guesses (assign.js's floor),
-      // so the most-assigned result is the one to trust. Attribution is still
-      // one-shot per map, and a total failure degrades to no names rather than
-      // failing the map (§6 of that design) - unlike everything else in this
-      // loop, which refuses loudly.
+      // Resolved from EVERY sample, not one frame - specs/2026-09-17-
+      // replay-bot-disconnect-identity-design.md. A disconnect landing on
+      // whichever frame used to be picked here could corrupt attribution
+      // for the whole map (and misattribute hero reads to the wrong slot on
+      // a slot-shift); this can't happen once every sample votes. Attribution
+      // is still resolved once per map, and a total failure degrades to no
+      // names rather than failing the map (§6 of that design, same contract
+      // the old per-frame attempt had) - unlike everything else in this loop,
+      // which refuses loudly. `attribution` keeps the flat {a, b, orientation}
+      // shape every downstream consumer (emit.js, resolve.js, review_out.js)
+      // already expects.
+      let identity = null;
       let attribution = null;
-      if (got.samples.length) {
-        try {
-          let assignedCount = -1;
-          const candidates = got.samples.slice(0, 4).filter((s) => s.framePath);
-          for (let i = 0; i < candidates.length; i++) {
-            const cand = candidates[i];
-            const frame = await io.loadImage(cand.framePath);
-            const attempt = await attributor.attributeMap(
-              frame, { a: cand.a, b: cand.b }, feed, code);
-            const assigned = (attempt.a.conf || []).concat(attempt.b.conf || [])
-              .filter(Boolean).length;
-            if (!attribution || assigned > assignedCount) {
-              attribution = attempt;
-              assignedCount = assigned;
-              if (i > 0) {
-                console.log(`attribution: first sample's names were not readable, ` +
-                  `using sample at ${cand.t}s (${assigned}/10 slots)`);
-              }
-            }
-            if (assigned >= 8) break;
-          }
-        } catch (e) {
-          console.log(`attribution failed, map keeps its hero reads without ` +
-            `player names: ${e.message}`);
-        }
+      try {
+        identity = A.attributeFromSamples(got.samples, feed, code);
+        attribution = { a: identity.attribution.a, b: identity.attribution.b, orientation: identity.orientation };
+      } catch (e) {
+        console.log(`attribution failed, map keeps its hero reads without ` +
+          `player names: ${e.message}`);
       }
+      const correctedSamples = identity ? identity.correctedSamples : got.samples;
 
       // The replay viewer does not always put the feed's "team A" on the left,
       // and heroes_a is whatever is on the left. When attribution's name read
@@ -725,7 +935,7 @@ async function main() {
       // contribution above - that stays per-sample until the review page's
       // finalize step rebuilds it from confirmed rounds.
       try {
-        const resolved = Resolve.rounds(got.samples, rounds, {
+        const resolved = Resolve.rounds(correctedSamples, rounds, {
           heroRoles: feed.hero_roles || {},
           attribution: attribution,
           planned: countPlanned(got.plan, rounds),
@@ -822,5 +1032,11 @@ if (require.main === module) {
     .catch(function (e) { console.error('FAILED: ' + e.message); process.exitCode = 1; })
     // The PowerShell host holds a pipe, and a held pipe keeps Node alive after
     // the work is done. The OCR worker is the same shape of problem.
-    .then(function () { H.close(); return ocrWorker ? ocrWorker.terminate() : null; });
+    .then(function () {
+      H.close();
+      return Promise.all([
+        ocrWorker ? ocrWorker.terminate() : null,
+        jevWorker ? jevWorker.terminate() : null,
+      ]);
+    });
 }

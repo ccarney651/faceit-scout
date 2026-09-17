@@ -101,6 +101,11 @@
     var conf = [null, null, null, null, null];
     reads = reads || []; players = players || []; slotRoles = slotRoles || [];
 
+    // Slots and players left over from a role-count mismatch (see below) -
+    // pooled across every mismatched group and given one cross-role decisive
+    // pass once the per-role loop is done.
+    var rescueSlots = [], rescuePool = [];
+
     for (var r = 0; r < ROLES.length; r++) {
       var role = ROLES[r];
       var slots = [], pool = [], i;
@@ -108,11 +113,18 @@
       for (i = 0; i < players.length; i++) {
         if (players[i] && players[i].id && normRole(players[i].role) === role) pool.push(players[i]);
       }
-      // Exact cover or nothing. A mismatch means either a misrecognised portrait
-      // (owdb/match.py's roles_consistent check, same reasoning) or a player whose
-      // role never came through - both are reasons to leave this group to the
-      // operator, not to force a body into a slot.
-      if (!slots.length || slots.length !== pool.length) continue;
+      // A mismatch means either a misrecognised portrait (owdb/match.py's
+      // roles_consistent check, same reasoning) or a player whose role never
+      // came through - either way the ROLE LABEL is what's suspect here, not
+      // necessarily the name evidence, so the exact-cover permutation search
+      // can't run but the leftover slots/players still get a shot at a
+      // decisive, unambiguous NAME match below (see the rescue pass).
+      if (!slots.length) continue;
+      if (slots.length !== pool.length) {
+        rescueSlots = rescueSlots.concat(slots);
+        rescuePool = rescuePool.concat(pool);
+        continue;
+      }
 
       var perms = permutations(pool), scored = [];
       for (i = 0; i < perms.length; i++) {
@@ -160,6 +172,36 @@
         conf[slots[i]] = how;
       }
     }
+
+    // Rescue pass: role bookkeeping failed for these slots (their group's
+    // count didn't match), so it cannot gate name evidence the way the
+    // per-role loop above does. Name evidence still can, but only when it is
+    // STRONG_NAME_SCORE-decisive AND unambiguous - a slot's one-and-only
+    // decisive claim on a player who has no other decisive claimant. That is
+    // strictly narrower than the per-role floor/margin gates above; it never
+    // resolves a slot by elimination or a group mean the way those do, only
+    // an outright, uncontested name match. Two slots racing for the same
+    // player, or one slot decisively matching two players, both abstain -
+    // "decisive" is not "unique" by itself, and only uniqueness is safe here.
+    var claims = [];
+    rescueSlots.forEach(function (si) {
+      rescuePool.forEach(function (p) {
+        var sc = scoreRead(reads[si], p);
+        if (sc >= (Names && Names.STRONG_NAME_SCORE || 75)) claims.push({ slot: si, player: p });
+      });
+    });
+    var bySlot = {}, byPlayer = {};
+    claims.forEach(function (c) {
+      (bySlot[c.slot] = bySlot[c.slot] || []).push(c);
+      (byPlayer[c.player.id] = byPlayer[c.player.id] || []).push(c);
+    });
+    claims.forEach(function (c) {
+      if (bySlot[c.slot].length === 1 && byPlayer[c.player.id].length === 1) {
+        ids[c.slot] = c.player.id;
+        conf[c.slot] = 'matched';
+      }
+    });
+
     return { ids: ids, conf: conf };
   }
 

@@ -209,6 +209,59 @@ test('cellTint reads each slot independently, not the side averaged together', (
 // warm-toned portrait crashed a live run by reading as a leaver's empty
 // slot, and it was never a leaver (confirmed against FACEIT's own data, and
 // by eye against the frame itself).
+// --- death-elimination marker: dead but present, not a leaver ------------
+//
+// See calib.deathMarker()'s comment for the full account. A death
+// desaturates the WHOLE card, badge included, so cellTint alone reads it
+// exactly like a real disconnect; cellDeath is the rescue signal - a real
+// disconnect shows raw exposed background there, never the X.
+// The real side b team-tint measured on the same capture the X itself came
+// from (r~104,g~18,b~33) - `#a01010` (used elsewhere in this file, where
+// exact hue never mattered) is a brighter red that happens to cross
+// DEATH_R_MIN, which a real card's own background tint must never do.
+const REAL_RED_TINT = 'rgb(104,18,33)';
+
+function frameWithDeathAt(side, deadIndex) {
+  const img = frameWithSlotColours(
+    ['#1040a0', '#1040a0', '#1040a0', '#1040a0', '#1040a0'],
+    [REAL_RED_TINT, REAL_RED_TINT, REAL_RED_TINT, REAL_RED_TINT, REAL_RED_TINT]);
+  const cx = img.getContext('2d');
+  const badge = calib.presenceBadge(side)[deadIndex];
+  cx.fillStyle = '#3a3a3a'; // desaturated - a death dims the badge too, not just the portrait
+  cx.fillRect(badge.x, badge.y, badge.w, badge.h);
+  const mark = calib.deathMarker(side)[deadIndex];
+  cx.fillStyle = 'rgb(216,34,80)'; // the X's own measured colour
+  cx.fillRect(mark.x, mark.y, mark.w, mark.h);
+  return img;
+}
+
+test('a dead-but-present card reads a low badge tint AND a positive death marker', () => {
+  const img = frameWithDeathAt('b', 2);
+  const tint = Crop.cellTint(img, calib);
+  assert.ok(tint.b[2] < calib.HUD_TINT, 'the desaturated badge reads low, same as a real disconnect would');
+  const dead = Crop.cellDeath(img, calib);
+  assert.strictEqual(dead.b[2], true, 'the X rescues it from being read as a leaver');
+  [0, 1, 3, 4].forEach((i) => assert.strictEqual(dead.b[i], false, 'a normal, alive card has no X'));
+  assert.deepStrictEqual(dead.a, [false, false, false, false, false]);
+});
+
+test('a genuinely absent slot (exposed scenery, no X) does not read as death', () => {
+  const img = frameWithSlotColours(
+    ['#1040a0', '#1040a0', '#1040a0', '#808080', '#1040a0'],
+    ['#a01010', '#a01010', '#a01010', '#a01010', '#a01010']);
+  const dead = Crop.cellDeath(img, calib);
+  assert.strictEqual(dead.a[3], false, 'no X was ever drawn - a real leaver, not a death');
+});
+
+test('cellDeath does not fire on the ordinary team-colour tint every present card has', () => {
+  const img = frameWithSlotColours(
+    ['#1040a0', '#1040a0', '#1040a0', '#1040a0', '#1040a0'],
+    [REAL_RED_TINT, REAL_RED_TINT, REAL_RED_TINT, REAL_RED_TINT, REAL_RED_TINT]);
+  const dead = Crop.cellDeath(img, calib);
+  assert.deepStrictEqual(dead.a, [false, false, false, false, false]);
+  assert.deepStrictEqual(dead.b, [false, false, false, false, false]);
+});
+
 test('a warm-toned real portrait does not read as an absent slot', { skip: C.absent() || false }, async () => {
   const img = await loadImage(C.file('warm-portrait-low-tint'));
   const got = Crop.cellTint(img, calib);

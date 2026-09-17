@@ -317,10 +317,37 @@
     return out;
   }
 
+  // Whether each cell shows the death-elimination "X" - see
+  // calib.deathMarker()'s comment for why cellTint alone cannot tell a dead
+  // player from a disconnected one (death desaturates the badge too). Same
+  // sampling grid as tintOfRect (every 3rd pixel), counting matches against
+  // calib.isDeathMarkPixel() rather than averaging a tint - the X is a
+  // small, sharply-coloured glyph in a mostly-dark region, so a mean would
+  // dilute it away; a real cluster is what a real X leaves.
+  function cellDeath(img, calib) {
+    var d = pixelsOf(img);
+    var out = { a: [], b: [] };
+    ['a', 'b'].forEach(function (side) {
+      calib.deathMarker(side).forEach(function (rect) {
+        var count = 0;
+        var bottom = Math.round(rect.y + rect.h);
+        for (var y = Math.round(rect.y); y < bottom; y += 3) {
+          for (var x = Math.round(rect.x); x < Math.round(rect.x + rect.w); x += 3) {
+            var i = (y * img.width + x) * 4;
+            if (calib.isDeathMarkPixel(d[i], d[i + 1], d[i + 2])) count++;
+          }
+        }
+        out[side].push(count >= calib.DEATH_MIN_SAMPLES);
+      });
+    });
+    return out;
+  }
+
   var Mod = {
     cell: cell,
     hudTint: hudTint,
     cellTint: cellTint,
+    cellDeath: cellDeath,
     all: all,
     barFlags: barFlags,
     panelBrightFraction: panelBrightFraction,

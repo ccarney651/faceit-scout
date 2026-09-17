@@ -38,7 +38,11 @@
     // HUD's card gap-seam. Added 2026-09-12 - refs.json got a matching rebuild
     // in the training pipeline (commit 4b2ad24) but this file didn't, so every
     // live crop was ~6% wider than the ref it was scored against.
-    ref: { REF_W: 64, REF_H: 36, LF: 0.42, TF: 0.45, RF: 0.06, PAD: 2 },
+    ref: {
+      REF_W: 64, REF_H: 36, LF: 0.42, TF: 0.45, RF: 0.06, PAD: 2,
+      // The death-elimination "X" marker's band - see deathMarker() below.
+      DEATH_X0: 0.38, DEATH_X1: 0.64, DEATH_Y0: 0.80,
+    },
 
     // The replay scrubber, measured on the same rig and frame. y0..y1 are the
     // bar's core rows, found by scanning for the band of steady mid luminance
@@ -248,6 +252,50 @@
     return out;
   }
 
+  // The red "eliminated" X a dead-but-present player's card shows, centred
+  // under the card in its bottom band. presenceBadge() alone cannot tell a
+  // dead player from a disconnected one - a death desaturates the WHOLE
+  // card, badge included, not just the portrait cellTint's whole-slot fix
+  // (2026-09-16) was already isolating away from. The X is the one mark a
+  // death leaves that a real disconnect (raw exposed game-world background)
+  // does not. See crop.cellDeath() for the pixel classification, and
+  // DEATH_R_MIN/DEATH_G_MAX/DEATH_RB_MIN/DEATH_MIN_SAMPLES below for the
+  // thresholds - all measured from a real saved capture (P1PXQK,
+  // 2026-09-17, side b slot 2), not a live bootstrap like FROZEN itself.
+  function deathMarker(side) {
+    var b = FROZEN.boxes[side];
+    var cw = b.w / 5;
+    var r = FROZEN.ref;
+    var out = [];
+    for (var i = 0; i < 5; i++) {
+      out.push({
+        x: b.x + i * cw + cw * r.DEATH_X0,
+        y: b.y + b.h * r.DEATH_Y0,
+        w: cw * (r.DEATH_X1 - r.DEATH_X0),
+        h: b.h * (1 - r.DEATH_Y0),
+      });
+    }
+    return out;
+  }
+
+  // A pixel counts toward the X only if it is vividly, specifically red -
+  // not merely warmer than its neighbours. Measured on the real capture: the
+  // X itself peaks at (216,34,80); side b's own red team-tint background
+  // (every OTHER cell, same y-band) peaks at only (~104,~18,~33); an orange
+  // portrait's warm highlight reads (255,126,40) - high red, but high green
+  // too, unlike the X's low green. DEATH_R_MIN excludes the team-tint
+  // background; DEATH_G_MAX excludes orange/warm portrait art; DEATH_RB_MIN
+  // excludes white/grey UI text. DEATH_MIN_SAMPLES requires a real cluster
+  // (a genuine X glyph, sampled on crop.js's usual every-3rd-pixel grid),
+  // not one or two stray matching pixels.
+  var DEATH_R_MIN = 150;
+  var DEATH_G_MAX = 70;
+  var DEATH_RB_MIN = 60;
+  var DEATH_MIN_SAMPLES = 8;
+  function isDeathMarkPixel(r, g, b) {
+    return r >= DEATH_R_MIN && g <= DEATH_G_MAX && (r - b) >= DEATH_RB_MIN;
+  }
+
   var Mod = {
     FROZEN: FROZEN,
     HUD_TINT: HUD_TINT,
@@ -256,6 +304,9 @@
     cells: cells,
     slots: slots,
     presenceBadge: presenceBadge,
+    deathMarker: deathMarker,
+    isDeathMarkPixel: isDeathMarkPixel,
+    DEATH_MIN_SAMPLES: DEATH_MIN_SAMPLES,
     check: check,
     eventsViewerOpen: eventsViewerOpen,
   };

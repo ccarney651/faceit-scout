@@ -59,14 +59,48 @@ test('the floor rejects noise that happens to favour one candidate', () => {
   assert.equal(r.ids[4], null);
 });
 
-test('a role-count mismatch leaves that group unresolved but not the others', () => {
-  // A misrecognised portrait puts three heroes in the damage group. The damage
-  // slots are abandoned; the tank is unaffected.
+test('a role-count mismatch no longer abandons decisive reads in that group', () => {
+  // A misrecognised portrait puts three heroes in the damage group (pool has
+  // only two Damage players). The exact-cover permutation search cannot run,
+  // but AL7OTHI and FreakyShadow are still unambiguous, decisive reads - the
+  // role bookkeeping is what is broken here, not the name evidence, so it
+  // still resolves them. 'x' matches nobody decisively and stays null.
   const roles = ['Tank', 'Damage', 'Damage', 'Damage', 'Support'];
   const r = Assign.assign(['Faisal', 'AL7OTHI', 'FreakyShadow', 'x', 'MineRabbit'],
     LINEUP, roles);
   assert.equal(r.ids[0], 'p-tank');
-  assert.deepEqual(r.ids.slice(1, 4), [null, null, null]);
+  assert.equal(r.ids[1], 'p-dps1');
+  assert.equal(r.ids[2], 'p-dps2');
+  assert.equal(r.ids[3], null);
+});
+
+test('a decisive rescue works across role groups, since the role label is the suspect evidence', () => {
+  // The real KAWB9A case (2026-09-16): a misread hero shifted one slot's
+  // apparent role, leaving 1 Damage slot for 2 Damage players and 3 Support
+  // slots for 2 Support players - both groups fail exact cover under the old
+  // all-or-nothing rule, discarding four otherwise-perfect OCR reads. Support
+  // and Damage's leftover slots/players are pooled together and matched by
+  // name alone; a role mismatch is exactly the situation where the role
+  // label cannot be trusted to gate name evidence.
+  const roles = ['Tank', 'Damage', 'Support', 'Support', 'Support'];
+  const r = Assign.assign(
+    ['Faisal', 'AL7OTHI', 'FreakyShadow', 'MineRabbit', 'zzzzzzz'],
+    LINEUP, roles);
+  assert.equal(r.ids[0], 'p-tank', 'unaffected - exact cover');
+  assert.equal(r.ids[1], 'p-dps1', 'decisive, rescued across the group boundary');
+  assert.equal(r.ids[2], 'p-dps2', 'decisive, rescued even though labelled Support');
+  assert.equal(r.ids[3], 'p-sup1', 'decisive, rescued');
+  assert.equal(r.ids[4], null, 'no decisive match for this read - abstains, not guessed');
+});
+
+test('a decisive rescue never fires when two slots both claim the same player', () => {
+  // Two different slots both read something that scores decisively against
+  // the SAME player - genuinely ambiguous, so neither is safe to guess.
+  const roles = ['Tank', 'Damage', 'Damage', 'Damage', 'Support'];
+  const r = Assign.assign(['Faisal', 'FREAKYSHADOW', 'FreakyShadow', 'x', 'MineRabbit'],
+    LINEUP, roles);
+  assert.equal(r.ids[1], null, 'contested claim on p-dps2 - abstain');
+  assert.equal(r.ids[2], null, 'contested claim on p-dps2 - abstain');
 });
 
 test('a player with no role from FACEIT leaves their group unresolved, never forced', () => {

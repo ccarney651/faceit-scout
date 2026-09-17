@@ -21,6 +21,7 @@
   var canvas = require('@napi-rs/canvas');
   var calib = require('./calib.js');
   var Crop = require('./crop.js');
+  var Nameplate = require('./nameplate.js');
   var Match = require('./match.js');
   var T = require('./timeline.js');
   var D = require('./driver.js');
@@ -367,23 +368,59 @@
   // resolveSlot special-cases this exact string; see its ABSENT_GUID.
   var ABSENT_GUID = 'ABSENT';
 
+  // A dead-but-present player's whole card desaturates - badge included, not
+  // just the portrait - so cellTint alone reads it exactly like a real
+  // disconnect (confirmed on real captures 2026-09-17: P1PXQK, H5Q9WE; "the
+  // X means a player is dead" - operator). crop.cellDeath looks for the red
+  // elimination X a death always draws and a real disconnect never does.
+  // Distinct from ABSENT_GUID so resolve.js can tell "no evidence this
+  // sample" (dead - the hero doesn't actually change) from "this player
+  // left" (a genuine leaver).
+  var DEAD_GUID = 'DEAD';
+
   // Match the ten HUD cells of one frame. `matcher` is a makeMatcher() result
   // or anything with .match(crop, side). A cell whose own tint fails
   // calib.cellPresent (crop.cellTint) never reaches the matcher at all - see
-  // ABSENT_GUID above.
+  // ABSENT_GUID/DEAD_GUID above.
   async function readHud(io, matcher, framePath) {
     var img = await io.loadImage(framePath);
     var crops = Crop.all(img, calib);
     var tint = Crop.cellTint(img, calib);
+    var dead = Crop.cellDeath(img, calib);
     var out = { a: [], b: [] };
     ['a', 'b'].forEach(function (side) {
       out[side] = crops[side].map(function (c, i) {
         if (!calib.cellPresent(tint[side][i])) {
-          return { score: null, name: null, guid: ABSENT_GUID };
+          return { score: null, name: null, guid: dead[side][i] ? DEAD_GUID : ABSENT_GUID };
         }
         return matcher.match(c, side);
       });
     });
+    return out;
+  }
+
+  // Per-sample name-OCR read - mirrors readHud's shape but returns raw text,
+  // not a hero match. Reuses Nameplate.nameRow/nameCrop exactly as
+  // attribute.js's (soon-to-be-former) attributeMap did internally - see
+  // specs/2026-09-17-replay-bot-disconnect-identity-design.md §4. Kept
+  // separate from readHud (a different concern: text, not hero portraits),
+  // called alongside it from sampleAt.
+  var BLANK_NAMES = ['', '', '', '', ''];
+  async function readNames(io, ocr, framePath) {
+    var img = await io.loadImage(framePath);
+    var out = { a: BLANK_NAMES.slice(), b: BLANK_NAMES.slice() };
+    var sides = ['a', 'b'];
+    for (var s = 0; s < sides.length; s++) {
+      var side = sides[s];
+      var row = Nameplate.nameRow(img, calib.FROZEN.boxes[side]);
+      if (!row) continue;
+      var slotCells = calib.slots(side);
+      var got = [];
+      for (var i = 0; i < slotCells.length; i++) {
+        got.push(await ocr(Nameplate.nameCrop(img, slotCells[i], row)));
+      }
+      out[side] = got;
+    }
     return out;
   }
 
@@ -477,13 +514,20 @@
       }
     }
 
+    // Names are read from whichever frame the retry logic above settled on,
+    // the same frame the hero read came from - never a second, different
+    // grab. Optional: a caller that doesn't pass ocr (existing tests, any
+    // path that doesn't need identity) gets blanks, never a crash. See
+    // specs/2026-09-17-replay-bot-disconnect-identity-design.md.
+    var names = o.ocr ? await readNames(io, o.ocr, framePath) : { a: BLANK_NAMES.slice(), b: BLANK_NAMES.slice() };
+
     if (shouldKeep(read, o.prev, o.prevPrev, o.firstOfRound)) {
       framePath = io.keepAs ? await io.keepAs('t' + t, framePath) : framePath;
     } else {
       log(mmss(t).padStart(6) + '  unchanged - not kept');
       framePath = null;
     }
-    return { t: t, at: at, a: read.a, b: read.b, framePath: framePath, worst: worstOf(read) };
+    return { t: t, at: at, a: read.a, b: read.b, names: names, framePath: framePath, worst: worstOf(read) };
   }
 
   var Mod = {
@@ -506,7 +550,9 @@
     deriveDuration: deriveDuration,
     readStructure: readStructure,
     readHud: readHud,
+    readNames: readNames,
     ABSENT_GUID: ABSENT_GUID,
+    DEAD_GUID: DEAD_GUID,
     shouldKeep: shouldKeep,
     sampleAt: sampleAt,
   };

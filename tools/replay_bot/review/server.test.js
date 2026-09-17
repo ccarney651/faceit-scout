@@ -127,6 +127,61 @@ test('applyCorrections replaces a hero and clears its flags, leaving the artifac
   assert.strictEqual(JSON.stringify(rounds), snap, 'the input rounds are not mutated');
 });
 
+// A slot with a real, twice-confirmed mid-round swap: hero A -> B -> C. The
+// operator wants to fix ONLY the middle read (B was a misread), leaving A and
+// C exactly as the machine read them - see PLANS.md's 2026-09-17 "individual
+// segment correction" entry for why a whole-round correction (above) is the
+// wrong tool for this: it discards the real swap entirely.
+const SWAPPED_ROUNDS = () => ([{
+  round_no: 1, from_t: 0, to_t: 300,
+  a: [
+    {
+      guid: 'g-b', name: 'B', contested: false, alt_guid: null, player_id: 'p1', player_conf: 'matched', flags: [],
+      segments: [
+        { guid: 'g-a', name: 'A', from_t: 10, reads: [0.9] },
+        { guid: 'g-b', name: 'B', from_t: 100, reads: [0.6] },
+        { guid: 'g-c', name: 'C', from_t: 200, reads: [0.9] },
+      ],
+    },
+    ...[1, 2, 3, 4].map((k) => ({ guid: 'gd' + k, name: 'D' + k, contested: false, alt_guid: null, player_id: 'p' + (k + 1), player_conf: 'matched', flags: [] })),
+  ],
+  b: [1, 2, 3, 4, 5].map((k) => ({ guid: 'gb' + k, name: 'B' + k, contested: false, alt_guid: null, player_id: 'q' + k, player_conf: 'matched', flags: [] })),
+  flags: [],
+}]);
+
+test('a segment-scoped correction replaces only that segment, leaving its siblings and the round-level read untouched', () => {
+  const rounds = SWAPPED_ROUNDS();
+  const snap = JSON.stringify(rounds);
+  const out = SV.applyCorrections(rounds, [
+    { kind: 'hero', round_no: 1, side: 'a', slot: 0, segment_from_t: 100,
+      was_guid: 'g-b', now_guid: 'g-fixed', now_name: 'Fixed' },
+  ]);
+  const segs = out[0].a[0].segments;
+  assert.strictEqual(segs.length, 3, 'the swap itself is not discarded');
+  assert.strictEqual(segs[0].guid, 'g-a', 'the earlier segment is untouched');
+  assert.strictEqual(segs[1].guid, 'g-fixed', 'only the targeted segment changed');
+  assert.strictEqual(segs[1].name, 'Fixed');
+  assert.strictEqual(segs[2].guid, 'g-c', 'the later segment is untouched');
+  assert.strictEqual(JSON.stringify(rounds), snap, 'the input rounds are not mutated');
+});
+
+test('a segment-scoped correction with a blank hero drops that segment, merging its span into its neighbour', () => {
+  const out = SV.applyCorrections(SWAPPED_ROUNDS(), [
+    { kind: 'hero', round_no: 1, side: 'a', slot: 0, segment_from_t: 100, was_guid: 'g-b', now_guid: null },
+  ]);
+  const segs = out[0].a[0].segments;
+  assert.deepStrictEqual(segs.map((s) => s.guid), ['g-a', 'g-c'], 'the dropped segment is removed, not left as a null-guid entry');
+});
+
+test('a segment-scoped correction clears attribution-abstained the same way a whole-round one does', () => {
+  const rounds = SWAPPED_ROUNDS();
+  rounds[0].a[0].flags = ['attribution-abstained'];
+  const out = SV.applyCorrections(rounds, [
+    { kind: 'hero', round_no: 1, side: 'a', slot: 0, segment_from_t: 100, was_guid: 'g-b', now_guid: 'g-fixed', now_name: 'Fixed' },
+  ]);
+  assert.deepStrictEqual(out[0].a[0].flags, ['attribution-abstained']);
+});
+
 test('applyCorrections fills an abstained player and drops the flag', () => {
   const out = SV.applyCorrections(ROUNDS(), [
     { kind: 'player', round_no: 1, side: 'a', slot: 0, now_id: 'p1' },

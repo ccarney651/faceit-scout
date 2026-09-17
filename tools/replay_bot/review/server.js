@@ -82,7 +82,28 @@ function applyCorrections(rounds, corrections) {
     if (!round) continue;
     const slot = (round[c.side] || [])[c.slot];
     if (!slot) continue;
-    if (c.kind === 'hero') {
+    if (c.kind === 'hero' && c.segment_from_t !== undefined && Array.isArray(slot.segments)) {
+      // Corrects ONE segment of a real, twice-confirmed mid-round swap,
+      // leaving its siblings and the round-level guid/contested/segments
+      // array otherwise alone - 2026-09-17, the operator could previously
+      // only assert one hero for the WHOLE round (below), which silently
+      // discarded a genuine swap just to fix one wrong segment in it.
+      // emit.js's slotSegments() reads this array directly whenever it is
+      // still an array (see its own comment), so this is what actually
+      // ships - the round-level guid/contested fields stay a display-only
+      // summary of the machine's original read.
+      const idx = slot.segments.findIndex((sg) => sg.from_t === c.segment_from_t);
+      if (idx !== -1) {
+        if (c.now_guid) {
+          slot.segments[idx] = { ...slot.segments[idx], guid: c.now_guid, name: c.now_name || c.now_guid, reads: [] };
+        } else {
+          // A blank correction drops the segment - it never happened, not a
+          // "no hero" segment (which would ship as a null guid downstream).
+          slot.segments.splice(idx, 1);
+        }
+        slot.flags = (slot.flags || []).filter((f) => f === 'attribution-abstained');
+      }
+    } else if (c.kind === 'hero') {
       slot.guid = c.now_guid || null;
       slot.name = c.now_name || c.now_guid || null;
       slot.contested = false;

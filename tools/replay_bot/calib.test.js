@@ -126,3 +126,34 @@ test('cellPresent uses the same HUD_TINT threshold hudPresent does', () => {
   assert.strictEqual(C.cellPresent(C.HUD_TINT), true, 'the threshold itself counts as present');
   assert.strictEqual(C.cellPresent(C.HUD_TINT - 0.001), false, 'just under it does not');
 });
+
+// --- the death-elimination marker (dead but present, not a leaver) --------
+//
+// 2026-09-17: a dead-but-present card desaturates its WHOLE card, ult badge
+// included - presenceBadge()'s own fix (2026-09-16, reading only the badge)
+// does not help here, because the badge itself goes low-tint too during
+// death, not just the portrait. The one thing a real disconnect never draws
+// and a death always does: a red "eliminated" X, centred under the card.
+// Geometry measured from a real saved capture (P1PXQK, 2026-09-17, side b
+// slot 2 - '!DANUIL', confirmed present the whole round, one sample read
+// ABSENT): bbox x 59-85 of a 141.2px cell (fraction 0.42-0.60), y 90-107 of
+// a 108.85px box (fraction 0.83-0.98), widened for margin. Not a live
+// bootstrap measurement like FROZEN itself - re-measure against a fresh
+// live frame if this ever needs retuning, the same as any FROZEN number.
+
+test('the death marker sits centred under the card, in its bottom band', () => {
+  const m = C.deathMarker('a')[0];
+  const b = C.FROZEN.boxes.a;
+  const cw = b.w / 5;
+  near(m.x, b.x + cw * C.FROZEN.ref.DEATH_X0, 'left edge of the marker band');
+  near(m.w, cw * (C.FROZEN.ref.DEATH_X1 - C.FROZEN.ref.DEATH_X0), 'marker band width');
+  near(m.y, b.y + b.h * C.FROZEN.ref.DEATH_Y0, 'marker band starts near the bottom of the box');
+  near(m.h, b.h * (1 - C.FROZEN.ref.DEATH_Y0), 'marker band runs to the bottom of the box');
+});
+
+test('a side has five death-marker regions, advancing by one cell each', () => {
+  const ms = C.deathMarker('b');
+  assert.strictEqual(ms.length, 5);
+  const cw = C.FROZEN.boxes.b.w / 5;
+  near(ms[1].x - ms[0].x, cw, 'slot 1 to 2');
+});

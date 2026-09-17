@@ -59,7 +59,7 @@ test('mapEntry writes one crop per round per side and points at them relatively'
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('a round-side with a real swap gets one crop per sample, not just the opening frame', async () => {
+test('a round with more than one sample gets a full per-sample gallery on both sides, not just the opening frame', async () => {
   const dir = tmpdir();
   const frame = blankFrame();
   const got = {
@@ -86,8 +86,12 @@ test('a round-side with a real swap gets one crop per sample, not just the openi
     assert.ok(fs.existsSync(path.join(dir, s.path)), s.path + ' should exist');
   });
 
-  // side b never swapped: no extra crops written, keeping the common case cheap.
-  assert.strictEqual(entry.frames['1'].b_samples, undefined);
+  // side b never swapped, but STILL gets a gallery (2026-09-17: unconditional
+  // on sample count, not swap status - an attribution-abstained slot needs
+  // the same multi-sample evidence a swap review does, and the old
+  // swap-only gate left that case with nothing to recover from).
+  assert.ok(Array.isArray(entry.frames['1'].b_samples), 'b_samples should exist too, unconditionally');
+  assert.deepStrictEqual(entry.frames['1'].b_samples.map((s) => s.t), [50, 150, 250]);
   assert.strictEqual(entry.duration_sec, null, 'no measurement in got stays null');
 
   fs.rmSync(dir, { recursive: true, force: true });

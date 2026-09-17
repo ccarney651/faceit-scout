@@ -210,6 +210,30 @@ test('sampleAt: the retry frame is what a change keeps', { skip }, async () => {
   assert.strictEqual(s.a[2].guid, 'SWAP', 'the retry read is the one returned');
 });
 
+test('sampleAt reads names alongside heroes when an ocr function is given', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const read = readOf(GUID_A);
+  const t = ctxWith(frame, [read]);
+  const ocr = async () => 'PLATE';
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: () => {},
+    prev: read, prevPrev: read, firstOfRound: false, ocr,
+  });
+  assert.deepStrictEqual(s.names.a, ['PLATE', 'PLATE', 'PLATE', 'PLATE', 'PLATE']);
+  assert.deepStrictEqual(s.names.b, ['PLATE', 'PLATE', 'PLATE', 'PLATE', 'PLATE']);
+});
+
+test('sampleAt defaults to blank names when no ocr function is given (existing callers unaffected)', { skip }, async () => {
+  const frame = Corpus.at('probe-panelopen-live.png');
+  const read = readOf(GUID_A);
+  const t = ctxWith(frame, [read]);
+  const s = await P.sampleAt(t.ctx, 60, {
+    matcher: t.matcher, stepS: 30, mmss: (x) => String(x), log: () => {},
+    prev: read, prevPrev: read, firstOfRound: false,
+  });
+  assert.deepStrictEqual(s.names, { a: ['', '', '', '', ''], b: ['', '', '', '', ''] });
+});
+
 // ---- readHud: a leaver's slot is never handed to the matcher --------------
 //
 // A disconnected player's card leaves the HUD outright - the cell is exposed
@@ -256,6 +280,34 @@ test('readHud marks an untinted slot ABSENT without calling the matcher', async 
   assert.strictEqual(calls.b, 5, 'side b had no absent slots');
 });
 
+// ---- readHud: a dead-but-present slot reads DEAD, not ABSENT --------------
+//
+// 2026-09-17: a death desaturates the WHOLE card (badge included), so
+// cellTint alone cannot tell it from a real disconnect - confirmed against
+// real captures (P1PXQK, H5Q9WE) and by the operator directly ("the X means
+// a player is dead"). readHud must ask crop.cellDeath before concluding
+// ABSENT, and never hand a dead (desaturated, unreadable) portrait to the
+// matcher either - same reasoning as ABSENT, different sentinel so
+// resolve.js can treat it as "no evidence this sample", not "this player
+// left".
+
+test('readHud marks a dead-but-present slot DEAD, not ABSENT, and never asks the matcher', async () => {
+  const img = frameWithSlots({ a: { 3: '#808080' } });
+  const cx = img.getContext('2d');
+  const mark = calib.deathMarker('a')[3];
+  cx.fillStyle = 'rgb(216,34,80)'; // the X's own measured colour
+  cx.fillRect(mark.x, mark.y, mark.w, mark.h);
+  const io = { loadImage: async () => img };
+  const calls = { a: 0, b: 0 };
+  const matcher = {
+    match: (crop, side) => { calls[side]++; return { score: 0.9, name: 'SomeHero', guid: '0xABC' }; },
+  };
+  const read = await P.readHud(io, matcher, 'unused-path');
+  assert.strictEqual(read.a[3].guid, 'DEAD');
+  assert.strictEqual(read.a[3].score, null);
+  assert.strictEqual(calls.a, 4, 'the matcher was never asked about the dead slot');
+});
+
 test('readHud still matches every present slot normally', async () => {
   const img = frameWithSlots({ a: { 3: '#808080' } });
   const io = { loadImage: async () => img };
@@ -263,4 +315,45 @@ test('readHud still matches every present slot normally', async () => {
   const read = await P.readHud(io, matcher, 'unused-path');
   [0, 1, 2, 4].forEach((i) => assert.strictEqual(read.a[i].guid, '0xABC', 'slot ' + i + ' still matched'));
   read.b.forEach((c, i) => assert.strictEqual(c.guid, '0xABC', 'side b slot ' + i + ' still matched'));
+});
+
+// ---- readNames: per-sample name OCR, mirrors readHud's shape -------------
+//
+// 2026-09-17: the disconnect slot-shift design (specs/2026-09-17-replay-bot-
+// disconnect-identity-design.md) needs per-sample name identity, not the
+// once-per-map single frame attribute.js reads today. readNames is the new
+// per-sample read; a later task teaches attribute.js to use it aggregated
+// across a whole map. This task only adds the read itself.
+
+// findNameRow needs real glyph-like light/dark transitions (see frames.js's
+// own comment on it) - frameWithSlots' flat colour fills legitimately find
+// no row, same as the "falls back to five blanks" test below. So the happy
+// path is exercised against a real corpus frame, same convention as
+// nameplate.test.js's 'nameRow finds a band under the portraits' and
+// attribute.test.js's real-frame tests.
+test('readNames OCRs all 10 name crops, five per side, in slot order', { skip }, async () => {
+  const witness = Corpus.NAMEPLATES[0];
+  const img = await canvas.loadImage(Corpus.at(witness.file));
+  const io = { loadImage: async () => img };
+  const seen = [];
+  const ocr = async (crop) => { seen.push(crop); return 'SOMENAME'; };
+  const names = await P.readNames(io, ocr, 'unused-path');
+  assert.strictEqual(names.a.length, 5);
+  assert.strictEqual(names.b.length, 5);
+  assert.strictEqual(seen.length, 10, 'one OCR call per name crop, both sides');
+  names.a.forEach((n) => assert.strictEqual(n, 'SOMENAME'));
+  names.b.forEach((n) => assert.strictEqual(n, 'SOMENAME'));
+});
+
+test('readNames falls back to five blanks for a side whose name row cannot be found', async () => {
+  // frameWithSlots paints only the FROZEN.boxes region - a frame with
+  // nothing but black outside it has no name-row band Nameplate.nameRow can
+  // find on side b if we blank it out entirely.
+  const f = calib.FROZEN.frame;
+  const img = canvas.createCanvas(f.w, f.h); // all-black, no boxes painted at all
+  const io = { loadImage: async () => img };
+  const ocr = async () => 'UNUSED';
+  const names = await P.readNames(io, ocr, 'unused-path');
+  assert.deepStrictEqual(names.a, ['', '', '', '', '']);
+  assert.deepStrictEqual(names.b, ['', '', '', '', '']);
 });

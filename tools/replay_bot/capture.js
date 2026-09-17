@@ -385,14 +385,14 @@
         if (isFirst) { prevRead = null; prevPrevRead = null; }
         var s = await P.sampleAt(ctx, t, {
           matcher: M, stepS: stepS, mmss: mmss, log: log,
-          prev: prevRead, prevPrev: prevPrevRead, firstOfRound: isFirst,
+          prev: prevRead, prevPrev: prevPrevRead, firstOfRound: isFirst, ocr: o.ocr,
         });
         if (s.missed) {
           missed.push({ t: s.t, at: s.at, reason: s.reason === 'seek' ? undefined : s.reason });
           continue;
         }
         roundSeen[si] = true;
-        samples.push({ t: s.t, at: s.at, a: s.a, b: s.b, framePath: s.framePath });
+        samples.push({ t: s.t, at: s.at, a: s.a, b: s.b, names: s.names, framePath: s.framePath });
         prevPrevRead = prevRead;
         prevRead = { a: s.a, b: s.b };
         log(mmss(t).padStart(6) + '  (' + ((Date.now() - started) / 1000).toFixed(1) + 's)');

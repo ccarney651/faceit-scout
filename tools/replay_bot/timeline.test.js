@@ -100,13 +100,27 @@ test('a grid point shared by two segments is planned once', () => {
   assert.strictEqual(new Set(got).size, got.length, 'duplicate seeks waste a grab');
 });
 
-// 100-115 contains no reachable point on a 30s grid, so the nearest reachable
-// instant to the segment's middle is taken instead - sampling somewhere beats
-// not sampling the round at all.
-test('a segment too short for the grid falls back to its nearest reachable middle', () => {
+// 100-115 contains no reachable point on a 30s grid. A single middle sample
+// used to be taken here, but that is one sample for a round that may still
+// hold a real mid-round swap - 2026-09-17, a real short round starved the
+// sample grid this way and a genuine multi-hop swap (Lifeweaver -> Lucio ->
+// Jetpack Cat) was only partially detected. Two independently-snapped
+// quarter points - one near the segment's start half, one near its end half -
+// replace the single middle sample: sampling somewhere near each half beats
+// sampling the dead centre of a round that may have changed partway through.
+test('a segment too short for the grid falls back to two reachable samples, not one', () => {
   const got = T.planGrid([{ play: true, from: 100, to: 115 }], { stepS: 30 });
-  assert.strictEqual(got.length, 1, 'a short segment must not vanish');
-  assert.strictEqual(got[0] % 30, 0, `${got[0]} is not reachable`);
+  assert.deepStrictEqual(got, [90, 120], 'quarter points 103.75/111.25, each snapped to the nearest 30s tick');
+  got.forEach((t) => assert.strictEqual(t % 30, 0, `${t} is not reachable`));
+});
+
+// A round SO short that even its two quarter points snap to the same
+// reachable tick collapses back to one sample via the whole-plan dedupe -
+// no worse than the old single-sample fallback, never worse.
+test('the two-sample fallback collapses to one when both quarter points snap to the same tick', () => {
+  const got = T.planGrid([{ play: true, from: 226, to: 240 }], { stepS: 45 });
+  // span 14, quarter points 229.5/236.5, BOTH round to the same 45s tick (225).
+  assert.deepStrictEqual(got, [225]);
 });
 
 // The grid must equal the client's skip interval, or a seek cannot land on it.

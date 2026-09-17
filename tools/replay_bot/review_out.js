@@ -79,15 +79,14 @@
         writeStrip(firstImg, calib.FROZEN.boxes[side], path.join(cropsDir, name));
         pair[side] = 'crops/' + name;
 
-        // A confirmed mid-round swap on this side is worth every read that fed
-        // segmentSlot()'s decision, not just the round's opening frame - one
-        // crop per sample the round actually took. Every other slot/round
-        // keeps the single opening crop above; this only grows disk use where
-        // there is something to actually verify by eye.
-        var swapped = (r[side] || []).some(function (s) {
-          return Array.isArray(s.segments) && s.segments.length > 1;
-        });
-        if (swapped && mine.length > 1) {
+        // Every round/side worth a gallery, not just a confirmed mid-round
+        // hero swap - measured 2026-09-17: an attribution-abstained slot
+        // needs the SAME multi-sample evidence a swap review does (a player
+        // absent from the single opening frame but legible later in the
+        // round), and restricting this to swapped==true left that case with
+        // no gallery to recover from at all. Cost measured against a real
+        // 298-map session: ~0.9MB/map extra - trivial against free disk.
+        if (mine.length > 1) {
           var gallery = [];
           for (var k = 0; k < mine.length; k++) {
             var samp = mine[k];

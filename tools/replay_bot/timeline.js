@@ -93,9 +93,16 @@
   // from `ceil(from/step)*step` onward, then every `+step` while strictly
   // before `to` - a round is never sampled on its closing edge, where the
   // portraits are gone and the read would be setup or aftermath. A segment
-  // shorter than one interval (no reachable point inside it) falls back to the
-  // nearest reachable instant to its middle and accepts being marginally
-  // outside - the alternative is not sampling the segment at all.
+  // shorter than one interval (no reachable point inside it) falls back to
+  // the nearest reachable instants to its two quarter points (one for each
+  // half of the segment) and accepts being marginally outside - the
+  // alternative is not sampling the segment at all. Two samples, not the
+  // single middle sample this used to take (2026-09-17): a round too short
+  // for even one grid step can still hold a real mid-round swap, and one
+  // sample cannot catch it - a real short round starved this way and a
+  // genuine multi-hop swap was only partially detected. A segment too short
+  // for even that (both quarter points snap to the same tick) collapses back
+  // to one sample via the whole-plan dedupe below - no worse than before.
   //
   // Two segments can share a grid point (a break shorter than the step), and
   // duplicates are dropped rather than spending an 800ms grab on a frame
@@ -121,9 +128,13 @@
       if (lo > hi) {
         // A segment too short to contain any grid point at all. Fixed-step
         // seeking cannot land inside it, so take the nearest reachable
-        // instant to its middle and accept being marginally outside - the
-        // alternative is not sampling the segment at all.
-        out.push(Math.round(((s.from + s.to) / 2) / step) * step);
+        // instants to its two quarter points - one representing each half of
+        // the segment - and accept being marginally outside. Collapses to
+        // one sample (via the whole-plan dedupe below) when the segment is
+        // shorter still and both quarter points snap to the same tick.
+        var span = s.to - s.from;
+        out.push(Math.round((s.from + span / 4) / step) * step);
+        out.push(Math.round((s.to - span / 4) / step) * step);
         return;
       }
 

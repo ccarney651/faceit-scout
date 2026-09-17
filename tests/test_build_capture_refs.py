@@ -30,15 +30,16 @@ def _db() -> sqlite3.Connection:
     return conn
 
 
-def test_active_profile_id_is_the_newest_unretired() -> None:
+def test_active_profile_id_is_the_newest_unretired_for_the_given_variant() -> None:
     from tools.build_capture_refs import active_profile_id
 
     conn = _db()
     conn.executemany(
         "INSERT INTO roi_profiles VALUES (?,?,?)",
-        [(4, "default", "2026-09-10T00:00:00Z"), (5, "default", None), (6, "scrim", None)],
+        [(4, "default", "2026-09-10T00:00:00Z"), (5, "default", None), (6, "replay", None)],
     )
-    assert active_profile_id(conn) == 5
+    assert active_profile_id(conn, "default") == 5
+    assert active_profile_id(conn, "replay") == 6
 
 
 def test_active_profile_id_raises_when_none_active() -> None:
@@ -47,11 +48,29 @@ def test_active_profile_id_raises_when_none_active() -> None:
     conn = _db()
     conn.execute("INSERT INTO roi_profiles VALUES (4, 'default', '2026-01-01T00:00:00Z')")
     try:
-        active_profile_id(conn)
+        active_profile_id(conn, "default")
     except SystemExit:
         pass
     else:
         raise AssertionError("expected SystemExit when no active profile")
+
+
+def test_active_profile_id_requires_the_variant_explicitly() -> None:
+    # 2026-09-16: a rebuild with no --hud-variant silently resolved 'default'
+    # (a live-spectate profile) and clobbered a deliberate replay recapture
+    # nobody noticed until an accuracy sweep caught it days later. There is no
+    # safe default across two real, different capture contexts - the caller
+    # must say which one it wants.
+    from tools.build_capture_refs import active_profile_id
+
+    conn = _db()
+    conn.execute("INSERT INTO roi_profiles VALUES (5, 'default', NULL)")
+    try:
+        active_profile_id(conn)  # type: ignore[call-arg]
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("hud_variant must be required, not defaulted")
 
 
 def test_select_ref_rows_returns_both_states() -> None:

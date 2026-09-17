@@ -52,6 +52,16 @@
   // arrives here as this guid, never having reached a matcher at all.
   var ABSENT_GUID = 'ABSENT';
 
+  // phases.js's own DEAD_GUID, restated for the same reason ABSENT_GUID is.
+  // A dead-but-present player's hero does not actually change - the read is
+  // not evidence of anything, for or against, so resolveSlot treats a
+  // DEAD_GUID cell as if that sample never happened for this slot (2026-09-17,
+  // confirmed against real captures where an undropped DEAD read corrupted a
+  // slot exactly the way an undropped takeover-frame read did: skewing the
+  // raw vote, or - worse - if it was the only read remaining, being reported
+  // outright as ABSENT/no-read for a player who was there the whole round).
+  var DEAD_GUID = 'DEAD';
+
   // The sentinel guid refs.json's "no hero chosen yet" reference is stored
   // under - a real ref, matched like any hero, for the grey silhouette OW
   // shows before a player locks in. Distinct from ABSENT_GUID: the card is
@@ -65,11 +75,34 @@
   // that stretch goes uncredited to any hero rather than guessed.
   var ASSEMBLE_GRACE_S = 10;
 
+  // A post-round/VS-takeover screen blanks the WHOLE board at once, which a
+  // real disconnect never does (at most one, rarely two, players leave a
+  // match). A sample where at least this many of its 10 slots read
+  // ABSENT_GUID is treated as a takeover screen the fixed sampling grid
+  // landed on, not ten simultaneous leavers - 2026-09-17, two real examples
+  // found in review (Sheffield Larp Central vs Chud Maximus, Qwiz Esports vs
+  // VQ Ragnarok) where this corrupted the round's raw vote / segment reads.
+  // 6 of 10 is comfortably above any plausible simultaneous-disconnect count
+  // and comfortably below "the board plainly isn't there".
+  var BLANK_FRAME_ABSENT_MIN = 6;
+
   // The samples whose time falls inside a round's [from_t, to_t].
   function samplesIn(samples, round) {
     return samples.filter(function (s) {
       return s.t >= round.from_t && s.t <= round.to_t;
     });
+  }
+
+  // Whether a sample is a takeover screen rather than real gameplay - see
+  // BLANK_FRAME_ABSENT_MIN above.
+  function isBlankFrame(sample) {
+    var count = 0;
+    SIDES.forEach(function (side) {
+      (sample[side] || []).forEach(function (c) {
+        if (c && c.guid === ABSENT_GUID) count++;
+      });
+    });
+    return count >= BLANK_FRAME_ABSENT_MIN;
   }
 
   // The guid held second-most-often across a slot's raw frame votes. Only
@@ -203,12 +236,41 @@
     };
   }
 
+  // Whether any two consecutive segments in a slot's own confirmed segment
+  // chain swap between two DIFFERENT roles - physically impossible under
+  // FACEIT's role lock (2026-09-17, a real Ramattra (Tank) -> Zenyatta
+  // (Support) misread found in review; role-locked-comp exceptions are rare
+  // enough - 53/8356 team-games, all missing-role, never a real 2-tank - that
+  // this is worth flagging as a probable misread either way, not resolving).
+  // Silent (no verdict on WHICH segment is wrong) when either guid's role is
+  // unknown to the feed - `unknown-hero` already covers that gap.
+  function hasCrossRoleSwap(segments, roleOf) {
+    for (var i = 1; i < segments.length; i++) {
+      var prevRole = roleOf(segments[i - 1].guid);
+      var curRole = roleOf(segments[i].guid);
+      if (prevRole && curRole && prevRole !== curRole) return true;
+    }
+    return false;
+  }
+
   // One slot, resolved across a round's frames.
   //
   // `cells` is the slot's per-sample reads for this round, in sample order -
   // each a {name, guid, score}. `roleKnown` says whether the feed has a role
-  // for the winning hero. `player` is {id, conf} from attribution, or null.
-  function resolveSlot(cells, times, roundFromT, roundToT, roleKnown, player) {
+  // for the winning hero. `roleOf` returns that role (or null). `player` is
+  // {id, conf} from attribution, or null.
+  function resolveSlot(cells, times, roundFromT, roundToT, roleKnown, roleOf, player) {
+    // A dead-but-present read is not evidence of anything - the hero does
+    // not actually change while a player is dead - so it is dropped here,
+    // before anything downstream (the raw vote, segmentSlot) ever sees it,
+    // exactly as if that sample had never been taken for this slot.
+    var kept = [], keptTimes = [];
+    cells.forEach(function (c, i) {
+      if (c && c.guid === DEAD_GUID) return;
+      kept.push(c); keptTimes.push(times[i]);
+    });
+    cells = kept; times = keptTimes;
+
     var guids = cells.map(function (c) { return (c && c.guid) || null; });
     // The raw frame vote still drives the noise-detection flags below (a
     // single-segment slot whose frames disagreed more than SUPPORT_MIN is
@@ -251,6 +313,7 @@
       else if (v.support < SUPPORT_MIN && segments.length <= 1) flags.push('low-support');
       if (winnerScores.length && Math.max.apply(null, winnerScores) < LOW_SCORE) flags.push('low-score');
       if (String(winner).indexOf('custom:') === 0 || !roleKnown(winner)) flags.push('unknown-hero');
+      if (segments.length > 1 && hasCrossRoleSwap(segments, roleOf)) flags.push('cross-role-swap');
     }
     // A leaver has nobody to attribute by construction - player-absent
     // already says so, so this would only be the same fact twice.
@@ -297,12 +360,19 @@
     var attribution = o.attribution || null;
     var planned = o.planned || {};
     var roleKnown = function (guid) { return Object.prototype.hasOwnProperty.call(heroRoles, guid); };
+    var roleOf = function (guid) { return heroRoles[guid] || null; };
 
     return (rounds_ || []).map(function (round, i) {
       var round_no = i + 1;
       var mine = samplesIn(samples || [], round);
+      var blankDropped = 0;
+      mine = mine.filter(function (s) {
+        if (isBlankFrame(s)) { blankDropped++; return false; }
+        return true;
+      });
 
       var out = { round_no: round_no, from_t: round.from_t, to_t: round.to_t, a: [], b: [], flags: [] };
+      if (blankDropped) out.flags.push('takeover-frame');
 
       SIDES.forEach(function (side) {
         var attr = attribution && attribution[side];
@@ -317,7 +387,7 @@
             continue;
           }
           var cells = mine.map(function (s) { return s[side] && s[side][slot]; });
-          out[side].push(resolveSlot(cells, times, round.from_t, round.to_t, roleKnown, player));
+          out[side].push(resolveSlot(cells, times, round.from_t, round.to_t, roleKnown, roleOf, player));
         }
       });
 
@@ -365,9 +435,13 @@
     LOW_SCORE: LOW_SCORE,
     SPARSE_RATIO: SPARSE_RATIO,
     ABSENT_GUID: ABSENT_GUID,
+    DEAD_GUID: DEAD_GUID,
     UNSELECTED_GUID: UNSELECTED_GUID,
+    BLANK_FRAME_ABSENT_MIN: BLANK_FRAME_ABSENT_MIN,
     samplesIn: samplesIn,
     runnerUp: runnerUp,
+    hasCrossRoleSwap: hasCrossRoleSwap,
+    isBlankFrame: isBlankFrame,
     rounds: rounds,
   };
 

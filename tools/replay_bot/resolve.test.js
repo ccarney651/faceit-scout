@@ -404,3 +404,122 @@ test('needsReview DOES fire for player-absent - a leaver is rare enough to be wo
     [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES });
   assert.strictEqual(R.needsReview(got), true);
 });
+
+// A confirmed mid-round segment-to-segment swap between two DIFFERENT roles
+// is physically impossible under FACEIT's role lock (2026-09-17, a real
+// Ramattra (Tank) -> Zenyatta (Support) misread found in review). RAMA and
+// ZEN both need a real 2-in-a-row confirmation to become their own segments.
+const ROLE_SWAP_ROLES = Object.assign({}, ROLES, {
+  RAMA: 'tank', ZEN: 'support', DVA: 'tank', DMON: 'tank',
+});
+
+test('a confirmed segment swap between two different roles is flagged cross-role-swap', () => {
+  const rama = [['RAMA', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const zen = [['ZEN', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, rama, rama), sample(150, rama, rama), sample(220, zen, zen), sample(280, zen, zen)],
+    ROUNDS, { heroRoles: ROLE_SWAP_ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.segments.length, 2, 'a real, twice-confirmed swap');
+  assert.ok(slot.flags.includes('cross-role-swap'), 'Tank -> Support within one round is role-lock-impossible');
+});
+
+test('a confirmed segment swap between the SAME role is not flagged cross-role-swap', () => {
+  const dva = [['DVA', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const dmon = [['DMON', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, dva, dva), sample(150, dva, dva), sample(220, dmon, dmon), sample(280, dmon, dmon)],
+    ROUNDS, { heroRoles: ROLE_SWAP_ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.segments.length, 2, 'a real, twice-confirmed swap');
+  assert.ok(!slot.flags.includes('cross-role-swap'), 'Tank -> Tank is a legal same-role swap');
+});
+
+// A post-round/VS-takeover screen blanks the WHOLE board at once - a pattern
+// a real disconnect (at most one, maybe two, players) never produces. Rather
+// than reading it as ten simultaneous leavers, resolve.js drops the whole
+// sample and flags the round, leaving the slots it would have corrupted
+// exactly as if that frame had never been captured (2026-09-17, two real
+// examples found in review: Sheffield Larp Central vs Chud Maximus and Qwiz
+// Esports vs VQ Ragnarok, both a fixed-grid sample landing on the post-round
+// takeover instead of gameplay).
+test('a frame where most slots read ABSENT is dropped as a takeover screen, not ten leavers', () => {
+  const good = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const blank = [[R.ABSENT_GUID, null], [R.ABSENT_GUID, null], [R.ABSENT_GUID, null],
+    [R.ABSENT_GUID, null], [R.ABSENT_GUID, null]];
+  const got = R.rounds(
+    [sample(50, good, good), sample(150, blank, blank), sample(250, good, good)],
+    [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.guid, 'tank', 'the dropped frame must not corrupt the real read');
+  assert.strictEqual(slot.segments.length, 1, 'no phantom ABSENT segment from the dropped frame');
+  assert.ok(!slot.flags.includes('player-absent'), 'a dropped takeover frame is not a real leaver');
+  assert.ok(!slot.flags.includes('low-support'),
+    'undropped, the corrupted frame counts against the raw vote (tank/ABSENT/tank = 0.667 < 0.67) and falsely flags noise');
+  assert.ok(got[0].flags.includes('takeover-frame'), 'the round is flagged so the drop is visible in review');
+  assert.strictEqual(R.needsReview(got), true);
+});
+
+// The boundary: a genuine single leaver must NOT be swept up by the
+// takeover-screen guard - only one slot of ten reads ABSENT here, exactly
+// the case `player-absent` exists to catch on its own.
+test('a genuine single leaver is not mistaken for a takeover screen', () => {
+  const gone = [[R.ABSENT_GUID, null], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const comp = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(100, gone, comp), sample(200, gone, comp)],
+    [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES });
+
+  assert.ok(!got[0].flags.includes('takeover-frame'), 'one real leaver is not a board-wide blank');
+  assert.ok(got[0].a[0].flags.includes('player-absent'), 'the genuine leaver is still reported');
+});
+
+// A dead-but-present read must not corrupt the round the way an undropped
+// takeover-frame read did (see the tests above) - the hero does not
+// actually change while a player is dead, so resolve.js treats DEAD_GUID
+// exactly as if that sample had never been taken for this slot: invisible
+// to the segment chain and the raw vote alike (2026-09-17, "the X means a
+// player is dead" - operator, confirmed against real captures P1PXQK and
+// H5Q9WE where an undropped death read would otherwise report a leaver who
+// was present the whole round, or skew the raw vote into a false
+// low-support flag).
+test('a dead-but-present read does not corrupt the slot - absorbed exactly like a takeover frame', () => {
+  const good = [['tank', 0.95], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const dead = [[R.DEAD_GUID, null], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds(
+    [sample(50, good, good), sample(150, dead, good), sample(250, good, good)],
+    [{ from_t: 0, to_t: 300 }], { heroRoles: ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.guid, 'tank', 'the dead read must not corrupt the real hero');
+  assert.strictEqual(slot.segments.length, 1, 'no phantom DEAD segment');
+  assert.ok(!slot.flags.includes('player-absent'), 'a dead player is not a leaver');
+  assert.ok(!slot.flags.includes('low-support'),
+    'undropped, the dead read counts against the raw vote (tank/DEAD/tank = 0.667 < 0.67) and falsely flags noise');
+});
+
+// A player dead on literally every sample of a round (a fast death, no
+// respawn before the round ends) has no real evidence either way - `no-read`
+// is the honest answer, not a guess at what hero they were on.
+test('a slot dead for every sample of a round resolves no-read, not a guess', () => {
+  const dead = [[R.DEAD_GUID, null], ['dps1', 0.95], ['dps2', 0.95], ['sup1', 0.95], ['sup2', 0.95]];
+  const got = R.rounds([sample(100, dead, dead), sample(200, dead, dead)], ROUNDS, { heroRoles: ROLES });
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.guid, null);
+  assert.ok(slot.flags.includes('no-read'));
+});
+
+test('a segment swap is not flagged cross-role-swap when either guid has no known role', () => {
+  const rama = [['RAMA', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const custom = [['custom:newhero', 0.9], ['dps1', 0.9], ['dps2', 0.9], ['sup1', 0.9], ['sup2', 0.9]];
+  const got = R.rounds(
+    [sample(50, rama, rama), sample(150, rama, rama), sample(220, custom, custom), sample(280, custom, custom)],
+    ROUNDS, { heroRoles: ROLE_SWAP_ROLES });
+
+  const slot = got[0].a[0];
+  assert.strictEqual(slot.segments.length, 2, 'a real, twice-confirmed swap');
+  assert.ok(!slot.flags.includes('cross-role-swap'), 'cannot judge role-legality without both roles known');
+});
