@@ -75,6 +75,7 @@ const A = require('./attribute.js');
 const Resolve = require('./resolve.js');
 const RO = require('./review_out.js');
 const calib = require('./calib.js');
+const RefsGate = require('./refsgate.js');
 const Crop = require('./crop.js');
 const S = require('./screen.js');
 const canvas = require('@napi-rs/canvas');
@@ -85,6 +86,8 @@ const FRAMES = path.join(__dirname, 'frames');
 const STATE = path.join(__dirname, 'state', 'attempts.json');
 const OUT_DIR = path.join(__dirname, 'out');
 const FEED = path.join(__dirname, '../../docs/capture/data.json');
+const REFS = path.join(__dirname, '../../docs/capture/refs.json');
+const REFS_GATE = path.join(__dirname, 'state', 'refs_gate.json');
 
 const CONTRIBUTOR = 'replay-bot';
 // The waits this loop spends live in timing.js: TIMING.load.timeoutMs (waiting
@@ -112,6 +115,7 @@ function parseArgs(argv) {
     codeStack: flag('--code-stack'),
     out: flag('--out'),
     staleOk: argv.includes('--stale-ok'),
+    refsOk: argv.includes('--refs-ok'),
     divisions: flag('--divisions') ? flag('--divisions').split(',').map((d) => d.trim()).filter(Boolean) : null,
     teams: flag('--teams') ? flag('--teams').split(',').map((t) => t.trim()).filter(Boolean) : null,
     newestFirst: argv.includes('--newest'),
@@ -618,6 +622,18 @@ async function main() {
     return;
   }
   if (!looping && !queue.length) { console.log('nothing to do'); return; }
+
+  // What the reference library says a portrait MEANS, checked before a code is
+  // spent. This sits after --dry returns on purpose: showing a queue needs no
+  // library, and the gate should never be in the way of looking. See
+  // refsgate.js for why a fingerprint is the whole mechanism.
+  const refs = RefsGate.check(readJson(REFS, {}), readJson(REFS_GATE, null));
+  if (!refs.ok && !args.refsOk) {
+    throw new Error(refs.reason + ' Pass --refs-ok to run anyway.');
+  }
+  console.log(refs.ok
+    ? `refs gate: passed, library ${refs.fingerprint} swept ${refs.passedAt || '(undated)'}`
+    : `refs gate: OVERRIDDEN by --refs-ok - library ${refs.fingerprint} is unswept`);
 
   const io = C.makeIo({ framesDir: FRAMES, log: (m) => console.log(m) });
   const capture = C.make(io);

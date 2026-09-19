@@ -17,6 +17,14 @@ test('no flags means the feed, every code, for real', () => {
   assert.deepStrictEqual([a.codes, a.limit, a.dry, a.staleOk], [null, null, false, false]);
 });
 
+// The refs gate refuses a run whose reference library no sweep has cleared
+// (refsgate.js). Like --stale-ok it has an override, because a checkout with
+// no retained frames can never pass a sweep and still has to be able to run.
+test('the refs gate is on unless --refs-ok is passed', () => {
+  assert.strictEqual(RUN.parseArgs([]).refsOk, false);
+  assert.strictEqual(RUN.parseArgs(['--refs-ok']).refsOk, true);
+});
+
 // --code-stack cycles a codestack.js file (console §14.3b) instead of a
 // finite queue. chunkSpeed left unset (null) means "read TIMING live at every
 // map", not "use whatever TIMING said when the process started" - that is
