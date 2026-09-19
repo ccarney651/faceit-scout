@@ -36,7 +36,12 @@ RefRow = tuple[str, str, str, str]
 
 
 def hero_names() -> dict[str, str]:
-    names: dict[str, str] = {}
+    # 'UNSELECTED' isn't a hero (it's the sentinel guid for the "no hero
+    # chosen yet" placeholder ref - see resolve.js's UNSELECTED_GUID) and so
+    # has no row in heroes/custom_heroes; without this it falls back to
+    # guid[:6] ("UNSELE"), which the live capture page would show as a hero
+    # name to the operator.
+    names: dict[str, str] = {"UNSELECTED": "Not Picked"}
     with sqlite3.connect(FACEIT_DB) as f:
         for guid, name in f.execute("SELECT guid, name FROM heroes"):
             names[guid] = name
