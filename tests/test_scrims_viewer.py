@@ -752,7 +752,10 @@ def test_every_hero_a_capture_can_write_has_a_role() -> None:
     """Names come off refs.json, so anything in refs and not in the role table
     renders in an "Other" card that means nothing to a reader."""
     refs = json.loads((APP.parent / "capture" / "refs.json").read_text(encoding="utf-8"))["refs"]
-    names = {r["n"] for r in refs if r.get("n")}
+    # "Not Picked" (guid UNSELECTED) is a slot state with a ref so the matcher
+    # can recognise it, not a hero: owdb/contribute.py's SENTINEL_GUIDS strips
+    # it at ingest, so it can never reach a viewer card.
+    names = {r["n"] for r in refs if r.get("n") and r.get("g") != "UNSELECTED"}
     got = _role_map()
     have = {h for heroes in got.values() for h in heroes}
     assert not (names - have), f"heroes with no role: {sorted(names - have)}"

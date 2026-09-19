@@ -294,3 +294,46 @@ test('mapRecordFromRounds carries the measured duration, null when absent', () =
     { profile: PROFILE });
   assert.strictEqual(without.duration_sec, null);
 });
+
+// --- sentinels: states a slot can be IN, never heroes a team PLAYED -------
+//
+// ABSENT (a disconnected player's empty card), UNSELECTED (the grey silhouette
+// before lock-in) and DEAD are real reads - resolve.js resolves slots to them
+// on purpose - but owdb/contribute.py takes `heroes` verbatim, so one written
+// here becomes a hero called "ABSENT" in a team's comp on the site. Found
+// 2026-09-19: the 09-17 session emitted 337 of them.
+
+test('a sentinel slot is dropped and every other hero keeps its own player', () => {
+  const heroes = [A[0], 'ABSENT', A[2], A[3], A[4]];
+  const attribution = { a: { ids: ['p0', 'p1', 'p2', 'p3', 'p4'] } };
+  const [a] = EM.observations([obs({ heroes_a: heroes })], oneRound([obs()]), attribution);
+  assert.deepStrictEqual(a.heroes, [A[0], A[2], A[3], A[4]]);
+  assert.deepStrictEqual(a.pairs, [[A[0], 'p0'], [A[2], 'p2'], [A[3], 'p3'], [A[4], 'p4']],
+    'pairing is by slot, so dropping slot 1 must not shift p2 onto A[3]');
+});
+
+test('UNSELECTED and DEAD are dropped as well as ABSENT', () => {
+  const heroes = ['UNSELECTED', A[1], 'DEAD', A[3], A[4]];
+  const [a] = EM.observations([obs({ heroes_a: heroes })], oneRound([obs()]));
+  assert.deepStrictEqual(a.heroes, [A[1], A[3], A[4]]);
+});
+
+test('a custom hero guid is a hero, not a sentinel', () => {
+  const [a] = EM.observations([obs()], oneRound([obs()]));
+  assert.ok(a.heroes.includes('custom:d_mon'));
+});
+
+test('a side that read nothing but sentinels ships no observation', () => {
+  const blank = ['ABSENT', 'ABSENT', 'ABSENT', 'ABSENT', 'ABSENT'];
+  const got = EM.observations([obs({ heroes_b: blank })], oneRound([obs()]));
+  assert.deepStrictEqual(got.map((o) => o.side), ['a']);
+});
+
+test('fromRounds does not write a slot resolved to a sentinel', () => {
+  const a = COMP('a');
+  a[1] = slot('ABSENT', { player_id: 'gone' });
+  a[3] = slot('UNSELECTED');
+  const [obsA] = EM.fromRounds([round(1, a, COMP('b'))]);
+  assert.deepStrictEqual(obsA.heroes, ['ta', 'd2a', 's2a']);
+  assert.deepStrictEqual(obsA.pairs.map((p) => p[0]), ['ta', 'd2a', 's2a']);
+});

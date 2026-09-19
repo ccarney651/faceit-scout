@@ -109,13 +109,20 @@ class MapKey(NamedTuple):
 
 
 class KnownGame(NamedTuple):
-    """What FACEIT says about a real game: who played it, its replay code, and
-    which season it belongs to."""
+    """What FACEIT says about a real game: who played it, its replay code,
+    which season it belongs to, who won it and what was banned."""
 
     teams: frozenset[str]           # both team names, lowercased
     demo_code: str | None        # None when FACEIT never published one
     season: str | None = None    # 's9', 's10'; None when the championship name
                                  # does not resolve — see validate_maps
+    winner: str | None = None    # the winning team's name, lowercased
+    bans: tuple[str, ...] = ()   # hero guids in ban order
+    # FACEIT team ids - what identity is keyed on, because names change at any
+    # point in a season (even after the roster lock). Names are the fallback
+    # for a contribution that carries no ids.
+    team_ids: frozenset[str] = frozenset()
+    winner_id: str | None = None
 
 
 class MergeResult(NamedTuple):
@@ -234,7 +241,8 @@ def known_games(faceit_db_path: str) -> dict[MapKey, KnownGame]:
 
     with connect_ro(faceit_db_path) as fdb:
         rows = fdb.execute(
-            """SELECT g.match_id, g.game_no, g.demo_code,
+            """SELECT g.match_id, g.game_no, g.demo_code, g.winner_faction,
+                      m.faction1_team_id AS a_id, m.faction2_team_id AS b_id,
                       t1.name AS a, t2.name AS b, c.name AS championship
                FROM games g
                JOIN matches m ON m.id = g.match_id
@@ -242,13 +250,30 @@ def known_games(faceit_db_path: str) -> dict[MapKey, KnownGame]:
                LEFT JOIN teams t1 ON t1.id = m.faction1_team_id
                LEFT JOIN teams t2 ON t2.id = m.faction2_team_id""",
         ).fetchall()
-    return {
-        MapKey(str(r["match_id"]), int(r["game_no"])): KnownGame(
+        bans: dict[MapKey, list[str]] = {}
+        for b in fdb.execute(
+                "SELECT match_id, game_no, hero_guid FROM hero_bans "
+                "ORDER BY match_id, game_no, ban_order"):
+            bans.setdefault(MapKey(str(b["match_id"]), int(b["game_no"])),
+                            []).append(str(b["hero_guid"]))
+
+    def of_winner(r: Any, a: str, b: str) -> Any:
+        return {"faction1": r[a], "faction2": r[b]}.get(r["winner_faction"])
+
+    out: dict[MapKey, KnownGame] = {}
+    for r in rows:
+        key = MapKey(str(r["match_id"]), int(r["game_no"]))
+        name = of_winner(r, "a", "b")
+        win_id = of_winner(r, "a_id", "b_id")
+        out[key] = KnownGame(
             teams=frozenset(str(n).lower() for n in (r["a"], r["b"]) if n),
             demo_code=r["demo_code"],
-            season=season_of(r["championship"]) if r["championship"] else None)
-        for r in rows
-    }
+            season=season_of(r["championship"]) if r["championship"] else None,
+            winner=str(name).lower() if name else None,
+            bans=tuple(bans.get(key, ())),
+            team_ids=frozenset(str(i) for i in (r["a_id"], r["b_id"]) if i),
+            winner_id=str(win_id) if win_id else None)
+    return out
 
 
 def validate_maps(
@@ -263,9 +288,13 @@ def validate_maps(
 
     * the game must exist in faceit.games — fabrication or corruption;
     * it must belong to ``season`` when both seasons are known — see below;
-    * any team name the contribution carries must be one of the two teams
-      FACEIT says played — the signature of scouting the WRONG replay code and
-      attaching it to this match, which would poison another team's report; and
+    * any team the contribution carries must be one of the two teams FACEIT
+      says played — the signature of scouting the WRONG replay code and
+      attaching it to this match, which would poison another team's report.
+      Checked by team ID, falling back to name only when a contribution has
+      no ids: names change at any point in a season, and this runs against
+      CURRENT names on every build, so a name check silently dropped maps
+      the week their team renamed (see ``_foreign_team``); and
     * the replay code must agree when FACEIT published one (lenient when it
       did not — some matches never get codes, yet the operator may have one).
 
@@ -298,10 +327,9 @@ def validate_maps(
             rejects.append((key, f"belongs to season {game.season}, "
                                  f"not {season}"))
             continue
-        names = [str(m.get(f"side_{s}_team") or "").lower() for s in ("a", "b")]
-        bad = [n for n in names if n and n not in game.teams]
+        bad = _foreign_team(m, game)
         if bad:
-            rejects.append((key, f"team {bad[0]!r} did not play this game"))
+            rejects.append((key, f"team {bad!r} did not play this game"))
             continue
         code = m.get("demo_code")
         if code and game.demo_code and str(code) != str(game.demo_code):
@@ -324,10 +352,74 @@ def validate_maps(
         if bad:
             rejects.append((key, f"screen showed {bad!r}, filed as {code!r}"))
             continue
-        cleaned.append(m)
+        cleaned.append(_without_sentinels(_with_faceit_result(m, game)))
     for rkey, why in rejects:
         log.warning("rejected map from %s (%s): %s", who, rkey, why)
     return dict(contrib, maps=cleaned), rejects
+
+
+def _foreign_team(m: Mapping[str, Any], game: KnownGame) -> str | None:
+    """The first team on ``m`` that did not play ``game``, or None.
+
+    Keyed on FACEIT team ids when the contribution carries them (every live
+    capture path does), because team NAMES change at any time - even after the
+    roster lock - and 54 of 298 S10 bot maps were being dropped by a rename
+    between capture and merge. Names are only the fallback for a contribution
+    with no ids at all.
+    """
+    ids = [str(m.get(f"side_{s}_team_id") or "") for s in ("a", "b")]
+    if game.team_ids and any(ids):
+        return next((i for i in ids if i and i not in game.team_ids), None)
+    names = [str(m.get(f"side_{s}_team") or "").lower() for s in ("a", "b")]
+    return next((n for n in names if n and n not in game.teams), None)
+
+
+def _with_faceit_result(m: Mapping[str, Any], game: KnownGame) -> dict[str, Any]:
+    """A validated map with FACEIT's winner and bans, which FACEIT owns.
+
+    Both live capture paths write ``winner_side=None`` and ``bans=[]`` because
+    FACEIT already has them - and until 2026-09-19 nothing filled them back in,
+    so every S10 captured comp read 0 wins and the capture-side ban reads were
+    empty league-wide. FACEIT wins over a contributed value whenever it has one.
+
+    The winner is mapped to the capture's OWN sides, not FACEIT's factions:
+    side a is whichever team the capture put on the left, which need not be
+    faction1. By team id where both sides have one, by name otherwise - see
+    ``_foreign_team`` for why names alone are not safe.
+    """
+    out = dict(m)
+    by_id = game.winner_id and m.get("side_a_team_id") and m.get("side_b_team_id")
+    for side in ("a", "b"):
+        if by_id:
+            hit = str(m.get(f"side_{side}_team_id")) == game.winner_id
+        else:
+            hit = bool(game.winner) and \
+                str(m.get(f"side_{side}_team") or "").lower() == game.winner
+        if hit:
+            out["winner_side"] = side
+            break
+    if game.bans:
+        out["bans"] = list(game.bans)
+    return out
+
+
+# Slot STATES a capture reads, never heroes a team played: an empty card, the
+# grey pre-lock-in silhouette, a death marker. Same set as the replay bot's
+# emit.js SENTINELS. Comps take `heroes` verbatim, so one of these arriving
+# from ANY contributor would become a hero called "ABSENT" on the site.
+SENTINEL_GUIDS = frozenset({"ABSENT", "UNSELECTED", "DEAD"})
+
+
+def _without_sentinels(m: dict[str, Any]) -> dict[str, Any]:
+    observations = []
+    for o in m.get("observations") or []:
+        heroes = [g for g in (o.get("heroes") or []) if g not in SENTINEL_GUIDS]
+        if not heroes:
+            continue
+        pairs = [p for p in (o.get("pairs") or [])
+                 if not (isinstance(p, (list, tuple)) and p and p[0] in SENTINEL_GUIDS)]
+        observations.append(dict(o, heroes=heroes, pairs=pairs))
+    return dict(m, observations=observations)
 
 
 def load_contribution(path: str | Path) -> dict[str, Any]:

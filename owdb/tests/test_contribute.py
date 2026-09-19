@@ -703,3 +703,194 @@ def test_an_override_still_beats_a_verified_view() -> None:
     late = _contrib("bob", [("m1", 1, ["ana"])]); late["maps"][0]["screen_code"] = "CODE1"
     res = merge_first_wins([early, late], overrides={MapKey("m1", 1): "alice"})
     assert res.owner[MapKey("m1", 1)] == "alice"
+
+
+# --- FACEIT owns the result and the bans ----------------------------------
+#
+# Both live capture paths (replay bot and browser) write winner_side=None and
+# bans=[], on the grounds that FACEIT already has them. Nothing put them back,
+# so from S10 onwards every captured comp on the site read 0 wins and the ban
+# reads were empty league-wide (found 2026-09-19: 298/298 bot maps). The merge
+# is where FACEIT's record and the capture meet, so it is filled here - which
+# also repairs every past capture on the next CI rebuild.
+
+def _known_result(winner: str | None = "bravo",
+                  bans: tuple[str, ...] = ()) -> dict[MapKey, Any]:
+    from owdb.contribute import KnownGame
+    return {MapKey("m1", 1): KnownGame(
+        teams=frozenset({"alpha", "bravo"}), demo_code="CODE1",
+        winner=winner, bans=bans)}
+
+
+def _one_map(**over: Any) -> dict[str, Any]:
+    c = _contrib("alice", [("m1", 1, ["ram"])])
+    c["maps"][0].update(over)
+    return c
+
+
+def test_faceit_winner_fills_a_capture_that_left_it_blank() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(_one_map(winner_side=None), _known_result())
+    assert cleaned["maps"][0]["winner_side"] == "b"
+
+
+def test_faceit_winner_follows_the_captures_own_orientation() -> None:
+    """Side a/b is whichever team the capture put on the left, not FACEIT's
+    faction1 - getting this backwards would credit every win to the loser."""
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(
+        _one_map(winner_side=None, side_a_team="Bravo", side_b_team="Alpha"),
+        _known_result())
+    assert cleaned["maps"][0]["winner_side"] == "a"
+
+
+def test_faceit_winner_overrides_a_contributed_one() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(_one_map(winner_side="a"), _known_result())
+    assert cleaned["maps"][0]["winner_side"] == "b"
+
+
+def test_no_faceit_winner_keeps_the_contributed_one() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(_one_map(winner_side="a"), _known_result(winner=None))
+    assert cleaned["maps"][0]["winner_side"] == "a"
+
+
+def test_faceit_bans_fill_an_empty_list_in_ban_order() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(_one_map(bans=[]),
+                               _known_result(bans=("0xFIRST", "0xSECOND")))
+    assert cleaned["maps"][0]["bans"] == ["0xFIRST", "0xSECOND"]
+
+
+def test_no_faceit_bans_keeps_the_contributed_list() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(_one_map(bans=["0xMINE"]), _known_result(bans=()))
+    assert cleaned["maps"][0]["bans"] == ["0xMINE"]
+
+
+def test_the_contribution_itself_is_not_mutated() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _one_map(winner_side=None)
+    validate_maps(contrib, _known_result())
+    assert contrib["maps"][0]["winner_side"] is None
+
+
+def test_a_filled_winner_reaches_the_comp_record() -> None:
+    """The end the bug was visible at: a captured comp's W-L."""
+    from owdb.contribute import to_obs_rows, validate_maps
+    cleaned, _ = validate_maps(_one_map(winner_side=None, observations=[
+        {"side": "b", "ts": 0, "sub_map": None, "round_no": 1, "phase": None,
+         "heroes": ["ram"]}]), _known_result())
+    maps = {MapKey("m1", 1): cleaned["maps"][0]}
+    rows = to_obs_rows(maps, {"ram": "tank"}, {"ram": "Ramattra"})
+    assert [r.won for r in rows] == [True]
+
+
+# --- sentinel guids are slot states, never heroes -------------------------
+#
+# ABSENT / UNSELECTED / DEAD are what a capture reads for an empty card, the
+# grey pre-lock-in silhouette, and a death marker. The merge writes `heroes`
+# into comps verbatim, so one arriving from ANY contributor becomes a hero
+# called "ABSENT" on the site. Filtered here because this is the one place
+# every contributor's data passes through.
+
+def test_sentinel_guids_are_dropped_at_ingest() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _one_map(observations=[{
+        "side": "a", "ts": 0, "sub_map": None, "round_no": 1, "phase": None,
+        "heroes": ["ram", "ABSENT", "UNSELECTED", "DEAD", "soj"],
+        "pairs": [["ram", "p1"], ["ABSENT", "p2"], ["UNSELECTED", None],
+                  ["DEAD", "p4"], ["soj", "p5"]]}])
+    cleaned, _ = validate_maps(contrib, _known_result())
+    o = cleaned["maps"][0]["observations"][0]
+    assert o["heroes"] == ["ram", "soj"]
+    assert o["pairs"] == [["ram", "p1"], ["soj", "p5"]]
+
+
+def test_an_observation_of_nothing_but_sentinels_is_dropped() -> None:
+    from owdb.contribute import validate_maps
+    contrib = _one_map(observations=[
+        {"side": "a", "ts": 0, "sub_map": None, "round_no": 1, "phase": None,
+         "heroes": ["ram"]},
+        {"side": "b", "ts": 0, "sub_map": None, "round_no": 1, "phase": None,
+         "heroes": ["ABSENT", "ABSENT"]}])
+    cleaned, _ = validate_maps(contrib, _known_result())
+    assert [o["side"] for o in cleaned["maps"][0]["observations"]] == ["a"]
+
+
+# --- team identity is the FACEIT team id, not its name ---------------------
+#
+# FACEIT teams rename at any time, even after the roster lock, and validation
+# re-runs against CURRENT names on every CI build. Checked by name, a map that
+# was accepted when captured is silently dropped the week its team renames:
+# 54 of 298 S10 bot maps on 2026-09-19 ("VTY Velociraptors" is now
+# "VTY Nine Lives"), and 33 of 62 of one contributor's S9 maps by season end.
+# Every contribution carries side_{a,b}_team_id; names stay only as a fallback.
+
+def _known_ids(winner_id: str | None = "t2") -> dict[MapKey, Any]:
+    from owdb.contribute import KnownGame
+    return {MapKey("m1", 1): KnownGame(
+        teams=frozenset({"new alpha", "bravo"}), demo_code="CODE1",
+        team_ids=frozenset({"t1", "t2"}), winner_id=winner_id)}
+
+
+def _captured_before_rename(**over: Any) -> dict[str, Any]:
+    fields = dict(side_a_team="Alpha", side_b_team="Bravo",
+                  side_a_team_id="t1", side_b_team_id="t2")
+    return _one_map(**{**fields, **over})
+
+
+def test_a_team_renamed_after_capture_is_still_accepted() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, rejects = validate_maps(_captured_before_rename(), _known_ids())
+    assert rejects == [] and len(cleaned["maps"]) == 1
+
+
+def test_a_team_id_that_did_not_play_is_rejected() -> None:
+    """Still the wrong-replay guard - just keyed on something that holds still."""
+    from owdb.contribute import validate_maps
+    # Names that DO match FACEIT today, so only the id can be what rejects it.
+    cleaned, rejects = validate_maps(
+        _captured_before_rename(side_a_team="New Alpha", side_b_team_id="t9"),
+        _known_ids())
+    assert cleaned["maps"] == [] and "did not play" in rejects[0][1]
+
+
+def test_the_winner_is_found_by_team_id_after_a_rename() -> None:
+    from owdb.contribute import validate_maps
+    cleaned, _ = validate_maps(_captured_before_rename(winner_side=None),
+                               _known_ids(winner_id="t1"))
+    assert cleaned["maps"][0]["winner_side"] == "a"
+
+
+def test_known_games_reads_the_winner_and_bans_from_faceit(tmp_path: Path) -> None:
+    import sqlite3
+    from owdb.contribute import known_games
+    db = tmp_path / "faceit.sqlite3"
+    con = sqlite3.connect(db)
+    con.executescript("""
+        CREATE TABLE teams (id TEXT, name TEXT);
+        CREATE TABLE championships (id TEXT, name TEXT);
+        CREATE TABLE matches (id TEXT, championship_id TEXT,
+                              faction1_team_id TEXT, faction2_team_id TEXT);
+        CREATE TABLE games (match_id TEXT, game_no INT, demo_code TEXT,
+                            winner_faction TEXT);
+        CREATE TABLE hero_bans (match_id TEXT, game_no INT, hero_guid TEXT,
+                                ban_order INT, banned_by_faction TEXT);
+        INSERT INTO teams VALUES ('t1', 'Alpha'), ('t2', 'Bravo');
+        INSERT INTO matches VALUES ('m1', NULL, 't1', 't2');
+        INSERT INTO games VALUES ('m1', 1, 'CODE1', 'faction2'),
+                                 ('m1', 2, 'CODE2', NULL);
+        INSERT INTO hero_bans VALUES ('m1', 1, '0xSECOND', 2, 'faction2'),
+                                     ('m1', 1, '0xFIRST', 1, 'faction1');
+    """)
+    con.commit(); con.close()
+    known = known_games(str(db))
+    assert known[MapKey("m1", 1)].team_ids == frozenset({"t1", "t2"})
+    assert known[MapKey("m1", 1)].winner_id == "t2"
+    assert known[MapKey("m1", 2)].winner_id is None
+    assert known[MapKey("m1", 1)].winner == "bravo"
+    assert known[MapKey("m1", 1)].bans == ("0xFIRST", "0xSECOND")
+    assert known[MapKey("m1", 2)].winner is None
+    assert known[MapKey("m1", 2)].bans == ()

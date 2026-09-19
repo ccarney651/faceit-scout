@@ -24,6 +24,14 @@
 
   var SIDES = ['a', 'b'];
 
+  // Slot STATES, not heroes: resolve.js's ABSENT_GUID/UNSELECTED_GUID/DEAD_GUID
+  // (same set as reprocess_hero_match.js's SENTINELS). contribute.py writes
+  // `heroes` verbatim, so any of these reaching a record is a hero called
+  // "ABSENT" in a comp on the site. A list, not a "starts with 0x" rule,
+  // because custom:* guids are real heroes.
+  var SENTINELS = { ABSENT: true, UNSELECTED: true, DEAD: true };
+  function isHero(guid) { return !!guid && !SENTINELS[guid]; }
+
   // Which round a sample falls in, 1-based to match owdb's round_no. A sample
   // outside every range (which should not happen) gets null rather than a
   // fabricated round.
@@ -50,16 +58,21 @@
     samples.forEach(function (s) {
       var round_no = roundNoFor(s, rounds);
       SIDES.forEach(function (side) {
-        var heroes = (side === 'a' ? s.heroes_a : s.heroes_b).slice();
+        var slots = side === 'a' ? s.heroes_a : s.heroes_b;
         var ids = attribution && attribution[side] && attribution[side].ids;
+        // Pair by SLOT before dropping sentinels - ids[i] belongs to slot i, so
+        // filtering first would shift every later player onto the wrong hero.
+        var pairs = slots.map(function (guid, i) { return [guid, ids ? (ids[i] || null) : null]; })
+          .filter(function (p) { return isHero(p[0]); });
+        if (!pairs.length) return;
         out.push({
           side: side,
           ts: s.t * 1000,
           sub_map: null,
           round_no: round_no,
           phase: null,
-          heroes: heroes,
-          pairs: ids ? heroes.map(function (guid, i) { return [guid, ids[i] || null]; }) : [],
+          heroes: pairs.map(function (p) { return p[0]; }),
+          pairs: ids ? pairs : [],
         });
       });
     });
@@ -156,7 +169,7 @@
             for (var k = 0; k < segs.length; k++) {
               if (segs[k].from_t <= t) active = segs[k]; else break;
             }
-            if (!active) return;
+            if (!active || !isHero(active.guid)) return;
             var s = slots[slotIdx];
             heroes.push(active.guid);
             pairs.push([active.guid, (s.player_id === undefined || s.player_id === null) ? null : s.player_id]);
